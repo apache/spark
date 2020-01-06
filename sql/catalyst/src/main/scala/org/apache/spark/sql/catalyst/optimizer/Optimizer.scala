@@ -128,6 +128,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSubqueryAliases,
       EliminateView,
       ReplaceExpressions,
+      RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabase(catalogManager),
       RewriteDistinctAggregates,

@@ -1959,6 +1959,71 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("COMMENT ON NAMESPACE") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // Session catalog is used.
+    sql("CREATE NAMESPACE ns")
+    checkNamespaceComment("ns", "minor revision")
+    checkNamespaceComment("ns", null)
+    checkNamespaceComment("ns", "NULL")
+    intercept[AnalysisException](sql("COMMENT ON NAMESPACE abc IS NULL"))
+
+    // V2 non-session catalog is used.
+    sql("CREATE NAMESPACE testcat.ns1")
+    checkNamespaceComment("testcat.ns1", "minor revision")
+    checkNamespaceComment("testcat.ns1", null)
+    checkNamespaceComment("testcat.ns1", "NULL")
+    intercept[AnalysisException](sql("COMMENT ON NAMESPACE testcat.abc IS NULL"))
+  }
+
+  private def checkNamespaceComment(namespace: String, comment: String): Unit = {
+    sql(s"COMMENT ON NAMESPACE $namespace IS " +
+      Option(comment).map("'" + _ + "'").getOrElse("NULL"))
+    val expectedComment = Option(comment).getOrElse("")
+    assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
+      .where("k='Description'")
+      .head().getString(1) === expectedComment)
+  }
+
+  test("COMMENT ON TABLE") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // Session catalog is used.
+    withTable("t") {
+      sql("CREATE TABLE t(k int) USING json")
+      checkTableComment("t", "minor revision")
+      checkTableComment("t", null)
+      checkTableComment("t", "NULL")
+    }
+    intercept[AnalysisException](sql("COMMENT ON TABLE abc IS NULL"))
+
+    // V2 non-session catalog is used.
+    withTable("testcat.ns1.ns2.t") {
+      sql("CREATE TABLE testcat.ns1.ns2.t(k int) USING foo")
+      checkTableComment("testcat.ns1.ns2.t", "minor revision")
+      checkTableComment("testcat.ns1.ns2.t", null)
+      checkTableComment("testcat.ns1.ns2.t", "NULL")
+    }
+    intercept[AnalysisException](sql("COMMENT ON TABLE testcat.abc IS NULL"))
+
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    withTempView("v") {
+      sql("create global temp view v as select 1")
+      val e = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL"))
+      assert(e.getMessage.contains("global_temp.v is a temp view not table."))
+    }
+  }
+
+  private def checkTableComment(tableName: String, comment: String): Unit = {
+    sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
+    val expectedComment = Option(comment).getOrElse("")
+    assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
+      .where("k='Comment'")
+      .head().getString(1) === expectedComment)
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

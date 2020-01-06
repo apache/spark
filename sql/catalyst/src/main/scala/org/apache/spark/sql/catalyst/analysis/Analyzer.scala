@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -92,10 +93,14 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
+ *                      that the table is resolved only once if a table is used multiple times
+ *                      in a query.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
-    nestedViewDepth: Int = 0)
+    nestedViewDepth: Int = 0,
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -110,7 +115,7 @@ object AnalysisContext {
   def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(
-      catalogAndNamespace, nestedViewDepth = originContext.nestedViewDepth + 1)
+      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
     set(context)
     try f finally { set(originContext) }
   }
@@ -197,6 +202,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -721,6 +727,14 @@ class Analyzer(
     }
   }
 
+  case class ResolveNamespace(catalogManager: CatalogManager)
+    extends Rule[LogicalPlan] with LookupCatalog {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
+        ResolvedNamespace(catalog.asNamespaceCatalog, ns)
+    }
+  }
+
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   /**
@@ -735,6 +749,11 @@ class Analyzer(
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      case u @ UnresolvedTable(ident) =>
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -772,6 +791,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
+          .getOrElse(u)
+
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
@@ -859,6 +883,18 @@ class Analyzer(
 
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
+
+      case u @ UnresolvedTable(identifier: Seq[String]) =>
+        expandRelationName(identifier) match {
+          case SessionCatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                u.failAnalysis(s"$ident is a view not table.")
+              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
+              case None => u
+            }
+          case _ => u
+        }
     }
 
     // Look up a relation from the session catalog with the following logic:
@@ -870,7 +906,9 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table)
+              val key = catalog.name +: ident.namespace :+ ident.name
+              AnalysisContext.get.relationCache.getOrElseUpdate(
+                key, v1SessionCatalog.getRelation(v1Table.v1Table))
             case table =>
               DataSourceV2Relation.create(table)
           }
