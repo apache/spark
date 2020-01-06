@@ -96,7 +96,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
-        ((COMMENT comment=STRING) |
+        (commentSpec |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
     | ALTER namespace multipartIdentifier
@@ -116,7 +116,7 @@ statement
         createTableClauses
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        ((COMMENT comment=STRING) |
+        (commentSpec |
         (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
         PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
@@ -160,7 +160,7 @@ statement
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
+        (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -182,7 +182,7 @@ statement
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? multipartIdentifier
         identifierCommentList?
-        ((COMMENT STRING) |
+        (commentSpec |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES tablePropertyList))*
         AS query                                                       #createView
@@ -216,8 +216,8 @@ statement
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace multipartIdentifier IS
-        commennt=(STRING | NULL)                                       #commentNamespace
-    | COMMENT ON TABLE multipartIdentifier IS commennt=(STRING | NULL) #commentTable
+        comment=(STRING | NULL)                                        #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
@@ -303,7 +303,11 @@ skewSpec
     ;
 
 locationSpec
-    : LOCATION STRING
+    : LOCATION location=STRING
+    ;
+
+commentSpec
+    : COMMENT comment=STRING
     ;
 
 query
@@ -364,7 +368,7 @@ createTableClauses
      (PARTITIONED BY partitioning=transformList) |
      bucketSpec |
      locationSpec |
-     (COMMENT comment=STRING) |
+     commentSpec |
      (TBLPROPERTIES tableProps=tablePropertyList))*
     ;
 
@@ -652,7 +656,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : identifier (COMMENT STRING)?
+    : identifier commentSpec?
     ;
 
 relationPrimary
@@ -865,7 +869,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (COMMENT comment=STRING)? colPosition?
+    : name=multipartIdentifier dataType commentSpec? colPosition?
     ;
 
 colTypeList
@@ -873,7 +877,7 @@ colTypeList
     ;
 
 colType
-    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType commentSpec?
     ;
 
 complexColTypeList
@@ -881,7 +885,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (COMMENT STRING)?
+    : identifier ':' dataType commentSpec?
     ;
 
 whenClause
