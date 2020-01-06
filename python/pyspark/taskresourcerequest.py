@@ -17,7 +17,6 @@
 
 
 class TaskResourceRequest(object):
-
     """
     .. note:: Evolving
 
@@ -27,11 +26,10 @@ class TaskResourceRequest(object):
     1 task per resource. Valid values are less than or equal to 0.5 or whole numbers.
     Use TaskResourceRequests class as a convenience API.
 
-    @param resourceName Name of the resource
-    @param amount Amount requesting as a Double to support fractional resource requests.
+    :param resourceName: Name of the resource
+    :param amount: Amount requesting as a Double to support fractional resource requests.
         Valid values are less than or equal to 0.5 or whole numbers.
     """
-
     def __init__(self, resourceName, amount):
         """Create a new TaskResourceRequest that wraps the underlying JVM object."""
         from pyspark.context import SparkContext

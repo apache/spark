@@ -26,8 +26,8 @@ class ResourceInformation(object):
 
     One example is GPUs, where the addresses would be the indices of the GPUs
 
-    @param name the name of the resource
-    @param addresses an array of strings describing the addresses of the resource
+    :param name: the name of the resource
+    :param addresses: an array of strings describing the addresses of the resource
     """
 
     def __init__(self, name, addresses):

@@ -17,7 +17,6 @@
 
 
 class ExecutorResourceRequest(object):
-
     """
     .. note:: Evolving
 
@@ -42,13 +41,13 @@ class ExecutorResourceRequest(object):
 
     Use ExecutorResourceRequests class as a convenience API.
 
-    @param resourceName Name of the resource
-    @param amount Amount requesting
-    @param discoveryScript Optional script used to discover the resources. This is required on some
+    :param resourceName: Name of the resource
+    :param amount: Amount requesting
+    :param discoveryScript: Optional script used to discover the resources. This is required on some
         cluster managers that don't tell Spark the addresses of the resources
         allocated. The script runs on Executors startup to discover the addresses
         of the resources available.
-    @param vendor Vendor, required for some cluster managers
+    :param vendor: Vendor, required for some cluster managers
     """
 
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
