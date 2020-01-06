@@ -109,27 +109,4 @@ object EventLogTestHelper {
   def convertEvent(event: SparkListenerEvent): String = {
     compact(render(JsonProtocol.sparkEventToJson(event)))
   }
-
-  class TestEventFilter1 extends EventFilter {
-    override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
-      case _: SparkListenerApplicationEnd => true
-      case _: SparkListenerBlockManagerAdded => true
-      case _: SparkListenerApplicationStart => false
-    }
-
-    override def statistics(): Option[EventFilter.FilterStatistics] = None
-  }
-
-  class TestEventFilter2 extends EventFilter {
-    override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
-      case _: SparkListenerApplicationEnd => true
-      case _: SparkListenerEnvironmentUpdate => true
-      case _: SparkListenerNodeBlacklisted => true
-      case _: SparkListenerBlockManagerAdded => false
-      case _: SparkListenerApplicationStart => false
-      case _: SparkListenerNodeUnblacklisted => false
-    }
-
-    override def statistics(): Option[EventFilter.FilterStatistics] = None
-  }
 }

@@ -93,15 +93,11 @@ class BasicEventFilterBuilderSuite extends SparkFunSuite {
     // Succeed all tasks in stage 0.
     val pending = s0Tasks.drop(1) ++ Seq(reattempt)
 
-    val s0Metrics = TaskMetrics.empty
-    s0Metrics.setExecutorCpuTime(2L)
-    s0Metrics.setExecutorRunTime(4L)
-
     time += 1
     pending.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
       listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptNumber,
-        "taskType", Success, task, new ExecutorMetrics, s0Metrics))
+        "taskType", Success, task, new ExecutorMetrics, TaskMetrics.empty))
     }
 
     // End stage 0.

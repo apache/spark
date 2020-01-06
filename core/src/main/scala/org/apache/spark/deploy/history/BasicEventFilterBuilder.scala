@@ -136,7 +136,9 @@ private[spark] abstract class JobEventFilter(
     case e: SparkListenerUnpersistRDD =>
       liveRDDs.contains(e.rddId)
     case e: SparkListenerExecutorMetricsUpdate =>
-      e.accumUpdates.exists { case (_, stageId, _, _) => liveStages.contains(stageId) }
+      e.accumUpdates.exists { case (taskId, stageId, _, _) =>
+        liveTasks.contains(taskId) || liveStages.contains(stageId)
+      }
     case e: SparkListenerSpeculativeTaskSubmitted =>
       liveStages.contains(e.stageId)
   }
@@ -169,6 +171,8 @@ private[spark] class BasicEventFilter(
     case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
+    case _: SparkListenerBlockManagerAdded => true
+    case _: SparkListenerBlockManagerRemoved => true
   }
 
   override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
