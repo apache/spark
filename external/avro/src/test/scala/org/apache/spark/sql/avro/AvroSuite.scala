@@ -33,16 +33,16 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+abstract class AvroSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val episodesAvro = testFile("episodes.avro")
@@ -50,7 +50,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
+    spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
@@ -81,7 +81,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("resolve avro data source") {
     val databricksAvro = "com.databricks.spark.avro"
     // By default the backward compatibility for com.databricks.spark.avro is enabled.
-    Seq("avro", "org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
+    Seq("org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
@@ -244,6 +244,32 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       val df = spark.read.format("avro").load(s"$dir.avro")
       assert(df.first() == Row(8))
+    }
+  }
+
+  test("SPARK-27858 Union type: More than one non-null type") {
+    withTempDir { dir =>
+      val complexNullUnionType = Schema.createUnion(
+        List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING)).asJava)
+      val fields = Seq(
+        new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
+      val schema = Schema.createRecord("name", "docs", "namespace", false)
+      schema.setFields(fields)
+      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      dataFileWriter.create(schema, new File(s"$dir.avro"))
+      val avroRec = new GenericData.Record(schema)
+      avroRec.put("field1", 42)
+      dataFileWriter.append(avroRec)
+      val avroRec2 = new GenericData.Record(schema)
+      avroRec2.put("field1", "Alice")
+      dataFileWriter.append(avroRec2)
+      dataFileWriter.flush()
+      dataFileWriter.close()
+
+      val df = spark.read.format("avro").load(s"$dir.avro")
+      assert(df.schema === StructType.fromDDL("field1 struct<member0: int, member1: string>"))
+      assert(df.collect().toSet == Set(Row(Row(42, null)), Row(Row(null, "Alice"))))
     }
   }
 
@@ -692,9 +718,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "type" : "record",
           |  "name" : "test_schema",
           |  "fields" : [{
-          |    "name": "enum",
+          |    "name": "Suit",
           |    "type": [{ "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }, "null"]
           |  }]
@@ -734,9 +760,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "type" : "record",
           |  "name" : "test_schema",
           |  "fields" : [{
-          |    "name": "enum",
+          |    "name": "Suit",
           |    "type": { "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }
           |  }]
@@ -764,7 +790,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
-      assert(message1.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+      assert(message1.contains("org.apache.avro.AvroTypeException: Not an enum: null"))
 
       // Writing df containing data not in the enum will throw an exception
       val message2 = intercept[SparkException] {
@@ -883,20 +909,106 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("support user provided avro schema for writing / reading fields with different ordering") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": "int"},
+          |    {"name": "Name", "type": "string"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val avroSchemaReversed =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Name", "type": "string"},
+          |    {"name": "Age", "type": "int"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))),
+        StructType(Seq(
+          StructField("Age", IntegerType, false),
+          StructField("Name", StringType, false))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      // Writing avro file with reversed field ordering
+      df.write.format("avro").option("avroSchema", avroSchemaReversed).save(tempSaveDir)
+
+      // Reading reversed avro file
+      checkAnswer(df.select("Name", "Age"), spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchemaReversed, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Reading reversed avro file with provided original schema
+      val avroDf = spark.read.format("avro").option("avroSchema", avroSchema).load(tempSaveDir)
+      checkAnswer(df, avroDf)
+      assert(avroDf.schema.fieldNames.sameElements(Array("Age", "Name")))
+    }
+  }
+
+  test("support user provided non-nullable avro schema " +
+    "for nullable catalyst schema without any null record") {
+    withTempPath { tempDir =>
+      val catalystSchema =
+        StructType(Seq(
+          StructField("Age", IntegerType, true),
+          StructField("Name", StringType, true)))
+
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": "int"},
+          |    {"name": "Name", "type": "string"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      val message = intercept[Exception] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message.contains("Caused by: java.lang.NullPointerException: " +
+        "in test_schema in string null of string in field Name"))
+    }
+  }
+
   test("error handling for unsupported Interval data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       var msg = intercept[AnalysisException] {
         sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
+      assert(msg.contains("Cannot save interval data type into external storage.") ||
+        msg.contains("AVRO data source does not support interval data type."))
 
       msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support calendarinterval data type."))
+        .contains(s"avro data source does not support interval data type."))
     }
   }
 
@@ -924,7 +1036,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       (TimestampType, LONG),
       (DecimalType(4, 2), BYTES)
     )
-    def assertException(f: () => AvroSerializer) {
+    def assertException(f: () => AvroSerializer): Unit = {
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
         f()
       }.getMessage
@@ -1380,4 +1492,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       |}
     """.stripMargin)
   }
+}
+
+class AvroV1Suite extends AvroSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
+}
+
+class AvroV2Suite extends AvroSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

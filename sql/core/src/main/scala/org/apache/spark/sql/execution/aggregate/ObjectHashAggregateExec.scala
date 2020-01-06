@@ -122,7 +122,7 @@ case class ObjectHashAggregateExec(
             initialInputBufferOffset,
             resultExpressions,
             (expressions, inputSchema) =>
-              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
+              MutableProjection.create(expressions, inputSchema),
             child.output,
             iter,
             fallbackCountThreshold,

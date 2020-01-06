@@ -23,13 +23,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * This rule is a variant of [[PushDownPredicate]] which can handle
+ * This rule is a variant of [[PushPredicateThroughNonJoin]] which can handle
  * pushing down Left semi and Left Anti joins below the following operators.
  *  1) Project
  *  2) Window
  *  3) Union
  *  4) Aggregate
- *  5) Other permissible unary operators. please see [[PushDownPredicate.canPushThrough]].
+ *  5) Other permissible unary operators. please see [[PushPredicateThroughNonJoin.canPushThrough]].
  */
 object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -42,7 +42,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
-        val aliasMap = PushDownPredicate.getAliasMap(p)
+        val aliasMap = PushPredicateThroughNonJoin.getAliasMap(p)
         val newJoinCond = if (aliasMap.nonEmpty) {
           Option(replaceAlias(joinCond.get, aliasMap))
         } else {
@@ -55,7 +55,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
         !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
-      val aliasMap = PushDownPredicate.getAliasMap(agg)
+      val aliasMap = PushPredicateThroughNonJoin.getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
@@ -94,7 +94,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     // LeftSemi/LeftAnti over UnaryNode
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
-        if PushDownPredicate.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
+        if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
   }

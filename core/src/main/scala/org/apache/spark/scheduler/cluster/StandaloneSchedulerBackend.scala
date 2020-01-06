@@ -28,6 +28,7 @@ import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientL
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
@@ -58,7 +59,7 @@ private[spark] class StandaloneSchedulerBackend(
   private val maxCores = conf.get(config.CORES_MAX)
   private val totalExpectedCores = maxCores.getOrElse(0)
 
-  override def start() {
+  override def start(): Unit = {
     super.start()
 
     // SPARK-21159. The scheduler backend should only try to connect to the launcher when in client
@@ -112,8 +113,11 @@ private[spark] class StandaloneSchedulerBackend(
       } else {
         None
       }
+    val executorResourceReqs = ResourceUtils.parseResourceRequirements(conf,
+      config.SPARK_EXECUTOR_PREFIX)
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
+      webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit,
+      resourceReqsPerExecutor = executorResourceReqs)
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -125,21 +129,21 @@ private[spark] class StandaloneSchedulerBackend(
     stop(SparkAppHandle.State.FINISHED)
   }
 
-  override def connected(appId: String) {
+  override def connected(appId: String): Unit = {
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
     notifyContext()
     launcherBackend.setAppId(appId)
   }
 
-  override def disconnected() {
+  override def disconnected(): Unit = {
     notifyContext()
     if (!stopping.get) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
-  override def dead(reason: String) {
+  override def dead(reason: String): Unit = {
     notifyContext()
     if (!stopping.get) {
       launcherBackend.setState(SparkAppHandle.State.KILLED)
@@ -154,13 +158,13 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
-    memory: Int) {
+    memory: Int): Unit = {
     logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 
   override def executorRemoved(
-      fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean) {
+      fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => SlaveLost(message, workerLost = workerLost)

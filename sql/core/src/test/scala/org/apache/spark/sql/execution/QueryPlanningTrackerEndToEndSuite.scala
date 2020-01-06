@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.streaming.StreamTest
 
-class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
+class QueryPlanningTrackerEndToEndSuite extends StreamTest {
+  import testImplicits._
 
   test("programmatic API") {
     val df = spark.range(1000).selectExpr("count(*)")
@@ -36,6 +38,24 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     val tracker = df.queryExecution.tracker
     assert(tracker.phases.keySet == Set("parsing", "analysis", "optimization", "planning"))
     assert(tracker.rules.nonEmpty)
+  }
+
+  test("SPARK-29227: Track rule info in optimization phase in streaming") {
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+
+    def assertStatus(stream: StreamExecution): Unit = {
+      stream.processAllAvailable()
+      val tracker = stream.lastExecution.tracker
+      assert(tracker.phases.keys == Set("analysis", "optimization", "planning"))
+      assert(tracker.rules.nonEmpty)
+    }
+
+    testStream(df)(
+      StartStream(),
+      AddData(inputData, 1, 2, 3),
+      Execute(assertStatus),
+      StopStream)
   }
 
 }

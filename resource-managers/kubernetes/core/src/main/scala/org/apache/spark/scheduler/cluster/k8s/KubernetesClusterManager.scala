@@ -23,7 +23,7 @@ import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -61,6 +61,17 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         None)
     }
 
+    // If KUBERNETES_EXECUTOR_POD_NAME_PREFIX is not set, initialize it so that all executors have
+    // the same prefix. This is needed for client mode, where the feature steps code that sets this
+    // configuration is not used.
+    //
+    // If/when feature steps are executed in client mode, they should instead take care of this,
+    // and this code should be removed.
+    if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
+      sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
+        KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name")))
+    }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
@@ -77,8 +88,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
     }
 
-    val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
-      "kubernetes-executor-requests")
+    val schedulerExecutorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kubernetes-executor-maintenance")
 
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(
@@ -114,7 +125,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc,
       kubernetesClient,
-      requestExecutorsService,
+      schedulerExecutorService,
       snapshotsStore,
       executorPodsAllocator,
       executorPodsLifecycleEventHandler,

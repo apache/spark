@@ -18,12 +18,12 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, StringArrayParam}
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
+import org.apache.spark.ml.param.{ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.shared.{HasInputCols, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -81,10 +81,9 @@ import org.apache.spark.util.collection.OpenHashMap
  *   +----+-----+---------+------+------------------------------------------------------+
  * }}}
  */
-@Experimental
 @Since("2.3.0")
 class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transformer
-  with HasInputCols with HasOutputCol with DefaultParamsWritable {
+  with HasInputCols with HasOutputCol with HasNumFeatures with DefaultParamsWritable {
 
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("featureHasher"))
@@ -99,21 +98,6 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   @Since("2.3.0")
   val categoricalCols = new StringArrayParam(this, "categoricalCols",
     "numeric columns to treat as categorical")
-
-  /**
-   * Number of features. Should be greater than 0.
-   * (default = 2^18^)
-   * @group param
-   */
-  @Since("2.3.0")
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    ParamValidators.gt(0))
-
-  setDefault(numFeatures -> (1 << 18))
-
-  /** @group getParam */
-  @Since("2.3.0")
-  def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
   @Since("2.3.0")
@@ -214,6 +198,13 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     }
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
+  }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FeatureHasher: uid=$uid, numFeatures=${$(numFeatures)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(categoricalCols).map(c => s", numCategoricalCols=${c.length}").getOrElse("")
   }
 }
 

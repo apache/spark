@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -45,6 +46,9 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
   val SQL_GROUPED_AGG_PANDAS_UDF = 202
   val SQL_WINDOW_AGG_PANDAS_UDF = 203
+  val SQL_SCALAR_PANDAS_ITER_UDF = 204
+  val SQL_MAP_PANDAS_ITER_UDF = 205
+  val SQL_COGROUPED_MAP_PANDAS_UDF = 206
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -53,6 +57,9 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
     case SQL_WINDOW_AGG_PANDAS_UDF => "SQL_WINDOW_AGG_PANDAS_UDF"
+    case SQL_SCALAR_PANDAS_ITER_UDF => "SQL_SCALAR_PANDAS_ITER_UDF"
+    case SQL_MAP_PANDAS_ITER_UDF => "SQL_MAP_PANDAS_ITER_UDF"
+    case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
   }
 }
 
@@ -71,19 +78,22 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
   private val conf = SparkEnv.get.conf
-  private val bufferSize = conf.get(BUFFER_SIZE)
+  protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   // each python worker gets an equal part of the allocation. the worker pool will grow to the
   // number of concurrent tasks, which is determined by the number of cores in this executor.
   private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY).map(_ / conf.get(EXECUTOR_CORES))
 
   // All the Python functions should have the same exec, version and envvars.
-  protected val envVars = funcs.head.funcs.head.envVars
-  protected val pythonExec = funcs.head.funcs.head.pythonExec
-  protected val pythonVer = funcs.head.funcs.head.pythonVer
+  protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
+  protected val pythonExec: String = funcs.head.funcs.head.pythonExec
+  protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
   // TODO: support accumulator in multiple UDF
-  protected val accumulator = funcs.head.funcs.head.accumulator
+  protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
+
+  // Python accumulator is always set in production except in tests. See SPARK-27893
+  private val maybeAccumulator: Option[PythonAccumulatorV2] = Option(accumulator)
 
   // Expose a ServerSocket to support method calls via socket from Python side.
   private[spark] var serverSocket: Option[ServerSocket] = None
@@ -98,6 +108,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+    // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
+    if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
+      // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
+      // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
+      // see https://github.com/numpy/numpy/issues/10455
+      conf.getOption("spark.executor.cores").foreach(envVars.put("OMP_NUM_THREADS", _))
+    }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
@@ -105,6 +122,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (memoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
+    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -165,18 +183,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       context: TaskContext)
     extends Thread(s"stdout writer for $pythonExec") {
 
-    @volatile private var _exception: Exception = null
+    @volatile private var _exception: Throwable = null
 
     private val pythonIncludes = funcs.flatMap(_.funcs.flatMap(_.pythonIncludes.asScala)).toSet
     private val broadcastVars = funcs.flatMap(_.funcs.flatMap(_.broadcastVars.asScala))
 
     setDaemon(true)
 
-    /** Contains the exception thrown while writing the parent iterator to the Python process. */
-    def exception: Option[Exception] = Option(_exception)
+    /** Contains the throwable thrown while writing the parent iterator to the Python process. */
+    def exception: Option[Throwable] = Option(_exception)
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
-    def shutdownOnTaskCompletion() {
+    def shutdownOnTaskCompletion(): Unit = {
       assert(context.isCompleted)
       this.interrupt()
     }
@@ -272,6 +290,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
         dataOut.writeLong(context.taskAttemptId())
+        val resources = context.resources()
+        dataOut.writeInt(resources.size)
+        resources.foreach { case (k, v) =>
+          PythonRDD.writeUTF(k, dataOut)
+          PythonRDD.writeUTF(v.name, dataOut)
+          dataOut.writeInt(v.addresses.size)
+          v.addresses.foreach { case addr =>
+            PythonRDD.writeUTF(addr, dataOut)
+          }
+        }
         val localProps = context.getLocalProperties.asScala
         dataOut.writeInt(localProps.size)
         localProps.foreach { case (k, v) =>
@@ -347,18 +375,21 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
       } catch {
-        case e: Exception if context.isCompleted || context.isInterrupted =>
-          logDebug("Exception thrown after task completion (likely due to cleanup)", e)
-          if (!worker.isClosed) {
-            Utils.tryLog(worker.shutdownOutput())
-          }
-
-        case e: Exception =>
-          // We must avoid throwing exceptions here, because the thread uncaught exception handler
-          // will kill the whole executor (see org.apache.spark.executor.Executor).
-          _exception = e
-          if (!worker.isClosed) {
-            Utils.tryLog(worker.shutdownOutput())
+        case t: Throwable if (NonFatal(t) || t.isInstanceOf[Exception]) =>
+          if (context.isCompleted || context.isInterrupted) {
+            logDebug("Exception/NonFatal Error thrown after task completion (likely due to " +
+              "cleanup)", t)
+            if (!worker.isClosed) {
+              Utils.tryLog(worker.shutdownOutput())
+            }
+          } else {
+            // We must avoid throwing exceptions/NonFatals here, because the thread uncaught
+            // exception handler will kill the whole executor (see
+            // org.apache.spark.executor.Executor).
+            _exception = t
+            if (!worker.isClosed) {
+              Utils.tryLog(worker.shutdownOutput())
+            }
           }
       }
     }
@@ -381,7 +412,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
-    def writeUTF(str: String, dataOut: DataOutputStream) {
+    def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
       val bytes = str.getBytes(UTF_8)
       dataOut.writeInt(bytes.length)
       dataOut.write(bytes)
@@ -461,7 +492,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val updateLen = stream.readInt()
         val update = new Array[Byte](updateLen)
         stream.readFully(update)
-        accumulator.add(update)
+        maybeAccumulator.foreach(_.add(update))
       }
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
@@ -500,7 +531,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {
@@ -511,7 +542,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         if (!context.isCompleted) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId}.${context.taskAttemptId} " +
+            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
               s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)

@@ -26,12 +26,10 @@ import scala.util.control.NonFatal
 import com.spotify.docker.client._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.DockerUtils
 
 abstract class DatabaseOnDocker {
@@ -66,11 +64,7 @@ abstract class DatabaseOnDocker {
   def getStartupProcessName: Option[String]
 }
 
-abstract class DockerJDBCIntegrationSuite
-  extends SparkFunSuite
-  with BeforeAndAfterAll
-  with Eventually
-  with SharedSQLContext {
+abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
 
   val db: DatabaseOnDocker
 

@@ -173,12 +173,10 @@ private[parquet] class ParquetRowConverter(
 
   private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
-  private val unsafeProjection = UnsafeProjection.create(catalystType)
-
   /**
-   * The [[UnsafeRow]] converted from an entire Parquet record.
+   * The [[InternalRow]] converted from an entire Parquet record.
    */
-  def currentRecord: UnsafeRow = unsafeProjection(currentRow)
+  def currentRecord: InternalRow = currentRow
 
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {

@@ -20,7 +20,6 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
@@ -188,7 +187,7 @@ class CoGroupedRDD[K: ClassTag](
       createCombiner, mergeValue, mergeCombiners)
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdds = null
   }

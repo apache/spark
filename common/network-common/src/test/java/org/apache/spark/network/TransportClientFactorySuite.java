@@ -84,7 +84,7 @@ public class TransportClientFactorySuite {
     try (TransportContext context = new TransportContext(conf, rpcHandler)) {
       TransportClientFactory factory = context.createClientFactory();
       Set<TransportClient> clients = Collections.synchronizedSet(
-          new HashSet<TransportClient>());
+              new HashSet<>());
 
       AtomicInteger failed = new AtomicInteger();
       Thread[] attempts = new Thread[maxConnections * 10];
@@ -117,7 +117,7 @@ public class TransportClientFactorySuite {
       }
 
       Assert.assertEquals(0, failed.get());
-      Assert.assertEquals(clients.size(), maxConnections);
+      Assert.assertTrue(clients.size() <= maxConnections);
 
       for (TransportClient client : clients) {
         client.close();
@@ -216,5 +216,12 @@ public class TransportClientFactorySuite {
       }
       assertFalse(c1.isActive());
     }
+  }
+
+  @Test(expected = IOException.class)
+  public void closeFactoryBeforeCreateClient() throws IOException, InterruptedException {
+    TransportClientFactory factory = context.createClientFactory();
+    factory.close();
+    factory.createClient(TestUtils.getLocalHost(), server1.getPort());
   }
 }

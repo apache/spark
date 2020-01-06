@@ -18,8 +18,11 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.plans
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ListQuery, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, Union}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.types.IntegerType
 
@@ -39,4 +42,45 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(mappedOrigin == Origin.apply(Some(0), Some(0)))
   }
 
+  test("collectInPlanAndSubqueries") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val plan =
+      Union(
+        Seq(
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                Filter(
+                  ListQuery(Project(
+                    Seq(a),
+                    UnresolvedRelation(TableIdentifier("t", None))
+                  )),
+                  UnresolvedRelation(TableIdentifier("t", None))
+                )
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          ),
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                UnresolvedRelation(TableIdentifier("t", None))
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          )
+        )
+      )
+
+    val countRelationsInPlan = plan.collect({ case _: UnresolvedRelation => 1 }).sum
+    val countRelationsInPlanAndSubqueries =
+      plan.collectInPlanAndSubqueries({ case _: UnresolvedRelation => 1 }).sum
+
+    assert(countRelationsInPlan == 2)
+    assert(countRelationsInPlanAndSubqueries == 5)
+  }
 }

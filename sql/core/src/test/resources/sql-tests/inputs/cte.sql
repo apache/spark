@@ -4,6 +4,9 @@ create temporary view t2 as select * from values 0, 1 as t(id);
 -- WITH clause should not fall into infinite loop by referencing self
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s;
 
+WITH r AS (SELECT (SELECT * FROM r))
+SELECT * FROM r;
+
 -- WITH clause should reference the base table
 WITH t AS (SELECT 1 FROM t) SELECT * FROM t;
 
@@ -23,6 +26,134 @@ SELECT t1.id AS c1,
        t2.id AS c2
 FROM   CTE1 t1
        CROSS JOIN CTE1 t2;
+
+-- CTE with column alias
+WITH t(x) AS (SELECT 1)
+SELECT * FROM t WHERE x = 1;
+
+-- CTE with multiple column aliases
+WITH t(x, y) AS (SELECT 1, 2)
+SELECT * FROM t WHERE x = 1 AND y = 2;
+
+-- CTE with duplicate column aliases
+WITH t(x, x) AS (SELECT 1, 2)
+SELECT * FROM t;
+
+-- CTE with empty column alias list is not allowed
+WITH t() AS (SELECT 1)
+SELECT * FROM t;
+
+-- CTEs with duplicate names are not allowed
+WITH
+  t(x) AS (SELECT 1),
+  t(x) AS (SELECT 2)
+SELECT * FROM t;
+
+-- CTE in CTE definition
+WITH t as (
+  WITH t2 AS (SELECT 1)
+  SELECT * FROM t2
+)
+SELECT * FROM t;
+
+-- CTE in subquery
+SELECT max(c) FROM (
+  WITH t(c) AS (SELECT 1)
+  SELECT * FROM t
+);
+
+-- CTE in subquery expression
+SELECT (
+  WITH t AS (SELECT 1)
+  SELECT * FROM t
+);
+
+-- CTE in CTE definition shadows outer
+WITH
+  t AS (SELECT 1),
+  t2 AS (
+    WITH t AS (SELECT 2)
+    SELECT * FROM t
+  )
+SELECT * FROM t2;
+
+-- CTE in CTE definition shadows outer 2
+WITH
+  t(c) AS (SELECT 1),
+  t2 AS (
+    SELECT (
+      SELECT max(c) FROM (
+        WITH t(c) AS (SELECT 2)
+        SELECT * FROM t
+      )
+    )
+  )
+SELECT * FROM t2;
+
+-- CTE in CTE definition shadows outer 3
+WITH
+  t AS (SELECT 1),
+  t2 AS (
+    WITH t AS (SELECT 2),
+    t2 AS (
+      WITH t AS (SELECT 3)
+      SELECT * FROM t
+    )
+    SELECT * FROM t2
+  )
+SELECT * FROM t2;
+
+-- CTE in subquery shadows outer
+WITH t(c) AS (SELECT 1)
+SELECT max(c) FROM (
+  WITH t(c) AS (SELECT 2)
+  SELECT * FROM t
+);
+
+-- CTE in subquery shadows outer 2
+WITH t(c) AS (SELECT 1)
+SELECT sum(c) FROM (
+  SELECT max(c) AS c FROM (
+    WITH t(c) AS (SELECT 2)
+    SELECT * FROM t
+  )
+);
+
+-- CTE in subquery shadows outer 3
+WITH t(c) AS (SELECT 1)
+SELECT sum(c) FROM (
+  WITH t(c) AS (SELECT 2)
+  SELECT max(c) AS c FROM (
+    WITH t(c) AS (SELECT 3)
+    SELECT * FROM t
+  )
+);
+
+-- CTE in subquery expression shadows outer
+WITH t AS (SELECT 1)
+SELECT (
+  WITH t AS (SELECT 2)
+  SELECT * FROM t
+);
+
+-- CTE in subquery expression shadows outer 2
+WITH t AS (SELECT 1)
+SELECT (
+  SELECT (
+    WITH t AS (SELECT 2)
+    SELECT * FROM t
+  )
+);
+
+-- CTE in subquery expression shadows outer 3
+WITH t AS (SELECT 1)
+SELECT (
+  WITH t AS (SELECT 2)
+  SELECT (
+    WITH t AS (SELECT 3)
+    SELECT * FROM t
+  )
+);
 
 -- Clean up
 DROP VIEW IF EXISTS t;

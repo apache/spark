@@ -34,9 +34,10 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
@@ -256,12 +257,12 @@ class FileBasedWriteAheadLogSuite
           counter.increment()
           // block so that other threads also launch
           latch.await(10, TimeUnit.SECONDS)
-          override def completion() { counter.decrement() }
+          override def completion(): Unit = { counter.decrement() }
         }
       }
       @volatile var collected: Seq[Int] = Nil
       val t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           // run the calculation on a separate thread so that we can release the latch
           val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
             testSeq, handle)
@@ -434,7 +435,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   private var walBatchingExecutionContext: ExecutionContextExecutorService = _
   private val sparkConf = new SparkConf()
 
-  private val queueLength = PrivateMethod[Int]('getQueueLength)
+  private val queueLength = PrivateMethod[Int](Symbol("getQueueLength"))
 
   override def beforeEach(): Unit = {
     super.beforeEach()

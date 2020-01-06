@@ -172,6 +172,12 @@ function renderDagViz(forJob) {
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
+  metadataContainer().selectAll(".barrier-rdd").each(function() {
+    var rddId = d3.select(this).text().trim()
+    var clusterId = VizConstants.clusterPrefix + rddId
+    svg.selectAll("g." + clusterId).classed("barrier", true)
+  });
+
   resizeSvg(svg);
   interpretLineBreak(svg);
 }
@@ -507,7 +513,7 @@ function addTooltipsForRDDs(svgContainer) {
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "top")
         .attr("data-html", "true") // to interpret line break, tooltipText is showing <circle> title
         .attr("title", tooltipText);
     }

@@ -37,7 +37,7 @@ private[spark] object UIWorkloadGenerator {
   val NUM_PARTITIONS = 100
   val INTER_JOB_WAIT_MS = 5000
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       // scalastyle:off println
       println(
@@ -98,7 +98,7 @@ private[spark] object UIWorkloadGenerator {
     (1 to nJobSet).foreach { _ =>
       for ((desc, job) <- jobs) {
         new Thread {
-          override def run() {
+          override def run(): Unit = {
             // scalastyle:off println
             try {
               setProperties(desc)

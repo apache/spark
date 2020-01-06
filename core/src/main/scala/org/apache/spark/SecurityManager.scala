@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Base64
@@ -109,12 +108,12 @@ private[spark] class SecurityManager(
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setViewAcls(defaultUsers: Set[String], allowedUsers: Seq[String]) {
+  def setViewAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     viewAcls = adminAcls ++ defaultUsers ++ allowedUsers
     logInfo("Changing view acls to: " + viewAcls.mkString(","))
   }
 
-  def setViewAcls(defaultUser: String, allowedUsers: Seq[String]) {
+  def setViewAcls(defaultUser: String, allowedUsers: Seq[String]): Unit = {
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
@@ -122,7 +121,7 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setViewAclsGroups(allowedUserGroups: Seq[String]) {
+  def setViewAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     viewAclsGroups = adminAclsGroups ++ allowedUserGroups
     logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
   }
@@ -150,7 +149,7 @@ private[spark] class SecurityManager(
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setModifyAcls(defaultUsers: Set[String], allowedUsers: Seq[String]) {
+  def setModifyAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     modifyAcls = adminAcls ++ defaultUsers ++ allowedUsers
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
@@ -159,7 +158,7 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setModifyAclsGroups(allowedUserGroups: Seq[String]) {
+  def setModifyAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     modifyAclsGroups = adminAclsGroups ++ allowedUserGroups
     logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
   }
@@ -187,7 +186,7 @@ private[spark] class SecurityManager(
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setAdminAcls(adminUsers: Seq[String]) {
+  def setAdminAcls(adminUsers: Seq[String]): Unit = {
     adminAcls = adminUsers.toSet
     logInfo("Changing admin acls to: " + adminAcls.mkString(","))
   }
@@ -196,12 +195,12 @@ private[spark] class SecurityManager(
    * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
    * acls groups you should also set the view and modify acls groups again to pick up the changes.
    */
-  def setAdminAclsGroups(adminUserGroups: Seq[String]) {
+  def setAdminAclsGroups(adminUserGroups: Seq[String]): Unit = {
     adminAclsGroups = adminUserGroups.toSet
     logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
   }
 
-  def setAcls(aclSetting: Boolean) {
+  def setAcls(aclSetting: Boolean): Unit = {
     aclsOn = aclSetting
     logInfo("Changing acls enabled to: " + aclsOn)
   }
@@ -213,6 +212,15 @@ private[spark] class SecurityManager(
    * @return true if UI authentication is enabled, otherwise false
    */
   def aclsEnabled(): Boolean = aclsOn
+
+  /**
+   * Checks whether the given user is an admin. This gives the user both view and
+   * modify permissions, and also allows the user to impersonate other users when
+   * making UI requests.
+   */
+  def checkAdminPermissions(user: String): Boolean = {
+    isUserInACL(user, adminAcls, adminAclsGroups)
+  }
 
   /**
    * Checks the given user against the view acl and groups list to see if they have
@@ -227,13 +235,7 @@ private[spark] class SecurityManager(
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(",") + " viewAclsGroups=" + viewAclsGroups.mkString(","))
-    if (!aclsEnabled || user == null || viewAcls.contains(user) ||
-        viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.contains(WILDCARD_ACL)) {
-      return true
-    }
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
-    logDebug("userGroups=" + currentUserGroups.mkString(","))
-    viewAclsGroups.exists(currentUserGroups.contains(_))
+    isUserInACL(user, viewAcls, viewAclsGroups)
   }
 
   /**
@@ -249,13 +251,7 @@ private[spark] class SecurityManager(
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(",") + " modifyAclsGroups=" + modifyAclsGroups.mkString(","))
-    if (!aclsEnabled || user == null || modifyAcls.contains(user) ||
-        modifyAcls.contains(WILDCARD_ACL) || modifyAclsGroups.contains(WILDCARD_ACL)) {
-      return true
-    }
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
-    logDebug("userGroups=" + currentUserGroups)
-    modifyAclsGroups.exists(currentUserGroups.contains(_))
+    isUserInACL(user, modifyAcls, modifyAclsGroups)
   }
 
   /**
@@ -368,6 +364,23 @@ private[spark] class SecurityManager(
           throw new IllegalArgumentException(
             "Secret keys provided via files is only allowed in Kubernetes mode.")
       }
+    }
+  }
+
+  private def isUserInACL(
+      user: String,
+      aclUsers: Set[String],
+      aclGroups: Set[String]): Boolean = {
+    if (user == null ||
+        !aclsEnabled ||
+        aclUsers.contains(WILDCARD_ACL) ||
+        aclUsers.contains(user) ||
+        aclGroups.contains(WILDCARD_ACL)) {
+      true
+    } else {
+      val userGroups = Utils.getCurrentUserGroups(sparkConf, user)
+      logDebug(s"user $user is in groups ${userGroups.mkString(",")}")
+      aclGroups.exists(userGroups.contains(_))
     }
   }
 

@@ -107,9 +107,9 @@ private[spark] class BarrierCoordinator(
     private var timerTask: TimerTask = null
 
     // Init a TimerTask for a barrier() call.
-    private def initTimerTask(): Unit = {
+    private def initTimerTask(state: ContextBarrierState): Unit = {
       timerTask = new TimerTask {
-        override def run(): Unit = synchronized {
+        override def run(): Unit = state.synchronized {
           // Timeout current barrier() call, fail all the sync requests.
           requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
             s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
@@ -148,7 +148,7 @@ private[spark] class BarrierCoordinator(
         // If this is the first sync message received for a barrier() call, start timer to ensure
         // we may timeout for the sync.
         if (requesters.isEmpty) {
-          initTimerTask()
+          initTimerTask(this)
           timer.schedule(timerTask, timeoutInSecs * 1000)
         }
         // Add the requester to array of RPCCallContexts pending for reply.

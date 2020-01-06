@@ -98,7 +98,7 @@ object SVDPlusPlus {
         (ctx: EdgeContext[
           (Array[Double], Array[Double], Double, Double),
           Double,
-          (Array[Double], Array[Double], Double)]) {
+          (Array[Double], Array[Double], Double)]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       val rank = p.length
@@ -177,7 +177,7 @@ object SVDPlusPlus {
 
     // calculate error on training set
     def sendMsgTestF(conf: Conf, u: Double)
-        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]) {
+        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + blas.ddot(q.length, q, 1, usr._2, 1)

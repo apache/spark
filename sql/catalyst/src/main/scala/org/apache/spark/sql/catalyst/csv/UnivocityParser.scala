@@ -78,7 +78,10 @@ class UnivocityParser(
     options.timestampFormat,
     options.zoneId,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -166,7 +169,7 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
-    case udt: UserDefinedType[_] => (datum: String) =>
+    case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
@@ -188,12 +191,13 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (requiredSchema.nonEmpty) {
-    (input: String) => convert(tokenizer.parseLine(input))
-  } else {
+  private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
     (_: String) => InternalRow.empty
+  } else {
+    // parse if the columnPruning is disabled or requiredSchema is nonEmpty
+    (input: String) => convert(tokenizer.parseLine(input))
   }
 
   /**

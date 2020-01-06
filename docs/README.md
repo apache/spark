@@ -36,13 +36,12 @@ You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/
 installed. Also install the following libraries:
 
 ```sh
-$ sudo gem install jekyll jekyll-redirect-from pygments.rb
-$ sudo pip install Pygments
+$ sudo gem install jekyll jekyll-redirect-from rouge
 # Following is needed only for generating API docs
 $ sudo pip install sphinx pypandoc mkdocs
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "rmarkdown"), repos="http://cran.stat.ucla.edu/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="http://cran.stat.ucla.edu/")'
-$ sudo Rscript -e 'devtools::install_version("testthat", version = "1.0.2", repos="http://cran.stat.ucla.edu/")'
+$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("testthat", version = "1.0.2", repos="https://cloud.r-project.org/")'
 ```
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
@@ -84,7 +83,7 @@ $ PRODUCTION=1 jekyll build
 
 ## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
-You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` from the `$SPARK_HOME` directory.
+You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
 `$SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
@@ -94,7 +93,7 @@ after [building Spark](https://github.com/apache/spark#building-spark) first.
 
 When you run `jekyll build` in the `docs` directory, it will also copy over the scaladoc and javadoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
-jekyll plugin to run `build/sbt unidoc` before building the site so if you haven't run it (recently) it
+jekyll plugin to run `./build/sbt unidoc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc and javadoc using [Unidoc](https://github.com/sbt/sbt-unidoc).
 The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/), SparkR docs
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
@@ -103,3 +102,17 @@ using [MkDocs](https://www.mkdocs.org/).
 NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
 to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+
+### Automatically Rebuilding API Docs
+
+`jekyll serve --watch` will only watch what's in `docs/`, and it won't follow symlinks. That means it won't monitor your API docs under `python/docs` or elsewhere.
+
+To work around this limitation for Python, install [`entr`](http://eradman.com/entrproject/) and run the following in a separate shell:
+
+```sh
+cd "$SPARK_HOME/python/docs"
+find .. -type f -name '*.py' \
+| entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
+```
+
+Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.

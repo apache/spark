@@ -21,10 +21,14 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 
+import org.junit.Assert
+import org.scalatest.Assertions
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.storage.StorageLevel
 
 
 abstract class QueryTest extends PlanTest {
@@ -149,10 +153,7 @@ abstract class QueryTest extends PlanTest {
 
     assertEmptyMissingInput(analyzedDF)
 
-    QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    QueryTest.checkAnswer(analyzedDF, expectedAnswer)
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
@@ -206,6 +207,22 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
+   * Asserts that a given [[Dataset]] will be executed using the cache with the given name and
+   * storage level.
+   */
+  def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
+      val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
+      cachedName == cacheBuilder.tableName.get &&
+        (storageLevel == cacheBuilder.storageLevel)
+    }.getOrElse(false)
+
+    assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
+      s"level $storageLevel, but it doesn't.")
+  }
+
+  /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
@@ -218,18 +235,32 @@ abstract class QueryTest extends PlanTest {
   }
 }
 
-object QueryTest {
+object QueryTest extends Assertions {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
+   */
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * If there was exception during the execution or the contents of the DataFrame does not
-   * match the expected result, an error message will be returned. Otherwise, a [[None]] will
+   * match the expected result, an error message will be returned. Otherwise, a None will
    * be returned.
    *
-   * @param df the [[DataFrame]] to be executed
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(
+  def getErrorMessageInCheckAnswer(
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
@@ -391,15 +422,15 @@ object QueryTest {
     }
   }
 
-  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
-    checkAnswer(df, expectedAnswer.asScala) match {
-      case Some(errorMessage) => errorMessage
-      case None => null
+  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
+      case Some(errorMessage) => Assert.fail(errorMessage)
+      case None =>
     }
   }
 }
 
-class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+class QueryTestSuite extends QueryTest with test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)

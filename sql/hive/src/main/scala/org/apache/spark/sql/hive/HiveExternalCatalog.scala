@@ -120,6 +120,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.getTable(db, table)
   }
 
+  private[hive] def getRawTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = {
+    client.getTablesByName(db, tables)
+  }
+
   /**
    * If the given table properties contains datasource properties, throw an exception. We will do
    * this check when create or alter a table, i.e. when we try to write table metadata to Hive
@@ -359,11 +363,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         (None, message)
 
       // our bucketing is un-compatible with hive(different hash function)
-      case _ if table.bucketSpec.nonEmpty =>
+      case Some(serde) if table.bucketSpec.nonEmpty =>
         val message =
           s"Persisting bucketed data source table $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
-        (None, message)
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with " +
+            "Hive bucketed table. But Hive can read this table as a non-bucketed table."
+        (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
       case Some(serde) =>
         val message =
@@ -700,6 +705,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
     restoreTableMetadata(getRawTable(db, table))
+  }
+
+  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = withClient {
+    getRawTablesByNames(db, tables).map(restoreTableMetadata)
   }
 
   /**

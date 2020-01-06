@@ -696,32 +696,28 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val struct2 = Literal.create(null, schema2)
     StructsToJson(Map.empty, struct2, gmtId).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("Unable to convert column a of type calendarinterval to JSON"))
+        assert(msg.contains("Unable to convert column a of type interval to JSON"))
       case _ => fail("from_json should not work on interval map value type.")
     }
   }
 
   test("from_json missing fields") {
-    for (forceJsonNullableSchema <- Seq(false, true)) {
-      withSQLConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA.key -> forceJsonNullableSchema.toString) {
-        val input =
-          """{
-          |  "a": 1,
-          |  "c": "foo"
-          |}
-          |""".stripMargin
-        val jsonSchema = new StructType()
-          .add("a", LongType, nullable = false)
-          .add("b", StringType, nullable = !forceJsonNullableSchema)
-          .add("c", StringType, nullable = false)
-        val output = InternalRow(1L, null, UTF8String.fromString("foo"))
-        val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
-        checkEvaluation(expr, output)
-        val schema = expr.dataType
-        val schemaToCompare = if (forceJsonNullableSchema) jsonSchema.asNullable else jsonSchema
-        assert(schemaToCompare == schema)
-      }
-    }
+    val input =
+      """{
+      |  "a": 1,
+      |  "c": "foo"
+      |}
+      |""".stripMargin
+    val jsonSchema = new StructType()
+      .add("a", LongType, nullable = false)
+      .add("b", StringType, nullable = false)
+      .add("c", StringType, nullable = false)
+    val output = InternalRow(1L, null, UTF8String.fromString("foo"))
+    val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
+    checkEvaluation(expr, output)
+    val schema = expr.dataType
+    val schemaToCompare = jsonSchema.asNullable
+    assert(schemaToCompare == schema)
   }
 
   test("SPARK-24709: infer schema of json strings") {

@@ -28,10 +28,36 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
+trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
+
+  /**
+   * Suites extending [[SharedSparkSession]] are sharing resources (eg. SparkSession) in their
+   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
+   * the automatic thread snapshot is performed, so the audit code could fail to report threads
+   * leaked by that shared session.
+   *
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
+   */
+  override protected val enableAutoThreadAudit = false
+
+  protected override def beforeAll(): Unit = {
+    doThreadPreAudit()
+    super.beforeAll()
+  }
+
+  protected override def afterAll(): Unit = {
+    try {
+      super.afterAll()
+    } finally {
+      doThreadPostAudit()
+    }
+  }
+}
+
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSparkSession
+trait SharedSparkSessionBase
   extends SQLTestUtilsBase
   with BeforeAndAfterEach
   with Eventually { self: Suite =>

@@ -23,9 +23,9 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.connector.write.WriterCommitMessage
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable

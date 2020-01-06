@@ -24,13 +24,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -254,10 +254,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
@@ -268,6 +268,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * empty array/struct during schema inference.</li>
    * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
    * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -315,10 +320,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * value.</li>
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
@@ -348,6 +353,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * For instance, this is used while parsing dates and timestamps.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing. Maximum length is 1 character.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -361,6 +371,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
+   * we should merge schemas collected from all ORC part-files. This will override
+   * `spark.sql.orc.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.3.0
@@ -380,6 +398,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * whether we should merge schemas collected from all
    * Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -410,6 +433,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * </li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -433,15 +461,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *   spark.readStream().textFile("/path/to/spark/README.md")
    * }}}
    *
-   * You can set the following text-specific options to deal with text files:
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * </ul>
+   * You can set the text-specific options as specified in `DataStreamReader.text`.
    *
    * @param path input path
    * @since 2.1.0

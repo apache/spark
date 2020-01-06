@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.IOException
 
-import org.apache.spark.sql.sources.v2.reader.PartitionReader
+import org.apache.spark.sql.connector.read.PartitionReader
 
 /**
  * A [[PartitionReader]] with empty output.

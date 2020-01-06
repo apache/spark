@@ -23,10 +23,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -105,7 +104,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -121,7 +120,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -165,7 +164,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -203,20 +202,57 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       // stage or if the stage information has been garbage collected
       store.asOption(store.lastStageAttempt(stageId)).getOrElse {
         new v1.StageData(
-          v1.StageStatus.PENDING,
-          stageId,
-          0, 0, 0, 0, 0, 0, 0,
-          0L, 0L, None, None, None, None,
-          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
-          "Unknown",
-          None,
-          "Unknown",
-          null,
-          Nil,
-          Nil,
-          None,
-          None,
-          Map())
+          status = v1.StageStatus.PENDING,
+          stageId = stageId,
+          attemptId = 0,
+          numTasks = 0,
+          numActiveTasks = 0,
+          numCompleteTasks = 0,
+          numFailedTasks = 0,
+          numKilledTasks = 0,
+          numCompletedIndices = 0,
+
+          submissionTime = None,
+          firstTaskLaunchedTime = None,
+          completionTime = None,
+          failureReason = None,
+
+          executorDeserializeTime = 0L,
+          executorDeserializeCpuTime = 0L,
+          executorRunTime = 0L,
+          executorCpuTime = 0L,
+          resultSize = 0L,
+          jvmGcTime = 0L,
+          resultSerializationTime = 0L,
+          memoryBytesSpilled = 0L,
+          diskBytesSpilled = 0L,
+          peakExecutionMemory = 0L,
+          inputBytes = 0L,
+          inputRecords = 0L,
+          outputBytes = 0L,
+          outputRecords = 0L,
+          shuffleRemoteBlocksFetched = 0L,
+          shuffleLocalBlocksFetched = 0L,
+          shuffleFetchWaitTime = 0L,
+          shuffleRemoteBytesRead = 0L,
+          shuffleRemoteBytesReadToDisk = 0L,
+          shuffleLocalBytesRead = 0L,
+          shuffleReadBytes = 0L,
+          shuffleReadRecords = 0L,
+          shuffleWriteBytes = 0L,
+          shuffleWriteTime = 0L,
+          shuffleWriteRecords = 0L,
+
+          name = "Unknown",
+          description = None,
+          details = "Unknown",
+          schedulingPool = null,
+
+          rddIds = Nil,
+          accumulatorUpdates = Nil,
+          tasks = None,
+          executorSummary = None,
+          killedTasksSummary = Map())
       }
     }
 

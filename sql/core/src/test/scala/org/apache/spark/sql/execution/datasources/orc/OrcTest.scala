@@ -27,9 +27,9 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileBasedDataSourceTest}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 
@@ -119,11 +119,8 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-      DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
+          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(options)
-        scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
-        val pushedFilters = scanBuilder.pushedFilters()
         if (noneSupported) {
           assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {

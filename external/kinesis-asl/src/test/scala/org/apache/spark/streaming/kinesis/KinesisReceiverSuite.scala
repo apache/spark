@@ -27,7 +27,7 @@ import com.amazonaws.services.kinesis.model.Record
 import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.{BeforeAndAfter, Matchers}
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 

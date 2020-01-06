@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
  * test driver submission in the standalone scheduler.
  */
 object DriverSubmissionTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       println("Usage: DriverSubmissionTest <seconds-to-sleep>")
       System.exit(0)

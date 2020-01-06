@@ -30,36 +30,25 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
 abstract class FileWriteBuilder(
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
-    supportsDataType: DataType => Boolean)
-  extends WriteBuilder with SupportsSaveMode {
-  private var schema: StructType = _
-  private var queryId: String = _
+    supportsDataType: DataType => Boolean,
+    info: LogicalWriteInfo) extends WriteBuilder {
+  private val schema = info.schema()
+  private val queryId = info.queryId()
+  private val options = info.options()
   private var mode: SaveMode = _
 
-  override def withInputDataSchema(schema: StructType): WriteBuilder = {
-    this.schema = schema
-    this
-  }
-
-  override def withQueryId(queryId: String): WriteBuilder = {
-    this.queryId = queryId
-    this
-  }
-
-  override def mode(mode: SaveMode): WriteBuilder = {
+  def mode(mode: SaveMode): WriteBuilder = {
     this.mode = mode
     this
   }

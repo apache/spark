@@ -53,6 +53,11 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     override def getValue: Long = threadPool.getCompletedTaskCount()
   })
 
+  // Gauge for executor, number of tasks started
+  metricRegistry.register(MetricRegistry.name("threadpool", "startedTasks"), new Gauge[Long] {
+    override def getValue: Long = threadPool.getTaskCount()
+  })
+
   // Gauge for executor thread pool's current number of threads
   metricRegistry.register(MetricRegistry.name("threadpool", "currentPool_size"), new Gauge[Int] {
     override def getValue: Int = threadPool.getPoolSize()
@@ -74,7 +79,8 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   }
 
   // Expose executor task metrics using the Dropwizard metrics system.
-  // The list is taken from TaskMetrics.scala
+  // The list of available Task metrics can be found in TaskMetrics.scala
+  val SUCCEEDED_TASKS = metricRegistry.counter(MetricRegistry.name("succeededTasks"))
   val METRIC_CPU_TIME = metricRegistry.counter(MetricRegistry.name("cpuTime"))
   val METRIC_RUN_TIME = metricRegistry.counter(MetricRegistry.name("runTime"))
   val METRIC_JVM_GC_TIME = metricRegistry.counter(MetricRegistry.name("jvmGCTime"))

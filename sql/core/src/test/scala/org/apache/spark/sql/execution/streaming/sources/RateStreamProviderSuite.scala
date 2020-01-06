@@ -24,12 +24,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ManualClock
@@ -39,7 +39,7 @@ class RateStreamProviderSuite extends StreamTest {
   import testImplicits._
 
   case class AdvanceRateManualClock(seconds: Long) extends AddData {
-    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
+    override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
         case r: StreamingDataSourceV2Relation
@@ -305,7 +305,7 @@ class RateStreamProviderSuite extends StreamTest {
         .load()
     }
     assert(exception.getMessage.contains(
-      "rate source does not support user-specified schema"))
+      "RateStreamProvider source does not support user-specified schema"))
   }
 
   test("continuous data") {

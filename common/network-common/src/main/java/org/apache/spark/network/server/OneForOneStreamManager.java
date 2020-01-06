@@ -57,7 +57,7 @@ public class OneForOneStreamManager extends StreamManager {
     int curChunk = 0;
 
     // Used to keep track of the number of chunks being transferred and not finished yet.
-    volatile long chunksBeingTransferred = 0L;
+    final AtomicLong chunksBeingTransferred = new AtomicLong(0L);
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
       this.appId = appId;
@@ -125,7 +125,10 @@ public class OneForOneStreamManager extends StreamManager {
 
         // Release all remaining buffers.
         while (state.buffers.hasNext()) {
-          state.buffers.next().release();
+          ManagedBuffer buffer = state.buffers.next();
+          if (buffer != null) {
+            buffer.release();
+          }
         }
       }
     }
@@ -150,7 +153,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred++;
+      streamState.chunksBeingTransferred.incrementAndGet();
     }
 
   }
@@ -164,7 +167,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred--;
+      streamState.chunksBeingTransferred.decrementAndGet();
     }
   }
 
@@ -177,7 +180,7 @@ public class OneForOneStreamManager extends StreamManager {
   public long chunksBeingTransferred() {
     long sum = 0L;
     for (StreamState streamState: streams.values()) {
-      sum += streamState.chunksBeingTransferred;
+      sum += streamState.chunksBeingTransferred.get();
     }
     return sum;
   }

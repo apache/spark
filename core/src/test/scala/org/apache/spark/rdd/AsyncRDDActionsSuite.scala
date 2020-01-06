@@ -37,12 +37,12 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     sc = new SparkContext("local[2]", "test")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       LocalSparkContext.stop(sc)
       sc = null
@@ -66,7 +66,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   test("foreachAsync") {
-    zeroPartRdd.foreachAsync(i => Unit).get()
+    zeroPartRdd.foreachAsync(i => ()).get()
 
     val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 3).foreachAsync { i =>
@@ -76,7 +76,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   test("foreachPartitionAsync") {
-    zeroPartRdd.foreachPartitionAsync(iter => Unit).get()
+    zeroPartRdd.foreachPartitionAsync(iter => ()).get()
 
     val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 9).foreachPartitionAsync { iter =>
@@ -86,7 +86,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   test("takeAsync") {
-    def testTake(rdd: RDD[Int], input: Seq[Int], num: Int) {
+    def testTake(rdd: RDD[Int], input: Seq[Int], num: Int): Unit = {
       val expected = input.take(num)
       val saw = rdd.takeAsync(num).get()
       assert(saw == expected, "incorrect result for rdd with %d partitions (expected %s, saw %s)"

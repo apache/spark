@@ -66,7 +66,7 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V) {
+  def update(k: K, v: V): Unit = {
     val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
     _keySet.rehashIfNeeded(k, grow, move)

@@ -20,9 +20,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScan
-import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -34,7 +35,8 @@ case class OrcScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    pushedFilters: Array[Filter])
   extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
   override def isSplitable(path: Path): Boolean = true
 
@@ -45,5 +47,19 @@ case class OrcScan(
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema)
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case o: OrcScan =>
+      fileIndex == o.fileIndex && dataSchema == o.dataSchema &&
+      readDataSchema == o.readDataSchema && readPartitionSchema == o.readPartitionSchema &&
+      options == o.options && equivalentFilters(pushedFilters, o.pushedFilters)
+    case _ => false
+  }
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def description(): String = {
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
 }

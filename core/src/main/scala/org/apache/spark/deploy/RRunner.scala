@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.internal.config.R._
+import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -46,7 +47,7 @@ object RRunner {
       // but kept here for backward compatibility.
       var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
       cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
-      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+      if (sys.props.getOrElse(SUBMIT_DEPLOY_MODE.key, "client") == "client") {
         cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
       }
       cmd
@@ -72,7 +73,7 @@ object RRunner {
     @volatile var sparkRBackendSecret: String = null
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
-      override def run() {
+      override def run(): Unit = {
         val (port, authHelper) = sparkRBackend.init()
         sparkRBackendPort = port
         sparkRBackendSecret = authHelper.secret

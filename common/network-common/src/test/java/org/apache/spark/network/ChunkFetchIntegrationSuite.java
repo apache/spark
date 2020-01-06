@@ -151,9 +151,9 @@ public class ChunkFetchIntegrationSuite {
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       final Semaphore sem = new Semaphore(0);
 
-      res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
-      res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
-      res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
+      res.successChunks = Collections.synchronizedSet(new HashSet<>());
+      res.failedChunks = Collections.synchronizedSet(new HashSet<>());
+      res.buffers = Collections.synchronizedList(new LinkedList<>());
 
       ChunkReceivedCallback callback = new ChunkReceivedCallback() {
         @Override

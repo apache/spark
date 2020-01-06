@@ -19,6 +19,7 @@ import sys
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.linalg import DenseMatrix, Vectors
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
@@ -26,8 +27,6 @@ from pyspark.sql.functions import lit
 
 class ChiSquareTest(object):
     """
-    .. note:: Experimental
-
     Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
     statistic is computed. All label and feature values must be categorical.
@@ -77,8 +76,6 @@ class ChiSquareTest(object):
 
 class Correlation(object):
     """
-    .. note:: Experimental
-
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
 
@@ -138,8 +135,6 @@ class Correlation(object):
 
 class KolmogorovSmirnovTest(object):
     """
-    .. note:: Experimental
-
     Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
     distribution.
 
@@ -199,8 +194,6 @@ class KolmogorovSmirnovTest(object):
 
 class Summarizer(object):
     """
-    .. note:: Experimental
-
     Tools for vectorized statistics on MLlib Vectors.
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
     This class lets users pick the statistics they would like to extract for a given column.
@@ -252,12 +245,28 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "mean")
 
     @staticmethod
+    @since("3.0.0")
+    def sum(col, weightCol=None):
+        """
+        return a column of sum summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "sum")
+
+    @staticmethod
     @since("2.4.0")
     def variance(col, weightCol=None):
         """
         return a column of variance summary
         """
         return Summarizer._get_single_metric(col, weightCol, "variance")
+
+    @staticmethod
+    @since("3.0.0")
+    def std(col, weightCol=None):
+        """
+        return a column of std summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "std")
 
     @staticmethod
     @since("2.4.0")
@@ -331,7 +340,9 @@ class Summarizer(object):
 
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
+         - sum: a vector that contains the coefficient-wise sum.
          - variance: a vector tha contains the coefficient-wise variance.
+         - std: a vector tha contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
@@ -355,8 +366,6 @@ class Summarizer(object):
 
 class SummaryBuilder(JavaWrapper):
     """
-    .. note:: Experimental
-
     A builder object that provides summary statistics about a given column.
 
     Users should not directly create such builders, but instead use one of the methods in
@@ -384,6 +393,22 @@ class SummaryBuilder(JavaWrapper):
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
+
+
+class MultivariateGaussian(object):
+    """Represents a (mean, cov) tuple
+
+    >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
+    >>> (m.mean, m.cov.toArray())
+    (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
+           [ 3.,  2.]]))
+
+    .. versionadded:: 3.0.0
+
+    """
+    def __init__(self, mean, cov):
+        self.mean = mean
+        self.cov = cov
 
 
 if __name__ == "__main__":

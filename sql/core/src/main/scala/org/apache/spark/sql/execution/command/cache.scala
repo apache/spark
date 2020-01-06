@@ -35,7 +35,7 @@ case class CacheTableCommand(
   require(plan.isEmpty || tableIdent.database.isEmpty,
     "Database name is not allowed in CACHE TABLE AS SELECT")
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
+  override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>

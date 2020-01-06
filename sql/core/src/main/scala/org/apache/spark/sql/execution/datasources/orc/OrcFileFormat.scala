@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc._
+import org.apache.orc.{OrcUtils => _, _}
 import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
@@ -38,10 +38,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
@@ -94,7 +93,7 @@ class OrcFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    OrcUtils.readSchema(sparkSession, files)
+    OrcUtils.inferSchema(sparkSession, files, options)
   }
 
   override def prepareWrite(
@@ -180,10 +179,11 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(filePath, readerOptions)
-
-      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+      val requestedColIdsOrEmptyFile =
+        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+          OrcUtils.requestedColumnIds(
+            isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+        }
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty

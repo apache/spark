@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -64,12 +64,10 @@ object CommandUtils extends Logging {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
         val pathFilter = new PathFilter with Serializable {
-          override def accept(path: Path): Boolean = {
-            DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
-          }
+          override def accept(path: Path): Boolean = isDataPath(path, stagingDir)
         }
         val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
-          paths, sessionState.newHadoopConf(), pathFilter, spark)
+          paths, sessionState.newHadoopConf(), pathFilter, spark, areRootPaths = true)
         fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
       } else {
         partitions.map { p =>
@@ -98,8 +96,7 @@ object CommandUtils extends Logging {
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
-            if (!status.getPath.getName.startsWith(stagingDir) &&
-              DataSourceUtils.isDataPath(path)) {
+            if (isDataPath(status.getPath, stagingDir)) {
               getPathSize(fs, status.getPath)
             } else {
               0L
@@ -217,7 +214,9 @@ object CommandUtils extends Logging {
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
-          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+          new ApproximatePercentile(attr,
+            Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)),
+            Literal(conf.percentileAccuracy))
         val expr = aggFunc.toAggregateExpression()
         Alias(expr, expr.toString)()
       }
@@ -342,5 +341,9 @@ object CommandUtils extends Logging {
       val histogram = Histogram(nonNullRows.toDouble / ndvs.length, bins)
       cs.copy(histogram = Some(histogram))
     }
+  }
+
+  private def isDataPath(path: Path, stagingDir: String): Boolean = {
+    !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
   }
 }

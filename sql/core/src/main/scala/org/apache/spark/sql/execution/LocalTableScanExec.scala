@@ -77,11 +77,14 @@ case class LocalTableScanExec(
     taken
   }
 
+  override def executeTail(limit: Int): Array[InternalRow] = {
+    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
+    longMetric("numOutputRows").add(taken.size)
+    taken.toArray
+  }
+
   // Input is already UnsafeRows.
   override protected val createUnsafeProjection: Boolean = false
-
-  // Do not codegen when there is no parent - to support the fast driver-local collect/take paths.
-  override def supportCodegen: Boolean = (parent != null)
 
   override def inputRDD: RDD[InternalRow] = rdd
 }
