@@ -367,7 +367,7 @@ The following configurations are optional:
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
