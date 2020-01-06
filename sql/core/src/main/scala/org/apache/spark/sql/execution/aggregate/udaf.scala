@@ -488,28 +488,12 @@ case class ScalaAggregator[IN, BUF, OUT](
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  private[this] lazy val childrenSchema: StructType = {
-    val inputFields = children.zipWithIndex.map {
-      case (child, index) =>
-        StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
-    }
-    StructType(inputFields)
-  }
-
-  private[this] lazy val inputProjection = {
-    val inputAttributes = childrenSchema.toAttributes
-    log.debug(
-      s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    UnsafeProjection.create(children, inputAttributes)
-  }
+  private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   def createAggregationBuffer(): BUF = agg.zero
 
-  def update(buffer: BUF, input: InternalRow): BUF = {
-    val proj = inputProjection(input)
-    val a = inputEncoder.fromRow(proj)
-    agg.reduce(buffer, a)
-  }
+  def update(buffer: BUF, input: InternalRow): BUF =
+    agg.reduce(buffer, inputEncoder.fromRow(inputProjection(input)))
 
   def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
 
@@ -518,10 +502,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
   }
 
-  private[this] lazy val bufferRow = {
-    val bufferSerializer = bufferEncoder.namedExpressions
-    new UnsafeRow(bufferSerializer.length)
-  }
+  private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
 
   def serialize(agg: BUF): Array[Byte] =
     bufferEncoder.toRow(agg).asInstanceOf[UnsafeRow].getBytes()
@@ -531,8 +512,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     bufferEncoder.fromRow(bufferRow)
   }
 
-  override def toString: String =
-    s"""${nodeName}(${children.mkString(",")})"""
+  override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
   override def nodeName: String = agg.getClass.getSimpleName
 }
