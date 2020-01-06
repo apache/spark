@@ -370,12 +370,7 @@ class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
             s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
-            // Create a new df to make sure its physical operator picks up
-            // spark.sql.TungstenAggregate.testFallbackStartsAt.
-            // todo: remove it?
-            val newActual = Dataset.ofRows(spark, actual.logicalPlan)
-
-            QueryTest.getErrorMessageInCheckAnswer(newActual, expectedAnswer) match {
+            QueryTest.getErrorMessageInCheckAnswer(actual, expectedAnswer) match {
               case Some(errorMessage) =>
                 val newErrorMessage =
                   s"""
