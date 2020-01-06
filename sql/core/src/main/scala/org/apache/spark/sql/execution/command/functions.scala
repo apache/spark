@@ -19,11 +19,14 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -73,6 +76,15 @@ case class CreateFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    // Checks if the given resources exist
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    val nonExistentResources = resources.filter { r =>
+      val path = new Path(r.uri)
+      !path.getFileSystem(hadoopConf).exists(path)
+    }
+    if (nonExistentResources.nonEmpty) {
+      throw new AnalysisException(s"Resources not found: ${nonExistentResources.mkString(",")}")
+    }
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
@@ -222,6 +234,21 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    functionNames.sorted.map(Row(_))
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    if (showSystemFunctions) {
+      (functionNames ++
+        StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
+        .sorted.map(Row(_))
+    } else {
+      functionNames.sorted.map(Row(_))
+    }
+
   }
+}
+
+object FunctionsCommand {
+  // operators that do not have corresponding functions.
+  // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
+  val virtualOperators = Seq("!=", "<>", "between", "case")
 }

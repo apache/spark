@@ -32,8 +32,9 @@ import org.apache.spark.sql.execution.window.WindowExec
 
 class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
 
-  override protected def checkGeneratedCode(plan: SparkPlan): Unit = {
-    super.checkGeneratedCode(plan)
+  override protected def checkGeneratedCode(
+      plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
+    super.checkGeneratedCode(plan, checkMethodCodeSize)
     checkLogicalPlanTag(plan)
   }
 

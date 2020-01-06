@@ -28,7 +28,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]) {
+  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]): Unit = {
     val nonExcludableRules = optimizer.nonExcludableRules
 
     val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))

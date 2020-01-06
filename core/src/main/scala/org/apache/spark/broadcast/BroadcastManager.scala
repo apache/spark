@@ -40,7 +40,7 @@ private[spark] class BroadcastManager(
   initialize()
 
   // Called by SparkContext or Executor before using Broadcast
-  private def initialize() {
+  private def initialize(): Unit = {
     synchronized {
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
@@ -50,7 +50,7 @@ private[spark] class BroadcastManager(
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     broadcastFactory.stop()
   }
 
@@ -77,7 +77,7 @@ private[spark] class BroadcastManager(
     broadcastFactory.newBroadcast[T](value_, isLocal, bid)
   }
 
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
 }

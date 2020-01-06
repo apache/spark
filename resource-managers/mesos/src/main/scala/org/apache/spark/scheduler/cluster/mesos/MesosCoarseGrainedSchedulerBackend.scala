@@ -187,7 +187,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     id.toString
   }
 
-  override def start() {
+  override def start(): Unit = {
     super.start()
 
     if (sc.deployMode == "client") {
@@ -322,12 +322,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
+  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID): Unit = {}
 
   override def registered(
       driver: org.apache.mesos.SchedulerDriver,
       frameworkId: FrameworkID,
-      masterInfo: MasterInfo) {
+      masterInfo: MasterInfo): Unit = {
 
     this.appId = frameworkId.getValue
     this.mesosExternalShuffleClient.foreach(_.init(appId))
@@ -341,11 +341,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     totalCoreCount.get >= maxCoresOption.getOrElse(0) * minRegisteredRatio
   }
 
-  override def disconnected(d: org.apache.mesos.SchedulerDriver) {
+  override def disconnected(d: org.apache.mesos.SchedulerDriver): Unit = {
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
   }
 
-  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo) {
+  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo): Unit = {
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
@@ -353,7 +353,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
    */
-  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]) {
+  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]): Unit = {
     stateLock.synchronized {
       if (stopCalled) {
         logDebug("Ignoring offers during shutdown")
@@ -613,7 +613,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     return true
   }
 
-  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
+  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus): Unit = {
     val taskId = status.getTaskId.getValue
     val slaveId = status.getSlaveId.getValue
     val state = mesosToTaskState(status.getState)
@@ -675,12 +675,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def error(d: org.apache.mesos.SchedulerDriver, message: String) {
+  override def error(d: org.apache.mesos.SchedulerDriver, message: String): Unit = {
     logError(s"Mesos error: $message")
     scheduler.error(message)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     stopSchedulerBackend()
     launcherBackend.setState(SparkAppHandle.State.FINISHED)
     launcherBackend.close()
@@ -722,7 +722,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
 
   /**
    * Called when a slave is lost or a Mesos task finished. Updates local view on

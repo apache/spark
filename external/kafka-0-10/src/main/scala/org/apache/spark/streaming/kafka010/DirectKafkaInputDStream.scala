@@ -237,9 +237,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val description = offsetRanges.filter { offsetRange =>
       // Don't display empty ranges.
       offsetRange.fromOffset != offsetRange.untilOffset
-    }.map { offsetRange =>
+    }.toSeq.sortBy(-_.count()).map { offsetRange =>
       s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
-        s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+      s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}\t" +
+      s"count: ${offsetRange.count()}"
     }.mkString("\n")
     // Copy offsetRanges to immutable.List to prevent from being modified by the user
     val metadata = Map(

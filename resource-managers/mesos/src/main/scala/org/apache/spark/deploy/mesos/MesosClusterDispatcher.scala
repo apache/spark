@@ -106,7 +106,7 @@ private[mesos] object MesosClusterDispatcher
   extends Logging
   with CommandLineUtils {
 
-  override def main(args: Array[String]) {
+  override def main(args: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf

@@ -1036,7 +1036,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       (TimestampType, LONG),
       (DecimalType(4, 2), BYTES)
     )
-    def assertException(f: () => AvroSerializer) {
+    def assertException(f: () => AvroSerializer): Unit = {
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
         f()
       }.getMessage

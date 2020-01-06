@@ -1291,7 +1291,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       3.0
+       3
   """)
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
@@ -1311,7 +1311,7 @@ case class Round(child: Expression, scale: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       2.0
+       2
   """)
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)

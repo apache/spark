@@ -27,14 +27,14 @@ trait LocalSparkSession extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   @transient var spark: SparkSession = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       LocalSparkSession.stop(spark)
       SparkSession.clearActiveSession()
@@ -47,7 +47,7 @@ trait LocalSparkSession extends BeforeAndAfterEach with BeforeAndAfterAll { self
 }
 
 object LocalSparkSession {
-  def stop(spark: SparkSession) {
+  def stop(spark: SparkSession): Unit = {
     if (spark != null) {
       spark.stop()
     }

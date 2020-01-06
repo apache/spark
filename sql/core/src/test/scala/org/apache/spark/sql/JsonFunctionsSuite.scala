@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -36,6 +37,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
       Row("alice", "5"))
+  }
+
+  test("function get_json_object - support single quotes") {
+    val df: DataFrame = Seq(("""{'name': 'fang', 'age': 5}""")).toDF("a")
+    checkAnswer(
+      df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
+      Row("fang", "5"))
   }
 
   val tuples: Seq[(String, String)] =
@@ -217,15 +225,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("to_json - key types of map don't matter") {
     // interval type is invalid for converting to JSON. However, the keys of a map are treated
     // as strings, so its type doesn't matter.
-    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+    val df = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
       .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
     checkAnswer(
       df.select(to_json($"c")),
-      Row("""{"col1":{"interval -3 months 7 hours":"a"}}""") :: Nil)
+      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
   }
 
   test("to_json unsupported type") {
-    val baseDf = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+    val baseDf = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
     val e = intercept[AnalysisException]{
       // Unsupported type throws an exception
@@ -606,6 +614,52 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = input.select(from_json($"value", "time timestamp", options))
 
       checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+    }
+  }
+
+  test("special timestamp values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(s"""{"t": "$specialValue"}""").toDS()
+      val readback = input.select(from_json($"value", lit("t timestamp"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+    }
+  }
+
+  test("special date values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
+      val readback = input.select(from_json($"value", lit("d date"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
+    }
+  }
+
+  test("from_json - timestamp in micros") {
+    val df = Seq("""{"time": "1970-01-01T00:00:00.123456"}""").toDS()
+    val schema = new StructType().add("time", TimestampType)
+    val options = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSSSSS")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.123456"))))
+  }
+
+  test("to_json - timestamp in micros") {
+    val s = "2019-11-18 11:56:00.123456"
+    val df = Seq(java.sql.Timestamp.valueOf(s)).toDF("t").select(
+      to_json(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS")))
+    checkAnswer(df, Row(s"""{"t":"$s"}"""))
+  }
+
+  test("json_tuple - do not truncate results") {
+    Seq(2000, 2800, 8000 - 1, 8000, 8000 + 1, 65535).foreach { len =>
+      val str = Array.tabulate(len)(_ => "a").mkString
+      val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
+        .withColumn("result", json_tuple('json, "test"))
+        .select('result)
+        .as[String].head.length
+      assert(json_tuple_result === len)
     }
   }
 }

@@ -58,7 +58,7 @@ class DataFrame(object):
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
 
-    To select a column from the data frame, use the apply method::
+    To select a column from the :class:`DataFrame`, use the apply method::
 
         ageCol = people.age
 
@@ -124,7 +124,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createTempView(self, name):
-        """Creates a local temporary view with this DataFrame.
+        """Creates a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -146,7 +146,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createOrReplaceTempView(self, name):
-        """Creates or replaces a local temporary view with this DataFrame.
+        """Creates or replaces a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -164,7 +164,7 @@ class DataFrame(object):
 
     @since(2.1)
     def createGlobalTempView(self, name):
-        """Creates a global temporary view with this DataFrame.
+        """Creates a global temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary view is tied to this Spark application.
         throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
@@ -253,10 +253,18 @@ class DataFrame(object):
         print(self._jdf.schema().treeString())
 
     @since(1.3)
-    def explain(self, extended=False):
+    def explain(self, extended=None, mode=None):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+        :param mode: specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
 
         >>> df.explain()
         == Physical Plan ==
@@ -271,11 +279,48 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
+
+        >>> df.explain(mode="formatted")
+        == Physical Plan ==
+        * Scan ExistingRDD (1)
+        (1) Scan ExistingRDD [codegen id : 1]
+        Output: [age#0, name#1]
+
+        .. versionchanged:: 3.0.0
+           Added optional argument `mode` to specify the expected output format of plans.
         """
-        if extended:
-            print(self._jdf.queryExecution().toString())
-        else:
-            print(self._jdf.queryExecution().simpleString())
+
+        if extended is not None and mode is not None:
+            raise Exception("extended and mode can not be specified simultaneously")
+
+        # For the no argument case: df.explain()
+        is_no_argument = extended is None and mode is None
+
+        # For the cases below:
+        #   explain(True)
+        #   explain(extended=False)
+        is_extended_case = extended is not None and isinstance(extended, bool)
+
+        # For the mode specified: df.explain(mode="formatted")
+        is_mode_case = mode is not None and isinstance(mode, basestring)
+
+        if not is_no_argument and not (is_extended_case or is_mode_case):
+            if extended is not None:
+                err_msg = "extended (optional) should be provided as bool" \
+                    ", got {0}".format(type(extended))
+            else:  # For mode case
+                err_msg = "mode (optional) should be provided as str, got {0}".format(type(mode))
+            raise TypeError(err_msg)
+
+        # Sets an explain mode depending on a given argument
+        if is_no_argument:
+            explain_mode = "simple"
+        elif is_extended_case:
+            explain_mode = "extended" if extended else "simple"
+        elif is_mode_case:
+            explain_mode = mode
+
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     @since(2.4)
     def exceptAll(self, other):
@@ -312,7 +357,7 @@ class DataFrame(object):
     @property
     @since(2.0)
     def isStreaming(self):
-        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
         return data as it arrives. A :class:`Dataset` that reads data from a streaming source
         must be executed as a :class:`StreamingQuery` using the :func:`start` method in
         :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
@@ -328,10 +373,10 @@ class DataFrame(object):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
-        :param truncate: If set to True, truncate strings longer than 20 chars by default.
+        :param truncate: If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
-        :param vertical: If set to True, print output rows vertically (one line
+        :param vertical: If set to ``True``, print output rows vertically (one line
             per column value).
 
         >>> df
@@ -373,7 +418,7 @@ class DataFrame(object):
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self):
-        """Returns a dataframe with html code when you enabled eager evaluation
+        """Returns a :class:`DataFrame` with html code when you enabled eager evaluation
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
@@ -407,11 +452,11 @@ class DataFrame(object):
     @since(2.1)
     def checkpoint(self, eager=True):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
-        plan may grow exponentially. It will be saved to files inside the checkpoint
+        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
+        where the plan may grow exponentially. It will be saved to files inside the checkpoint
         directory set with :meth:`SparkContext.setCheckpointDir`.
 
-        :param eager: Whether to checkpoint this DataFrame immediately
+        :param eager: Whether to checkpoint this :class:`DataFrame` immediately
 
         .. note:: Experimental
         """
@@ -421,11 +466,11 @@ class DataFrame(object):
     @since(2.3)
     def localCheckpoint(self, eager=True):
         """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this DataFrame, which is especially useful in iterative
-        algorithms where the plan may grow exponentially. Local checkpoints are stored in the
-        executors using the caching subsystem and therefore they are not reliable.
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. Local checkpoints are
+        stored in the executors using the caching subsystem and therefore they are not reliable.
 
-        :param eager: Whether to checkpoint this DataFrame immediately
+        :param eager: Whether to checkpoint this :class:`DataFrame` immediately
 
         .. note:: Experimental
         """
@@ -468,7 +513,7 @@ class DataFrame(object):
 
     @since(2.2)
     def hint(self, name, *parameters):
-        """Specifies some hint on the current DataFrame.
+        """Specifies some hint on the current :class:`DataFrame`.
 
         :param name: A name of the hint.
         :param parameters: Optional parameters.
@@ -520,16 +565,21 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def toLocalIterator(self):
+    def toLocalIterator(self, prefetchPartitions=False):
         """
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
-        The iterator will consume as much memory as the largest partition in this DataFrame.
+        The iterator will consume as much memory as the largest partition in this
+        :class:`DataFrame`. With prefetch it may consume up to the memory of the 2 largest
+        partitions.
+
+        :param prefetchPartitions: If Spark should pre-fetch the next partition
+                                   before it is needed.
 
         >>> list(df.toLocalIterator())
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.toPythonIterator()
+            sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
@@ -629,7 +679,7 @@ class DataFrame(object):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
 
-        .. note:: `blocking` default has changed to False to match Scala in 2.0.
+        .. note:: `blocking` default has changed to ``False`` to match Scala in 2.0.
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
@@ -664,7 +714,7 @@ class DataFrame(object):
     def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
-        resulting DataFrame is hash partitioned.
+        resulting :class:`DataFrame` is hash partitioned.
 
         :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
@@ -726,7 +776,7 @@ class DataFrame(object):
     def repartitionByRange(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
-        resulting DataFrame is range partitioned.
+        resulting :class:`DataFrame` is range partitioned.
 
         :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
@@ -786,7 +836,7 @@ class DataFrame(object):
     def sample(self, withReplacement=None, fraction=None, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        :param withReplacement: Sample with replacement or not (default False).
+        :param withReplacement: Sample with replacement or not (default ``False``).
         :param fraction: Fraction of rows to generate, range [0.0, 1.0].
         :param seed: Seed for sampling (default a random seed).
 
@@ -858,7 +908,7 @@ class DataFrame(object):
             sampling fraction for each stratum. If a stratum is not
             specified, we treat its fraction as zero.
         :param seed: random seed
-        :return: a new DataFrame that represents the stratified sample
+        :return: a new :class:`DataFrame` that represents the stratified sample
 
         >>> from pyspark.sql.functions import col
         >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
@@ -894,8 +944,8 @@ class DataFrame(object):
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
-        :param weights: list of doubles as weights with which to split the DataFrame. Weights will
-            be normalized if they don't sum up to 1.0.
+        :param weights: list of doubles as weights with which to split the :class:`DataFrame`.
+            Weights will be normalized if they don't sum up to 1.0.
         :param seed: The seed for sampling.
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
@@ -960,7 +1010,7 @@ class DataFrame(object):
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
 
-        :param alias: string, an alias name to be set for the DataFrame.
+        :param alias: string, an alias name to be set for the :class:`DataFrame`.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -1052,7 +1102,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: boolean or list of boolean (default True).
+        :param ascending: boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
@@ -1073,7 +1123,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: boolean or list of boolean (default True).
+        :param ascending: boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
@@ -1140,7 +1190,8 @@ class DataFrame(object):
         given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting
+            :class:`DataFrame`.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -1184,7 +1235,8 @@ class DataFrame(object):
         approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting
+            :class:`DataFrame`.
 
         >>> df.summary().show()
         +-------+------------------+-----+
@@ -1306,7 +1358,7 @@ class DataFrame(object):
 
         :param cols: list of column names (string) or expressions (:class:`Column`).
             If one of the column names is '*', that column is expanded to include all columns
-            in the current DataFrame.
+            in the current :class:`DataFrame`.
 
         >>> df.select('*').collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
@@ -1410,7 +1462,7 @@ class DataFrame(object):
     def cube(self, *cols):
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregation on them.
+        the specified columns, so we can run aggregations on them.
 
         >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
@@ -1444,7 +1496,8 @@ class DataFrame(object):
 
     @since(2.0)
     def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1455,7 +1508,8 @@ class DataFrame(object):
 
     @since(1.3)
     def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1466,7 +1520,8 @@ class DataFrame(object):
 
     @since(2.3)
     def unionByName(self, other):
-        """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
 
         This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
         union (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1489,7 +1544,7 @@ class DataFrame(object):
     @since(1.3)
     def intersect(self, other):
         """ Return a new :class:`DataFrame` containing rows only in
-        both this frame and another frame.
+        both this :class:`DataFrame` and another :class:`DataFrame`.
 
         This is equivalent to `INTERSECT` in SQL.
         """
@@ -1497,8 +1552,8 @@ class DataFrame(object):
 
     @since(2.4)
     def intersectAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
-        dataframe while preserving duplicates.
+        """ Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
+        and another :class:`DataFrame` while preserving duplicates.
 
         This is equivalent to `INTERSECT ALL` in SQL.
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
@@ -1519,8 +1574,8 @@ class DataFrame(object):
 
     @since(1.3)
     def subtract(self, other):
-        """ Return a new :class:`DataFrame` containing rows in this frame
-        but not in another frame.
+        """ Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+        but not in another :class:`DataFrame`.
 
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
@@ -1810,12 +1865,12 @@ class DataFrame(object):
     def approxQuantile(self, col, probabilities, relativeError):
         """
         Calculates the approximate quantiles of numerical columns of a
-        DataFrame.
+        :class:`DataFrame`.
 
         The result of this algorithm has the following deterministic bound:
-        If the DataFrame has N elements and if we request the quantile at
+        If the :class:`DataFrame` has N elements and if we request the quantile at
         probability `p` up to error `err`, then the algorithm will return
-        a sample `x` from the DataFrame so that the *exact* rank of `x` is
+        a sample `x` from the :class:`DataFrame` so that the *exact* rank of `x` is
         close to (p * N). More precisely,
 
           floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
@@ -1883,7 +1938,7 @@ class DataFrame(object):
     @since(1.4)
     def corr(self, col1, col2, method=None):
         """
-        Calculates the correlation of two columns of a DataFrame as a double value.
+        Calculates the correlation of two columns of a :class:`DataFrame` as a double value.
         Currently only supports the Pearson Correlation Coefficient.
         :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
@@ -1931,7 +1986,7 @@ class DataFrame(object):
         :param col1: The name of the first column. Distinct items will make the first item of
             each row.
         :param col2: The name of the second column. Distinct items will make the column names
-            of the DataFrame.
+            of the :class:`DataFrame`.
         """
         if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
@@ -1948,7 +2003,8 @@ class DataFrame(object):
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting
+            :class:`DataFrame`.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1970,8 +2026,8 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
-        The column expression must be an expression over this DataFrame; attempting to add
-        a column from some other dataframe will raise an error.
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -2086,8 +2142,8 @@ class DataFrame(object):
 
         This is only available if Pandas is installed and available.
 
-        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
-            to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
+            expected to be small, as all the data is loaded into the driver's memory.
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
@@ -2099,6 +2155,7 @@ class DataFrame(object):
         from pyspark.sql.utils import require_minimum_pandas_version
         require_minimum_pandas_version()
 
+        import numpy as np
         import pandas as pd
 
         if self.sql_ctx._conf.pandasRespectSessionTimeZone():
@@ -2179,6 +2236,11 @@ class DataFrame(object):
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
                     pdf[field.name].isnull().any()):
                 dtype[field.name] = pandas_type
+            # Ensure we fall back to nullable numpy types, even when whole column is null:
+            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.float64
+            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.object
 
         for f, t in dtype.items():
             pdf[f] = pdf[f].astype(t, copy=False)
@@ -2289,8 +2351,9 @@ def _to_scala_map(sc, jm):
 
 def _to_corrected_pandas_type(dt):
     """
-    When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
-    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type may be
+    wrong. This method gets the corrected data type for Pandas if that type may be inferred
+    uncorrectly.
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -2299,8 +2362,16 @@ def _to_corrected_pandas_type(dt):
         return np.int16
     elif type(dt) == IntegerType:
         return np.int32
+    elif type(dt) == LongType:
+        return np.int64
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DoubleType:
+        return np.float64
+    elif type(dt) == BooleanType:
+        return np.bool
+    elif type(dt) == TimestampType:
+        return np.datetime64
     else:
         return None
 

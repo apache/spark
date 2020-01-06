@@ -80,13 +80,13 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.addresses.sameElements(Array("0", "1")), "should have 0,1 entries")
 
       val fpgaValue = resources.get(FPGA)
       assert(fpgaValue.nonEmpty, "Should have a gpu entry")
       assert(fpgaValue.get.name == "fpga", "name should be fpga")
       assert(fpgaValue.get.addresses.size == 3, "Should have 3 indexes")
-      assert(fpgaValue.get.addresses.deep == Array("f1", "f2", "f3").deep,
+      assert(fpgaValue.get.addresses.sameElements(Array("f1", "f2", "f3")),
         "should have f1,f2,f3 entries")
     }
   }
@@ -175,7 +175,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.addresses.sameElements(Array("0", "1")), "should have 0,1 entries")
     }
   }
 

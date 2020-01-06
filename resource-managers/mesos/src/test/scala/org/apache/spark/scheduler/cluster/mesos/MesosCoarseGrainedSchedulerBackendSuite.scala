@@ -28,7 +28,7 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
@@ -809,7 +809,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null, home: String = "/path") {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      home: String = "/path"): Unit = {
     initializeSparkConf(sparkConfVars, home)
     sc = new SparkContext(sparkConf)
 

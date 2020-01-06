@@ -52,14 +52,16 @@ class JacksonParser(
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = makeRootConverter(schema)
 
-  private val factory = new JsonFactory()
-  options.setJacksonOptions(factory)
+  private val factory = options.buildJsonFactory()
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

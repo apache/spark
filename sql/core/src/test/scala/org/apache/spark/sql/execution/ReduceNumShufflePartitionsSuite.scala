@@ -23,7 +23,8 @@ import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.adaptive.rule.{CoalescedShuffleReaderExec, ReduceNumShufflePartitions}
+import org.apache.spark.sql.execution.adaptive.{CoalescedShuffleReaderExec, ReduceNumShufflePartitions}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -258,13 +259,6 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
 
   val numInputPartitions: Int = 10
 
-  def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    QueryTest.checkAnswer(actual, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
-  }
-
   def withSparkSession(
       f: SparkSession => Unit,
       targetPostShuffleInputSize: Int,
@@ -274,6 +268,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .setMaster("local[*]")
         .setAppName("test")
         .set(UI_ENABLED, false)
+        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
@@ -308,7 +303,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val agg = df.groupBy("key").count()
 
         // Check the answer first.
-        checkAnswer(
+        QueryTest.checkAnswer(
           agg,
           spark.range(0, 20).selectExpr("id", "50 as cnt").collect())
 
@@ -355,7 +350,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
             .range(0, 1000)
             .selectExpr("id % 500 as key", "id as value")
             .union(spark.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
-        checkAnswer(
+        QueryTest.checkAnswer(
           join,
           expectedAnswer.collect())
 
@@ -407,7 +402,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           spark
             .range(0, 500)
             .selectExpr("id", "2 as cnt")
-        checkAnswer(
+        QueryTest.checkAnswer(
           join,
           expectedAnswer.collect())
 
@@ -459,7 +454,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           spark
             .range(0, 1000)
             .selectExpr("id % 500 as key", "2 as cnt", "id as value")
-        checkAnswer(
+        QueryTest.checkAnswer(
           join,
           expectedAnswer.collect())
 
@@ -503,11 +498,11 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           // Check the answer first.
           val expectedAnswer = spark.range(0, 500).selectExpr("id % 500", "id as value")
             .union(spark.range(500, 1000).selectExpr("id % 500", "id as value"))
-          checkAnswer(
+          QueryTest.checkAnswer(
             join,
             expectedAnswer.collect())
 
-          // Then, let's make sure we do not reduce number of ppst shuffle partitions.
+          // Then, let's make sure we do not reduce number of post shuffle partitions.
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           val shuffleReaders = finalPlan.collect {
@@ -533,10 +528,12 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       //   ReusedQueryStage 0
       //   ReusedQueryStage 0
       val resultDf = df.join(df, "key").join(df, "key")
-      checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
+      QueryTest.checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect { case p: ReusedQueryStageExec => p }.length == 2)
+      assert(finalPlan.collect {
+        case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+      }.length == 2)
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
 
 
@@ -549,7 +546,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val grouped = df.groupBy("key").agg(max("value").as("value"))
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
-      checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
+      QueryTest.checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
 
       val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
@@ -567,7 +564,9 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       assert(leafStages.length == 2)
 
       val reusedStages = level1Stages.flatMap { stage =>
-        stage.plan.collect { case r: ReusedQueryStageExec => r }
+        stage.plan.collect {
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+        }
       }
       assert(reusedStages.length == 1)
     }
@@ -579,7 +578,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val ds = spark.range(3)
       val resultDf = ds.repartition(2, ds.col("id")).toDF()
 
-      checkAnswer(resultDf,
+      QueryTest.checkAnswer(resultDf,
         Seq(0, 1, 2).map(i => Row(i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
@@ -595,7 +594,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
 
       val resultDf = df1.union(df2)
 
-      checkAnswer(resultDf, Seq((0), (1), (2), (3)).map(i => Row(i)))
+      QueryTest.checkAnswer(resultDf, Seq((0), (1), (2), (3)).map(i => Row(i)))
 
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan

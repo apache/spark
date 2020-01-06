@@ -22,10 +22,12 @@ import java.net.URI
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -169,6 +171,34 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.createDatabase(tempDB, ignoreIfExists = true)
     }
 
+    test(s"$version: create/get/alter database should pick right user name as owner") {
+      if (version != "0.12") {
+        val currentUser = UserGroupInformation.getCurrentUser.getUserName
+        val ownerName = "SPARK_29425"
+        val db1 = "SPARK_29425_1"
+        val db2 = "SPARK_29425_2"
+        val ownerProps = Map("ownerName" -> ownerName)
+
+        // create database with owner
+        val dbWithOwner = CatalogDatabase(db1, "desc", Utils.createTempDir().toURI, ownerProps)
+        client.createDatabase(dbWithOwner, ignoreIfExists = true)
+        val getDbWithOwner = client.getDatabase(db1)
+        assert(getDbWithOwner.properties("ownerName") === ownerName)
+        // alter database without owner
+        client.alterDatabase(getDbWithOwner.copy(properties = Map()))
+        assert(client.getDatabase(db1).properties("ownerName") === "")
+
+        // create database without owner
+        val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
+        client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
+        val getDbWithoutOwner = client.getDatabase(db2)
+        assert(getDbWithoutOwner.properties("ownerName") === currentUser)
+        // alter database with owner
+        client.alterDatabase(getDbWithoutOwner.copy(properties = ownerProps))
+        assert(client.getDatabase(db2).properties("ownerName") === ownerName)
+      }
+    }
+
     test(s"$version: createDatabase with null description") {
       withTempDir { tmpDir =>
         val dbWithNullDesc =
@@ -201,6 +231,22 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val database = client.getDatabase("temporary").copy(properties = Map("flag" -> "true"))
       client.alterDatabase(database)
       assert(client.getDatabase("temporary").properties.contains("flag"))
+
+      // test alter database location
+      val tempDatabasePath2 = Utils.createTempDir().toURI
+      // Hive support altering database location since HIVE-8472.
+      if (version == "3.0" || version == "3.1") {
+        client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        val uriInCatalog = client.getDatabase("temporary").locationUri
+        assert("file" === uriInCatalog.getScheme)
+        assert(new Path(tempDatabasePath2.getPath).toUri.getPath === uriInCatalog.getPath,
+          "Failed to alter database location")
+      } else {
+        val e = intercept[AnalysisException] {
+          client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        }
+        assert(e.getMessage.contains("does not support altering database location"))
+      }
     }
 
     test(s"$version: dropDatabase") {
@@ -272,6 +318,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val newTable = client.getTable("default", "src").copy(properties = Map("changed" -> ""))
       client.alterTable(newTable)
       assert(client.getTable("default", "src").properties.contains("changed"))
+    }
+
+    test(s"$version: alterTable - should respect the original catalog table's owner name") {
+      val ownerName = "SPARK-29405"
+      val originalTable = client.getTable("default", "src")
+      // mocking the owner is what we declared
+      val newTable = originalTable.copy(owner = ownerName)
+      client.alterTable(newTable)
+      assert(client.getTable("default", "src").owner === ownerName)
+      // mocking the owner is empty
+      val newTable2 = originalTable.copy(owner = "")
+      client.alterTable(newTable2)
+      assert(client.getTable("default", "src").owner === client.userName)
     }
 
     test(s"$version: alterTable(dbName: String, tableName: String, table: CatalogTable)") {
@@ -891,7 +950,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
+          val errorMsg = "Cannot safely cast 'f0': DecimalType(2,1) to BinaryType"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"

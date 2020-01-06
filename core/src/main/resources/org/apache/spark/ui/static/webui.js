@@ -87,4 +87,14 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
   collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
+  collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
+  collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
+  collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
+});
+
+$(function() {
+    // Show/hide full job description on click event.
+    $(".description-input").click(function() {
+        $(this).toggleClass("description-input-full");
+    });
 });

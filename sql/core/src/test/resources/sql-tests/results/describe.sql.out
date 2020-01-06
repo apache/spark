@@ -131,7 +131,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test, e=3]       	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -163,7 +163,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test, e=3]       	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -203,7 +203,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test]            	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -242,7 +242,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Table Properties    	[t=test]            	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -280,7 +280,7 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -289,7 +289,7 @@ Last Access [not included in comparison]
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]
 
 
@@ -311,7 +311,7 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -320,7 +320,7 @@ Last Access [not included in comparison]
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]
 
 
@@ -475,9 +475,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
-View Default Database	default             	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
+Table Properties    	[view.query.out.col.3=d, view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=4, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=c, view.catalogAndNamespace.part.1=default]
 
 
 -- !query 30
@@ -499,9 +499,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
-View Default Database	default             	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
+Table Properties    	[view.query.out.col.3=d, view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=4, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=c, view.catalogAndNamespace.part.1=default]
 
 
 -- !query 31

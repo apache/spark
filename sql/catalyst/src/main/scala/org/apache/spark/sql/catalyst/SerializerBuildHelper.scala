@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object SerializerBuildHelper {
 
-  private def nullOnOverflow: Boolean = SQLConf.get.decimalOperationsNullOnOverflow
+  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
 
   def createSerializerForBoolean(inputObject: Expression): Expression = {
     Invoke(inputObject, "booleanValue", BooleanType)

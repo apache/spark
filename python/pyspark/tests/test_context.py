@@ -214,6 +214,10 @@ class ContextTests(unittest.TestCase):
             rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
 
             def run():
+                # When thread is pinned, job group should be set for each thread for now.
+                # Local properties seem not being inherited like Scala side does.
+                if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+                    sc.setJobGroup('test_progress_api', '', True)
                 try:
                     rdd.count()
                 except Exception:

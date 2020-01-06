@@ -131,7 +131,7 @@ class IDFModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val func = { vector: Vector =>
       vector match {
@@ -149,12 +149,18 @@ class IDFModel private[ml] (
     }
 
     val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), idf.size)
+    }
+    outputSchema
   }
 
   @Since("1.4.1")
@@ -175,9 +181,13 @@ class IDFModel private[ml] (
   @Since("3.0.0")
   def numDocs: Long = idfModel.numDocs
 
-
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IDFModel: uid=$uid, numDocs=$numDocs, numFeatures=${idf.size}"
+  }
 }
 
 @Since("1.6.0")

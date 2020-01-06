@@ -55,11 +55,11 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
       .filter(_.startsWith(prefix)).flatMap(deserializeFromFile[T])
   }
 
-  override def close() {
+  override def close(): Unit = {
     zk.close()
   }
 
-  private def serializeIntoFile(path: String, value: AnyRef) {
+  private def serializeIntoFile(path: String, value: AnyRef): Unit = {
     val serialized = serializer.newInstance().serialize(value)
     val bytes = new Array[Byte](serialized.remaining())
     serialized.get(bytes)

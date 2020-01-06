@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.UUID
 import java.util.regex.Pattern
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
@@ -49,7 +50,7 @@ private[hive] class SparkGetSchemasOperation(
 
   override def close(): Unit = {
     super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
+    HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -67,7 +68,7 @@ private[hive] class SparkGetSchemasOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -87,12 +88,21 @@ private[hive] class SparkGetSchemasOperation(
       }
       setState(OperationState.FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: Throwable =>
+        logError(s"Error executing get schemas operation with $statementId", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw e
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting schemas: " + root.toString, root)
+        }
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 }

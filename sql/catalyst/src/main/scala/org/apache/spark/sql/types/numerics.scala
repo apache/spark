@@ -22,7 +22,6 @@ import scala.math.Ordering
 
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
-
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
@@ -114,13 +113,13 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw new ArithmeticException(s"Casting $x to int causes overflow.")
+      throw new ArithmeticException(s"Casting $x to int causes overflow")
     }
 }
 
-object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
+object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
   private val intUpperBound = Int.MaxValue.toFloat
   private val intLowerBound = Int.MinValue.toFloat
@@ -148,11 +147,13 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
       overflowException(x, "int")
     }
   }
+
+  override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
 }
 
-object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
+object DoubleExactNumeric extends DoubleIsFractional {
   private def overflowException(x: Double, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
   private val intUpperBound = Int.MaxValue.toDouble
   private val intLowerBound = Int.MinValue.toDouble
@@ -174,6 +175,8 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
       overflowException(x, "long")
     }
   }
+
+  override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {

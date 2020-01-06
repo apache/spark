@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive.rule
+package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.Duration
 
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
@@ -27,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.ThreadUtils
 
 /**
  * A rule to adjust the post shuffle partitions based on the map output statistics.
@@ -64,19 +61,21 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       return plan
     }
 
-    val shuffleStages = plan.collect {
-      case stage: ShuffleQueryStageExec => stage
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
+    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
+      case _: LocalShuffleReaderExec => Nil
+      case stage: ShuffleQueryStageExec => Seq(stage)
+      case _ => plan.children.flatMap(collectShuffleStages)
     }
+
+    val shuffleStages = collectShuffleStages(plan)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStages.forall(_.plan.canChangeNumPartitions)) {
+    if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
       val shuffleMetrics = shuffleStages.map { stage =>
-        val metricsFuture = stage.mapOutputStatisticsFuture
-        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
-        ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
+        assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
+        stage.resultOption.get.asInstanceOf[MapOutputStatistics]
       }
 
       // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
@@ -94,7 +93,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // even for shuffle exchange whose input RDD has 0 partition, we should still update its
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
-          case stage: QueryStageExec if ShuffleQueryStageExec.isShuffleQueryStageExec(stage) =>
+          case stage: ShuffleQueryStageExec =>
             CoalescedShuffleReaderExec(stage, partitionStartIndices)
         }
       } else {
@@ -178,13 +177,18 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
+/**
+ * A wrapper of shuffle query stage, which submits fewer reduce task as one reduce task may read
+ * multiple shuffle partitions. This can avoid many small reduce tasks that hurt performance.
+ *
+ * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange node during
+ *              canonicalization.
+ */
 case class CoalescedShuffleReaderExec(
-    child: QueryStageExec,
+    child: SparkPlan,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
-
-  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
     UnknownPartitioning(partitionStartIndices.length)
@@ -196,9 +200,9 @@ case class CoalescedShuffleReaderExec(
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.plan.createShuffledRDD(Some(partitionStartIndices))
-        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.createShuffledRDD(Some(partitionStartIndices))
+          stage.shuffle.createShuffledRDD(Some(partitionStartIndices))
+        case _ =>
+          throw new IllegalStateException("operating on canonicalization plan")
       }
     }
     cachedShuffleRDD

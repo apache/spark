@@ -27,6 +27,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
     artifactId = spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION_SHORT}}
 
+Please note that to use the headers functionality, your Kafka client version should be version 0.11.0.0 or up.
+
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
@@ -49,6 +51,17 @@ val df = spark
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
+
+// Subscribe to 1 topic, with headers
+val df = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
+  .as[(String, String, Map)]
 
 // Subscribe to multiple topics
 val df = spark
@@ -84,6 +97,16 @@ Dataset<Row> df = spark
   .load();
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
+// Subscribe to 1 topic, with headers
+Dataset<Row> df = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers");
+
 // Subscribe to multiple topics
 Dataset<Row> df = spark
   .readStream()
@@ -115,6 +138,16 @@ df = spark \
   .option("subscribe", "topic1") \
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to 1 topic, with headers
+val df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .option("includeHeaders", "true") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
 
 # Subscribe to multiple topics
 df = spark \
@@ -286,6 +319,10 @@ Each row in the source has the following schema:
   <td>timestampType</td>
   <td>int</td>
 </tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
 </table>
 
 The following options must be set for the Kafka source
@@ -326,6 +363,27 @@ The following configurations are optional:
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
 <tr>
+  <td>startingOffsetsByTimestamp</td>
+  <td>json string
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  </td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
+  <td>streaming and batch</td>
+  <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
+  each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
+  equal to the given timestamp in the corresponding partition. If the matched offset doesn't exist,
+  the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
+  <p/>
+  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
+  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
+  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
+  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
+  Note2: <code>startingOffsetsByTimestamp</code> takes precedence over <code>startingOffsets</code>.<p/>
+  Note3: For streaming queries, this only applies when a new query is started, and that resuming will
+  always pick up from where the query left off. Newly discovered partitions during a query will start at
+  earliest.</td>
+</tr>
+<tr>
   <td>startingOffsets</td>
   <td>"earliest", "latest" (streaming only), or json string
   """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
@@ -339,6 +397,25 @@ The following configurations are optional:
   For streaming queries, this only applies when a new query is started, and that resuming will
   always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
+</tr>
+<tr>
+  <td>endingOffsetsByTimestamp</td>
+  <td>json string
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  </td>
+  <td>latest</td>
+  <td>batch query</td>
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
+  The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
+  the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
+  be set to latest.<p/>
+  <p/>
+  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
+  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
+  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
+  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
+  Note2: <code>endingOffsetsByTimestamp</code> takes precedence over <code>endingOffsets</code>.
+  </td>
 </tr>
 <tr>
   <td>endingOffsets</td>
@@ -392,12 +469,12 @@ The following configurations are optional:
   <td>minPartitions</td>
   <td>int</td>
   <td>none</td>
-  <td>streaming and batch</td>
+  <td>streaming</td>
   <td>Desired minimum number of partitions to read from Kafka.
   By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
   If you set this option to a value greater than your topicPartitions, Spark will divvy up large
-  Kafka partitions to smaller pieces. Please note that this configuration is like a `hint`: the
-  number of Spark tasks will be **approximately** `minPartitions`. It can be less or more depending on
+  Kafka partitions to smaller pieces. Please note that this configuration is like a <code>hint</code>: the
+  number of Spark tasks will be <strong>approximately</strong> <code>minPartitions</code>. It can be less or more depending on
   rounding errors or Kafka partitions that didn't receive any new data.</td>
 </tr>
 <tr>
@@ -405,7 +482,7 @@ The following configurations are optional:
   <td>string</td>
   <td>spark-kafka-source</td>
   <td>streaming and batch</td>
-  <td>Prefix of consumer group identifiers (`group.id`) that are generated by structured streaming
+  <td>Prefix of consumer group identifiers (<code>group.id</code>) that are generated by structured streaming
   queries. If "kafka.group.id" is set, this option will be ignored.</td>
 </tr>
 <tr>
@@ -424,6 +501,13 @@ The following configurations are optional:
   data. This may also occur when queries are started/restarted in quick succession. To minimize such
   issues, set the Kafka consumer session timeout (by setting option "kafka.session.timeout.ms") to
   be very small. When this is set, option "groupIdPrefix" will be ignored.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
 
@@ -523,8 +607,16 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>string or binary</td>
 </tr>
 <tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
+<tr>
   <td>topic (*optional)</td>
   <td>string</td>
+</tr>
+<tr>
+  <td>partition (optional)</td>
+  <td>int</td>
 </tr>
 </table>
 \* The topic column is required if the "topic" configuration option is not specified.<br>
@@ -534,6 +626,12 @@ a ```null``` valued key column will be automatically added (see Kafka semantics 
 how ```null``` valued key values are handled). If a topic column exists then its value
 is used as the topic when writing the given row to Kafka, unless the "topic" configuration
 option is set i.e., the "topic" configuration option overrides the topic column.
+If a "partition" column is not specified (or its value is ```null```) 
+then the partition is calculated by the Kafka producer.
+A Kafka partitioner can be specified in Spark by setting the
+```kafka.partitioner.class``` option. If not present, Kafka default partitioner
+will be used.
+
 
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
@@ -558,6 +656,13 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
   topic column that may exist in the data.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
 
@@ -825,7 +930,9 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
     <td>SASL_SSL</td>
     <td>
-      Protocol used to communicate with brokers. For further details please see Kafka documentation. Only used to obtain delegation token.
+      Protocol used to communicate with brokers. For further details please see Kafka documentation. Protocol is applied on all the sources and sinks as default where
+      <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>),
+      and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
     </td>
   </tr>
   <tr>

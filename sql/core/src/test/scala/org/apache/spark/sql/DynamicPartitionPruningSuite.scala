@@ -22,6 +22,7 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -96,7 +97,8 @@ class DynamicPartitionPruningSuite
       (6, 60)
     )
 
-    spark.range(1000).select('id as 'product_id, ('id % 10) as 'store_id, ('id + 1) as 'code)
+    spark.range(1000)
+      .select($"id" as "product_id", ($"id" % 10) as "store_id", ($"id" + 1) as "code")
       .write
       .format(tableFormat)
       .mode("overwrite")
@@ -161,22 +163,36 @@ class DynamicPartitionPruningSuite
       df: DataFrame,
       withSubquery: Boolean,
       withBroadcast: Boolean): Unit = {
-    val dpExprs = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+    val plan = df.queryExecution.executedPlan
+    val dpExprs = collectDynamicPruningExpressions(plan)
     val hasSubquery = dpExprs.exists {
       case InSubqueryExec(_, _: SubqueryExec, _, _) => true
       case _ => false
     }
-    val hasSubqueryBroadcast = dpExprs.exists {
-      case InSubqueryExec(_, _: SubqueryBroadcastExec, _, _) => true
-      case _ => false
+    val subqueryBroadcast = dpExprs.collect {
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
     assert(hasSubquery == withSubquery,
       s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
     val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
-    assert(hasSubqueryBroadcast == withBroadcast,
+    assert(subqueryBroadcast.nonEmpty == withBroadcast,
       s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
+
+    subqueryBroadcast.foreach { s =>
+      s.child match {
+        case _: ReusedExchangeExec => // reuse check ok.
+        case b: BroadcastExchangeExec =>
+          val hasReuse = plan.find {
+            case ReusedExchangeExec(_, e) => e eq b
+            case _ => false
+          }.isDefined
+          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
+        case _ =>
+          fail(s"Invalid child node found in\n$s")
+      }
+    }
   }
 
   /**
@@ -408,7 +424,7 @@ class DynamicPartitionPruningSuite
           """
             |SELECT * FROM fact_sk f
             |JOIN dim_store s
-            |ON f.date_id = s.store_id
+            |ON f.store_id = s.store_id
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
@@ -1022,7 +1038,7 @@ class DynamicPartitionPruningSuite
   test("no partition pruning when the build side is a stream") {
     withTable("fact") {
       val input = MemoryStream[Int]
-      val stream = input.toDF.select('value as "one", ('value * 3) as "code")
+      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
       spark.range(100).select(
         $"id",
         ($"id" + 1).as("one"),

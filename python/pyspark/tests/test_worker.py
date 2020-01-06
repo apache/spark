@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -149,6 +150,20 @@ class WorkerTests(ReusedPySparkTestCase):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
             self.sc.pythonVer = version
+
+    def test_python_exception_non_hanging(self):
+        # SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
+        try:
+            def f():
+                raise Exception("exception with 中 and \xd6\xd0")
+
+            self.sc.parallelize([1]).map(lambda x: f()).count()
+        except Py4JJavaError as e:
+            if sys.version_info.major < 3:
+                # we have to use unicode here to avoid UnicodeDecodeError
+                self.assertRegexpMatches(unicode(e).encode("utf-8"), "exception with 中")
+            else:
+                self.assertRegexpMatches(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):

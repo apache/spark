@@ -294,7 +294,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
    |  Helper methods that contain the test body  |
    * =========================================== */
 
-  private def emptyDataStream(conf: SparkConf) {
+  private def emptyDataStream(conf: SparkConf): Unit = {
     conf.set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
@@ -327,7 +327,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter4.stop()
   }
 
-  private def fewElementsPerPartition(conf: SparkConf) {
+  private def fewElementsPerPartition(conf: SparkConf): Unit = {
     conf.set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
@@ -368,7 +368,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter4.stop()
   }
 
-  private def emptyPartitionsWithSpilling(conf: SparkConf) {
+  private def emptyPartitionsWithSpilling(conf: SparkConf): Unit = {
     val size = 1000
     conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
@@ -393,7 +393,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter.stop()
   }
 
-  private def testSpillingInLocalCluster(conf: SparkConf, numReduceTasks: Int) {
+  private def testSpillingInLocalCluster(conf: SparkConf, numReduceTasks: Int): Unit = {
     val size = 5000
     conf.set(SHUFFLE_MANAGER, "sort")
     conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 4)
@@ -517,7 +517,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       conf: SparkConf,
       withPartialAgg: Boolean,
       withOrdering: Boolean,
-      withSpilling: Boolean) {
+      withSpilling: Boolean): Unit = {
     val size = 1000
     if (withSpilling) {
       conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
@@ -551,7 +551,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(results === expected)
   }
 
-  private def sortWithoutBreakingSortingContracts(conf: SparkConf) {
+  private def sortWithoutBreakingSortingContracts(conf: SparkConf): Unit = {
     val size = 100000
     val conf = createSparkConf(loadDefaults = true, kryo = false)
     conf.set(SHUFFLE_MANAGER, "sort")

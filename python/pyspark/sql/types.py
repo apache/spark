@@ -912,6 +912,11 @@ if sys.version < "3":
         long: LongType,
     })
 
+if sys.version >= "3":
+    _type_mappings.update({
+        bytes: BinaryType,
+    })
+
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on C
 # implementation. We need to make sure that this conversion does not lose any
@@ -1190,7 +1195,7 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    BinaryType: (bytearray,),
+    BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),

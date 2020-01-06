@@ -29,7 +29,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:11.4"
+    override val imageName = "postgres:12.0-alpine"
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )

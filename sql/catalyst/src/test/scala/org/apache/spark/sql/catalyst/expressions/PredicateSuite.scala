@@ -38,7 +38,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def booleanLogicTest(
     name: String,
     op: (Expression, Expression) => Expression,
-    truthTable: Seq[(Any, Any, Any)]) {
+    truthTable: Seq[(Any, Any, Any)]): Unit = {
     test(s"3VL $name") {
       truthTable.foreach {
         case (l, r, answer) =>
@@ -510,7 +510,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Interpreted Predicate should initialize nondeterministic expressions") {
-    val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
+    val interpreted = Predicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
   }
@@ -559,5 +559,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("argument 1 requires boolean type"))
     }
+  }
+
+  test("SPARK-29100: InSet with empty input set") {
+    val row = create_row(1)
+    val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
+    checkEvaluation(inSet, false, row)
   }
 }

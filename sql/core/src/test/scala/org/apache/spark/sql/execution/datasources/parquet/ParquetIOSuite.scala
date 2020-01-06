@@ -66,7 +66,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
     new WriteContext(schema, new java.util.HashMap[String, String]())
   }
 
-  override def write(record: Group) {
+  override def write(record: Group): Unit = {
     groupWriter.write(record)
   }
 }

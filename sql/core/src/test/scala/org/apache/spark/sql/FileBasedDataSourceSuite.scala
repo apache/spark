@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FilenameFilter, FileNotFoundException}
+import java.io.{File, FileNotFoundException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
@@ -27,9 +27,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -481,14 +481,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         spark.range(1000).repartition(1).write.csv(path)
         val bytesReads = new mutable.ArrayBuffer[Long]()
         val bytesReadListener = new SparkListener() {
-          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
             bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
           }
         }
         sparkContext.addSparkListener(bytesReadListener)
         try {
           spark.read.csv(path).limit(1).collect()
-          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(bytesReads.sum === 7860)
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
@@ -657,6 +657,23 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Return correct results when data columns overlap with partition columns (nested data)") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+        withTempPath { path =>
+          val tablePath = new File(s"${path.getCanonicalPath}/c3=c/c1=a/c5=e")
+
+          val inputDF = sql("SELECT 1 c1, 2 c2, 3 c3, named_struct('c4_1', 2, 'c4_2', 3) c4, 5 c5")
+          inputDF.write.format(format).save(tablePath.getCanonicalPath)
+
+          val resultDF = spark.read.format(format).load(path.getCanonicalPath)
+            .select("c1", "c4.c4_1", "c5", "c3")
+          checkAnswer(resultDF, Row("a", 2, "e", "c"))
+        }
+      }
+    }
+  }
+
   test("sizeInBytes should be the total size of all files") {
     Seq("orc", "").foreach { useV1SourceReaderList =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
@@ -664,7 +681,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
+          assert(df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
@@ -720,7 +737,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           .option("path", paths.head.getCanonicalPath)
           .parquet(paths(1).getCanonicalPath, paths(2).getCanonicalPath)
         df.queryExecution.optimizedPlan match {
-          case PhysicalOperation(_, _, DataSourceV2Relation(table: ParquetTable, _, _)) =>
+          case PhysicalOperation(_, _, DataSourceV2ScanRelation(table: ParquetTable, _, _)) =>
             assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
           case _ =>
             throw new AnalysisException("Can not match ParquetTable in the query.")

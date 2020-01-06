@@ -50,7 +50,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
     } else {
       # Check to see if inputData is a valid data.frame
       stopifnot(deserializer == "byte" || deserializer == "arrow")
-      stopifnot(class(inputData) == "data.frame")
+      stopifnot(is.data.frame(inputData))
     }
 
     if (mode == 2) {
@@ -194,7 +194,7 @@ if (isEmpty != 0) {
        } else {
         # gapply mode
         outputs <- list()
-        for (i in 1:length(data)) {
+        for (i in seq_len(length(data))) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],

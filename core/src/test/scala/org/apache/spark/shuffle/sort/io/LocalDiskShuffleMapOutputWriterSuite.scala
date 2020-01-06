@@ -23,7 +23,7 @@ import java.nio.file.Files
 import java.util.Arrays
 
 import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.{any, anyInt}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mock
 import org.mockito.Mockito.when
 import org.mockito.MockitoAnnotations
@@ -73,9 +73,9 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
     conf = new SparkConf()
       .set("spark.app.id", "example.spark.app")
       .set("spark.shuffle.unsafe.file.output.buffer", "16k")
-    when(blockResolver.getDataFile(anyInt, anyInt)).thenReturn(mergedOutputFile)
+    when(blockResolver.getDataFile(anyInt, anyLong)).thenReturn(mergedOutputFile)
     when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
+      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
         partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
         val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]

@@ -36,7 +36,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 import org.apache.kafka.common.security.scram.ScramLoginModule
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -241,8 +241,8 @@ private[spark] object KafkaTokenUtil extends Logging {
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
       logDebug("%-15s %-15s %-15s %-25s %-15s %-15s %-15s".format(
-        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.tokenId,
+        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.owner,
         tokenInfo.renewersAsString,
         dateFormat.format(tokenInfo.issueTimestamp),
@@ -251,7 +251,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def findMatchingToken(
+  def findMatchingTokenClusterConfig(
       sparkConf: SparkConf,
       bootStrapServers: String): Option[KafkaTokenClusterConf] = {
     val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
@@ -272,6 +272,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   def getTokenJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
       getTokenService(clusterConf.identifier))
+    require(token != null, s"Token for identifier ${clusterConf.identifier} must exist")
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
@@ -287,5 +288,18 @@ private[spark] object KafkaTokenUtil extends Logging {
     logDebug(s"Scram JAAS params: ${KafkaRedactionUtil.redactJaasParam(params)}")
 
     params
+  }
+
+  def isConnectorUsingCurrentToken(
+      params: ju.Map[String, Object],
+      clusterConfig: Option[KafkaTokenClusterConf]): Boolean = {
+    if (params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
+      logDebug("Delegation token used by connector, checking if uses the latest token.")
+      val consumerJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
+      require(clusterConfig.isDefined, "Delegation token must exist for this connector.")
+      getTokenJaasParams(clusterConfig.get) == consumerJaasParams
+    } else {
+      true
+    }
   }
 }
