@@ -512,19 +512,19 @@ case class TruncateTableCommand(
           fs.mkdirs(path)
           optPermission.foreach { permission =>
             Try(fs.setPermission(path, permission)) match {
-              case Failure(e) if e.isInstanceOf[UnsupportedOperationException] =>
-                log.warn(s"Can not set original permission $permission back to " +
-                  s"the created path: $path. Exception: ${e.getMessage}")
-              case Failure(e) => throw e
+              case Failure(e) =>
+                throw new AnalysisException(
+                  s"Failed to set original permission $permission back to " +
+                    s"the created path: $path. Exception: ${e.getMessage}")
               case _ =>
             }
           }
           optAcls.foreach { acls =>
             Try(fs.setAcl(path, acls)) match {
-              case Failure(e) if e.isInstanceOf[UnsupportedOperationException] =>
-                log.warn(s"Can not set original ACL $acls back to " +
-                  s"the created path: $path. Exception: ${e.getMessage}")
-              case Failure(e) => throw e
+              case Failure(e) =>
+                throw new AnalysisException(
+                  s"Failed to set original ACL $acls back to " +
+                    s"the created path: $path. Exception: ${e.getMessage}")
               case _ =>
             }
           }
