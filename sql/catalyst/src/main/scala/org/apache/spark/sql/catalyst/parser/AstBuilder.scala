@@ -2368,9 +2368,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
+   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists).
    */
-  type TableHeader = (Seq[String], Boolean, Boolean, Boolean)
+  type TableHeader = (Seq[String], Boolean, Boolean)
 
   /**
    * Type to keep track of table clauses:
@@ -2390,7 +2390,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
     }
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
-    (multipartIdentifier, temporary, ifNotExists, ctx.EXTERNAL != null)
+    (multipartIdentifier, temporary, ifNotExists)
+  }
+
+  /**
+   * Validate a create external table statement and return the [[TableIdentifier]].
+   */
+  override def visitCreateExternalTableHeader(
+      ctx: CreateExternalTableHeaderContext): TableHeader = withOrigin(ctx) {
+    val temporary = false
+    val ifNotExists = ctx.EXISTS != null
+    val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
+    (multipartIdentifier, temporary, ifNotExists)
   }
 
   /**
@@ -2399,7 +2410,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitReplaceTableHeader(
       ctx: ReplaceTableHeaderContext): TableHeader = withOrigin(ctx) {
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
-    (multipartIdentifier, false, false, false)
+    (multipartIdentifier, false, false)
   }
 
   /**
@@ -2655,10 +2666,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
-    if (external) {
-      operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
-    }
+    val (table, temp, ifNotExists) = visitCreateTableHeader(ctx.createTableHeader)
     val schema = Option(ctx.colTypeList()).map(createSchema)
     val defaultProvider = conf.defaultDataSourceName
     val provider =
@@ -2714,10 +2722,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, _, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
-    if (external) {
-      operationNotAllowed("REPLACE EXTERNAL TABLE ... USING", ctx)
-    }
+    val (table, _, _) = visitReplaceTableHeader(ctx.replaceTableHeader)
 
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())

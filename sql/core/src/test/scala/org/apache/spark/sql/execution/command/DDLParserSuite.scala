@@ -246,9 +246,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive external table - location must be specified") {
     assertUnsupported(
-      sql = "CREATE EXTERNAL TABLE my_tab STORED AS parquet",
+      sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
-    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
+    val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -256,8 +256,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive table - property values must be set") {
     assertUnsupported(
-      sql = "CREATE TABLE my_tab STORED AS parquet " +
-        "TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
     assertUnsupported(
       sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
@@ -266,10 +265,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create hive table - location implies external") {
-    val query = "CREATE TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    val ct = parseAs[CreateTable](query)
-    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
+    val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
+    val ct = parseAs[CreateTableStatement](query)
+    assert(ct.location === Some("/something/anything"))
   }
 
   test("Duplicate clauses - create hive table") {
@@ -769,8 +767,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table - external") {
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("Operation not allowed: CREATE EXTERNAL TABLE ..."))
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {

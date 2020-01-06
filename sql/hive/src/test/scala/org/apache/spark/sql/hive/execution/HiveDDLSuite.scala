@@ -659,6 +659,34 @@ class HiveDDLSuite
       "partition column value"))
   }
 
+  test("create external table with default") {
+    val catalog = spark.sessionState.catalog
+    withTempDir { tmpDir =>
+      val externalTab = "extTable_with_defaults"
+      withTable(externalTab) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $externalTab (key INT, value STRING)
+             |LOCATION '${tmpDir.toURI}'
+          """.stripMargin)
+
+        val hiveTable = catalog.getTableMetadata(TableIdentifier(externalTab, Some("default")))
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
+
+        // Before data insertion, all the directory are empty
+        assert(tmpDir.listFiles == null || tmpDir.listFiles.isEmpty)
+
+        sql(s"INSERT INTO $externalTab VALUES (1, 'a')")
+        assert(tmpDir.listFiles.nonEmpty)
+
+        sql(s"DROP TABLE $externalTab")
+        // After data insertion, all the directory are not empty
+        assert(tmpDir.listFiles.nonEmpty)
+      }
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>

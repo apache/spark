@@ -170,23 +170,6 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("disallows CREATE EXTERNAL TABLE ... USING ... AS query") {
-    withTable("t") {
-      val error = intercept[ParseException] {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toURI}')
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-
-      assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE EXTERNAL TABLE ..."))
-    }
-  }
-
   test("create table using as select - with partitioned by") {
     val catalog = spark.sessionState.catalog
     withTable("t") {

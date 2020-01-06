@@ -182,14 +182,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * it is deprecated.
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
-    val (ident, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    val (ident, temp, ifNotExists) = visitCreateTableHeader(ctx.createTableHeader)
 
     if (!temp || ctx.query != null) {
       super.visitCreateTable(ctx)
     } else {
-      if (external) {
-        operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
-      }
       if (ifNotExists) {
         // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
         // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
@@ -329,6 +326,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
   }
 
+
+  override def visitCreateHiveTable(ctx: CreateHiveTableContext): LogicalPlan = withOrigin(ctx) {
+    handleCreateHiveTable(ctx, visitCreateTableHeader(ctx.createTableHeader), external = false,
+      ctx.columns, ctx.query, ctx.createHiveTableClauses)
+  }
+
+  override def visitCreateExternalHiveTable(
+      ctx: CreateExternalHiveTableContext): LogicalPlan = withOrigin(ctx) {
+    handleCreateHiveTable(ctx, visitCreateExternalTableHeader(ctx.createExternalTableHeader),
+      external = true, ctx.columns, ctx.query, ctx.createHiveTableClauses)
+  }
+
   /**
    * Create a Hive serde table, returning a [[CreateTable]] logical plan.
    *
@@ -342,10 +351,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   [(col1[:] data_type [COMMENT col_comment], ...)]
-   *   create_table_clauses
+   *   create_hive_table_clauses
    *   [AS select_statement];
    *
-   *   create_table_clauses (order insensitive):
+   *   create_hive_table_clauses (order insensitive):
    *     [COMMENT table_comment]
    *     [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
    *     [ROW FORMAT row_format]
@@ -354,31 +363,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *     [TBLPROPERTIES (property_name=property_value, ...)]
    * }}}
    */
-  override def visitCreateHiveTable(ctx: CreateHiveTableContext): LogicalPlan = withOrigin(ctx) {
-    val (ident, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+  private def handleCreateHiveTable(
+      ctx: ParserRuleContext,
+      tblHeader: TableHeader,
+      external: Boolean,
+      columns: ColTypeListContext,
+      query: QueryContext,
+      clauseCtx: CreateHiveTableClausesContext): LogicalPlan = {
+    val (ident, temp, ifNotExists) = tblHeader
     // TODO: implement temporary tables
     if (temp) {
       throw new ParseException(
         "CREATE TEMPORARY TABLE is not supported yet. " +
           "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
     }
-    if (ctx.skewSpec.size > 0) {
+    if (clauseCtx.skewSpec.size > 0) {
       operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
     }
 
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
-    checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+    checkDuplicateClauses(clauseCtx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(clauseCtx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(clauseCtx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(clauseCtx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(clauseCtx.createFileFormat, "STORED AS/BY", ctx)
+    checkDuplicateClauses(clauseCtx.rowFormat, "ROW FORMAT", ctx)
+    checkDuplicateClauses(clauseCtx.locationSpec, "LOCATION", ctx)
 
-    val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
-    val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val selectQuery = Option(ctx.query).map(plan)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
+    val dataCols = Option(columns).map(visitColTypeList).getOrElse(Nil)
+    val partitionCols = Option(clauseCtx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
+    val properties = Option(clauseCtx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val selectQuery = Option(query).map(plan)
+    val bucketSpec = clauseCtx.bucketSpec().asScala.headOption.map(visitBucketSpec)
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly
@@ -386,12 +401,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
-    val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
+    validateRowFormatFileFormat(clauseCtx.rowFormat.asScala, clauseCtx.createFileFormat.asScala,
+      ctx)
+    val fileStorage = clauseCtx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
+    val rowStorage = clauseCtx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = clauseCtx.locationSpec.asScala.headOption.map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
@@ -425,7 +441,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
-      comment = Option(ctx.comment).map(string))
+      comment = Option(clauseCtx.comment).map(string))
 
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
@@ -448,14 +464,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
         // Hive CTAS supports dynamic partition by specifying partition column names.
         val partitionColumnNames =
-          Option(ctx.partitionColumnNames)
+          Option(clauseCtx.partitionColumnNames)
             .map(visitIdentifierList(_).toArray)
             .getOrElse(Array.empty[String])
 
         val tableDescWithPartitionColNames =
           tableDesc.copy(partitionColumnNames = partitionColumnNames)
 
-        val hasStorageProperties = (ctx.createFileFormat.size != 0) || (ctx.rowFormat.size != 0)
+        val hasStorageProperties = (clauseCtx.createFileFormat.size != 0) ||
+          (clauseCtx.rowFormat.size != 0)
         if (conf.convertCTAS && !hasStorageProperties) {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
@@ -468,7 +485,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         }
       case None =>
         // When creating partitioned table, we must specify data type for the partition columns.
-        if (Option(ctx.partitionColumnNames).isDefined) {
+        if (Option(clauseCtx.partitionColumnNames).isDefined) {
           val errorMessage = "Must specify a data type for each partition column while creating " +
             "Hive partitioned table."
           operationNotAllowed(errorMessage, ctx)

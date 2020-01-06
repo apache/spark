@@ -115,16 +115,11 @@ statement
         createTableHeader ('(' colTypeList ')')? tableProvider
         createTableClauses
         (AS? query)?                                                   #createTable
+    | createExternalTableHeader ('(' columns=colTypeList ')')?
+        createHiveTableClauses
+        (AS? query)?                                                   #createExternalHiveTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        ((COMMENT comment=STRING) |
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
-        PARTITIONED BY partitionColumnNames=identifierList) |
-        bucketSpec |
-        skewSpec |
-        rowFormat |
-        createFileFormat |
-        locationSpec |
-        (TBLPROPERTIES tableProps=tablePropertyList))*
+        createHiveTableClauses
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier
@@ -283,7 +278,11 @@ unsupportedHiveNativeCommands
     ;
 
 createTableHeader
-    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
+    : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? multipartIdentifier
+    ;
+
+createExternalTableHeader
+    : CREATE EXTERNAL TABLE (IF NOT EXISTS)? multipartIdentifier
     ;
 
 replaceTableHeader
@@ -365,6 +364,18 @@ createTableClauses
      bucketSpec |
      locationSpec |
      (COMMENT comment=STRING) |
+     (TBLPROPERTIES tableProps=tablePropertyList))*
+    ;
+
+createHiveTableClauses
+    :((COMMENT comment=STRING) |
+     (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
+     PARTITIONED BY partitionColumnNames=identifierList) |
+     bucketSpec |
+     skewSpec |
+     rowFormat |
+     createFileFormat |
+     locationSpec |
      (TBLPROPERTIES tableProps=tablePropertyList))*
     ;
 
