@@ -419,11 +419,8 @@ class FMRegressor @Since("3.0.0") (
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val data: RDD[(Double, OldVector)] =
-      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          (label, features)
-      }
+    val labeledPoint = extractLabeledPoints(dataset)
+    val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
