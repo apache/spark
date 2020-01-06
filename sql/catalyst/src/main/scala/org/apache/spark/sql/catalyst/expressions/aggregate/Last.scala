@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
        5
   """,
   note = """
-    The function is non-deterministic because its results depends on order of rows which
+    The function is non-deterministic because its results depends on the order of rows which
     may be non-deterministic after a shuffle.
   """,
   since = "2.0.0")

@@ -196,7 +196,7 @@ _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
     .. note:: The function is non-deterministic because the order of collected results depends
-        on order of rows which may be non-deterministic after a shuffle.
+        on order of the rows which may be non-deterministic after a shuffle.
 
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_list('age')).collect()
@@ -206,7 +206,7 @@ _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
     .. note:: The function is non-deterministic because the order of collected results depends
-        on order of rows which may be non-deterministic after a shuffle.
+        on order of the rows which may be non-deterministic after a shuffle.
 
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_set('age')).collect()

@@ -879,7 +879,7 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
+#' Note: the function is non-deterministic because its results depends on the order of rows which
 #' may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1024,7 +1024,7 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
+#' Note: the function is non-deterministic because its results depends on the order of rows which
 #' may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
