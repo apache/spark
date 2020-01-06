@@ -272,7 +272,7 @@ private[spark] object ResourceUtils extends Logging {
       resourcesFileOpt: Option[String],
       componentName: String): Map[String, ResourceInformation] = {
     val requests =
-      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
+      ResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
     val resourceIdToRequest = requests.map(req => (req.id, req)).toMap
     val requestResourceIds = resourceIdToRequest.keySet.toSeq
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,

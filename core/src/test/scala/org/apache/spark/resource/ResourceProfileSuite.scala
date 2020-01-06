@@ -18,20 +18,101 @@
 package org.apache.spark.resource
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{EXECUTOR_CORES, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, SPARK_EXECUTOR_PREFIX}
+import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 
 class ResourceProfileSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ImmutableResourceProfile.reInitDefaultProfile(new SparkConf)
+      ResourceProfile.reInitDefaultProfile(new SparkConf)
     } finally {
       super.afterEach()
     }
   }
+  test("Default ResourceProfile") {
+    val rprof = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+    assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(rprof.executorResources.size === 2,
+      "Executor resources should contain cores and memory by default")
+    assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
+      s"Executor resources should have 1 core")
+    assert(rprof.getExecutorCores.get === 1,
+      s"Executor resources should have 1 core")
+    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
+      s"Executor resources should have 1024 memory")
+    assert(rprof.executorResources.get(ResourceProfile.PYSPARK_MEM) == None,
+      s"pyspark memory empty if not specified")
+    assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
+      s"overhead memory empty if not specified")
+    assert(rprof.taskResources.size === 1,
+      "Task resources should just contain cpus by default")
+    assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
+      s"Task resources should have 1 cpu")
+    assert(rprof.getTaskCpus.get === 1,
+      s"Task resources should have 1 cpu")
+  }
+
+  test("Default ResourceProfile with app level resources specified") {
+    val conf = new SparkConf
+    conf.set(PYSPARK_EXECUTOR_MEMORY.key, "2g")
+    conf.set(EXECUTOR_MEMORY_OVERHEAD.key, "1g")
+    conf.set(EXECUTOR_MEMORY.key, "4g")
+    conf.set(EXECUTOR_CORES.key, "4")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.amount", "1")
+    conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.discoveryScript", "nameOfScript")
+    val rprof = ResourceProfile.getOrCreateDefaultProfile(conf)
+    assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val execResources = rprof.executorResources
+    assert(execResources.size === 5,
+      "Executor resources should contain cores, memory, and gpu " + execResources)
+    assert(execResources.contains("gpu"), "Executor resources should have gpu")
+    assert(rprof.executorResources(ResourceProfile.CORES).amount === 4,
+      s"Executor resources should have 4 core")
+    assert(rprof.getExecutorCores.get === 4,
+      s"Executor resources should have 4 core")
+    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
+      s"Executor resources should have 1024 memory")
+    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount == 2048,
+      s"pyspark memory empty if not specified")
+    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount == 1024,
+      s"overhead memory empty if not specified")
+    assert(rprof.taskResources.size === 2,
+      "Task resources should just contain cpus and gpu")
+    assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
+  }
+
+  test("test default profile task gpus fractional") {
+    val sparkConf = new SparkConf()
+      .set("spark.executor.resource.gpu.amount", "2")
+      .set("spark.task.resource.gpu.amount", "0.33")
+    val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.taskResources.get("gpu").get.amount == 0.33)
+  }
+
+  test("Internal confs") {
+    val rprof = new ResourceProfileBuilder()
+    val gpuExecReq =
+      new ExecutorResourceRequests().cores(2).pysparkMemory("2g").resource("gpu", 2, "someScript")
+    rprof.require(gpuExecReq)
+    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
+    val internalResourceConfs =
+      ResourceProfile.createResourceProfileInternalConfs(immrprof)
+    val sparkConf = new SparkConf
+    internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
+    val resourceReq =
+      ResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, immrprof.id)
+
+    assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
+    assert(resourceReq(0).id.resourceName === "gpu")
+    assert(resourceReq(0).amount === 2)
+    assert(resourceReq(0).discoveryScript === Some("someScript"))
+  }
+
 
   test("Create ResourceProfile") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(eReq)
@@ -75,7 +156,7 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test ExecutorResourceRequests memory helpers") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val ereqs = new ExecutorResourceRequests()
     ereqs.memory("4g")
     ereqs.memoryOverhead("2000m").pysparkMemory("512000k")
@@ -90,7 +171,7 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test TaskResourceRequest fractional") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val treqs = new TaskResourceRequests().resource("gpu", 0.33)
     rprof.require(treqs)
 

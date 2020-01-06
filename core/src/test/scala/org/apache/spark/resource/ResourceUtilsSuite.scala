@@ -121,6 +121,7 @@ class ResourceUtilsSuite extends SparkFunSuite
 
   test("get from resources file and discover resource profile remaining") {
     val conf = new SparkConf
+    val rpId = 1
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       implicit val formats = DefaultFormats
@@ -128,15 +129,15 @@ class ResourceUtilsSuite extends SparkFunSuite
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
         dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
-      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(1,
+      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(rpId,
         conf,
         Some(resourcesFile),
         SPARK_EXECUTOR_PREFIX)
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val gpuInternalConf =
-        ImmutableResourceProfile.ResourceProfileInternalConf(1, GPU)
+      val prefix = ResourceProfile.resourceProfileCustomResourceIntConfPrefix(rpId)
+      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(prefix, GPU)
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")

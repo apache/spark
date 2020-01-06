@@ -38,7 +38,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -177,7 +177,7 @@ private[yarn] class YarnAllocator(
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
   // Using default profile for now until the ResourceProfile stuff is fully supported in YARN
-  private val defaultResourceProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  private val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
 

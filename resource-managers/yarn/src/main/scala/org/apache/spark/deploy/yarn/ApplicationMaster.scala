@@ -48,7 +48,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -457,7 +457,7 @@ private[spark] class ApplicationMaster(
       val executorCores = _sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
         "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources,
-        ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf))
+        ResourceProfile.getOrCreateDefaultProfile(sparkConf))
       dummyRunner.launchContextDebugInfo()
     }
 
