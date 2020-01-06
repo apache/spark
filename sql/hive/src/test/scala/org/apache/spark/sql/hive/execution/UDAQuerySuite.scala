@@ -364,6 +364,7 @@ class HashUDAQuerySuite extends UDAQuerySuite
 class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    super.checkAnswer(actual, expectedAnswer)
     Seq("true", "false").foreach { enableTwoLevelMaps =>
       withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
         enableTwoLevelMaps) {
