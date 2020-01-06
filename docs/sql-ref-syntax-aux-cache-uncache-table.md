@@ -21,8 +21,8 @@ license: |
 
 ### Description
 `UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
-underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` do not remove 
-the temporary view if it is created by `CACHE TABLE AS query`. `UNCACHE TABLE` on a non-existent table throws Exception if `IF EXISTS`
+underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` does not remove 
+the temporary view if it is created by `CACHE TABLE name AS query`. `UNCACHE TABLE` on a non-existent table throws Exception if `IF EXISTS`
 is not specified.
 
 ### Syntax
