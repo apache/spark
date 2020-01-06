@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+
 class ExecutorResourceRequest(object):
 
     """
@@ -53,20 +54,21 @@ class ExecutorResourceRequest(object):
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
         """Create a new ExecutorResourceRequest that wraps the underlying JVM object."""
         from pyspark.context import SparkContext
-        self._javaExecutorResourceRequest = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
+        self._jExecRequest = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequest(
+            resourceName, amount, discoveryScript, vendor)
 
     @property
     def resourceName(self):
-        return self._javaExecutorResourceRequest.resourceName()
+        return self._jExecRequest.resourceName()
 
     @property
     def amount(self):
-        return self._javaExecutorResourceRequest.amount()
+        return self._jExecRequest.amount()
 
     @property
     def discoveryScript(self):
-        return self._javaExecutorResourceRequest.discoveryScript()
+        return self._jExecRequest.discoveryScript()
 
     @property
     def vendor(self):
-        return self._javaExecutorResourceRequest.vendor()
+        return self._jExecRequest.vendor()

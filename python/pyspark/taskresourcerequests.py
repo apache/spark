@@ -17,20 +17,22 @@
 
 from pyspark.taskresourcerequest import TaskResourceRequest
 
+
 class TaskResourceRequests(object):
 
     """
     .. note:: Evolving
 
-    A set of task resource requests. This is used in conjuntion with the ResourceProfileBuilder to
-    programmatically specify the resources needed for an RDD that will be applied at the
-    stage level.
+    A set of task resource requests. This is used in conjuntion with the
+    ResourceProfileBuilder to programmatically specify the resources needed for
+    an RDD that will be applied at the stage level.
     """
 
     def __init__(self):
         """Create a new TaskResourceRequests that wraps the underlying JVM object."""
         from pyspark import SparkContext
-        self._javaTaskResourceRequests = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
+        self._javaTaskResourceRequests \
+            = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
 
     def cpus(self, amount):
         self._javaTaskResourceRequests.cpus(amount)

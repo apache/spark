@@ -20,6 +20,7 @@ from pyspark.resourceprofile import ResourceProfile
 from pyspark.taskresourcerequest import TaskResourceRequest
 from pyspark.taskresourcerequests import TaskResourceRequests
 
+
 class ResourceProfileBuilder(object):
 
     """
@@ -34,7 +35,8 @@ class ResourceProfileBuilder(object):
     def __init__(self, ):
         """Create a new ResourceProfileBuilder that wraps the underlying JVM object."""
         from pyspark.context import SparkContext
-        self._jResourceProfileBuilder = SparkContext._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+        self._jResourceProfileBuilder \
+            = SparkContext._jvm.org.apache.spark.resource.ResourceProfileBuilder()
 
     def require(self, resourceRequest):
         if isinstance(resourceRequest, TaskResourceRequests):
@@ -64,11 +66,11 @@ class ResourceProfileBuilder(object):
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(), v.discoveryScript(), v.vendor())
+            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                                                v.discoveryScript(), v.vendor())
         return result
 
     @property
     def build(self):
         jresourceProfile = self._jResourceProfileBuilder.build()
         return ResourceProfile(jresourceProfile)
-

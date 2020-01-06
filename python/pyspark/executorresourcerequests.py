@@ -17,20 +17,22 @@
 
 from pyspark.executorresourcerequest import ExecutorResourceRequest
 
+
 class ExecutorResourceRequests(object):
 
     """
     .. note:: Evolving
 
-    A set of Executor resource requests. This is used in conjunction with the ResourceProfileBuilder to
-    programmatically specify the resources needed for an RDD that will be applied at the
-    stage level.
+    A set of Executor resource requests. This is used in conjunction with the
+    ResourceProfileBuilder to programmatically specify the resources needed for an RDD
+    that will be applied at the stage level.
     """
 
     def __init__(self):
         """Create a new ExecutorResourceRequests that wraps the underlying JVM object."""
         from pyspark import SparkContext
-        self._javaExecutorResourceRequests = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequests()
+        self._javaExecutorResourceRequests \
+            = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequests()
 
     def memory(self, amount):
         self._javaExecutorResourceRequests.memory(amount)
@@ -58,5 +60,6 @@ class ExecutorResourceRequests(object):
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(), v.discoveryScript(), v.vendor())
+            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                                                v.discoveryScript(), v.vendor())
         return result

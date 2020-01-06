@@ -1,4 +1,4 @@
-#
+
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -17,6 +17,7 @@
 
 from pyspark.executorresourcerequest import ExecutorResourceRequest
 from pyspark.taskresourcerequest import TaskResourceRequest
+
 
 class ResourceProfile(object):
 
@@ -47,6 +48,6 @@ class ResourceProfile(object):
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(), v.discoveryScript(), v.vendor())
+            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                                                v.discoveryScript(), v.vendor())
         return result
-

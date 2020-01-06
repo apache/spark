@@ -2506,7 +2506,6 @@ class RDD(object):
         """
         return ResourceProfile(self._jrdd.getResourceProfile())
 
-
     def _is_barrier(self):
         """
         Whether this RDD is in a barrier stage.

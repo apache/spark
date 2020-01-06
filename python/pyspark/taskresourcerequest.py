@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+
 class TaskResourceRequest(object):
 
     """
@@ -34,12 +35,13 @@ class TaskResourceRequest(object):
     def __init__(self, resourceName, amount):
         """Create a new TaskResourceRequest that wraps the underlying JVM object."""
         from pyspark.context import SparkContext
-        self._javaTaskResourceRequest = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequest(resourceName, amount)
+        self._jTaskRequest = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequest(
+            resourceName, amount)
 
     @property
     def resourceName(self):
-        return self._javaTaskResourceRequest.resourceName()
+        return self._jTaskRequest.resourceName()
 
     @property
     def amount(self):
-        return self._javaTaskResourceRequest.amount()
+        return self._jTaskRequest.amount()
