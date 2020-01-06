@@ -64,14 +64,14 @@ private class AsyncEventQueue(
   // processed (instead of just dequeued).
   private val eventCount = new AtomicLong()
 
-  /** A counter for dropped events. It will be reset every time we log it. */
+  /** A counter for dropped events. */
   private val droppedEventsCounter = new AtomicLong(0L)
 
   /** A counter to keep number of dropped events last time it was logged */
-  private var lastDroppedEventsCounter: Long = 0L
+  @volatile private var lastDroppedEventsCounter: Long = 0L
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private val lastReportTimestamp = new AtomicLong(0L)
+  private val lastReportTimestamp = new AtomicLong(0L)
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
@@ -178,14 +178,12 @@ private class AsyncEventQueue(
       if (curTime - lastReportTime >= LOGGING_INTERVAL) {
         // There may be multiple threads trying to logging dropped events,
         // Use 'compareAndSet' to make sure only one thread can win.
-        // After set the 'lastReportTimestamp', the next time we come here will
-        // be 60s later.
         if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
-          val prevLastReportTimestamp = lastReportTimestamp.get
-          val previous = new java.util.Date(prevLastReportTimestamp)
+          val lastReportTime = lastReportTimestamp.get
+          val previous = new java.util.Date(lastReportTime)
           lastDroppedEventsCounter = droppedCount
           logWarning(s"Dropped $droppedCount events from $name since " +
-            s"${if (prevLastReportTimestamp == 0) "the application started" else s"$previous"}.")
+            s"${if (lastReportTime == 0) "the application started" else s"$previous"}.")
           // Logging thread dump when events from appStatus was dropped
           Utils.getThreadDumpForThread(dispatchThread.getId).foreach { thread =>
             if (thread.threadName.contains(LiveListenerBus.APP_STATUS_QUEUE)) {
@@ -226,5 +224,4 @@ private object AsyncEventQueue {
   val POISON_PILL = new SparkListenerEvent() { }
 
   val LOGGING_INTERVAL = 60 * 1000
-
 }
