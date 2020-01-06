@@ -2788,7 +2788,7 @@ object SparkContext extends Logging {
 
     // Ensure that default executor's resources satisfies one or more tasks requirement.
     // This function is for cluster managers that don't set the executor cores config, for
-    // others its checked in ImmutableResourceProfile.
+    // others its checked in ResourceProfile.
     def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
       validateTaskCpusLargeEnough(executorCores, taskCores)
