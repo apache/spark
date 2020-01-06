@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.{ResourceProfile, ResourceInformation}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._

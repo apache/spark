@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, getPysparkMemoryFromInternalConfs}
+import org.apache.spark.resource.ResourceProfile.{getPysparkMemoryFromInternalConfs, DEFAULT_RESOURCE_PROFILE_ID}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 

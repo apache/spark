@@ -34,7 +34,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ResourceProfile, ResourceInformation}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -1932,8 +1932,8 @@ class TaskSetManagerSuite
     // get the TaskSetManager
     val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
 
-    val task0 = manager.resourceOffer(exec0, "localhost", TaskLocality.NO_PREF)
-    val task1 = manager.resourceOffer(exec1, "localhost", TaskLocality.NO_PREF)
+    val task0 = manager.resourceOffer(exec0, "localhost", TaskLocality.NO_PREF, 1)
+    val task1 = manager.resourceOffer(exec1, "localhost", TaskLocality.NO_PREF, 1)
     assert(task0.isDefined && task1.isDefined)
     val (taskId0, index0) = (task0.get.taskId, task0.get.index)
     val (taskId1, index1) = (task1.get.taskId, task1.get.index)
