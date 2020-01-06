@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetWriteSupport}
@@ -39,8 +40,8 @@ case class ParquetScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
-    options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
+    options: CaseInsensitiveStringMap,
+    partitionFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -82,13 +83,17 @@ case class ParquetScan(
     case p: ParquetScan =>
       fileIndex == p.fileIndex && dataSchema == p.dataSchema &&
         readDataSchema == p.readDataSchema && readPartitionSchema == p.readPartitionSchema &&
-        options == p.options && equivalentFilters(pushedFilters, p.pushedFilters)
+        options == p.options && equivalentFilters(pushedFilters, p.pushedFilters) &&
+        Set(partitionFilters.map(_.canonicalized)) == Set(p.partitionFilters.map(_.canonicalized))
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+    super.description() + ", PushedFilters: " + seqToString(pushedFilters)
   }
+
+  override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters)
 }
