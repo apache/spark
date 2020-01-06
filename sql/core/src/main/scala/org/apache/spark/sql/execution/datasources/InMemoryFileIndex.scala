@@ -69,14 +69,6 @@ class InMemoryFileIndex(
 
   refresh0()
 
-//  override def metadataOpsTimeNs: Option[Long] = {
-//    if (_metadataOpsTimeNs.isDefined) {
-//      _metadataOpsTimeNs
-//    } else {
-//      super.metadataOpsTimeNs
-//    }
-//  }
-
   override def partitionSpec(): PartitionSpec = {
     if (userSpecifiedPartitionSpec.isDefined) {
       return userSpecifiedPartitionSpec.get
