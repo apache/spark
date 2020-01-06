@@ -61,7 +61,6 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    logInfo("calling compute in PythonRDD")
     val runner = PythonRunner(func)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }

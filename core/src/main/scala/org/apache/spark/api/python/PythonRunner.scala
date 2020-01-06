@@ -117,7 +117,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
-      // TODO - we have to update this to limit it based on limiting resource
       conf.getOption("spark.executor.cores").foreach(envVars.put("OMP_NUM_THREADS", _))
     }
     logInfo("omp num threads is: " + envVars.get("OMP_NUM_THREADS"))
@@ -143,9 +142,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-    // TODO - remove log
-    logInfo("creating python worker, context: " + context.taskAttemptId() +
-      " resources: " + context.resources() + " memory: " + workerMemoryMb)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
