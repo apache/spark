@@ -1,0 +1,112 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+JSON schema inferring:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       57417          59374         953          1.7         574.2       1.0X
+UTF-8 is set                                      90156          92689         NaN          1.1         901.6       0.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+count a short column:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       36685          38315        1414          2.7         366.9       1.0X
+UTF-8 is set                                      62956          64488        1328          1.6         629.6       0.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+count a wide column:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       53021          56113         NaN          0.2        5302.1       1.0X
+UTF-8 is set                                      84490          88618        1904          0.1        8449.0       0.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+select wide row:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                      129822         131107         NaN          0.0      259643.1       1.0X
+UTF-8 is set                                     147795         154502         NaN          0.0      295589.1       0.9X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+Select a subset of 10 columns:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 10 columns                                 15051          15603         478          0.7        1505.1       1.0X
+Select 1 column                                   18987          19021          31          0.5        1898.7       0.8X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+creation of JSON parser per line:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Short column without encoding                      6182           6251          61          1.6         618.2       1.0X
+Short column with UTF-8                            8913           8930          27          1.1         891.3       0.7X
+Wide column without encoding                      84504          87084         NaN          0.1        8450.4       0.1X
+Wide column with UTF-8                           129669         131259        1920          0.1       12966.9       0.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                           602            606           6         16.6          60.2       1.0X
+from_json                                         18369          18424          55          0.5        1836.9       0.0X
+json_tuple                                        22175          22262         144          0.5        2217.5       0.0X
+get_json_object                                   18619          18658          44          0.5        1861.9       0.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                          2983           2987           4         16.8          59.7       1.0X
+schema inferring                                  25172          25190          18          2.0         503.4       0.1X
+parsing                                           25643          26105         402          1.9         512.9       0.1X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                         10764          10787          28          4.6         215.3       1.0X
+Schema inferring                                  36000          36032          35          1.4         720.0       0.3X
+Parsing without charset                           29164          29277          99          1.7         583.3       0.4X
+Parsing with UTF-8                                42282          42357          90          1.2         845.6       0.3X
+
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Create a dataset of timestamps                     1256           1259           3          8.0         125.6       1.0X
+to_json(timestamp)                                11850          12043         244          0.8        1185.0       0.1X
+write timestamps to files                          9968          10034          58          1.0         996.8       0.1X
+Create a dataset of dates                          1313           1333          27          7.6         131.3       1.0X
+to_json(date)                                      8130           8196          57          1.2         813.0       0.2X
+write dates to files                               5761           5814          53          1.7         576.1       0.2X
+
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+read timestamp text from files                     2480           2493          15          4.0         248.0       1.0X
+read timestamps from files                        21338          21364          27          0.5        2133.8       0.1X
+infer timestamps from files                       44079          44204         159          0.2        4407.9       0.1X
+read date text from files                          2297           2318          22          4.4         229.7       1.1X
+read date from files                              15020          15091          81          0.7        1502.0       0.2X
+timestamp strings                                  2185           2191          10          4.6         218.5       1.1X
+parse timestamps from Dataset[String]             22879          22963          73          0.4        2287.9       0.1X
+infer timestamps from Dataset[String]             45896          46150         233          0.2        4589.6       0.1X
+date strings                                       3171           3179          14          3.2         317.1       0.8X
+parse dates from Dataset[String]                  18291          18409         105          0.5        1829.1       0.1X
+from_json(timestamp)                              36083          36096          17          0.3        3608.3       0.1X
+from_json(date)                                   31175          31188          11          0.3        3117.5       0.1X
+
+
