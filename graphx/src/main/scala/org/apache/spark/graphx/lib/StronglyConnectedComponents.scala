@@ -39,13 +39,11 @@ object StronglyConnectedComponents {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
 
-    // the graph we update with final SCC ids, and the graph we return at the end
-    var sccGraph = graph.mapVertices { case (vid, _) => vid }
     // graph we are going to work with in our iterations
     var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
 
-    // helper variables to unpersist cached graphs
-    var prevSccGraph = sccGraph
+    // the SCC label, and the vertices to be removed in iteration
+    var sccVertexLabel = graph.vertices.sparkContext.emptyRDD[(VertexId, VertexId)]
 
     var numVertices = sccWorkGraph.numVertices
     var iter = 0
@@ -53,41 +51,58 @@ object StronglyConnectedComponents {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
+
+        val labeledByOutDegree = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.outerJoinVertices(sccWorkGraph.inDegrees) {
+        }
+
+        val labeledByInDegree = labeledByOutDegree.outerJoinVertices(sccWorkGraph.inDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
         }.cache()
+
+        // helper variables to unpersist
+        val prevSccVertexLabel = sccVertexLabel
 
         // get all vertices to be removed
-        val finalVertices = sccWorkGraph.vertices
-            .filter { case (vid, (scc, isFinal)) => isFinal}
-            .mapValues { (vid, data) => data._1}
+        val finalVertices = labeledByInDegree.vertices
+          .filter { case (vid, (scc, isFinal)) => isFinal}
+          .mapValues { (vid, data) => data._1}
 
-        // write values to sccGraph
-        sccGraph = sccGraph.outerJoinVertices(finalVertices) {
-          (vid, scc, opt) => opt.getOrElse(scc)
-        }.cache()
-        // materialize vertices and edges
-        sccGraph.vertices.count()
-        sccGraph.edges.count()
-        // sccGraph materialized so, unpersist can be done on previous
-        prevSccGraph.unpersist()
-        prevSccGraph = sccGraph
+        // combine new vertex with the SCC label
+        sccVertexLabel = finalVertices.union(sccVertexLabel).cache()
+        sccVertexLabel.count()    // materialize
+
+        prevSccVertexLabel.unpersist(blocking = false)
+
+        // helper variables to unpersist
+        val prevSccWorkGraph = sccWorkGraph
 
         // only keep vertices that are not final
-        sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
+        sccWorkGraph = labeledByInDegree.subgraph(vpred = (vid, data) => !data._2).cache()
+
+        // materialize vertices and edges
+        sccWorkGraph.numVertices
+        sccWorkGraph.numEdges
+
+        // unpersist helper variables
+        prevSccWorkGraph.unpersist(blocking = false)
+        prevSccWorkGraph.edges.unpersist(blocking = false)
+        labeledByInDegree.unpersist(blocking = false)
+        labeledByInDegree.edges.unpersist(blocking = false)
+        labeledByOutDegree.unpersist(blocking = false)
+        labeledByOutDegree.edges.unpersist(blocking = false)
+
       } while (sccWorkGraph.numVertices < numVertices)
 
       // if iter < numIter at this point sccGraph that is returned
       // will not be recomputed and pregel executions are pointless
       if (iter < numIter) {
-        sccWorkGraph = sccWorkGraph.mapVertices { case (vid, (color, isFinal)) => (vid, isFinal) }
+        val phase1 = sccWorkGraph.mapVertices{case(vid, (color, isFinal)) => (vid, isFinal)}
 
         // collect min of all my neighbor's scc values, update if it's smaller than mine
         // then notify any neighbors with scc values larger than mine
-        sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
-          sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
+        val phase2 = Pregel[(VertexId, Boolean), ED, VertexId](
+          phase1, Long.MaxValue, activeDirection = EdgeDirection.Out)(
           (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
           e => {
             if (e.srcAttr._1 < e.dstAttr._1) {
@@ -100,8 +115,12 @@ object StronglyConnectedComponents {
 
         // start at root of SCCs. Traverse values in reverse, notify all my neighbors
         // do not propagate if colors do not match!
+
+        sccWorkGraph.unpersist(blocking = false)
+        sccWorkGraph.edges.unpersist(blocking = false)
+
         sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
-          sccWorkGraph, false, activeDirection = EdgeDirection.In)(
+          phase2, false, activeDirection = EdgeDirection.In)(
           // vertex is final if it is the root of a color
           // or it has the same color as a neighbor that is final
           (vid, myScc, existsSameColorFinalNeighbor) => {
@@ -118,10 +137,28 @@ object StronglyConnectedComponents {
               Iterator()
             }
           },
-          (final1, final2) => final1 || final2)
+          (final1, final2) => final1 || final2).cache()
+        phase1.unpersist(blocking = false)
+        phase1.edges.unpersist(blocking = false)
+        phase2.unpersist(blocking = false)
+        phase2.edges.unpersist(blocking = false)
       }
     }
+
+    sccWorkGraph.unpersist(blocking = false)
+    sccWorkGraph.edges.unpersist(blocking = false)
+
+    val graphWithId = graph.mapVertices{case(vid, _) => vid}
+
+    val sccGraph = graphWithId.joinVertices(sccVertexLabel) {(_, _, label) => label}.cache()
+
+    sccGraph.numVertices
+    sccGraph.numEdges
+
+    sccVertexLabel.unpersist(blocking = false)
+    graphWithId.unpersist(blocking = false)
+    graphWithId.edges.unpersist(blocking = false)
+
     sccGraph
   }
-
 }
