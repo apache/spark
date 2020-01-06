@@ -70,11 +70,12 @@ class InMemoryFileIndex(
   refresh0()
 
   override def partitionSpec(): PartitionSpec = {
-    if (userSpecifiedPartitionSpec.isDefined) {
-      return userSpecifiedPartitionSpec.get
-    }
     if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning()
+      if (userSpecifiedPartitionSpec.isDefined) {
+        cachedPartitionSpec = userSpecifiedPartitionSpec.get
+      } else {
+        cachedPartitionSpec = inferPartitioning()
+      }
     }
     logTrace(s"Partition spec: $cachedPartitionSpec")
     cachedPartitionSpec
