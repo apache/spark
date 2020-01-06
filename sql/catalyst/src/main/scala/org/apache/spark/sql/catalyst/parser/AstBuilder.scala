@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -3428,6 +3428,36 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       functionName,
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
+  }
+
+  /**
+   * Create a CREATE FUNCTION statement.
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   * }}}
+   */
+  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val resources = ctx.resource.asScala.map { resource =>
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
+      resourceType match {
+        case "jar" | "file" | "archive" =>
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
+        case other =>
+          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
+      }
+    }
+
+    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CreateFunctionStatement(
+      functionIdentifier,
+      string(ctx.className),
+      resources,
+      ctx.TEMPORARY != null,
+      ctx.EXISTS != null,
+      ctx.REPLACE != null)
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {

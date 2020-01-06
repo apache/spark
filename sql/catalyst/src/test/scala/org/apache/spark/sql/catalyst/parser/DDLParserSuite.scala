@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -1915,7 +1915,43 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
       DropFunctionStatement(Seq("a", "b", "c"), true, true))
+  }
 
+  test("CREATE FUNCTION") {
+    parseCompare("CREATE FUNCTION a as 'fun'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(), false, false, false))
+
+    parseCompare("CREATE FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, false))
+
+    parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, true))
+
+    parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), true, false, false))
+
+    parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, true, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(ArchiveResource, "a")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(FileResource, "f")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j"),
+        FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
+        false, false, false))
+
+    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
+      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
   }
 
   private case class TableSpec(

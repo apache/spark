@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.ViewType
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -515,3 +515,14 @@ case class DropFunctionStatement(
     functionName: Seq[String],
     ifExists: Boolean,
     isTemp: Boolean) extends ParsedStatement
+
+/**
+ *  CREATE FUNCTION statement, as parsed from SQL
+ */
+case class CreateFunctionStatement(
+    functionName: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    isTemp: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends ParsedStatement
