@@ -15,24 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.catalog;
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.connector.write.BatchWrite;
-import org.apache.spark.sql.connector.write.LogicalWriteInfo;
-import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
- * {@link #newWriteBuilder(LogicalWriteInfo)} that is used to create a
- * write for batch or streaming.
+ * This interface contains logical write information that data sources can use when generating a
+ * {@link WriteBuilder}.
  */
-@Experimental
-public interface SupportsWrite extends Table {
+@Evolving
+public interface LogicalWriteInfo {
+  /**
+   * the options that the user specified when writing the dataset
+   */
+  CaseInsensitiveStringMap options();
 
   /**
-   * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
-   * this method to configure each data source write.
+   * `queryId` is a unique string of the query. It's possible that there are many queries
+   * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
+   * this id to identify the query.
    */
-  WriteBuilder newWriteBuilder(LogicalWriteInfo info);
+  String queryId();
+
+  /**
+   * the schema of the input data from Spark to data source.
+   */
+  StructType schema();
 }
