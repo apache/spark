@@ -48,16 +48,20 @@ object StronglyConnectedComponents {
     var prevSccGraph = sccGraph
 
     var numVertices = sccWorkGraph.numVertices
+    var pregelDone = false
     var iter = 0
     while (sccWorkGraph.numVertices > 0 && iter < numIter) {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
-          (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.outerJoinVertices(sccWorkGraph.inDegrees) {
-          (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.cache()
+        if (!pregelDone) {
+          sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
+            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+          }.outerJoinVertices(sccWorkGraph.inDegrees) {
+            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+          }.cache()
+        }
+        pregelDone = false
 
         // get all vertices to be removed
         val finalVertices = sccWorkGraph.vertices
@@ -120,6 +124,7 @@ object StronglyConnectedComponents {
           },
           (final1, final2) => final1 || final2)
       }
+      pregelDone = true
     }
     sccGraph
   }
