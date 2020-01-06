@@ -15,24 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.catalog;
+package org.apache.spark.sql.connector.write
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.connector.write.BatchWrite;
-import org.apache.spark.sql.connector.write.LogicalWriteInfo;
-import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/**
- * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
- * {@link #newWriteBuilder(LogicalWriteInfo)} that is used to create a
- * write for batch or streaming.
- */
-@Experimental
-public interface SupportsWrite extends Table {
-
-  /**
-   * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
-   * this method to configure each data source write.
-   */
-  WriteBuilder newWriteBuilder(LogicalWriteInfo info);
-}
+private[sql] case class LogicalWriteInfoImpl(
+    queryId: String,
+    schema: StructType,
+    options: CaseInsensitiveStringMap) extends LogicalWriteInfo
