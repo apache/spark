@@ -470,7 +470,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   with Logging {
 
   private[this] lazy val inputEncoder = inputEncoderNR.resolveAndBind()
-  private[this] lazy val bufferEncoder = agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+  private[this] lazy val bufferEncoder =
+    agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
@@ -521,17 +522,13 @@ case class ScalaAggregator[IN, BUF, OUT](
     val bufferSerializer = bufferEncoder.namedExpressions
     new UnsafeRow(bufferSerializer.length)
   }
-  private[this] lazy val bufferRowToObject = {
-    val bufferDeserializer = bufferEncoder.resolveAndBind().deserializer
-    GenerateSafeProjection.generate(bufferDeserializer :: Nil)
-  }
 
   def serialize(agg: BUF): Array[Byte] =
     bufferEncoder.toRow(agg).asInstanceOf[UnsafeRow].getBytes()
 
   def deserialize(storageFormat: Array[Byte]): BUF = {
     bufferRow.pointTo(storageFormat, storageFormat.length)
-    bufferRowToObject(bufferRow).get(0, ObjectType(classOf[Any])).asInstanceOf[BUF]
+    bufferEncoder.fromRow(bufferRow)
   }
 
   override def toString: String =
