@@ -317,7 +317,7 @@ class ResolveSessionCatalog(
     case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespace(ResolvedNamespace(catalog, ns), _, _) if isSessionCatalog(catalog) =>
+    case c @ CreateNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")

@@ -2499,7 +2499,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[CreateNamespace]] command.
+   * Create a [[CreateNamespaceStatement]] command.
    *
    * For example:
    * {{{
@@ -2539,8 +2539,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       properties += PROP_LOCATION -> _
     }
 
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateNamespace(UnresolvedNamespace(nameParts), ctx.EXISTS != null, properties)
+    CreateNamespaceStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.EXISTS != null,
+      properties)
   }
 
   /**

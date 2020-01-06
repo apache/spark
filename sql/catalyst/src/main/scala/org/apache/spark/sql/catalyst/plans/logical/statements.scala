@@ -359,6 +359,14 @@ case class ShowTableStatement(
   extends ParsedStatement
 
 /**
+ * A CREATE NAMESPACE statement, as parsed from SQL.
+ */
+case class CreateNamespaceStatement(
+    namespace: Seq[String],
+    ifNotExists: Boolean,
+    properties: Map[String, String]) extends ParsedStatement
+
+/**
  * A DROP NAMESPACE statement, as parsed from SQL.
  */
 case class DropNamespaceStatement(
