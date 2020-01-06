@@ -64,15 +64,6 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_OWNER_TYPE = "ownerType";
 
   /**
-   * The list of namespace ownership properties, which can be used in `ALTER` syntax:
-   *
-   * {{
-   *   ALTER (DATABASE|SCHEMA|NAMESPACE) SET OWNER ...
-   * }}
-   */
-  List<String> OWNERSHIPS = Arrays.asList(PROP_OWNER_NAME, PROP_OWNER_TYPE);
-
-  /**
    * The list of immutable namespace properties, which can not be removed or changed directly by
    * the syntax:
    * {{
