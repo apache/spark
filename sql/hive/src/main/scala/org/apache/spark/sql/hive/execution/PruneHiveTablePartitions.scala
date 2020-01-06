@@ -75,20 +75,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
           (part, 0L)
         }
       }
-      val sizeOfPartitions =
-        if (partitionsWithSize.count(_._2==0) <= conf.fallBackToHdfsForStatsMaxPartitionNum) {
-          partitionsWithSize.map{ pair =>
-            val (part, size) = (pair._1, pair._2)
-            if (size == 0) {
-              CommandUtils.calculateLocationSize(
-                session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
-            } else {
-              size
-            }
-          }.sum
+      val sizeOfPartitions = partitionsWithSize.map{ pair =>
+        val (partition, size) = (pair._1, pair._2)
+        if (size == 0) {
+          CommandUtils.calculateLocationSize(
+            session.sessionState, relation.tableMeta.identifier, partition.storage.locationUri)
         } else {
-          partitionsWithSize.filter(_._2>0).map(_._2).sum
+          size
         }
+      }.sum
       // If size of partitions is zero fall back to the default size.
       if (sizeOfPartitions == 0L) conf.defaultSizeInBytes else sizeOfPartitions
     } catch {
