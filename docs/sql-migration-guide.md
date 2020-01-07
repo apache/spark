@@ -867,7 +867,17 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `CROSS JOIN`
 * Unions
 * Sub-queries
-  * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+  * Sub-queries in the FROM Clause
+  
+   ```SELECT col FROM ( SELECT a + b AS col FROM t1) t2```
+  * Sub-queries in WHERE Clause
+    * Correlated or non-correlated IN and NOT IN statement
+    
+      ```SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)```
+    * Correlated or non-correlated EXISTS and NOT EXISTS statement
+    
+      ```SELECT col FROM t1 WHERE EXISTS (SELECT a FROM t2 WHERE a > 10)```
+       
 * Sampling
 * Explain
 * Partitioned tables including dynamic partition insertion
