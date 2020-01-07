@@ -1147,7 +1147,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespaceStatement(
-      UnresolvedNamespace(Seq("a", "b", "c")),
+      Seq("a", "b", "c"),
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -1220,7 +1220,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(sql),
       CreateNamespaceStatement(
-        UnresolvedNamespace(Seq("a", "b", "c")),
+        Seq("a", "b", "c"),
         ifNotExists = false,
         Map(
           "a" -> "1",

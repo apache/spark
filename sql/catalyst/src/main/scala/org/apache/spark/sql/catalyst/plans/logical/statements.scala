@@ -367,11 +367,9 @@ case class ShowTableStatement(
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
-    namespace: LogicalPlan,
+    namespace: Seq[String],
     ifNotExists: Boolean,
-    properties: Map[String, String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
+    properties: Map[String, String]) extends ParsedStatement
 
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.

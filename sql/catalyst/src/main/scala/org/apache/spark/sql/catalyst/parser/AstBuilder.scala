@@ -2533,7 +2533,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     CreateNamespaceStatement(
-      UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.EXISTS != null,
       properties)
   }
