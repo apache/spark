@@ -65,6 +65,15 @@ class CatalogManager(
     catalogIdentifiers.get(catalog)
   }
 
+  def isCatalogRegistered(name: String): Boolean = {
+    try {
+      catalog(name)
+      true
+    } catch {
+      case _: CatalogNotFoundException => false
+    }
+  }
+
   private def loadV2SessionCatalog(): CatalogPlugin = {
     Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>

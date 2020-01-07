@@ -204,6 +204,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("array of nested struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(
+            Tuple1(s"1st_val_$i")),
+          Tuple1(
+            Tuple1(s"2nd_val_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
+      })
+    }
+  }
+
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
@@ -214,9 +250,34 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
+  testStandardAndLegacyModes("nested map with struct as key type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          (i, s"kA_$i") -> s"vA_$i",
+          (i, s"kB_$i") -> s"vB_$i"
+        )
+      )
+    }
     withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("nested map with struct as value type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })

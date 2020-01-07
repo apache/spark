@@ -1891,14 +1891,10 @@ class Dataset[T] private[sql](
   * [[org.apache.spark.sql.util.QueryExecutionListener]] to the spark session.
   *
   * {{{
-  *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
-  *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
-  *   observed_ds.writeStream.format("...").start()
-  *
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
-  *       event.progress.observedMetrics.get("my_event").foreach { row =>
+  *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
   *         val num_rows = row.getAs[Long]("rc")
   *         val num_error_rows = row.getAs[Long]("erc")
@@ -1908,7 +1904,12 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
+  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
+  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
+  *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
+  *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
+  *   observed_ds.writeStream.format("...").start()
   * }}}
   *
   * @group typedrel
@@ -2794,6 +2795,18 @@ class Dataset[T] private[sql](
   def take(n: Int): Array[T] = head(n)
 
   /**
+   * Returns the last `n` rows in the Dataset.
+   *
+   * Running tail requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.0.0
+   */
+  def tail(n: Int): Array[T] = withAction(
+    "tail", withTypedPlan(Tail(Literal(n), logicalPlan)).queryExecution)(collectFromPlan)
+
+  /**
    * Returns the first `n` rows in the Dataset as a list.
    *
    * Running take requires moving data into the application's driver process, and doing so with
@@ -3459,9 +3472,7 @@ class Dataset[T] private[sql](
    */
   private def withNewRDDExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
-      rddQueryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      rddQueryExecution.executedPlan.resetMetrics()
       body
     }
   }
@@ -3472,9 +3483,7 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
-      qe.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      qe.executedPlan.resetMetrics()
       action(qe.executedPlan)
     }
   }

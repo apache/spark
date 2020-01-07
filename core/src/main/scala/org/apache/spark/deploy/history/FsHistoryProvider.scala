@@ -31,7 +31,6 @@ import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
@@ -214,7 +213,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (!Utils.isTesting) {
       ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
     } else {
-      MoreExecutors.sameThreadExecutor()
+      ThreadUtils.sameThreadExecutorService
     }
   }
 

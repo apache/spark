@@ -35,6 +35,7 @@ import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
 
@@ -100,13 +101,16 @@ private[spark] object RandomForest extends Logging with Serializable {
   }
 
   /**
-   * Train a random forest.
+   * Train a random forest with metadata. This method is mainly for GBT, in which metadata can
+   * be reused among trees.
    *
    * @param input Training data: RDD of `Instance`
+   * @param metadata Learning and dataset metadata for DecisionTree.
    * @return an unweighted set of trees
    */
-  def run(
+  def runWithMetadata(
       input: RDD[Instance],
+      metadata: DecisionTreeMetadata,
       strategy: OldStrategy,
       numTrees: Int,
       featureSubsetStrategy: String,
@@ -114,27 +118,26 @@ private[spark] object RandomForest extends Logging with Serializable {
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
-
     val timer = new TimeTracker()
-
-    timer.start("total")
-
-    timer.start("init")
-
-    val retaggedInput = input.retag(classOf[Instance])
-    val metadata =
-      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
 
     instr match {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
         instrumentation.logNumExamples(metadata.numExamples)
+        instrumentation.logSumOfWeights(metadata.weightedNumExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)
         logInfo("numExamples: " + metadata.numExamples)
+        logInfo("weightedNumExamples: " + metadata.weightedNumExamples)
     }
+
+    timer.start("total")
+
+    timer.start("init")
+
+    val retaggedInput = input.retag(classOf[Instance])
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -211,7 +214,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
-        RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
+      RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
@@ -269,6 +272,32 @@ private[spark] object RandomForest extends Logging with Serializable {
             new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
         }
     }
+  }
+
+  /**
+   * Train a random forest.
+   *
+   * @param input Training data: RDD of `Instance`
+   * @return an unweighted set of trees
+   */
+  def run(
+      input: RDD[Instance],
+      strategy: OldStrategy,
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      seed: Long,
+      instr: Option[Instrumentation],
+      prune: Boolean = true, // exposed for testing only, real trees are always pruned
+      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+    val timer = new TimeTracker()
+
+    timer.start("build metadata")
+    val metadata = DecisionTreeMetadata
+      .buildMetadata(input.retag(classOf[Instance]), strategy, numTrees, featureSubsetStrategy)
+    timer.stop("build metadata")
+
+    runWithMetadata(input, metadata, strategy, numTrees, featureSubsetStrategy,
+      seed, instr, prune, parentUID)
   }
 
   /**
@@ -563,7 +592,7 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.iterator.zipWithIndex.map(_.swap)
       }
     } else {
       input.mapPartitions { points =>
@@ -581,7 +610,7 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.iterator.zipWithIndex.map(_.swap)
       }
     }
 
@@ -596,6 +625,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
         (nodeIndex, (split, stats))
     }.collectAsMap()
+    nodeToFeaturesBc.destroy()
 
     timer.stop("chooseSplits")
 
@@ -946,24 +976,34 @@ private[spark] object RandomForest extends Logging with Serializable {
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
 
-    val continuousSplits: scala.collection.Map[Int, Array[Split]] = {
+    val continuousSplits = if (continuousFeatures.nonEmpty) {
       // reduce the parallelism for split computations when there are less
       // continuous features than input partitions. this prevents tasks from
       // being spun up that will definitely do no work.
       val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
 
-      input
-        .flatMap { point =>
-          continuousFeatures.map(idx => (idx, (point.weight, point.features(idx))))
-            .filter(_._2._2 != 0.0)
-        }.groupByKey(numPartitions)
-        .map { case (idx, samples) =>
-          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
-          val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
-          logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
-          (idx, splits)
-        }.collectAsMap()
-    }
+      input.flatMap { point =>
+        continuousFeatures.iterator
+          .map(idx => (idx, (point.features(idx), point.weight)))
+          .filter(_._2._1 != 0.0)
+      }.aggregateByKey((new OpenHashMap[Double, Double], 0L), numPartitions)(
+        seqOp = { case ((map, c), (v, w)) =>
+          map.changeValue(v, w, _ + w)
+          (map, c + 1L)
+        },
+        combOp = { case ((map1, c1), (map2, c2)) =>
+          map2.foreach { case (v, w) =>
+            map1.changeValue(v, w, _ + w)
+          }
+          (map1, c1 + c2)
+        }
+      ).map { case (idx, (map, c)) =>
+        val thresholds = findSplitsForContinuousFeature(map.toMap, c, metadata, idx)
+        val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
+        logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
+        (idx, splits)
+      }.collectAsMap()
+    } else Map.empty[Int, Array[Split]]
 
     val numFeatures = metadata.numFeatures
     val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
@@ -1031,23 +1071,42 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSamples: Iterable[(Double, Double)],
       metadata: DecisionTreeMetadata,
       featureIndex: Int): Array[Double] = {
+    val valueWeights = new OpenHashMap[Double, Double]
+    var count = 0L
+    featureSamples.foreach { case (weight, value) =>
+      valueWeights.changeValue(value, weight, _ + weight)
+      count += 1L
+    }
+    findSplitsForContinuousFeature(valueWeights.toMap, count, metadata, featureIndex)
+  }
+
+  /**
+   * Find splits for a continuous feature
+   * NOTE: Returned number of splits is set based on `featureSamples` and
+   *       could be different from the specified `numSplits`.
+   *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
+   *
+   * @param partValueWeights non-zero distinct values and their weights
+   * @param metadata decision tree metadata
+   *                 NOTE: `metadata.numbins` will be changed accordingly
+   *                       if there are not enough splits to be found
+   * @param featureIndex feature index to find splits
+   * @return array of split thresholds
+   */
+  private[tree] def findSplitsForContinuousFeature(
+      partValueWeights: Map[Double, Double],
+      count: Long,
+      metadata: DecisionTreeMetadata,
+      featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
-    val splits: Array[Double] = if (featureSamples.isEmpty) {
-      Array.empty[Double]
+    val splits = if (partValueWeights.isEmpty) {
+      Array.emptyDoubleArray
     } else {
       val numSplits = metadata.numSplits(featureIndex)
 
-      // get count for each distinct value except zero value
-      val partValueCountMap = mutable.Map[Double, Double]()
-      var partNumSamples = 0.0
-      var unweightedNumSamples = 0.0
-      featureSamples.foreach { case (sampleWeight, feature) =>
-        partValueCountMap(feature) = partValueCountMap.getOrElse(feature, 0.0) + sampleWeight
-        partNumSamples += sampleWeight
-        unweightedNumSamples += 1.0
-      }
+      val partNumSamples = partValueWeights.values.sum
 
       // Calculate the expected number of samples for finding splits
       val weightedNumSamples = samplesFractionForFindSplits(metadata) *
@@ -1055,12 +1114,12 @@ private[spark] object RandomForest extends Logging with Serializable {
       // scale tolerance by number of samples with constant factor
       // Note: constant factor was tuned by running some tests where there were no zero
       // feature values and validating we are never within tolerance
-      val tolerance = Utils.EPSILON * unweightedNumSamples * 100
+      val tolerance = Utils.EPSILON * count * 100
       // add expected zero value count and get complete statistics
       val valueCountMap = if (weightedNumSamples - partNumSamples > tolerance) {
-        partValueCountMap + (0.0 -> (weightedNumSamples - partNumSamples))
+        partValueWeights + (0.0 -> (weightedNumSamples - partNumSamples))
       } else {
-        partValueCountMap
+        partValueWeights
       }
 
       // sort distinct values
@@ -1069,7 +1128,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       val possibleSplits = valueCounts.length - 1
       if (possibleSplits == 0) {
         // constant feature
-        Array.empty[Double]
+        Array.emptyDoubleArray
       } else if (possibleSplits <= numSplits) {
         // if possible splits is not enough or just enough, just return all possible splits
         (1 to possibleSplits)

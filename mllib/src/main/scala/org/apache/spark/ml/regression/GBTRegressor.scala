@@ -186,10 +186,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy))
+        $(seed), $(featureSubsetStrategy), Some(instr))
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy))
+        $(seed), $(featureSubsetStrategy), Some(instr))
     }
     baseLearners.foreach(copyValues(_))
 

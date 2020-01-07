@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
+import scala.collection.mutable.ArrayBuilder
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
@@ -254,28 +255,43 @@ class VectorsSuite extends SparkMLFunSuite {
     }
   }
 
+  test("foreach") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvMap = scala.collection.mutable.Map[Int, Double]()
+    dv.foreach { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+
+    val svMap = scala.collection.mutable.Map[Int, Double]()
+    sv.foreach { (index, value) => svMap.put(index, value) }
+    assert(svMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+  }
+
   test("foreachActive") {
     val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
     val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
 
     val dvMap = scala.collection.mutable.Map[Int, Double]()
-    dv.foreachActive { (index, value) =>
-      dvMap.put(index, value)
-    }
-    assert(dvMap.size === 4)
-    assert(dvMap.get(0) === Some(0.0))
-    assert(dvMap.get(1) === Some(1.2))
-    assert(dvMap.get(2) === Some(3.1))
-    assert(dvMap.get(3) === Some(0.0))
+    dv.foreachActive { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
 
     val svMap = scala.collection.mutable.Map[Int, Double]()
-    sv.foreachActive { (index, value) =>
-      svMap.put(index, value)
-    }
-    assert(svMap.size === 3)
-    assert(svMap.get(1) === Some(1.2))
-    assert(svMap.get(2) === Some(3.1))
-    assert(svMap.get(3) === Some(0.0))
+    sv.foreachActive { (index, value) => svMap.put(index, value) }
+    assert(svMap === Map(1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+  }
+
+  test("foreachNonZero") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvMap = scala.collection.mutable.Map[Int, Double]()
+    dv.foreachNonZero { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(1 -> 1.2, 2 -> 3.1))
+
+    val svMap = scala.collection.mutable.Map[Int, Double]()
+    sv.foreachNonZero { (index, value) => svMap.put(index, value) }
+    assert(dvMap === Map(1 -> 1.2, 2 -> 3.1))
   }
 
   test("vector p-norm") {
@@ -402,5 +418,58 @@ class VectorsSuite extends SparkMLFunSuite {
     val dv = Vectors.dense(arr)
     assert(sv.dot(dv) === 0.26)
     assert(dv.dot(sv) === 0.26)
+  }
+
+  test("iterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val (indices, values) = vec.iterator.toArray.unzip
+      assert(Array.range(0, vec.size) === indices)
+      assert(vec.toArray === values)
+    }
+  }
+
+  test("activeIterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val indicesBuilder = ArrayBuilder.make[Int]
+      val valuesBuilder = ArrayBuilder.make[Double]
+      vec.foreachActive { case (i, v) =>
+        indicesBuilder += i
+        valuesBuilder += v
+      }
+      val (indices, values) = vec.activeIterator.toArray.unzip
+      assert(indicesBuilder.result === indices)
+      assert(valuesBuilder.result === values)
+    }
+  }
+
+  test("nonZeroIterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val indicesBuilder = ArrayBuilder.make[Int]
+      val valuesBuilder = ArrayBuilder.make[Double]
+      vec.foreachActive { case (i, v) =>
+        if (v != 0) {
+          indicesBuilder += i
+          valuesBuilder += v
+        }
+      }
+      val (indices, values) = vec.nonZeroIterator.toArray.unzip
+      assert(indicesBuilder.result === indices)
+      assert(valuesBuilder.result === values)
+    }
   }
 }
