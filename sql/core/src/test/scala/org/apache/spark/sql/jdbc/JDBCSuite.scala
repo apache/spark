@@ -65,7 +65,7 @@ class JDBCSuite extends QueryTest
         size: Int,
         md: MetadataBuilder): Option[DataType] = {
       sqlType match {
-        case java.sql.Types.TINYINT => Some(ByteType)
+        case java.sql.Types.TINYINT => Some(ShortType)
         case _ => None
       }
     }
@@ -578,7 +578,7 @@ class JDBCSuite extends QueryTest
     assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
-    assert(rows(0).getInt(2) === 3)
+    assert(rows(0).getShort(2) === 3)
     assert(rows(0).getInt(3) === 4)
     assert(rows(0).getLong(4) === 1234567890123L)
   }
@@ -704,8 +704,8 @@ class JDBCSuite extends QueryTest
     val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
     val rows = df.collect()
     assert(rows.length === 2)
-    assert(rows(0).get(2).isInstanceOf[Byte])
-    assert(rows(0).getByte(2) === 3)
+    assert(rows(0).get(2).isInstanceOf[Short])
+    assert(rows(0).getShort(2) === 3)
     assert(rows(1).isNullAt(2))
     JdbcDialects.unregisterDialect(testH2DialectTinyInt)
   }

@@ -171,7 +171,7 @@ object JdbcUtils extends Logging {
       case DoubleType => Option(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
       case FloatType => Option(JdbcType("REAL", java.sql.Types.FLOAT))
       case ShortType => Option(JdbcType("INTEGER", java.sql.Types.SMALLINT))
-      case ByteType => Option(JdbcType("BYTE", java.sql.Types.TINYINT))
+      case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
@@ -244,7 +244,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
                                         => null
-      case java.sql.Types.TINYINT       => IntegerType
+      case java.sql.Types.TINYINT       => ShortType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            =>
@@ -445,7 +445,7 @@ object JdbcUtils extends Logging {
 
     case ByteType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.setByte(pos, rs.getByte(pos + 1))
+        row.setShort(pos, rs.getByte(pos + 1))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -550,7 +550,7 @@ object JdbcUtils extends Logging {
 
     case ByteType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setInt(pos + 1, row.getByte(pos))
+        stmt.setByte(pos + 1, row.getByte(pos))
 
     case BooleanType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
