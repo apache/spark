@@ -32,7 +32,10 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       sparkSession: SparkSession,
       relation: LeafNode,
       partitionSchema: StructType,
-      normalizedFilters: Seq[Expression]): ExpressionSet = {
+      filters: Seq[Expression],
+      output: Seq[AttributeReference]): ExpressionSet = {
+    val normalizedFilters = DataSourceStrategy.normalizeExprs(
+      filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), output)
     val partitionColumns =
       relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
     val partitionSet = AttributeSet(partitionColumns)
@@ -70,10 +73,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filterNot(SubqueryExpression.hasSubquery), logicalRelation.output)
       val partitionKeyFilters = getPartitionKeyFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, normalizedFilters)
+        fsRelation.sparkSession, logicalRelation, partitionSchema, filters, logicalRelation.output)
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
@@ -91,10 +92,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     case op @ PhysicalOperation(projects, filters,
         v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))
         if filters.nonEmpty  && scan.readDataSchema.nonEmpty =>
-      val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter(_.deterministic), output)
       val partitionKeyFilters = getPartitionKeyFilters(scan.sparkSession,
-        v2Relation, scan.readPartitionSchema, normalizedFilters)
+        v2Relation, scan.readPartitionSchema, filters, output)
       if (partitionKeyFilters.nonEmpty) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withPartitionFilters(partitionKeyFilters.toSeq))
