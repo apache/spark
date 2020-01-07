@@ -958,7 +958,7 @@ class PlannerSuite extends SharedSparkSession {
             |INNER JOIN
             |  (SELECT key + 1 AS k2 from df2) t2
             |ON t1.k1 = t2.k2
-          """.stripMargin).queryExecution.executedPlan
+            |""".stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
 
         // Make sure aliases to an expression (key + 1) are not replaced.
