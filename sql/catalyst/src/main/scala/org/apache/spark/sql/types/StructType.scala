@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString, StringUtils}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -407,8 +407,12 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
-    s"struct<${fieldTypes.mkString(",")}>"
+    val stringConcat = new StringUtils.StringConcat()
+    fields.init.foreach { field =>
+      stringConcat.append(s"${field.name}:${field.dataType.catalogString}, ")
+    }
+    stringConcat.append(s"${fields.last.name}:${fields.last.dataType.catalogString}")
+    s"struct<${stringConcat.toString}>"
   }
 
   override def sql: String = {
