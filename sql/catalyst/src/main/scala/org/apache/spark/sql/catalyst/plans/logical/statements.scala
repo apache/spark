@@ -348,8 +348,11 @@ case class InsertIntoStatement(
 /**
  * A SHOW TABLES statement, as parsed from SQL.
  */
-case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
+case class ShowTablesStatement(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A SHOW TABLE EXTENDED statement, as parsed from SQL.

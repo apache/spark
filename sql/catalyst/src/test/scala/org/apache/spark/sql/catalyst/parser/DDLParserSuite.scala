@@ -1108,16 +1108,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
-      ShowTablesStatement(None, None))
+      ShowTablesStatement(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTablesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTablesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
-      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+      ShowTablesStatement(UnresolvedNamespace(Seq("tbl")), Some("*dog*")))
   }
 
   test("show table extended") {

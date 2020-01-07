@@ -336,16 +336,13 @@ class ResolveSessionCatalog(
     case ShowNamespacesStatement(SessionCatalogAndNamespace(catalog, ns), pattern) =>
       ShowNamespaces(catalog, ns, pattern)
 
-    case ShowTablesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern)
-        if isSessionCatalog(catalog) =>
+    case ShowTablesStatement(SessionCatalogAndNamespace(_, ns), pattern) =>
+      assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw new AnalysisException(
             s"The database name is not valid: ${ns.quoted}")
       }
       ShowTablesCommand(Some(ns.head), pattern)
-
-    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
-      ShowTablesCommand(None, pattern)
 
     case ShowTableStatement(ns, pattern, partitionsSpec) =>
       val db = ns match {
