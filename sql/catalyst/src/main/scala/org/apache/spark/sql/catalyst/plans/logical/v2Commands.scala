@@ -284,7 +284,7 @@ case class AlterNamespaceSetProperties(
  */
 case class ShowNamespaces(
     catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
+    namespace: Seq[String],
     pattern: Option[String]) extends Command {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())

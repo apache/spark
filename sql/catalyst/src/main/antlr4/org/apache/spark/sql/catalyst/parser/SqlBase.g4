@@ -96,7 +96,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
-        ((COMMENT comment=STRING) |
+        (commentSpec |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
     | ALTER namespace multipartIdentifier
@@ -116,7 +116,7 @@ statement
         createTableClauses
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        ((COMMENT comment=STRING) |
+        (commentSpec |
         (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
         PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
@@ -160,7 +160,7 @@ statement
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
+        (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -182,7 +182,7 @@ statement
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? multipartIdentifier
         identifierCommentList?
-        ((COMMENT STRING) |
+        (commentSpec |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES tablePropertyList))*
         AS query                                                       #createView
@@ -216,8 +216,8 @@ statement
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace multipartIdentifier IS
-        commennt=(STRING | NULL)                                       #commentNamespace
-    | COMMENT ON TABLE multipartIdentifier IS commennt=(STRING | NULL) #commentTable
+        comment=(STRING | NULL)                                        #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
@@ -306,6 +306,10 @@ locationSpec
     : LOCATION STRING
     ;
 
+commentSpec
+    : COMMENT STRING
+    ;
+
 query
     : ctes? queryTerm queryOrganization
     ;
@@ -364,7 +368,7 @@ createTableClauses
      (PARTITIONED BY partitioning=transformList) |
      bucketSpec |
      locationSpec |
-     (COMMENT comment=STRING) |
+     commentSpec |
      (TBLPROPERTIES tableProps=tablePropertyList))*
     ;
 
@@ -652,7 +656,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : identifier (COMMENT STRING)?
+    : identifier commentSpec?
     ;
 
 relationPrimary
@@ -816,7 +820,6 @@ booleanValue
 
 interval
     : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
-    | {SQL_standard_keyword_behavior}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval
@@ -842,23 +845,12 @@ intervalValue
 
 intervalUnit
     : DAY
-    | DAYS
     | HOUR
-    | HOURS
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
     | MINUTE
-    | MINUTES
     | MONTH
-    | MONTHS
     | SECOND
-    | SECONDS
-    | WEEK
-    | WEEKS
     | YEAR
-    | YEARS
+    | identifier
     ;
 
 colPosition
@@ -877,7 +869,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (COMMENT comment=STRING)? colPosition?
+    : name=multipartIdentifier dataType commentSpec? colPosition?
     ;
 
 colTypeList
@@ -885,7 +877,7 @@ colTypeList
     ;
 
 colType
-    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType commentSpec?
     ;
 
 complexColTypeList
@@ -893,7 +885,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (COMMENT STRING)?
+    : identifier ':' dataType commentSpec?
     ;
 
 whenClause
@@ -994,7 +986,7 @@ number
 //     function, alias, etc.
 // - Non-reserved keywords:
 //     Keywords that have a special meaning only in particular contexts and can be used as
-//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     identifiers in other contexts. For example, `EXPLAIN SELECT ...` is a command, but EXPLAIN
 //     can be used as identifiers in other places.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
@@ -1032,7 +1024,6 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
-    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1063,7 +1054,6 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
-    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1092,12 +1082,6 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
-    | MINUTES
-    | MONTHS
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1144,7 +1128,6 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
-    | SECONDS
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
@@ -1182,10 +1165,7 @@ ansiNonReserved
     | USE
     | VALUES
     | VIEW
-    | WEEK
-    | WEEKS
     | WINDOW
-    | YEARS
     ;
 
 // When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
@@ -1267,7 +1247,6 @@ nonReserved
     | DATABASE
     | DATABASES
     | DAY
-    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1313,7 +1292,6 @@ nonReserved
     | GROUPING
     | HAVING
     | HOUR
-    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1347,14 +1325,8 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
     | MINUTE
-    | MINUTES
     | MONTH
-    | MONTHS
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1411,7 +1383,6 @@ nonReserved
     | ROWS
     | SCHEMA
     | SECOND
-    | SECONDS
     | SELECT
     | SEPARATED
     | SERDE
@@ -1460,14 +1431,11 @@ nonReserved
     | USER
     | VALUES
     | VIEW
-    | WEEK
-    | WEEKS
     | WHEN
     | WHERE
     | WINDOW
     | WITH
     | YEAR
-    | YEARS
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
@@ -1530,7 +1498,6 @@ DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DAY: 'DAY';
-DAYS: 'DAYS';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1577,7 +1544,6 @@ GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
 HOUR: 'HOUR';
-HOURS: 'HOURS';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1615,14 +1581,8 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
-MICROSECOND: 'MICROSECOND';
-MICROSECONDS: 'MICROSECONDS';
-MILLISECOND: 'MILLISECOND';
-MILLISECONDS: 'MILLISECONDS';
 MINUTE: 'MINUTE';
-MINUTES: 'MINUTES';
 MONTH: 'MONTH';
-MONTHS: 'MONTHS';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
@@ -1682,7 +1642,6 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 SCHEMA: 'SCHEMA';
 SECOND: 'SECOND';
-SECONDS: 'SECONDS';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -1735,14 +1694,11 @@ USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
 VIEW: 'VIEW';
-WEEK: 'WEEK';
-WEEKS: 'WEEKS';
 WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
-YEARS: 'YEARS';
 //============================
 // End of the keywords list
 //============================

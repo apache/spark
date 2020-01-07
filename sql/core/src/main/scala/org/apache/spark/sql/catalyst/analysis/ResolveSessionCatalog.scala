@@ -184,8 +184,7 @@ class ResolveSessionCatalog(
       }
       DescribeDatabaseCommand(ns.head, d.extended)
 
-    case AlterNamespaceSetPropertiesStatement(
-        SessionCatalogAndNamespace(_, ns), properties) =>
+    case AlterNamespaceSetPropertiesStatement(SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
@@ -316,7 +315,8 @@ class ResolveSessionCatalog(
     case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
+    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
+        if isSessionCatalog(catalog) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
@@ -334,16 +334,16 @@ class ResolveSessionCatalog(
       }
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
-    case ShowTablesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern)
-        if isSessionCatalog(catalog) =>
+    case ShowNamespacesStatement(SessionCatalogAndNamespace(catalog, ns), pattern) =>
+      ShowNamespaces(catalog, ns, pattern)
+
+    case ShowTablesStatement(SessionCatalogAndNamespace(_, ns), pattern) =>
+      assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw new AnalysisException(
             s"The database name is not valid: ${ns.quoted}")
       }
       ShowTablesCommand(Some(ns.head), pattern)
-
-    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
-      ShowTablesCommand(None, pattern)
 
     case ShowTableStatement(ns, pattern, partitionsSpec) =>
       val db = ns match {
@@ -590,11 +590,12 @@ class ResolveSessionCatalog(
   }
 
   object SessionCatalogAndNamespace {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndNamespace(catalog, ns) if isSessionCatalog(catalog) =>
-        Some(catalog -> ns)
-      case _ => None
-    }
+    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
+      if (isSessionCatalog(resolved.catalog)) {
+        Some(resolved.catalog -> resolved.namespace)
+      } else {
+        None
+      }
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {

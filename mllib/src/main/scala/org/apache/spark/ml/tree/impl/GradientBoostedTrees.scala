@@ -313,11 +313,12 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val metadata = RandomForest.buildMetadata(input, treeStrategy,
-      numTrees = 1, featureSubsetStrategy)
-    val firstTreeModel = RandomForest.run(input, treeStrategy, numTrees = 1,
-      featureSubsetStrategy, seed = seed, instr = instr,
-      parentUID = None, precomputedMetadata = Some(metadata))
+    val metadata = DecisionTreeMetadata.buildMetadata(
+      input.retag(classOf[Instance]), treeStrategy, numTrees = 1,
+      featureSubsetStrategy)
+    val firstTreeModel = RandomForest.runWithMetadata(input, metadata, treeStrategy,
+      numTrees = 1, featureSubsetStrategy, seed = seed, instr = instr,
+      parentUID = None)
       .head.asInstanceOf[DecisionTreeRegressionModel]
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
@@ -353,9 +354,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
 
-      val model = RandomForest.run(data, treeStrategy, numTrees = 1,
-        featureSubsetStrategy, seed = seed + m, instr = None,
-        parentUID = None, precomputedMetadata = Some(metadata))
+      val model = RandomForest.runWithMetadata(data, metadata, treeStrategy,
+        numTrees = 1, featureSubsetStrategy, seed = seed + m,
+        instr = None, parentUID = None)
         .head.asInstanceOf[DecisionTreeRegressionModel]
       timer.stop(s"building tree $m")
       // Update partial model
