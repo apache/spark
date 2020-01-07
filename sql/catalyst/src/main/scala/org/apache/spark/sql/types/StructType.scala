@@ -407,17 +407,17 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val fieldsStr = if (fields.size > 0) {
-      val stringConcat = new StringUtils.StringConcat()
-      fields.init.foreach { field =>
-        stringConcat.append(s"${field.name}:${field.dataType.catalogString},")
-      }
-      stringConcat.append(s"${fields.last.name}:${fields.last.dataType.catalogString}")
-      stringConcat.toString
-    } else {
-      ""
+    val stringConcat = new StringUtils.StringConcat()
+    val len = fields.length
+    stringConcat.append("struct<")
+    var i = 0
+    while (i < len) {
+      stringConcat.append(s"${fields(i).name}:${fields(i).dataType.catalogString}")
+      i += 1
+      if (i < len) stringConcat.append(",")
     }
-    s"struct<$fieldsStr>"
+    stringConcat.append(">")
+    stringConcat.toString
   }
 
   override def sql: String = {
