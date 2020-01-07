@@ -2140,8 +2140,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.property.nonReserved")
       .internal()
       .doc("When true, all database and table properties are not reserved and available for " +
-        "create/alter syntaxes. But please be aware that the reserved properties will still be " +
-        "used by Spark internally and will ignore their user specified values.")
+        "create/alter syntaxes. But please be aware that the reserved properties will be " +
+        "silently removed.")
       .booleanConf
       .createWithDefault(false)
 }
