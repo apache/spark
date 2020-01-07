@@ -32,6 +32,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.ResourceUtils._
@@ -1917,9 +1918,8 @@ class TaskSetManagerSuite
     val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
 
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
-    val Seq(exec0, exec1) = backend.getExecutorIds()
 
-    val taskSet = FakeTask.createTaskSet(2)
+    val taskSet = FakeLongTasks.createTaskSet(2)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
@@ -1928,16 +1928,18 @@ class TaskSetManagerSuite
     // get the TaskSetManager
     val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
 
-    val task0 = manager.resourceOffer(exec0, "localhost", TaskLocality.NO_PREF)
-    val task1 = manager.resourceOffer(exec1, "localhost", TaskLocality.NO_PREF)
-    assert(task0.isDefined && task1.isDefined)
-    val (taskId0, index0) = (task0.get.taskId, task0.get.index)
-    val (taskId1, index1) = (task1.get.taskId, task1.get.index)
+    val (task0, task1) = eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      val task0 = Option(manager.taskInfos(0))
+      val task1 = Option(manager.taskInfos(1))
+      assert(task0.isDefined && task1.isDefined)
+      (task0, task1)
+    }
+
+    val (taskId0, index0, exec0) = (task0.get.taskId, task0.get.index, task0.get.executorId)
+    val (taskId1, index1, exec1) = (task1.get.taskId, task1.get.index, task1.get.executorId)
     // set up two running tasks
     assert(manager.taskInfos(taskId0).running)
-    assert(manager.taskInfos(taskId0).executorId === exec0)
     assert(manager.taskInfos(taskId1).running)
-    assert(manager.taskInfos(taskId1).executorId === exec1)
 
     val numFailures = PrivateMethod[Array[Int]](Symbol("numFailures"))
     // no task failures yet
@@ -1956,5 +1958,31 @@ class TaskSetManagerSuite
       assert(manager.invokePrivate(numFailures())(index0) === 0)
       assert(manager.invokePrivate(numFailures())(index1) === 1)
     }
+  }
+}
+
+class FakeLongTasks(
+    stageId: Int,
+    partitionId: Int)
+    extends FakeTask(stageId, partitionId) {
+
+  override def runTask(context: TaskContext): Int = {
+    while (true) {
+      Thread.sleep(10000)
+    }
+    0
+  }
+}
+
+object FakeLongTasks {
+  def createTaskSet(
+      numTasks: Int,
+      stageId: Int = 0,
+      stageAttemptId: Int = 0,
+      priority: Int = 0): TaskSet = {
+    val tasks = Array.tabulate[Task[_]](numTasks) { i =>
+      new FakeLongTasks(stageId, i)
+    }
+    new TaskSet(tasks, stageId, stageAttemptId, priority, null)
   }
 }
