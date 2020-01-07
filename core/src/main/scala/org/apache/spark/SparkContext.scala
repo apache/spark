@@ -2779,9 +2779,12 @@ object SparkContext extends Logging {
       } else {
         executorCores.get
       }
+      val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
+        (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
+      logInfo("check resources executors cores is: " + execCores)
 
       // Number of cores per executor must meet at least one task requirement.
-      if (execCores < taskCores) {
+      if (shouldCheckExecCores && execCores < taskCores) {
         throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
           s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
       }
@@ -2789,11 +2792,14 @@ object SparkContext extends Logging {
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
       val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-      val executorResourcesAndAmounts =
-        parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
+      val executorResourcesAndAmounts = parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
           .map(request => (request.id.resourceName, request.amount)).toMap
-      var numSlots = execCores / taskCores
-      var limitingResourceName = "CPU"
+
+      var (numSlots, limitingResourceName) = if (shouldCheckExecCores) {
+        (execCores / taskCores, "CPU")
+      } else {
+        (-1, "")
+      }
 
       taskResourceRequirements.foreach { taskReq =>
         // Make sure the executor resources were specified through config.
@@ -2818,6 +2824,12 @@ object SparkContext extends Logging {
         // multiple executor resources.
         val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
+          if (shouldCheckExecCores) {
+            throw new IllegalArgumentException("The number of slots has to be limited by " +
+              "the number of cores, otherwise you waste resources and dynamic allocation " +
+              "doesn't work properly. Please adjust your configuration so that all resources " +
+              "require same number of executor slots.")
+          }
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
         }
@@ -2835,6 +2847,22 @@ object SparkContext extends Logging {
           val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
             s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+            s"runnable tasks = ${resourceNumSlots}) will " +
+            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
+            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
+            s"your configuration."
+          if (Utils.isTesting) {
+            throw new SparkException(message)
+          } else {
+            logWarning(message)
+          }
+        }
+      }
+      if (shouldCheckExecCores && !limitingResourceName.equals("CPU")) {
+        val resourceNumSlots = numSlots * taskCores
+        if (resourceNumSlots < execCores) {
+          val message = s"The configuration of resource: CPU " +
+            s"(exec = ${execCores}, task = ${execCores}, " +
             s"runnable tasks = ${resourceNumSlots}) will " +
             s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
             s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
