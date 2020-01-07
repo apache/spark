@@ -745,8 +745,10 @@ class DDLParserSuite extends AnalysisTest {
   test("describe database") {
     val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
     val sql2 = "DESCRIBE DATABASE a.b"
-    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
-    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
+    comparePlans(parsePlan(sql1),
+      DescribeNamespaceStatement(UnresolvedNamespace(Seq("a", "b")), extended = true))
+    comparePlans(parsePlan(sql2),
+      DescribeNamespaceStatement(UnresolvedNamespace(Seq("a", "b")), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
@@ -1106,16 +1108,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
-      ShowTablesStatement(None, None))
+      ShowTablesStatement(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTablesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTablesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
-      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+      ShowTablesStatement(UnresolvedNamespace(Seq("tbl")), Some("*dog*")))
   }
 
   test("show table extended") {
@@ -1230,78 +1232,86 @@ class DDLParserSuite extends AnalysisTest {
   test("drop namespace") {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
 
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
   }
 
   test("set namespace properties") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
 
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
   }
 
   test("set namespace location") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocationStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocationStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocationStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespacesStatement(None, Some("defau*")))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
   }
 
   test("show databases: FROM/IN operator is not allowed") {
@@ -1317,16 +1327,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+      ShowNamespacesStatement(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   test("analyze table statistics") {
