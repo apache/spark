@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -491,48 +491,48 @@ class ResolveSessionCatalog(
         tbl.asTableIdentifier,
         propertyKey)
 
-    case DescribeFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), extended) =>
-      val functionIdentifier = if (isSessionCatalog(catalog)) {
-        functionIdent.asMultipartIdentifier match {
-          case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
-          case Seq(fn) => FunctionIdentifier(fn, None)
-          case _ =>
-            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
-        }
-      } else {
-        throw new AnalysisException ("DESCRIBE FUNCTION is only supported in v1 catalog")
-      }
-      DescribeFunctionCommand(functionIdentifier, extended)
+    case DescribeFunctionStatement(CatalogAndIdentifier(catalog, ident), extended) =>
+      val functionIdent =
+        parseSessionCatalogFunctionIdentifier("DESCRIBE FUNCTION", catalog, ident)
+      DescribeFunctionCommand(functionIdent, extended)
 
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
-        case Some(CatalogAndIdentifier(catalog, functionIdent)) =>
-          if (isSessionCatalog(catalog)) {
-            functionIdent.asMultipartIdentifier match {
-              case Seq(db, fn) => (Some(db), Some(fn))
-              case Seq(fn) => (None, Some(fn))
-              case _ =>
-                throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
-            }
-          } else {
-            throw new AnalysisException ("SHOW FUNCTIONS is only supported in v1 catalog")
-          }
+        case Some(CatalogAndIdentifier(catalog, ident)) =>
+          val FunctionIdentifier(fn, db) =
+            parseSessionCatalogFunctionIdentifier("SHOW FUNCTIONS", catalog, ident)
+          (db, Some(fn))
         case None => (None, pattern)
       }
       ShowFunctionsCommand(database, function, userScope, systemScope)
 
-    case DropFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
-      if (isSessionCatalog(catalog)) {
-        val (database, function) = functionIdent.asMultipartIdentifier match {
-          case Seq(db, fn) => (Some(db), fn)
-          case Seq(fn) => (None, fn)
-          case _ =>
-            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
-        }
-        DropFunctionCommand(database, function, ifExists, isTemp)
-      } else {
-        throw new AnalysisException("DROP FUNCTION is only supported in v1 catalog")
+    case DropFunctionStatement(CatalogAndIdentifier(catalog, ident), ifExists, isTemp) =>
+      val FunctionIdentifier(function, database) =
+        parseSessionCatalogFunctionIdentifier("DROP FUNCTION", catalog, ident)
+      DropFunctionCommand(database, function, ifExists, isTemp)
+
+    case CreateFunctionStatement(CatalogAndIdentifier(catalog, ident),
+      className, resources, isTemp, ignoreIfExists, replace) =>
+      val FunctionIdentifier(function, database) =
+        parseSessionCatalogFunctionIdentifier("CREATE FUNCTION", catalog, ident)
+      CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
+        replace)
+  }
+
+  private def parseSessionCatalogFunctionIdentifier(
+      sql: String,
+      catalog: CatalogPlugin,
+      functionIdent: Identifier): FunctionIdentifier = {
+    if (isSessionCatalog(catalog)) {
+      functionIdent.asMultipartIdentifier match {
+        case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
+        case Seq(fn) => FunctionIdentifier(fn, None)
+        case _ =>
+          throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
       }
+    } else {
+      throw new AnalysisException(s"$sql is only supported in v1 catalog")
+    }
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
