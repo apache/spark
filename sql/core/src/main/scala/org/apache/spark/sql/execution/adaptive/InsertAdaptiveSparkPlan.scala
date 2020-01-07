@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal}
@@ -64,12 +65,24 @@ case class InsertAdaptiveSparkPlan(
     }.isDefined
   }
 
+  def supportAdaptiveInSubquery(plan: SparkPlan): Boolean = {
+    val flags = ArrayBuffer[Boolean]()
+    plan.foreach(_.expressions.foreach(_.foreach {
+      case expressions.ScalarSubquery(p, _, exprId) =>
+        flags += compileSubquery(p).isInstanceOf[AdaptiveSparkPlanExec]
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+        flags += compileSubquery(query).isInstanceOf[AdaptiveSparkPlanExec]
+      case _ =>
+    }))
+    flags.contains(true)
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
     case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan)
-      && containShuffle(plan) =>
+      && (supportAdaptiveInSubquery(plan) || containShuffle(plan)) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.
