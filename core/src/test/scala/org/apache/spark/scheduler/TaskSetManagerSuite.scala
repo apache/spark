@@ -1919,7 +1919,12 @@ class TaskSetManagerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val Seq(exec0, exec1) = backend.getExecutorIds()
 
-    val taskSet = FakeTask.createTaskSet(2)
+    // SPARK-30440: it's possible that tasks have already been scheduled after we call
+    // `sched.submitTasks(taskSet)` but before `manager.resourceOffer`. In this case,
+    // we'd get None task after `resourceOffer`. So, here, we intentionally set up a
+    // 4 tasks TaskSet in order to feed 2 tasks to the executors and leave another two
+    // tasks for our test purpose.
+    val taskSet = FakeTask.createTaskSet(4)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
