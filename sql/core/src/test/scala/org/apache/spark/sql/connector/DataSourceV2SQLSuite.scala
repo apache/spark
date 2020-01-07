@@ -866,11 +866,29 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateNameSpace: reserved properties") {
-    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
-      val exception = intercept[ParseException] {
-        sql(s"CREATE NAMESPACE testcat.ns1 WITH DBPROPERTIES('$key'='dummyVal')")
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        val exception = intercept[ParseException] {
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
+        }
+        assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
       }
-      assert(exception.getMessage.contains("Disallow to specify reserved properties"))
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          withTempDir { tmpDir =>
+            val sideEffectVal = tmpDir.getCanonicalPath
+            sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='$sideEffectVal')")
+            assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+              .toDF("k", "v")
+              .where("k='Properties'")
+              .isEmpty, s"$key is a reserved namespace property")
+            assert(catalog("testcat").asNamespaceCatalog
+              .loadNamespaceMetadata(Array("reservedTest")).get(key) === sideEffectVal)
+          }
+        }
+      }
     }
   }
 
@@ -968,6 +986,37 @@ class DataSourceV2SQLSuite
         Row("Location", "/tmp/ns_test"),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
+    }
+  }
+
+  test("AlterNamespaceSetProperties: reserved properties") {
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql("CREATE NAMESPACE testcat.reservedTest")
+          val exception = intercept[ParseException] {
+            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='dummyVal')")
+          }
+          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+        }
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          withTempDir { tmpDir =>
+            val sideEffectVal = tmpDir.getCanonicalPath
+            sql(s"CREATE NAMESPACE testcat.reservedTest")
+            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='$sideEffectVal')")
+            assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+              .toDF("k", "v")
+              .where("k='Properties'")
+              .isEmpty, s"$key is a reserved namespace property")
+            assert(catalog("testcat").asNamespaceCatalog
+              .loadNamespaceMetadata(Array("reservedTest")).get(key) === sideEffectVal)
+          }
+        }
+      }
     }
   }
 
