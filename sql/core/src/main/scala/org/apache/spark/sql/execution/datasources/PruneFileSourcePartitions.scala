@@ -46,9 +46,13 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       filters: Seq[Expression],
       relation: LeafNode): Project = {
     // Keep partition-pruning predicates so that they are visible in physical planning
-    val filterExpression = filters.reduceLeft(And)
-    val filter = Filter(filterExpression, relation)
-    Project(projects, filter)
+    val withFilter = if (filters.nonEmpty) {
+      val filterExpression = filters.reduceLeft(And)
+      Filter(filterExpression, relation)
+    } else {
+      relation
+    }
+    Project(projects, withFilter)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
