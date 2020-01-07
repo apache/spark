@@ -153,7 +153,6 @@ class BisectingKMeans private (
     this
   }
 
-
   private[spark] def run(
       input: RDD[Vector],
       instr: Option[Instrumentation]): BisectingKMeansModel = {
@@ -166,19 +165,17 @@ class BisectingKMeans private (
   private[spark] def runWithWeight(
       input: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): BisectingKMeansModel = {
-    if (input.getStorageLevel == StorageLevel.NONE) {
-      logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
-        + " its parent RDDs are also not cached.")
-    }
     val d = input.map(_._1.size).first
     logInfo(s"Feature dimension: $d.")
 
     val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
     // Compute and cache vector norms for fast distance computation.
     val norms = input.map(d => Vectors.norm(d._1, 2.0))
-      .persist(StorageLevel.MEMORY_AND_DISK)
     val vectors = input.zip(norms).map {
       case ((x, weight), norm) => new VectorWithNorm(x, norm, weight)
+    }
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      vectors.persist(StorageLevel.MEMORY_AND_DISK)
     }
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
@@ -253,7 +250,7 @@ class BisectingKMeans private (
     if (indices != null) {
       indices.unpersist()
     }
-    norms.unpersist()
+    vectors.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
     val totalCost = root.leafNodes.map(_.cost).sum
