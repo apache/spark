@@ -44,7 +44,8 @@ object StronglyConnectedComponents {
 
     // the SCC label, and the vertices to be removed in iteration
     var sccVertexLabel = graph.vertices.sparkContext.emptyRDD[(VertexId, VertexId)]
-
+    
+    var existColorVertex = false
     var numVertices = sccWorkGraph.numVertices
     var iter = 0
     while (sccWorkGraph.numVertices > 0 && iter < numIter) {
@@ -52,13 +53,20 @@ object StronglyConnectedComponents {
       do {
         numVertices = sccWorkGraph.numVertices
 
-        val labeledByOutDegree = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
-          (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+        val labeledByOutDegree = if (!existColorVertex) {
+          sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
+            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)}
+        } else {
+          sccWorkGraph
         }
 
-        val labeledByInDegree = labeledByOutDegree.outerJoinVertices(sccWorkGraph.inDegrees) {
-          (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.cache()
+        val labeledByInDegree = if (!existColorVertex) {
+          labeledByOutDegree.outerJoinVertices(sccWorkGraph.inDegrees) {
+            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+          }.cache()
+        } else {
+          labeledByOutDegree
+        }
 
         // helper variables to unpersist
         val prevSccVertexLabel = sccVertexLabel
@@ -83,6 +91,8 @@ object StronglyConnectedComponents {
         // materialize vertices and edges
         sccWorkGraph.numVertices
         sccWorkGraph.numEdges
+
+        existColorVertex = false
 
         // unpersist helper variables
         prevSccWorkGraph.unpersist(blocking = false)
@@ -142,6 +152,8 @@ object StronglyConnectedComponents {
         phase1.edges.unpersist(blocking = false)
         phase2.unpersist(blocking = false)
         phase2.edges.unpersist(blocking = false)
+
+        existColorVertex = true
       }
     }
 
