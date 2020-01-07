@@ -118,13 +118,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       initTree: DecisionTreeRegressionModel,
       loss: OldLoss,
       bcSplits: Broadcast[Array[Array[Split]]]): RDD[(Double, Double)] = {
-    data.mapPartitions { iter =>
-      val splits = bcSplits.value
-      iter.map { treePoint =>
-        val pred = updatePrediction(treePoint, 0.0, initTree, initTreeWeight, splits)
-        val error = loss.computeError(pred, treePoint.label)
-        (pred, error)
-      }
+    data.map { treePoint =>
+      val pred = updatePrediction(treePoint, 0.0, initTree, initTreeWeight, bcSplits.value)
+      val error = loss.computeError(pred, treePoint.label)
+      (pred, error)
     }
   }
 
@@ -146,13 +143,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       tree: DecisionTreeRegressionModel,
       loss: OldLoss,
       bcSplits: Broadcast[Array[Array[Split]]]): RDD[(Double, Double)] = {
-    data.zip(predictionAndError).mapPartitions { iter =>
-      val splits = bcSplits.value
-      iter.map { case (treePoint, (pred, _)) =>
-        val newPred = updatePrediction(treePoint, pred, tree, treeWeight, splits)
-        val newError = loss.computeError(newPred, treePoint.label)
-        (newPred, newError)
-      }
+    data.zip(predictionAndError).map { case (treePoint, (pred, _)) =>
+      val newPred = updatePrediction(treePoint, pred, tree, treeWeight, bcSplits.value)
+      val newError = loss.computeError(newPred, treePoint.label)
+      (newPred, newError)
     }
   }
 
@@ -343,15 +337,15 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     timer.start("findSplits")
     val splits = RandomForest.findSplits(retaggedInput, metadata, seed)
-    val bcSplits = sc.broadcast(splits)
     timer.stop("findSplits")
+    val bcSplits = sc.broadcast(splits)
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treePoints = TreePoint.convertToTreeRDD(
       retaggedInput, splits, metadata)
-      .setName("binned tree points")
       .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName("binned tree points")
     val validationTreePoints = if (validate) {
       TreePoint.convertToTreeRDD(
         validationInput.retag(classOf[Instance]), splits, metadata)
@@ -365,8 +359,8 @@ private[spark] object GradientBoostedTrees extends Logging {
         require(bagged.subsampleCounts.length == 1)
         require(bagged.sampleWeight == bagged.datum.weight)
         bagged.subsampleCounts.head
-      }.setName("firstCounts for iter=0")
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      }.persist(StorageLevel.MEMORY_AND_DISK)
+      .setName("firstCounts at iter=0")
 
     val firstBagged = treePoints.zip(firstCounts)
       .map { case (treePoint, count) =>
@@ -376,7 +370,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     val firstTreeModel = RandomForest.runBagged(baggedInput = firstBagged,
       metadata = metadata, splits = splits, strategy = treeStrategy, numTrees = 1,
-      featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = None,
+      featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = instr,
       parentUID = None)
       .head.asInstanceOf[DecisionTreeRegressionModel]
 
@@ -423,8 +417,8 @@ private[spark] object GradientBoostedTrees extends Logging {
           // Update labels with pseudo-residuals
           val newLabel = -loss.gradient(pred, bagged.datum.label)
           (newLabel, bagged.subsampleCounts.head)
-        }.setName(s"labelWithCounts for iter=$m")
-        .persist(StorageLevel.MEMORY_AND_DISK)
+        }.persist(StorageLevel.MEMORY_AND_DISK)
+        .setName(s"labelWithCounts at iter=$m")
 
       val bagged = treePoints.zip(labelWithCounts)
         .map { case (treePoint, (newLabel, count)) =>
