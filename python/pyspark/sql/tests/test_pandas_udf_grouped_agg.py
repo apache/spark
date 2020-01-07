@@ -327,9 +327,11 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected6 = df.groupby(df.v % 2, plus_one(df.id)).agg(sum(df.v))
 
         # groupby one expression and one scalar pandas UDF
-        result7 = df.groupby(df.v % 2, plus_two(df.id)).agg(sum_udf(df.v)).sort(['sum(v)', 'plus_two(id)'])
-        expected7 = df.groupby(df.v % 2, plus_two(df.id)).agg(sum(df.v)).sort(['sum(v)', 'plus_two(id)'])
-        
+        result7 = (df.groupby(df.v % 2, plus_two(df.id))
+                   .agg(sum_udf(df.v)).sort(['sum(v)', 'plus_two(id)']))
+        expected7 = (df.groupby(df.v % 2, plus_two(df.id))
+                     .agg(sum(df.v)).sort(['sum(v)', 'plus_two(id)']))
+
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
         assert_frame_equal(expected2.toPandas(), result2.toPandas())
         assert_frame_equal(expected3.toPandas(), result3.toPandas())
