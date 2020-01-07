@@ -44,8 +44,8 @@ import org.apache.spark.sql.types._
        5
   """,
   note = """
-    The function is non-deterministic because its results depends on the order of rows which
-    may be non-deterministic after a shuffle.
+    The function is non-deterministic because its results depends on the order of the rows
+    which may be non-deterministic after a shuffle.
   """,
   since = "2.0.0")
 case class Last(child: Expression, ignoreNullsExpr: Expression)
