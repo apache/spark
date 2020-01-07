@@ -127,7 +127,7 @@ class ShuffledRowRDD(
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
   private[this] val partitionStartIndices: Array[Int] = specifiedPartitionIndices match {
-    case Some(indices) => indices.unzip._1
+    case Some(indices) => indices.map(_._1)
     case None =>
       // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
       // corresponds to a pre-shuffle partition.

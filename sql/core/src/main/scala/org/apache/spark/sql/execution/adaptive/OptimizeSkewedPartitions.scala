@@ -61,10 +61,9 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * Get the map size of the specific reduce shuffle Id.
    */
-  private def getMapSizeForReduceId(partitionId: Int, shuffleId: Int): Array[Long] = {
+  private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
     val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTracker.shuffleStatuses.get(shuffleId).
-      get.mapStatuses.map{_.getSizeForBlock(partitionId)}
+    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
   }
 
   /**
@@ -72,18 +71,19 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def getMapStartIndices(stage: ShuffleQueryStageExec, partitionId: Int): Array[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
-    val mapPartitionSize = getMapSizeForReduceId(partitionId, shuffleId)
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
     val numSplits = math.min(conf.getConf(
-      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS), mapPartitionSize.length)
-    val avgPartitionSize = mapPartitionSize.sum / numSplits
-    val partitionIndices = (0 until mapPartitionSize.length)
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS), mapPartitionSizes.length)
+    val avgPartitionSize = mapPartitionSizes.sum / numSplits
+    val advisoryPartitionSize = math.max(avgPartitionSize,
+      conf.getConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE))
+    val partitionIndices = mapPartitionSizes.indices
     val partitionStartIndices = ArrayBuffer[Int]()
-    var postMapPartitionSize = mapPartitionSize(0)
+    var postMapPartitionSize = mapPartitionSizes(0)
     partitionStartIndices += 0
-    partitionIndices.drop(1).foreach {
-      nextPartitionIndex =>
-        var nextMapPartitionSize = mapPartitionSize(nextPartitionIndex)
-        if (postMapPartitionSize + nextMapPartitionSize > avgPartitionSize) {
+    partitionIndices.drop(1).foreach { nextPartitionIndex =>
+        var nextMapPartitionSize = mapPartitionSizes(nextPartitionIndex)
+        if (postMapPartitionSize + nextMapPartitionSize > advisoryPartitionSize) {
           partitionStartIndices += nextPartitionIndex
           postMapPartitionSize = nextMapPartitionSize
         } else {
@@ -181,7 +181,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       logDebug(s"number of skewed partitions is ${skewedPartitions.size}")
       if (skewedPartitions.size > 0) {
         val optimizedSmj = smj.transformDown {
-          case sort: SortExec if (sort.child.isInstanceOf[ShuffleQueryStageExec]) =>
+          case sort @ SortExec(_, _, shuffleStage: ShuffleQueryStageExec, _) =>
             val shuffleStage = sort.child.asInstanceOf[ShuffleQueryStageExec]
             val newStage = shuffleStage.copy(
               excludedPartitions = skewedPartitions.toSet)
@@ -209,7 +209,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     val shuffleStages = collectShuffleStages(plan)
 
-    if (shuffleStages.distinct.length == 2) {
+    if (shuffleStages.length == 2) {
       // Currently we only support handling skewed join for 2 table join.
       handleSkewJoin(plan)
     } else {
@@ -224,8 +224,8 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
  * shuffle partition 'partitionIndex' produced by the mappers in range [startMapId, endMapId).
  * This is used to handle the skewed partitions.
  *
- * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
- *              shuffle exchange node during canonicalization.
+ * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange
+ *              node during canonicalization.
  * @param partitionIndex The pre shuffle partition index.
  * @param startMapId The start map id.
  * @param endMapId The end map id.
@@ -237,8 +237,6 @@ case class SkewedShufflePartitionReader(
     endMapId: Int) extends LeafExecNode {
 
   override def output: Seq[Attribute] = child.output
-
-  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
     UnknownPartitioning(1)

@@ -61,7 +61,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         new MapOutputStatistics(index, bytesByPartitionId)
     }
     val estimatedPartitionStartIndices =
-      rule.estimatePartitionStartAndEndIndices(mapOutputStatistics).unzip._1
+      rule.estimatePartitionStartAndEndIndices(mapOutputStatistics).map(_._1)
     assert(estimatedPartitionStartIndices === expectedPartitionStartIndices)
   }
 

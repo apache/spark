@@ -37,24 +37,6 @@ class AdaptiveQueryExecSuite
 
   import testImplicits._
 
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark
-      .range(0, 1000, 1, 10)
-      .selectExpr("id % 2 as key1", "id as value1")
-      .createOrReplaceTempView("skewData1")
-    spark
-      .range(0, 1000, 1, 10)
-      .selectExpr("id % 1 as key2", "id as value2")
-      .createOrReplaceTempView("skewData2")
-  }
-
-  protected override def afterAll(): Unit = {
-    spark.catalog.dropTempView("skewData1")
-    spark.catalog.dropTempView("skewData2")
-    super.afterAll()
-  }
-
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
@@ -597,14 +579,24 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("adaptive skew join both in left and right for inner join," +
+  test("SPARK-29544: adaptive skew join both in left and right for inner join," +
     " left outer join and right outer join") {
+    spark
+      .range(0, 1000, 1, 10)
+      .selectExpr("id % 2 as key1", "id as value1")
+      .createOrReplaceTempView("skewData1")
+    spark
+      .range(0, 1000, 1, 10)
+      .selectExpr("id % 1 as key2", "id as value2")
+      .createOrReplaceTempView("skewData2")
+
     Seq("false", "true").foreach { reducePostShufflePartitionsEnabled =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
-        SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> reducePostShufflePartitionsEnabled) {
+        SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> reducePostShufflePartitionsEnabled,
+        SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
         // skewed inner join optimization
         val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
@@ -732,6 +724,8 @@ class AdaptiveQueryExecSuite
         assert(rightSmjAfter.size == 6)
       }
     }
+    spark.catalog.dropTempView("skewData1")
+    spark.catalog.dropTempView("skewData2")
   }
 
   test("SPARK-30291: AQE should catch the exceptions when doing materialize") {

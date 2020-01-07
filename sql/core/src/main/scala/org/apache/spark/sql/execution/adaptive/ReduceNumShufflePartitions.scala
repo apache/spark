@@ -54,7 +54,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     if (!conf.reducePostShufflePartitionsEnabled) {
       return plan
     }
-    // we ned skip the leaf node of 'SkewedShufflePartitionReader'
+    // we need skip the leaf node of 'SkewedShufflePartitionReader'
     val leafNodes = plan.collectLeaves().filter(!_.isInstanceOf[SkewedShufflePartitionReader])
     if (!leafNodes.forall(_.isInstanceOf[QueryStageExec])) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
@@ -158,9 +158,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     partitionStartIndices += firstStartIndex
     var postShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId(firstStartIndex)).sum
     var i = firstStartIndex
-    includedPartitions.drop(1).foreach {
-      nextPartitionIndex =>
-        var nextShuffleInputSize =
+    includedPartitions.drop(1).foreach { nextPartitionIndex =>
+        val nextShuffleInputSize =
           mapOutputStatistics.map(_.bytesByPartitionId(nextPartitionIndex)).sum
         // If nextPartitionIndices is skewed and omitted, or including
         // the nextShuffleInputSize would exceed the target partition size,

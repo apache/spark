@@ -177,12 +177,17 @@ case class ShuffleQueryStageExec(
     partitionStartIndices.zip(partitionEndIndices).toArray
   }
 
-  private var cachedShuffleRDD: ShuffledRowRDD = null
+  private var cachedShuffleRDD: RDD[InternalRow] = null
 
   override def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = shuffle.createShuffledRDD(
-        Some(getPartitionIndexRanges()))
+      cachedShuffleRDD = excludedPartitions match {
+        case e if e.isEmpty =>
+          plan.execute()
+        case _ =>
+          shuffle.createShuffledRDD(
+            Some(getPartitionIndexRanges()))
+      }
     }
     cachedShuffleRDD
   }
