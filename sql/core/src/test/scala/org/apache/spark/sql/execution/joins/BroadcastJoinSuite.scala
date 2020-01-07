@@ -378,11 +378,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
   private val bl = BroadcastNestedLoopJoinExec.toString
 
   private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
-    val executedPlan = sql(sqlStr).queryExecution.executedPlan match {
-      case a: AdaptiveSparkPlanExec => a.executedPlan
-      case other => other
-    }
-
+    val executedPlan = stripAQEPlan(sql(sqlStr).queryExecution.executedPlan)
     executedPlan match {
       case b: BroadcastNestedLoopJoinExec =>
         assert(b.getClass.getSimpleName === joinMethod)

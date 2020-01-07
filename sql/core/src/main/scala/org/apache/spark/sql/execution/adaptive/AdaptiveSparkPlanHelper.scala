@@ -128,4 +128,12 @@ trait AdaptiveSparkPlanHelper {
     case s: QueryStageExec => Seq(s.plan)
     case _ => p.children
   }
-}
+
+  /**
+   * Strip the executePlan of AdaptiveSparkPlanExec leaf node.
+   */
+  def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
+    case a: AdaptiveSparkPlanExec => a.executedPlan
+    case other => other
+  }
+ }

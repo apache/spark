@@ -695,11 +695,10 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       }.getCause.getMessage.contains(msg))
     }
     withClue("transform should fail when ids exceed integer range. ") {
-      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
         val e1 = intercept[SparkException] {
-          model.transform(dataFrame).first
+          model.transform(dataFrame).collect()
         }
         TestUtils.assertExceptionMsg(e1, msg)
         val e2 = intercept[StreamingQueryException] {

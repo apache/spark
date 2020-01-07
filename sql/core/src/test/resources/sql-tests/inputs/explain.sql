@@ -1,3 +1,6 @@
+--SET spark.sql.codegen.wholeStage = true
+--SET spark.sql.adaptive.enabled = false
+
 -- Test tables
 CREATE table  explain_temp1 (key int, val int) USING PARQUET;
 CREATE table  explain_temp2 (key int, val int) USING PARQUET;

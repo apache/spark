@@ -529,11 +529,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      val plan = query.queryExecution.executedPlan match {
-        case a: AdaptiveSparkPlanExec => a.executedPlan
-        case other => other
-      }
-      assert(plan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -550,11 +546,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      val plan = query.queryExecution.executedPlan match {
-        case a: AdaptiveSparkPlanExec => a.executedPlan
-        case other => other
-      }
-      assert(plan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -570,11 +562,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      val plan = query.queryExecution.executedPlan match {
-        case a: AdaptiveSparkPlanExec => a.executedPlan
-        case other => other
-      }
-      assert(plan.outputPartitioning.numPartitions === 12)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 12)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -629,11 +617,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val query =
         sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
       verifyNumExchanges(query, 1)
-      val plan = query.queryExecution.executedPlan match {
-        case a: AdaptiveSparkPlanExec => a.executedPlan
-        case other => other
-      }
-      assert(plan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
