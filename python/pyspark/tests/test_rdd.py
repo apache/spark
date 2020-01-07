@@ -784,7 +784,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertEqual(i, next(it))
 
     def test_resourceprofile(self):
-        rp = ResourceProfile()
+        rp_builder = ResourceProfileBuilder()
         ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
         ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
         treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
@@ -804,7 +804,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertEqual(task_reqs["gpu"].amount, 2.0)
 
         assert_request_contents(ereqs.requests, treqs.requests)
-        rp.require(ereqs).require(treqs)
+        rp = rp_builder.require(ereqs).require(treqs).build()
         assert_request_contents(rp.executorResources, rp.taskResources)
         rdd = self.sc.parallelize(range(10)).withResources(rp)
         return_rp = rdd.getResourceProfile()
