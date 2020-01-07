@@ -368,7 +368,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
@@ -391,7 +391,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
@@ -425,7 +425,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
-      comment = Option(ctx.comment).map(string))
+      comment = visitCommentSpecList(ctx.commentSpec()))
 
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
@@ -504,7 +504,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // rowStorage used to determine CatalogStorageFormat.serde and
     // CatalogStorageFormat.properties in STORED AS clause.
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
