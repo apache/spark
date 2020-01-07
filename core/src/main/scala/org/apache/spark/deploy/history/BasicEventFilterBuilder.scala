@@ -19,9 +19,11 @@ package org.apache.spark.deploy.history
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * This class tracks both live jobs and live executors, and pass the list to the
@@ -46,40 +48,30 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     totalJobs += 1
-    jobStart.stageIds.foreach { stageId =>
-      if (_stageToRDDs.get(stageId).isEmpty) {
-        // stage submit event is not received yet
-        totalStages += 1
-        _stageToRDDs.put(stageId, Set.empty[Int])
-      }
-    }
+    totalStages += jobStart.stageIds.length
     _liveJobToStages += jobStart.jobId -> jobStart.stageIds.toSet
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     val stages = _liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
     _liveJobToStages -= jobEnd.jobId
-    // This might leave some stages and tasks if job end event comes earlier than stage submitted
-    // or task start event; it's not accurate but safer than dropping wrong events which cannot be
-    // restored.
     _stageToTasks --= stages
     _stageToRDDs --= stages
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
     val stageId = stageSubmitted.stageInfo.stageId
-    if (_stageToRDDs.get(stageId).isEmpty) {
-      // job start event is not received yet
-      totalStages += 1
-    }
     _stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
+    _stageToTasks.getOrElseUpdate(stageId, new mutable.HashSet[Long]())
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-    totalTasks += 1
-    val curTasks = _stageToTasks.getOrElseUpdate(taskStart.stageId,
-      mutable.HashSet[Long]())
-    curTasks += taskStart.taskInfo.taskId
+    _stageToTasks.get(taskStart.stageId) match {
+      case Some(tasks) =>
+        totalTasks += 1
+        tasks += taskStart.taskInfo.taskId
+      case _ =>
+    }
   }
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
@@ -171,8 +163,13 @@ private[spark] class BasicEventFilter(
     case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
-    case _: SparkListenerBlockManagerAdded => true
-    case _: SparkListenerBlockManagerRemoved => true
+    case e: SparkListenerBlockManagerAdded => acceptBlockManagerEvent(e.blockManagerId)
+    case e: SparkListenerBlockManagerRemoved => acceptBlockManagerEvent(e.blockManagerId)
+    case e: SparkListenerBlockUpdated => acceptBlockManagerEvent(e.blockUpdatedInfo.blockManagerId)
+  }
+
+  private def acceptBlockManagerEvent(blockManagerId: BlockManagerId): Boolean = {
+    blockManagerId.isDriver || liveExecutors.contains(blockManagerId.executorId)
   }
 
   override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {

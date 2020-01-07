@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.spark.{storage, SparkFunSuite, Success, TaskState}
+import org.apache.spark.{storage, SparkContext, SparkFunSuite, Success, TaskState}
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler._
@@ -107,14 +107,16 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assertFilterTaskEvents(acceptFn, tasksForStage2, stage2, Some(true))
   }
 
-  test("accept all events for block manager addition/removal") {
+  test("accept all events for block manager addition/removal on driver") {
     val filter = new BasicEventFilter(EMPTY_STATS, Set.empty, Set.empty, Set.empty, Set.empty,
       Set.empty)
     val acceptFn = filter.acceptFn().lift
 
-    val bmId = BlockManagerId("1", "host1", 1)
+    val bmId = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "host1", 1)
     assert(Some(true) === acceptFn(SparkListenerBlockManagerAdded(0, bmId, 1)))
     assert(Some(true) === acceptFn(SparkListenerBlockManagerRemoved(1, bmId)))
+    assert(Some(true) === acceptFn(SparkListenerBlockUpdated(
+      storage.BlockUpdatedInfo(bmId, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0, 10))))
   }
 
   test("filter out events for dead executors") {
@@ -134,6 +136,11 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assert(Some(false) === acceptFn(SparkListenerExecutorBlacklisted(0, 1.toString, 1)))
     assert(Some(false) === acceptFn(SparkListenerExecutorUnblacklisted(0, 1.toString)))
     assert(Some(false) === acceptFn(createExecutorRemovedEvent(1)))
+    val bmId = BlockManagerId(1.toString, "host1", 1)
+    assert(Some(false) === acceptFn(SparkListenerBlockManagerAdded(0, bmId, 1)))
+    assert(Some(false) === acceptFn(SparkListenerBlockManagerRemoved(1, bmId)))
+    assert(Some(false) === acceptFn(SparkListenerBlockUpdated(
+      storage.BlockUpdatedInfo(bmId, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0, 10))))
 
     // events for live executor should be accepted
     assert(Some(true) === acceptFn(createExecutorAddedEvent(2)))
@@ -142,6 +149,11 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assert(Some(true) === acceptFn(SparkListenerExecutorBlacklisted(0, 2.toString, 1)))
     assert(Some(true) === acceptFn(SparkListenerExecutorUnblacklisted(0, 2.toString)))
     assert(Some(true) === acceptFn(createExecutorRemovedEvent(2)))
+    val bmId2 = BlockManagerId(2.toString, "host1", 1)
+    assert(Some(true) === acceptFn(SparkListenerBlockManagerAdded(0, bmId2, 1)))
+    assert(Some(true) === acceptFn(SparkListenerBlockManagerRemoved(1, bmId2)))
+    assert(Some(true) === acceptFn(SparkListenerBlockUpdated(
+      storage.BlockUpdatedInfo(bmId2, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0, 10))))
   }
 
   test("other events should be left to other filters") {
@@ -152,9 +164,6 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assert(None === acceptFn(SparkListenerEnvironmentUpdate(Map.empty)))
     assert(None === acceptFn(SparkListenerApplicationStart("1", Some("1"), 0, "user", None)))
     assert(None === acceptFn(SparkListenerApplicationEnd(1)))
-    val bmId = BlockManagerId("1", "host1", 1)
-    assert(None === acceptFn(SparkListenerBlockUpdated(
-      storage.BlockUpdatedInfo(bmId, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0, 10))))
     assert(None === acceptFn(SparkListenerNodeBlacklisted(0, "host1", 1)))
     assert(None === acceptFn(SparkListenerNodeUnblacklisted(0, "host1")))
     assert(None === acceptFn(SparkListenerLogStart("testVersion")))

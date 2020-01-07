@@ -106,7 +106,7 @@ class BasicEventFilterBuilderSuite extends SparkFunSuite {
     listener.onStageCompleted(SparkListenerStageCompleted(stages.head))
 
     assert(listener.liveJobs === Set(1))
-    assert(listener.liveStages === Set(0, 1))
+    assert(listener.liveStages === Set(0))
     // stage 1 not yet submitted - RDDs for stage 1 is not available
     assert(listener.liveRDDs === rddsForStage0.map(_.id).toSet)
     assert(listener.liveTasks === (s0Tasks ++ Seq(reattempt)).map(_.taskId).toSet)
@@ -189,8 +189,7 @@ class BasicEventFilterBuilderSuite extends SparkFunSuite {
 
     // everything related to job 1 should be cleaned up, but not for job 2
     assert(listener.liveJobs === Set(2))
-    // there're no stage submit event on job 2, but they will be available on job start event
-    assert(listener.liveStages === Set(2, 3))
+    assert(listener.liveStages.isEmpty)
     // no RDD information available as these stages are not submitted yet
     assert(listener.liveRDDs.isEmpty)
     // stageToTasks has no information for job 2, as no task has been started

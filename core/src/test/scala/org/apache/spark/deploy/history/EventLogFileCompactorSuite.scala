@@ -168,13 +168,24 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
       val newConf = sparkConf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.7d)
 
-      // only one of two tasks is finished, which would score 0.5d
-      val tasks = createTasks(2, Array("exec1"), 0L).map(createTaskStartEvent(_, 1, 0))
+      // job 1 having 4 tasks
+      val rddsForStage1 = createRddsWithId(1 to 2)
+      val stage1 = createStage(1, rddsForStage1, Nil)
+      val tasks = createTasks(4, Array("exec1"), 0L).map(createTaskStartEvent(_, 1, 0))
 
+      // job 2 having 4 tasks
+      val rddsForStage2 = createRddsWithId(3 to 4)
+      val stage2 = createStage(2, rddsForStage2, Nil)
+      val tasks2 = createTasks(4, Array("exec1"), 0L).map(createTaskStartEvent(_, 2, 0))
+
+      // here job 1 is finished and job 2 is still live, hence half of total tasks are considered
+      // as live
       val fileStatuses = writeEventsToRollingWriter(fs, "app", dir, newConf, hadoopConf,
+        Seq(SparkListenerJobStart(1, 0, Seq(stage1)), SparkListenerStageSubmitted(stage1)),
         tasks,
-        Seq(SparkListenerTaskEnd(1, 0, "taskType", Success, tasks.head.taskInfo,
-          new ExecutorMetrics, null)),
+        Seq(SparkListenerJobStart(2, 0, Seq(stage2)), SparkListenerStageSubmitted(stage2)),
+        tasks2,
+        Seq(SparkListenerJobEnd(1, 0, JobSucceeded)),
         testEvent,
         testEvent,
         testEvent)
