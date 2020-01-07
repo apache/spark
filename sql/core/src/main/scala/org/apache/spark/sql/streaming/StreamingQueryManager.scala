@@ -415,7 +415,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       query.streamingQuery.start()
     } catch {
       case e: Throwable =>
-        unregisterTerminatedStream(query.id)
+        unregisterTerminatedStream(query)
         throw e
     }
     query

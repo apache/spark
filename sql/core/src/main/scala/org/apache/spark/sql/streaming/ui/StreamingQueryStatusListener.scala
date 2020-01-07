@@ -62,7 +62,8 @@ private[ui] class StreamingQueryUIData(
     val name: String,
     val id: UUID,
     val runId: UUID) {
-  val submitTime = System.currentTimeMillis()
+
+  val submitTime: Long = System.currentTimeMillis()
 
   /** Holds the most recent query progress updates. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
@@ -70,7 +71,7 @@ private[ui] class StreamingQueryUIData(
   private var _isActive = true
   private var _exception: Option[String] = None
 
-  def isActive: Boolean = isActive
+  def isActive: Boolean = _isActive
 
   def exception: Option[String] = _exception
 
@@ -95,3 +96,4 @@ private[ui] class StreamingQueryUIData(
     progressBuffer.lastOption.orNull
   }
 }
+
