@@ -48,7 +48,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
       relation: LeafNode): Project = {
-    // Keep partition-pruning predicates so that they are visible in physical planning
     val withFilter = if (filters.nonEmpty) {
       val filterExpression = filters.reduceLeft(And)
       Filter(filterExpression, relation)
@@ -84,6 +83,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
         val prunedLogicalRelation = logicalRelation.copy(
           relation = prunedFsRelation, catalogTable = withStats)
+        // Keep partition-pruning predicates so that they are visible in physical planning
         rebuildPhysicalOperation(projects, filters, prunedLogicalRelation)
       } else {
         op
@@ -91,12 +91,13 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
     case op @ PhysicalOperation(projects, filters,
         v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))
-        if filters.nonEmpty  && scan.readDataSchema.nonEmpty =>
+        if filters.nonEmpty && scan.readDataSchema.nonEmpty =>
       val partitionKeyFilters = getPartitionKeyFilters(scan.sparkSession,
         v2Relation, scan.readPartitionSchema, filters, output)
       if (partitionKeyFilters.nonEmpty) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withPartitionFilters(partitionKeyFilters.toSeq))
+        // The pushed down partition filters don't need to be evaluated again.
         val afterScanFilters =
           ExpressionSet(filters) -- partitionKeyFilters.filter(_.references.nonEmpty)
         rebuildPhysicalOperation(projects, afterScanFilters.toSeq, prunedV2Relation)
