@@ -165,7 +165,7 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
 
-  test("SPARK-27604: take nullability into account") {
+  test("SPARK-30447: take nullability into account") {
     val query = testRelation
       .select(columnA)
       .where(!(columnA === Literal(1) && Add(columnA, 1) === Literal(1)))
