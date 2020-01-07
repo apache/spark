@@ -504,7 +504,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // rowStorage used to determine CatalogStorageFormat.serde and
     // CatalogStorageFormat.properties in STORED AS clause.
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)

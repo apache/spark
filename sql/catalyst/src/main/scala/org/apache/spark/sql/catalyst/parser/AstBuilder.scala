@@ -2651,7 +2651,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     val comment = visitCommentSpecList(ctx.commentSpec())
     (partitioning, bucketSpec, properties, options, location, comment)
   }
