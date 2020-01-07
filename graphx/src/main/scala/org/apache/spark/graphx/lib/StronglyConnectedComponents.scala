@@ -54,7 +54,7 @@ object StronglyConnectedComponents {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-        if (!pregelDone) {
+        if (pregelDone == false) {
           sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
             (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
           }.outerJoinVertices(sccWorkGraph.inDegrees) {
