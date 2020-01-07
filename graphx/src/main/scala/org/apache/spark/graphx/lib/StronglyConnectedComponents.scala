@@ -46,7 +46,6 @@ object StronglyConnectedComponents {
 
     // helper variables to unpersist cached graphs
     var prevSccGraph = sccGraph
-
     var numVertices = sccWorkGraph.numVertices
     var pregelDone = false
     var iter = 0
@@ -62,7 +61,6 @@ object StronglyConnectedComponents {
           }.cache()
         }
         pregelDone = false
-
         // get all vertices to be removed
         val finalVertices = sccWorkGraph.vertices
             .filter { case (vid, (scc, isFinal)) => isFinal}
