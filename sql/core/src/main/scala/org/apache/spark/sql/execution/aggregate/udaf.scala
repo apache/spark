@@ -459,7 +459,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     children: Seq[Expression],
     agg: Aggregator[IN, BUF, OUT],
     inputEncoderNR: ExpressionEncoder[IN],
-    isNullable: Boolean = true,
+    nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
@@ -477,8 +477,6 @@ case class ScalaAggregator[IN, BUF, OUT](
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
   def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
-
-  def nullable: Boolean = isNullable
 
   override lazy val deterministic: Boolean = isDeterministic
 
