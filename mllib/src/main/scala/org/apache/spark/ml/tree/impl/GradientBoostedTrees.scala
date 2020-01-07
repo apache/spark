@@ -383,7 +383,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     var predError = computeInitialPredictionAndError(
       treePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
     predErrorCheckpointer.update(predError)
-    logDebug("error of gbt = " + computeWeightedError(treePoints, predError))
+    logDebug(s"error of gbt = ${computeWeightedError(treePoints, predError)}")
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
@@ -447,7 +447,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         treePoints, predError, baseLearnerWeights(m),
         baseLearners(m), loss, bcSplits)
       predErrorCheckpointer.update(predError)
-      logDebug("error of gbt = " + computeWeightedError(treePoints, predError))
+      logDebug(s"error of gbt = ${computeWeightedError(treePoints, predError)}")
 
       if (validate) {
         // Stop training early if
