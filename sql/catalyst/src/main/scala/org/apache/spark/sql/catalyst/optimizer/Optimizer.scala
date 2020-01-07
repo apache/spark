@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -80,6 +80,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseProject,
         CollapseWindow,
         CombineFilters,
+        CombineAggregates,
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
@@ -961,6 +962,155 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
         case None =>
           nf
       }
+  }
+}
+
+/**
+ * Combines two adjacent [[Aggregate]] operators into one, if the first one is not necessary.
+ *
+ * If we are referencing the outputs of aggregate functions in the inner aggregate from the outer
+ * one, check if they are being used in outer aggregates in a way that can be collapsed into a
+ * single aggregate. A sum of sums, or a max of max, or min of min are all collapsible.
+ * avg over avg will not be collapsible because different number of raw rows will have contributed
+ * to the partial averages of the inner aggregate
+ *
+ * Min an Max can be folded in the case described above, or if they are referencing
+ * the group by columns, as they can safely be computed just using the set of
+ * unique values.
+ */
+object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
+
+  /**
+   * The aggregate expression list includes both aggregate expressions and
+   * the projected group by keys, this filters out the aggregate expressions
+   * in the list leaving just the group by keys. It also unwraps aliases to
+   * just give a list of the projected grouping expressions themselves.
+   */
+  def justProjectedGroupExprs(aggExprs: Seq[NamedExpression],
+                   groupExprs: Seq[Expression]): Seq[NamedExpression] = {
+    aggExprs.filter(namedEx =>
+      groupExprs.exists(_.semanticEquals(unwrapAlias(namedEx)))
+    )
+  }
+
+  def unwrapAlias(ex: Expression): Expression = {
+    if (ex.isInstanceOf[Alias]) ex.children.head
+    else ex
+  }
+
+  /**
+   * Pulls up references to aliases from an earlier operator and replaces them with the
+   * raw expression they are associated with.
+   *
+   * The output name of the original expression is assumed to be the desired final name
+   * of the rewritten expression, so if necessary an alias is added to ensure the output
+   * name is correct.
+   *
+   * @param ex expression to re-write
+   * @param aliasMap aliases from the input operator, mapped to their expressions
+   * @return rewritten expression with intermediate aliases removed
+   */
+  def resolveAliasesMaintainingSchema(ex: NamedExpression,
+                                      aliasMap: AttributeMap[Expression]): NamedExpression = {
+    val ret = replaceAlias(ex, aliasMap)
+    ret match {
+      case namedEx: NamedExpression =>
+        if (namedEx.name != ex.name) {
+          Alias(ret, ex.name)(ex.exprId, ex.qualifier, Some(ex.metadata))
+        } else {
+          namedEx
+        }
+      case _ => Alias(ret, ex.name)(ex.exprId, ex.qualifier, Some(ex.metadata))
+    }
+  }
+
+  def collapseIntoOneAggregate(aggExprs: Seq[NamedExpression],
+                               groupExprs: Seq[Expression],
+                               childAgg: Aggregate): Aggregate = {
+
+    val aliasMap = AttributeMap(childAgg.aggregateExpressions.collect {
+      case a: Alias => (a.toAttribute, a.child)
+    })
+    val aliasResolvedAggExprs = aggExprs.map(resolveAliasesMaintainingSchema(_, aliasMap))
+    val aliasResolvedGroupExprs = groupExprs.map(ex => replaceAlias(ex, aliasMap))
+    Aggregate(aliasResolvedGroupExprs, aliasResolvedAggExprs, childAgg.child)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transform {
+      // The query execution/optimization does not guarantee the expressions are evaluated in order.
+      // We only can combine them if and only if both are deterministic.
+      case agg@Aggregate(groupExprs: Seq[Expression],
+                         projectionsOfAggregateNode: Seq[NamedExpression],
+                         childAgg@Aggregate(childGroupExprs, childAggExprs, grandChild)) =>
+
+      var collapsible = true
+      val collapsibleNestedAggs = projectionsOfAggregateNode.map(aggEx => {
+        // Don't need to rewrite the projected grouping key expressions, but want to maintain them
+        // in the list, so identify them early and keep them the same.
+        //
+        // The or condition is kind of a hack for "early exit" of this loop, so later iterations
+        // don't overwrite the value to again declare this collapsible
+        if (groupExprs.exists(ex => ex.semanticEquals(aggEx)) || !collapsible) aggEx
+        else {
+          aggEx match {
+            case a@Alias(outerAggExpr: AggregateExpression, _) =>
+              outerAggExpr.aggregateFunction match {
+                case _: Max | _: Min | _: Sum =>
+                  // look for the expressions in the inner aggregate that produce
+                  // the columns used by the outer aggregate
+                  val resolvedInnerExprs = childAggExprs.filter(
+                    ex => outerAggExpr.references.exists(_.name == ex.name))
+                  // this rule only handles cases where outer expressions are simple
+                  // and reference a single column from the inner aggregate.
+                  // Possible future enhancement also handle cases like:
+                  // select sum(innerSum1 + innerSum2) from (
+                  //    select sum(col1) as innerSum1, sum(col2) as innerSum2 from t)
+                  if (resolvedInnerExprs.size != 1) {
+                    collapsible = false
+                    aggEx
+                  } else {
+                    val resolvedInnerExpression = resolvedInnerExprs.iterator.next()
+                    var newExpr: NamedExpression = null
+                    unwrapAlias(resolvedInnerExpression) match {
+                      case childAggExpr@AggregateExpression(_, _, _, _, _) =>
+                        collapsible = childAggExpr.aggregateFunction.prettyName ==
+                          outerAggExpr.aggregateFunction.prettyName
+                        if (collapsible) {
+                          // this only has 1 child because it is definitely sum, min or max
+                          val newChild = resolvedInnerExpression.children.iterator.next()
+                          newExpr = aggEx.withNewChildren(
+                            Seq(newChild)).asInstanceOf[NamedExpression]
+                        }
+                      case att@AttributeReference(ex: String, _, _, _) =>
+                        outerAggExpr.aggregateFunction match {
+                          case _: Min | _: Max =>
+                            // min and max are a special case that can be computed successfully
+                            // even if they are referencing grouping keys from the inner aggregate
+                            // instead of a nested aggregation. min(min(col)) is handled above
+                            // along with sum
+                            collapsible =
+                              justProjectedGroupExprs(childAggExprs, childGroupExprs)
+                                .exists(unwrapAlias(_).semanticEquals(unwrapAlias(att)))
+                          case _ => collapsible = false
+                        }
+                      case _ => collapsible = false
+                    }
+                    if (newExpr != null) newExpr else aggEx
+                  }
+                case _ => collapsible = false; aggEx
+              }
+            case _ => collapsible = false; aggEx
+          }
+        }
+      })
+
+      if (collapsible) {
+        collapseIntoOneAggregate(collapsibleNestedAggs, groupExprs, childAgg)
+      } else {
+        agg
+      }
+    }
   }
 }
 

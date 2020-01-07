@@ -1651,6 +1651,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val COMBINE_AGGREGATES = buildConf("spark.sql.optimizer.combineAggregates")
+    .internal()
+    .doc("When true, enable optimizer rule to identify and collapse two levels of aggregates that" +
+      " can be computed in a single aggregate.")
+    .booleanConf
+    .createWithDefault(true)
+
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
@@ -2637,6 +2644,8 @@ class SQLConf extends Serializable with Logging {
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def combineAggregates: Boolean = getConf(COMBINE_AGGREGATES)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 

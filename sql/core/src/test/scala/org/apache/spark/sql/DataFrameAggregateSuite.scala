@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.Matchers.the
 
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -669,6 +670,424 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
       Seq(Row(3, 4, 9)))
+  }
+
+  private def samePlanWithOptionOnOrOff(option: String, query: String): Unit = {
+    var actualPlan: LogicalPlan = null
+    withSQLConf(option -> "true") {
+      actualPlan = spark.sql(query).queryExecution.optimizedPlan
+    }
+    withSQLConf(option -> "false") {
+      comparePlans(actualPlan, spark.sql(query).queryExecution.optimizedPlan)
+    }
+  }
+
+  private def diffPlanSameResultWithOptionOnOrOff(option: String, query: String): Unit = {
+
+    var actualPlan: LogicalPlan = null
+    var actualResult: DataFrame = null
+    withSQLConf(option -> "true") {
+      actualPlan = spark.sql(query).queryExecution.optimizedPlan
+      actualResult = spark.sql(query)
+    }
+
+    withSQLConf(option -> "false") {
+      assertPlansDifferent(actualPlan, spark.sql(query).queryExecution.optimizedPlan)
+      checkAnswer(actualResult, spark.sql(query))
+    }
+  }
+
+  /**
+    * Takes two sql strings that should end up with equivalent plans once they
+    * have been sent through the optimizer.
+    */
+  private def samePlanWithCollapseAggEnabled(testSql: String,
+                                             expectedOptimization: String): Unit = {
+    withSQLConf(SQLConf.COMBINE_AGGREGATES.key -> "true") {
+      val expected = spark.sql(expectedOptimization).queryExecution.optimizedPlan
+      comparePlans(spark.sql(testSql).queryExecution.optimizedPlan, expected)
+    }
+  }
+
+  /**
+    * Should not match the aggregate combine rule because this is not
+    * possible to condense into a single aggregate. The inner aggregate
+    * changes the number of rows present with each unique value of b, based
+    * on which values of "a" they appear with. This result can only be achieved
+    * with a nested aggregate like this.
+   */
+  test("Don't match, aggregates combine rule") {
+    val query = "SELECT sum(1), b from(select sum(1), a, b FROM testData2 GROUP BY a, b) group by b"
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(3, 1),
+        Row(3, 2)))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Don't collapse necessary nested aggregates, refer to inner agg result in outer group by") {
+    val query = """
+                  |SELECT sum(1), agg from (
+                  |   select sum(1) as agg, a, b FROM testData2 GROUP BY a, b
+                  |) group by agg
+                """.stripMargin
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(spark.sql(query),
+      Seq(Row(6, 1)))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Don't match, Nested Agg references, different functions") {
+    val query =
+      """|SELECT min(maxEarnings) as a, year from (
+         |   select max(earnings) as maxEarnings, course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(10000.0, 2012),
+        Row(30000.0, 2013)))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Don't match, Nested Agg references, separated by a persist()") {
+    val innerQuery =
+      "select max(earnings) as maxEarnings, course, year FROM courseSales GROUP BY course, year"
+    val outerQuery = "SELECT max(maxEarnings) as a, year from aggSales group by year"
+    courseSales.createOrReplaceTempView("courseSales")
+    val innerDf = spark.sql(innerQuery)
+    innerDf.createOrReplaceTempView("aggSales")
+    innerDf.persist()
+    checkAnswer(
+      spark.sql(outerQuery),
+      Seq(Row(20000.0, 2012),
+        Row(48000.0, 2013)))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, outerQuery)
+  }
+
+  test("Don't collapse necessary nested aggregates, one would be collapsible, " +
+    "but there is also a reference to inner agg result in outer agg") {
+    val query = """
+                  |SELECT sum(1), min(a), b from (
+                  |     select sum(1), a, b FROM testData2 GROUP BY a, b
+                  |     ) group by b
+                """.stripMargin
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(spark.sql(query),
+      Seq(Row(3, 1, 1),
+        Row(3, 1, 2)))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  /**
+    * This is a example that we will in some cases be better off without this optimization.
+    *
+    * We currently do not have statistics to determine when it is better to go one way or
+    * the other. Users can in a way give a planner hint by using persist() as is shown in the test
+    * above where the CollapseAggregates rule is not applied.
+    *
+    * If the inner aggregate can be done once, to reduce the size of the dataset and then
+    * that result consumed for two separate smaller aggregates, it can be better to
+    * go that route, rather than apply the rule and turn this into two aggregates over the
+    * full dataset. If there isn't much reduction of the dataset size from the first aggregate
+    * it is still useful to reduce 3 aggregates to 2.
+    */
+  test("Nested Agg references, no automatic detection of common subtrees to prevent matching") {
+    val innerQuery =
+      """|select max(earnings) as maxEarnings, min(earnings) as minEarnings, course, year
+         |FROM courseSales GROUP BY course, year
+      """.stripMargin
+    val outerQuery =
+      s"""|with aggSales as ($innerQuery)
+          |SELECT max(maxEarnings) as a, year from aggSales group by year
+          |UNION ALL SELECT min(minEarnings) as a, year from aggSales group by year
+          |""".stripMargin
+    val expectedOptimization =
+      s"""|SELECT max(earnings) as a, year from courseSales group by year
+          |UNION ALL SELECT min(earnings) as a, year from courseSales group by year
+          |""".stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val innerDf = spark.sql(innerQuery)
+    innerDf.createOrReplaceTempView("aggSales")
+    checkAnswer(
+      spark.sql(outerQuery),
+      Seq(Row(20000.0, 2012),
+        Row(30000.0, 2013),
+        Row(48000.0, 2013),
+        Row(5000.0, 2012)))
+
+    samePlanWithCollapseAggEnabled(outerQuery, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, outerQuery)
+  }
+
+  test("Collapse nested Agg references, inner aggregate in a view, but no persist") {
+    val innerQuery =
+      "select max(earnings) as maxEarnings, course, year FROM courseSales GROUP BY course, year"
+    val outerQuery =
+      "SELECT max(maxEarnings) as a, year from aggSales group by year"
+    courseSales.createOrReplaceTempView("courseSales")
+    val innerDf = spark.sql(innerQuery)
+    innerDf.createOrReplaceTempView("aggSales")
+    val expectedOptimization = "SELECT max(earnings) as a, year from courseSales group by year"
+    checkAnswer(
+      spark.sql(outerQuery),
+      Seq(Row(20000.0, 2012),
+        Row(48000.0, 2013)))
+
+    samePlanWithCollapseAggEnabled(outerQuery, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, outerQuery)
+  }
+
+  test("Collapse redundant aggregates, for min an max they can " +
+    "refer to group by columns, along with a nested agg") {
+    val query = """
+                  |SELECT sum(agg), min(a), b from (
+                  |     select sum(1) as agg, a, b FROM testData2 GROUP BY a, b
+                  |     ) group by b
+                """.stripMargin
+    testData2.createOrReplaceTempView("testData2")
+    val expectedOptimization =
+      "SELECT sum(1) as `sum(agg)`, min(a) as `min(a)`, b " +
+      "from testData2 group by b"
+    checkAnswer(spark.sql(query),
+      Seq(Row(3, 1, 1),
+        Row(3, 1, 2)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Nested Agg references, inner aggregate over constant") {
+    val query =
+      """|SELECT sum(sumAgg) as a, year from (
+         |   select sum(1) as sumAgg, course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val expectedOptimization = "SELECT sum(1) as `a`, year from courseSales group by year"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(2, 2013),
+        Row(3, 2012)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Cannot collapse nested Agg references, complex outer agg expression") {
+    val query =
+      """|SELECT min(minEarnings + minYear), instructor from (
+         |   select min(earnings) as minEarnings, min(year) as minYear, course, instructor FROM courseSalesWider GROUP BY course, instructor
+         |) group by instructor
+      """.stripMargin
+    courseSalesWider.createOrReplaceTempView("courseSalesWider")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(12012.0, "bob"),
+        Row(22012.0, "megan"),
+        Row(50013.0, "angela"),
+        Row(7012.0, "tim")))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  // I think this could be collapsed, I would need to make the rule smarter to understand
+  // that sums can be added together with the standard scalar expression addition operator
+  test("Cannot collapse nested Agg references, complex outer agg expression with sums") {
+    val query =
+      """|SELECT sum(sumEarnings + sumYear), instructor from (
+         |   select sum(earnings) as sumEarnings, sum(year) as sumYear, course, instructor FROM courseSalesWider GROUP BY course, instructor
+         |) group by instructor
+      """.stripMargin
+    courseSalesWider.createOrReplaceTempView("courseSalesWider")
+    val possibleOptimization =
+      """|SELECT sumEarnings + sumYear as `sum(sumEarnings + sumYear)`, instructor from (
+         |   select sum(earnings) as sumEarnings, sum(year) as sumYear, instructor FROM courseSalesWider GROUP BY instructor)
+      """.stripMargin
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(12012.0, "bob"),
+        Row(22012.0, "megan"),
+        Row(39025.0, "tim"),
+        Row(50013.0, "angela")))
+    checkAnswer(
+      spark.sql(query),
+      spark.sql(possibleOptimization))
+
+    samePlanWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Nested Agg references, complex agg expression") {
+    val query =
+      """|SELECT min(minEarningsYear), instructor from (
+         |   select min(earnings + year) as minEarningsYear, course, instructor FROM courseSalesWider GROUP BY course, instructor
+         |) group by instructor
+      """.stripMargin
+    courseSalesWider.createOrReplaceTempView("courseSalesWider")
+    val expectedOptimization =
+      "SELECT min(earnings + year) as `min(minEarningsYear)`, instructor " +
+      "from courseSalesWider group by instructor"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(12012.0, "bob"),
+        Row(22012.0, "megan"),
+        Row(50013.0, "angela"),
+        Row(7012.0, "tim")))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+
+  test("Nested Agg references, no outer alias") {
+    val query =
+      """|SELECT min(minEarnings), year from (
+         |   select min(earnings) as minEarnings, course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val expectedOptimization =
+      "SELECT min(earnings) as `min(minEarnings)`, year " +
+      "from courseSales group by year"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(30000.0, 2013),
+        Row(5000.0, 2012)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Nested Agg references, no inner alias") {
+    val query =
+      """|SELECT min(`min(earnings)`), year from (
+         |   select min(earnings), course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val expectedOptimization =
+      "SELECT min(earnings) as `min(min(earnings))`, year " +
+      "from courseSales group by year"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(30000.0, 2013),
+        Row(5000.0, 2012)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Nested Agg references") {
+    val query =
+      """|SELECT min(minEarnings) as a, year from (
+         |   select min(earnings) as minEarnings, course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val expectedOptimization = "SELECT min(earnings) as `a`, year from courseSales group by year"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(30000.0, 2013),
+        Row(5000.0, 2012)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Nested Agg references, 2 nested funcs") {
+    val query =
+      """|SELECT min(minEarnings) as a, sum(sumEarnings) b, year from (
+         |   select min(earnings) as minEarnings, sum(earnings) as sumEarnings, course, year FROM courseSales GROUP BY course, year
+         |) group by year
+      """.stripMargin
+    courseSales.createOrReplaceTempView("courseSales")
+    val expectedOptimization =
+      "SELECT min(earnings) as `a`, sum(earnings) as b, year " +
+      "from courseSales group by year"
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(30000.0, 78000.0, 2013),
+        Row(5000.0, 35000.0, 2012)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Combine redundant aggregates, with inner alias in outer agg") {
+    val query = """
+        |SELECT min(c), b from (
+        |   select sum(1), a as c, b FROM testData2 GROUP BY a, b
+        |) group by b
+      """.stripMargin
+    val expectedOptimization = "SELECT min(a) as `min(c)`, b from testData2 group by b"
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(1, 1),
+        Row(1, 2)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Combine redundant aggregates success") {
+    val query = """
+        |SELECT min(a), b from (
+        |     select sum(1), a, b FROM testData2 GROUP BY a, b
+        |) group by b
+      """.stripMargin
+    val expectedOptimization = "SELECT min(a) as `min(a)`, b from testData2 group by b"
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(1, 1),
+        Row(1, 2)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Combine redundant aggregates success, multiple aggregate expressions") {
+    val query = """
+                  |SELECT min(a), max(a), b from (
+                  |     select sum(1), a, b FROM testData2 GROUP BY a, b
+                  |) group by b
+                """.stripMargin
+    val expectedOptimization =
+      "SELECT min(a) as `min(a)`, max(a) as `max(a)`, b from testData2 group by b"
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(1, 3, 1),
+        Row(1, 3, 2)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
+  }
+
+  test("Combine redundant aggregates success, inner alias in outer group by") {
+    val query = """
+        |SELECT max(b), c from (
+        |     select sum(3), b, a as c FROM testData2 GROUP BY a, b
+        |) group by c
+      """.stripMargin
+    val expectedOptimization = "SELECT max(b), a as c from testData2 group by a"
+    testData2.createOrReplaceTempView("testData2")
+    checkAnswer(
+      spark.sql(query),
+      Seq(Row(2, 1),
+        Row(2, 2),
+        Row(2, 3)))
+
+    samePlanWithCollapseAggEnabled(query, expectedOptimization)
+    diffPlanSameResultWithOptionOnOrOff(SQLConf.COMBINE_AGGREGATES.key, query)
   }
 
   test("SPARK-22223: ObjectHashAggregate should not introduce unnecessary shuffle") {

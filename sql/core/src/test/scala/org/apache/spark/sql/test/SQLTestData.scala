@@ -287,6 +287,17 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val courseSalesWider: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      CourseSalesWider("dotNET", 2012, 10000, "bob", "beginner") ::
+        CourseSalesWider("Java", 2012, 20000, "megan", "advanced") ::
+        CourseSalesWider("dotNET", 2012, 5000, "tim", "beginner") ::
+        CourseSalesWider("dotNET", 2013, 48000, "angela", "beginner") ::
+        CourseSalesWider("Java", 2013, 30000, "tim", "advanced") :: Nil).toDF()
+    df.createOrReplaceTempView("courseSalesWider")
+    df
+  }
+
   /**
    * Initialize all test data such that all temp tables are properly registered.
    */
@@ -342,6 +353,8 @@ private[sql] object SQLTestData {
   case class Salary(personId: Int, salary: Double)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   case class CourseSales(course: String, year: Int, earnings: Double)
+  case class CourseSalesWider(course: String, year: Int, earnings: Double,
+                              instructor: String, level: String)
   case class TrainingSales(training: String, sales: CourseSales)
   case class IntervalData(data: CalendarInterval)
 }

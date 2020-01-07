@@ -36,6 +36,7 @@ class AggregateOptimizeSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
       FoldablePropagation,
+      CombineAggregates,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil
   }
@@ -48,6 +49,49 @@ class AggregateOptimizeSuite extends PlanTest {
     val correctAnswer = testRelation.groupBy('a)(sum('b)).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove redundant agg operators, inner agg result not used") {
+    val query = testRelation.groupBy('a, 'c)(sum('b), 'a, 'c)
+      .groupBy('a)(max('c))
+
+    withSQLConf(SQLConf.COMBINE_AGGREGATES.key -> "true") {
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = testRelation.groupBy('a)(max('c)).analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+
+  }
+
+  test("remove redundant agg operators, nested same function") {
+    val query = testRelation.groupBy('a, 'c)(sum('b).as('d), 'a, 'c)
+      .groupBy('a)(sum('d))
+
+    withSQLConf(SQLConf.COMBINE_AGGREGATES.key -> "true") {
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = testRelation.groupBy('a)(sum('b).as("sum('d)")).analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  /**
+    * Outer results is impacted by the reduction in number of rows by inner result.
+    * So this isn't possible to collapse.
+    */
+  test("don't remove necessary nested aggregates") {
+    val q1 = testRelation.groupBy('a, 'c)(sum('b).as('d), 'a, 'c)
+    val query = q1.groupBy('d)(sum(Literal(1)))
+
+    withSQLConf(SQLConf.COMBINE_AGGREGATES.key -> "true") {
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = testRelation
+        .groupBy('a, 'c)(sum('b).as('d), 'a, 'c)
+        .groupBy('d)(sum(Literal(1))).analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("do not remove all grouping expressions if they are all literals") {
