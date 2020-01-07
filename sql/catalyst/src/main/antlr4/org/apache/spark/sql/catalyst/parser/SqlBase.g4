@@ -303,11 +303,11 @@ skewSpec
     ;
 
 locationSpec
-    : LOCATION location=STRING
+    : LOCATION STRING
     ;
 
 commentSpec
-    : COMMENT comment=STRING
+    : COMMENT STRING
     ;
 
 query
