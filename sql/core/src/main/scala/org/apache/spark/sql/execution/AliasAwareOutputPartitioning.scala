@@ -31,7 +31,7 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
       case HashPartitioning(expressions, numPartitions) =>
         val newExpressions = expressions.map {
           case a: AttributeReference =>
-            removeAlias(a).getOrElse(a)
+            replaceAlias(a).getOrElse(a)
           case other => other
         }
         HashPartitioning(newExpressions, numPartitions)
@@ -39,7 +39,7 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
     }
   }
 
-  private def removeAlias(attr: AttributeReference): Option[Attribute] = {
+  private def replaceAlias(attr: AttributeReference): Option[Attribute] = {
     outputExpressions.collectFirst {
       case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
         a.toAttribute

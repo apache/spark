@@ -927,23 +927,52 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
-  test("aliases in the project should not introduce extra shuffle.") {
+  test("aliases in the project should not introduce extra shuffle") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
-      spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
-      val planned = sql("""
-        SELECT * FROM
-          (SELECT key AS k from df1) t1
-        INNER JOIN
-         (SELECT key AS k from df2) t2
-        ON t1.k = t2.k
-      """).queryExecution.executedPlan
-      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
-      assert(exchanges.size == 1)
+      withTempView("df1", "df2") {
+        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
+        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+        val planned = sql(
+          """
+            |SELECT * FROM
+            |  (SELECT key AS k from df1) t1
+            |INNER JOIN
+            |  (SELECT key AS k from df2) t2
+            |ON t1.k = t2.k
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 1)
+      }
     }
   }
 
-  test("aliases in the aggregate expressions should not introduce extra shuffle.") {
+  test("aliases to expressions should not be replaced") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("df1", "df2") {
+        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
+        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+        val planned = sql(
+          """
+            |SELECT * FROM
+            |  (SELECT key + 1 AS k1 from df1) t1
+            |INNER JOIN
+            |  (SELECT key + 1 AS k2 from df2) t2
+            |ON t1.k1 = t2.k2
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+
+        // Make sure aliases to an expression (key + 1) are not replaced.
+        Seq("k1", "k2").foreach { alias =>
+          assert(exchanges.exists(_.outputPartitioning match {
+            case HashPartitioning(Seq(a: AttributeReference), _) => a.name == alias
+            case _ => false
+          }))
+        }
+      }
+    }
+  }
+
+  test("aliases in the aggregate expressions should not introduce extra shuffle") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
       val t2 = spark.range(10).selectExpr("floor(id/4) as k2")
