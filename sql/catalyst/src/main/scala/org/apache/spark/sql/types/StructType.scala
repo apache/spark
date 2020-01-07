@@ -409,7 +409,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     // in catalogString, we should not truncate
     val stringConcat = new StringUtils.StringConcat()
     fields.init.foreach { field =>
-      stringConcat.append(s"${field.name}:${field.dataType.catalogString}, ")
+      stringConcat.append(s"${field.name}:${field.dataType.catalogString},")
     }
     stringConcat.append(s"${fields.last.name}:${fields.last.dataType.catalogString}")
     s"struct<${stringConcat.toString}>"
