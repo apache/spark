@@ -302,8 +302,10 @@ case class DescribeTableStatement(
  * A DESCRIBE NAMESPACE statement, as parsed from SQL.
  */
 case class DescribeNamespaceStatement(
-    namespace: Seq[String],
-    extended: Boolean) extends ParsedStatement
+    namespace: LogicalPlan,
+    extended: Boolean) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
@@ -346,8 +348,11 @@ case class InsertIntoStatement(
 /**
  * A SHOW TABLES statement, as parsed from SQL.
  */
-case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
+case class ShowTablesStatement(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A SHOW TABLE EXTENDED statement, as parsed from SQL.
@@ -370,29 +375,38 @@ case class CreateNamespaceStatement(
  * A DROP NAMESPACE statement, as parsed from SQL.
  */
 case class DropNamespaceStatement(
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     ifExists: Boolean,
-    cascade: Boolean) extends ParsedStatement
+    cascade: Boolean) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
  */
 case class AlterNamespaceSetPropertiesStatement(
-    namespace: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
+    namespace: LogicalPlan,
+    properties: Map[String, String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
  */
 case class AlterNamespaceSetLocationStatement(
-    namespace: Seq[String],
-    location: String) extends ParsedStatement
+    namespace: LogicalPlan,
+    location: String) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
-case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
+case class ShowNamespacesStatement(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A USE statement, as parsed from SQL.
