@@ -28,124 +28,76 @@ class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
   private val sparkHome =
     sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
 
-  // creates a spark-class process that invokes the exception thrower
-  // the testcases will detect the process's exit code
-  def getThrowerProcess(exceptionThrower: Any, exitOnUncaughtException: Boolean): Process = {
-    Utils.executeCommand(
-      Seq(s"$sparkHome/bin/spark-class",
-        exceptionThrower.getClass.getCanonicalName.dropRight(1), // drops the "$" at the end
-        exitOnUncaughtException.toString),
-      new File(sparkHome),
-      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-  }
+  Seq(
+    (ThrowableTypes.RuntimeException, true, SparkExitCode.UNCAUGHT_EXCEPTION),
+    (ThrowableTypes.RuntimeException, false, 0),
+    (ThrowableTypes.OutOfMemoryError, true, SparkExitCode.OOM),
+    (ThrowableTypes.OutOfMemoryError, false, SparkExitCode.OOM),
+    (ThrowableTypes.SparkFatalRuntimeException, true, SparkExitCode.UNCAUGHT_EXCEPTION),
+    (ThrowableTypes.SparkFatalRuntimeException, false, 0),
+    (ThrowableTypes.SparkFatalOutOfMemoryError, true, SparkExitCode.OOM),
+    (ThrowableTypes.SparkFatalOutOfMemoryError, false, SparkExitCode.OOM)
+  ).foreach {
+    case (throwable: ThrowableTypes.ThrowableTypesVal,
+    exitOnUncaughtException: Boolean, expectedExitCode) =>
+      test(s"SPARK-30310: Test uncaught $throwable, " +
+          s"exitOnUncaughtException = $exitOnUncaughtException") {
 
-  test("SPARK-30310: Test uncaught RuntimeException, exitOnUncaughtException = true") {
-    val process = getThrowerProcess(RuntimeExceptionThrower, exitOnUncaughtException = true)
-    assert(process.waitFor == SparkExitCode.UNCAUGHT_EXCEPTION)
-  }
-
-  test("SPARK-30310: Test uncaught RuntimeException, exitOnUncaughtException = false") {
-    val process = getThrowerProcess(RuntimeExceptionThrower, exitOnUncaughtException = false)
-    assert(process.waitFor == 0)
-  }
-
-  test("SPARK-30310: Test uncaught OutOfMemoryError, exitOnUncaughtException = true") {
-    val process = getThrowerProcess(OutOfMemoryErrorThrower, exitOnUncaughtException = true)
-    assert(process.waitFor == SparkExitCode.OOM)
-  }
-
-  test("SPARK-30310: Test uncaught OutOfMemoryError, exitOnUncaughtException = false") {
-    val process = getThrowerProcess(OutOfMemoryErrorThrower, exitOnUncaughtException = false)
-    assert(process.waitFor == SparkExitCode.OOM)
-  }
-
-  test("SPARK-30310: Test uncaught SparkFatalException, exitOnUncaughtException = true") {
-    val process = getThrowerProcess(SparkFatalExceptionThrower, exitOnUncaughtException = true)
-    assert(process.waitFor == SparkExitCode.UNCAUGHT_EXCEPTION)
-  }
-
-  test("SPARK-30310: Test uncaught SparkFatalException, exitOnUncaughtException = false") {
-    val process = getThrowerProcess(SparkFatalExceptionThrower, exitOnUncaughtException = false)
-    assert(process.waitFor == 0)
-  }
-
-  test("SPARK-30310: Test uncaught SparkFatalException (OOM), exitOnUncaughtException = true") {
-    val process = getThrowerProcess(SparkFatalExceptionWithOOMThrower,
-      exitOnUncaughtException = true)
-    assert(process.waitFor == SparkExitCode.OOM)
-  }
-
-  test("SPARK-30310: Test uncaught SparkFatalException (OOM), exitOnUncaughtException = false") {
-    val process = getThrowerProcess(SparkFatalExceptionWithOOMThrower,
-      exitOnUncaughtException = false)
-    assert(process.waitFor == SparkExitCode.OOM)
-  }
-
-}
-
-// a thread that uses SparkUncaughtExceptionHandler, then throws the throwable
-class ThrowableThrowerThread(t: Throwable,
-    exitOnUncaughtException: Boolean) extends Thread {
-  override def run() {
-    Thread.setDefaultUncaughtExceptionHandler(
-      new SparkUncaughtExceptionHandler(exitOnUncaughtException))
-    throw t
+        // creates a ThrowableThrower process via spark-class and verify the exit code
+        val process = Utils.executeCommand(
+          Seq(s"$sparkHome/bin/spark-class",
+            ThrowableThrower.getClass.getCanonicalName.dropRight(1), // drops the "$" at the end
+            throwable.name,
+            exitOnUncaughtException.toString),
+          new File(sparkHome),
+          Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome)
+        )
+        assert(process.waitFor == expectedExitCode)
+      }
   }
 }
 
-// Objects to be invoked by spark-class for different Throwable types
-// that SparkUncaughtExceptionHandler handles.  spark-class will exit with
-// exit code dictated by either:
-// - SparkUncaughtExceptionHandler (SparkExitCode)
-// - main() (0, or -1 when args is empty)
+// enumeration object for the Throwable types that SparkUncaughtExceptionHandler handles
+object ThrowableTypes extends Enumeration {
 
-object RuntimeExceptionThrower {
-  def main(args: Array[String]): Unit = {
-    if (args.length > 0) {
-      val t = new ThrowableThrowerThread(new RuntimeException,
-        Try(args(0).toBoolean).getOrElse(false))
-      t.start()
-      t.join()
-      System.exit(0)
-    } else {
-      System.exit(-1)
+  sealed case class ThrowableTypesVal(name: String, t: Throwable) extends Val(name)
+
+  val RuntimeException = ThrowableTypesVal("RuntimeException", new RuntimeException)
+  val OutOfMemoryError = ThrowableTypesVal("OutOfMemoryError", new OutOfMemoryError)
+  val SparkFatalRuntimeException = ThrowableTypesVal("SparkFatalException(RuntimeException)",
+    new SparkFatalException(new RuntimeException))
+  val SparkFatalOutOfMemoryError = ThrowableTypesVal("SparkFatalException(OutOfMemoryError)",
+    new SparkFatalException(new OutOfMemoryError))
+
+  // returns the actual Throwable by its name
+  def getThrowableByName(name: String): Throwable = {
+    super.withName(name).asInstanceOf[ThrowableTypesVal].t
+  }
+}
+
+// Invoked by spark-class for throwing a Throwable
+object ThrowableThrower {
+
+  // a thread that uses SparkUncaughtExceptionHandler and throws a Throwable by name
+  class ThrowerThread(name: String, exitOnUncaughtException: Boolean) extends Thread {
+    override def run() {
+      Thread.setDefaultUncaughtExceptionHandler(
+        new SparkUncaughtExceptionHandler(exitOnUncaughtException))
+      throw ThrowableTypes.getThrowableByName(name)
     }
   }
-}
 
-object OutOfMemoryErrorThrower {
+  // main() requires 2 args:
+  // - args(0): name of the Throwable defined in ThrowableTypes
+  // - args(1): exitOnUncaughtException (true/false)
+  //
+  // it exits with the exit code dictated by either:
+  // - SparkUncaughtExceptionHandler (SparkExitCode)
+  // - main() (0, or -1 when number of args is wrong)
   def main(args: Array[String]): Unit = {
-    if (args.length > 0) {
-      val t = new ThrowableThrowerThread(new OutOfMemoryError,
-        Try(args(0).toBoolean).getOrElse(false))
-      t.start()
-      t.join()
-      System.exit(0)
-    } else {
-      System.exit(-1)
-    }
-  }
-}
-
-object SparkFatalExceptionThrower {
-  def main(args: Array[String]): Unit = {
-    if (args.length > 0) {
-      val t = new ThrowableThrowerThread(new SparkFatalException(new RuntimeException),
-        Try(args(0).toBoolean).getOrElse(false))
-      t.start()
-      t.join()
-      System.exit(0)
-    } else {
-      System.exit(-1)
-    }
-  }
-}
-
-object SparkFatalExceptionWithOOMThrower {
-  def main(args: Array[String]): Unit = {
-    if (args.length > 0) {
-      val t = new ThrowableThrowerThread(new SparkFatalException(new OutOfMemoryError),
-        Try(args(0).toBoolean).getOrElse(false))
+    if (args.length == 2) {
+      val t = new ThrowerThread(args(0),
+        Try(args(1).toBoolean).getOrElse(false))
       t.start()
       t.join()
       System.exit(0)
