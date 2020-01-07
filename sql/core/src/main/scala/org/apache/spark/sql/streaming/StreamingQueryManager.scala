@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
@@ -37,6 +38,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
+import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -67,6 +69,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         addListener(listener)
         logInfo(s"Registered listener ${listener.getClass.getName}")
       })
+    }
+    if (sparkSession.sparkContext.conf.get(UI_ENABLED)) {
+      val statusListener = new StreamingQueryStatusListener(sparkSession.sqlContext.conf)
+      addListener(statusListener)
+      sparkSession.sparkContext.ui.foreach(new StreamingQueryTab(statusListener, _))
     }
   } catch {
     case e: Exception =>
@@ -357,7 +364,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
 
       // Make sure no other query with same id is active across all sessions
-      val activeOption = Option(sparkSession.sharedState.streamQueryStore.getActive(query.id))
+      val activeOption = Option(sparkSession.sharedState.activeStreamingQueries.get(query.id))
         .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
       val shouldStopActiveRun =
@@ -390,8 +397,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       // We still can have a race condition when two concurrent instances try to start the same
       // stream, while a third one was already active and stopped above. In this case, we throw a
       // ConcurrentModificationException.
-      val oldActiveQuery = sparkSession.sharedState.streamQueryStore.putActive(
-        query.streamingQuery) // we need to put the StreamExecution, not the wrapper
+      val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(
+        query.id, query.streamingQuery) // we need to put the StreamExecution, not the wrapper
       if (oldActiveQuery != null) {
         throw new ConcurrentModificationException(
           "Another instance of this query was just started by a concurrent session.")
@@ -415,7 +422,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
-    unregisterTerminatedStream(terminatedQuery.id)
+    unregisterTerminatedStream(terminatedQuery)
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
         lastTerminatedQuery = terminatedQuery
@@ -425,11 +432,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
   }
 
-  private def unregisterTerminatedStream(terminatedQueryId: UUID): Unit = {
+  private def unregisterTerminatedStream(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesSharedLock.synchronized {
-      // remove from shared state only if the streaming query manager also matches
-      sparkSession.sharedState.streamQueryStore.terminate(terminatedQueryId)
-      activeQueries -= terminatedQueryId
+      // remove from shared state only if the streaming execution also matches
+      sparkSession.sharedState.activeStreamingQueries.remove(
+        terminatedQuery.id, terminatedQuery)
+      activeQueries -= terminatedQuery.id
     }
   }
 }
