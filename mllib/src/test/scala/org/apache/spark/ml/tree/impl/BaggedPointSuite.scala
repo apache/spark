@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.util.MLUtils
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.serializer.KryoSerializer
 
 /**
  * Test suite for [[BaggedPoint]].
@@ -109,6 +112,49 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
         baggedRDD.map(_.subsampleCounts.map(_.toDouble)).collect()
       EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
+    }
+  }
+
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    MLUtils.registerKryoClasses(conf)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val values = Array(1, 2, 3)
+
+    {
+      val point = new TreePoint[Int](1.0, values, 1.0)
+      val bagged = new BaggedPoint[TreePoint[Int]](point, Array(1), 1.0)
+      val bagged2 = ser.deserialize[BaggedPoint[TreePoint[Int]]](ser.serialize(bagged))
+      assert(bagged.datum.label === bagged2.datum.label)
+      assert(bagged.datum.binnedFeatures === bagged2.datum.binnedFeatures)
+      assert(bagged.datum.weight === bagged2.datum.weight)
+      assert(bagged.subsampleCounts === bagged2.subsampleCounts)
+      assert(bagged.sampleWeight === bagged2.sampleWeight)
+    }
+
+    {
+      val point = new TreePoint[Short](1.0, values.map(_.toShort), 1.0)
+      val bagged = new BaggedPoint[TreePoint[Short]](point, Array(1), 1.0)
+      val bagged2 = ser.deserialize[BaggedPoint[TreePoint[Short]]](ser.serialize(bagged))
+      assert(bagged.datum.label === bagged2.datum.label)
+      assert(bagged.datum.binnedFeatures === bagged2.datum.binnedFeatures)
+      assert(bagged.datum.weight === bagged2.datum.weight)
+      assert(bagged.subsampleCounts === bagged2.subsampleCounts)
+      assert(bagged.sampleWeight === bagged2.sampleWeight)
+    }
+
+    {
+      val point = new TreePoint[Byte](1.0, values.map(_.toByte), 1.0)
+      val bagged = new BaggedPoint[TreePoint[Byte]](point, Array(1), 1.0)
+      val bagged2 = ser.deserialize[BaggedPoint[TreePoint[Byte]]](ser.serialize(bagged))
+      assert(bagged.datum.label === bagged2.datum.label)
+      assert(bagged.datum.binnedFeatures === bagged2.datum.binnedFeatures)
+      assert(bagged.datum.weight === bagged2.datum.weight)
+      assert(bagged.subsampleCounts === bagged2.subsampleCounts)
+      assert(bagged.sampleWeight === bagged2.sampleWeight)
     }
   }
 }

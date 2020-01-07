@@ -17,8 +17,11 @@
 
 package org.apache.spark.ml.tree.impl
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
+import org.apache.spark.ml.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 
@@ -38,9 +41,9 @@ import org.apache.spark.rdd.RDD
  *                        Same length as LabeledPoint.features, but values are bin indices.
  * @param weight Sample weight for this TreePoint.
  */
-private[spark] class TreePoint(
+private[spark] class TreePoint[@specialized(Byte, Short, Int) B: Integral: ClassTag](
     val label: Double,
-    val binnedFeatures: Array[Int],
+    val binnedFeatures: Array[B],
     val weight: Double) extends Serializable
 
 private[spark] object TreePoint {
@@ -53,26 +56,28 @@ private[spark] object TreePoint {
    * @param metadata  Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
-  def convertToTreeRDD(
+  def convertToTreeRDD[B: Integral: ClassTag](
       input: RDD[Instance],
       splits: Array[Array[Split]],
-      metadata: DecisionTreeMetadata): RDD[TreePoint] = {
+      metadata: DecisionTreeMetadata): RDD[TreePoint[B]] = {
+    MLUtils.registerKryoClasses(input.sparkContext.getConf)
+
     // Construct arrays for featureArity for efficiency in the inner loop.
-    val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
-    var featureIndex = 0
-    while (featureIndex < metadata.numFeatures) {
-      featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
-      featureIndex += 1
+    val featureArity = new Array[Int](metadata.numFeatures)
+    var i = 0
+    while (i < metadata.numFeatures) {
+      featureArity(i) = metadata.featureArity.getOrElse(i, 0)
+      i += 1
     }
-    val thresholds: Array[Array[Double]] = featureArity.zipWithIndex.map { case (arity, idx) =>
+    val thresholds = featureArity.zipWithIndex.map { case (arity, idx) =>
       if (arity == 0) {
         splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
       } else {
         Array.emptyDoubleArray
       }
     }
-    input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, thresholds, featureArity)
+    input.map { instance =>
+      TreePoint.labeledPointToTreePoint[B](instance, thresholds, featureArity)
     }
   }
 
@@ -83,19 +88,20 @@ private[spark] object TreePoint {
    * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
    *                      for categorical features.
    */
-  private def labeledPointToTreePoint(
+  private def labeledPointToTreePoint[B: Integral: ClassTag](
       instance: Instance,
       thresholds: Array[Array[Double]],
-      featureArity: Array[Int]): TreePoint = {
+      featureArity: Array[Int]): TreePoint[B] = {
     val numFeatures = instance.features.size
-    val arr = new Array[Int](numFeatures)
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      arr(featureIndex) =
-        findBin(featureIndex, instance, featureArity(featureIndex), thresholds(featureIndex))
-      featureIndex += 1
+    val arr = Array.ofDim[B](numFeatures)
+    var i = 0
+    val inb = implicitly[Integral[B]]
+    while (i < numFeatures) {
+      val bin = findBin(i, instance, featureArity(i), thresholds(i))
+      arr(i) = inb.fromInt(bin)
+      i += 1
     }
-    new TreePoint(instance.label, arr, instance.weight)
+    new TreePoint[B](instance.label, arr, instance.weight)
   }
 
   /**

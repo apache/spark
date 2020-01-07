@@ -19,6 +19,7 @@ package org.apache.spark.ml.tree.impl
 
 import org.apache.commons.math3.distribution.PoissonDistribution
 
+import org.apache.spark.ml.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -63,6 +64,8 @@ private[spark] object BaggedPoint {
       withReplacement: Boolean,
       extractSampleWeight: (Datum => Double) = (_: Datum) => 1.0,
       seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
+    MLUtils.registerKryoClasses(input.sparkContext.getConf)
+
     // TODO: implement weighted bootstrapping
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples,

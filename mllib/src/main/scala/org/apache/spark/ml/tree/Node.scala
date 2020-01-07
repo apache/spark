@@ -46,7 +46,9 @@ sealed abstract class Node extends Serializable {
   private[ml] def predictImpl(features: Vector): LeafNode
 
   /** Recursive prediction helper method */
-  private[ml] def predictBinned(binned: Array[Int], splits: Array[Array[Split]]): LeafNode
+  private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+      binned: Array[B],
+      splits: Array[Array[Split]]): LeafNode
 
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
@@ -122,8 +124,8 @@ class LeafNode private[ml] (
 
   override private[ml] def predictImpl(features: Vector): LeafNode = this
 
-  override private[ml] def predictBinned(
-      binned: Array[Int],
+  override private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+      binned: Array[B],
       splits: Array[Array[Split]]): LeafNode = this
 
   override private[tree] def numDescendants: Int = 0
@@ -181,14 +183,15 @@ class InternalNode private[ml] (
     }
   }
 
-  override private[ml] def predictBinned(
-      binned: Array[Int],
+  override private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+      binned: Array[B],
       splits: Array[Array[Split]]): LeafNode = {
     val i = split.featureIndex
-    if (split.shouldGoLeft(binned(i), splits(i))) {
-      leftChild.predictBinned(binned, splits)
+    val inb = implicitly[Integral[B]]
+    if (split.shouldGoLeft(inb.toInt(binned(i)), splits(i))) {
+      leftChild.predictBinned[B](binned, splits)
     } else {
-      rightChild.predictBinned(binned, splits)
+      rightChild.predictBinned[B](binned, splits)
     }
   }
 
@@ -325,13 +328,17 @@ private[tree] class LearningNode(
    *         group of nodes on one call to
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
-  def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
+  def predictImpl[@specialized(Byte, Short, Int) B: Integral](
+      binnedFeatures: Array[B],
+      splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {
       this.id
     } else {
       val split = this.split.get
       val featureIndex = split.featureIndex
-      val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
+      val inb = implicitly[Integral[B]]
+      val bin = inb.toInt(binnedFeatures(split.featureIndex))
+      val splitLeft = split.shouldGoLeft(bin, splits(featureIndex))
       if (this.leftChild.isEmpty) {
         // Not yet split. Return next layer of nodes to train
         if (splitLeft) {
@@ -341,9 +348,9 @@ private[tree] class LearningNode(
         }
       } else {
         if (splitLeft) {
-          this.leftChild.get.predictImpl(binnedFeatures, splits)
+          this.leftChild.get.predictImpl[B](binnedFeatures, splits)
         } else {
-          this.rightChild.get.predictImpl(binnedFeatures, splits)
+          this.rightChild.get.predictImpl[B](binnedFeatures, splits)
         }
       }
     }

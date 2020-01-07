@@ -338,7 +338,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
     val bcSplits = input.sparkContext.broadcast(splits)
 
-    val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
+    val treeInput = TreePoint.convertToTreeRDD[Int](input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
 
     val topNode = LearningNode.emptyNode(nodeIndex = 1)
@@ -382,7 +382,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
     val bcSplits = input.sparkContext.broadcast(splits)
 
-    val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
+    val treeInput = TreePoint.convertToTreeRDD[Int](input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
 
     val topNode = LearningNode.emptyNode(nodeIndex = 1)
