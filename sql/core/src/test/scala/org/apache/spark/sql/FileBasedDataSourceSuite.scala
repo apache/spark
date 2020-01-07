@@ -731,9 +731,19 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>
         withTempPath { dir =>
-          Seq(("a", 1), ("b", 2)).toDF("v", "p").write.format(format)
-            .partitionBy("p").save(dir.getCanonicalPath)
-          val df = spark.read.format(format).load(dir.getCanonicalPath).where("p = 1")
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format(format)
+            .partitionBy("p1", "p2")
+            .option("header", true)
+            .save(dir.getCanonicalPath)
+          val df = spark
+            .read
+            .format(format)
+            .option("header", true)
+            .load(dir.getCanonicalPath)
+            .where("p1 = 1 and p2 = 2 and value != \"a\"")
           val fileScan = df.queryExecution.executedPlan collectFirst {
             case BatchScanExec(_, f: FileScan) => f
           }
@@ -741,9 +751,10 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           assert(fileScan.get.partitionFilters.nonEmpty)
           assert(fileScan.get.planInputPartitions().forall { partition =>
             partition.asInstanceOf[FilePartition].files.forall { file =>
-              file.filePath.contains("p=1")
+              file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
             }
           })
+          checkAnswer(df, Row("b", 1, 2))
         }
       }
     }
