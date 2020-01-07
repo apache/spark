@@ -28,7 +28,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
@@ -744,6 +746,16 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
             .option("header", true)
             .load(dir.getCanonicalPath)
             .where("p1 = 1 and p2 = 2 and value != \"a\"")
+
+          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+            case f: Filter => f.condition
+          }
+          assert(filterCondition.isDefined)
+          // The partitions filters should be pushed down and no need to be reevaluated.
+          assert(filterCondition.get.collectFirst {
+            case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
+          }.isEmpty)
+
           val fileScan = df.queryExecution.executedPlan collectFirst {
             case BatchScanExec(_, f: FileScan) => f
           }

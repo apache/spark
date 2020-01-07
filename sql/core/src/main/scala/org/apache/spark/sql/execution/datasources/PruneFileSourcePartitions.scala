@@ -97,7 +97,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       if (partitionKeyFilters.nonEmpty) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withPartitionFilters(partitionKeyFilters.toSeq))
-        // The pushed down partition filters don't need to be evaluated again.
+        // The pushed down partition filters don't need to be reevaluated.
         val afterScanFilters =
           ExpressionSet(filters) -- partitionKeyFilters.filter(_.references.nonEmpty)
         rebuildPhysicalOperation(projects, afterScanFilters.toSeq, prunedV2Relation)
