@@ -281,9 +281,9 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (10) BroadcastHashJoin [codegen id : 2]
-Left keys: List(key#x)
-Right keys: List(key#x)
-Join condition: None
+Left keys      : List(key#x)
+Right keys     : List(key#x)
+Join condition : None
 
 
 -- !query 8
@@ -337,9 +337,9 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (8) BroadcastHashJoin [codegen id : 2]
-Left keys: List(key#x)
-Right keys: List(key#x)
-Join condition: None
+Left keys      : List(key#x)
+Right keys     : List(key#x)
+Join condition : None
 
 
 -- !query 9
@@ -689,9 +689,9 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (10) BroadcastHashJoin [codegen id : 2]
-Left keys: List(key#x)
-Right keys: List(key#x)
-Join condition: None
+Left keys      : List(key#x)
+Right keys     : List(key#x)
+Join condition : None
 
 
 -- !query 13
@@ -757,9 +757,9 @@ Input: [key#x, max#x]
 Input: [key#x, max(val)#x]
      
 (11) BroadcastHashJoin [codegen id : 4]
-Left keys: List(key#x)
-Right keys: List(key#x)
-Join condition: None
+Left keys      : List(key#x)
+Right keys     : List(key#x)
+Join condition : None
 
 
 -- !query 14

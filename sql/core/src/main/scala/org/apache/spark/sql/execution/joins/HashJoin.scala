@@ -49,9 +49,9 @@ trait HashJoin {
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Left keys: ${leftKeys}
-       |Right keys: ${rightKeys}
-       |Join condition: ${joinCondStr}
+       |Left keys      : ${leftKeys}
+       |Right keys     : ${rightKeys}
+       |Join condition : ${joinCondStr}
      """.stripMargin
   }
 
