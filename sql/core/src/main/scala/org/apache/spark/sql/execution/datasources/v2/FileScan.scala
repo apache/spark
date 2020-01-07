@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.execution.PartitionedFileUtil
@@ -75,6 +75,16 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+  override def equals(obj: Any): Boolean = obj match {
+    case f: FileScan =>
+      fileIndex == f.fileIndex && readSchema == f.readSchema
+        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters)
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
     val locationDesc =

@@ -91,4 +91,12 @@ case class CSVScan(
 
   override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case c: CSVScan => super.equals(c) && dataSchema == c.dataSchema && options == c.options
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode()
 }

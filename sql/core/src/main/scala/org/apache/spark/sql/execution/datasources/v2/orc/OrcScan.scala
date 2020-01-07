@@ -52,10 +52,9 @@ case class OrcScan(
 
   override def equals(obj: Any): Boolean = obj match {
     case o: OrcScan =>
-      fileIndex == o.fileIndex && dataSchema == o.dataSchema &&
-        readDataSchema == o.readDataSchema && readPartitionSchema == o.readPartitionSchema &&
-        options == o.options && equivalentFilters(pushedFilters, o.pushedFilters) &&
-        Set(partitionFilters.map(_.canonicalized)) == Set(o.partitionFilters.map(_.canonicalized))
+      super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
+        equivalentFilters(pushedFilters, o.pushedFilters)
+
     case _ => false
   }
 

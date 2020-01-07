@@ -81,10 +81,8 @@ case class ParquetScan(
 
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
-      fileIndex == p.fileIndex && dataSchema == p.dataSchema &&
-        readDataSchema == p.readDataSchema && readPartitionSchema == p.readPartitionSchema &&
-        options == p.options && equivalentFilters(pushedFilters, p.pushedFilters) &&
-        Set(partitionFilters.map(_.canonicalized)) == Set(p.partitionFilters.map(_.canonicalized))
+      super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
+        equivalentFilters(pushedFilters, p.pushedFilters)
     case _ => false
   }
 
