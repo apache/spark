@@ -2279,7 +2279,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create an optional location string.
    */
-  private def visitLocationSpecList(ctx: java.util.List[LocationSpecContext]): Option[String] = {
+  protected def visitLocationSpecList(ctx: java.util.List[LocationSpecContext]): Option[String] = {
     ctx.asScala.headOption.map(visitLocationSpec)
   }
 
