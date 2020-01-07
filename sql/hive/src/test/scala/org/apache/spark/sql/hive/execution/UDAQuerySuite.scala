@@ -172,6 +172,9 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
       (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
     data3.write.saveAsTable("agg3")
 
+    val data4 = Seq[Boolean](true, false, true).toDF("boolvalues")
+    data4.write.saveAsTable("agg4")
+
     val emptyDF = spark.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
@@ -188,6 +191,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
       spark.sql("DROP TABLE IF EXISTS agg1")
       spark.sql("DROP TABLE IF EXISTS agg2")
       spark.sql("DROP TABLE IF EXISTS agg3")
+      spark.sql("DROP TABLE IF EXISTS agg4")
       spark.catalog.dropTempView("emptyTable")
     } finally {
       super.afterAll()
@@ -356,6 +360,15 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     checkAnswer(
       data.agg(agg($"value1")),
       Row(CountSerDeSQL(4, 4, 5050)) :: Nil)
+  }
+
+  test("verify type casting failure") {
+    assertThrows[org.apache.spark.sql.AnalysisException] {
+      spark.sql(
+        """
+          |SELECT mydoublesum(boolvalues) FROM agg4
+        """.stripMargin)
+    }
   }
 }
 
