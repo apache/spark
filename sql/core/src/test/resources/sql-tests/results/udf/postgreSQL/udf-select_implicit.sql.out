@@ -242,31 +242,36 @@ struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS IN
 SELECT udf(udf(a)/2), udf(udf(a)/2) FROM test_missing_target
 	ORDER BY udf(udf(a)/2)
 -- !query 23 schema
-struct<CAST(udf(cast((cast(udf(cast(a as string)) as int) div 2) as string)) AS INT):int,CAST(udf(cast((cast(udf(cast(a as string)) as int) div 2) as string)) AS INT):int>
+struct<CAST(udf(cast((cast(cast(udf(cast(a as string)) as int) as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast((cast(cast(udf(cast(a as string)) as int) as double) / cast(2 as double)) as string)) AS DOUBLE):double>
 -- !query 23 output
-0	0
-0	0
-1	1
-1	1
-2	2
-2	2
-3	3
-3	3
-4	4
-4	4
+0.0	0.0
+0.5	0.5
+1.0	1.0
+1.5	1.5
+2.0	2.0
+2.5	2.5
+3.0	3.0
+3.5	3.5
+4.0	4.0
+4.5	4.5
 
 
 -- !query 24
 SELECT udf(a/2), udf(a/2) FROM test_missing_target
 	GROUP BY udf(a/2) ORDER BY udf(a/2)
 -- !query 24 schema
-struct<CAST(udf(cast((a div 2) as string)) AS INT):int,CAST(udf(cast((a div 2) as string)) AS INT):int>
+struct<CAST(udf(cast((cast(a as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast((cast(a as double) / cast(2 as double)) as string)) AS DOUBLE):double>
 -- !query 24 output
-0	0
-1	1
-2	2
-3	3
-4	4
+0.0	0.0
+0.5	0.5
+1.0	1.0
+1.5	1.5
+2.0	2.0
+2.5	2.5
+3.0	3.0
+3.5	3.5
+4.0	4.0
+4.5	4.5
 
 
 -- !query 25
@@ -334,7 +339,8 @@ SELECT udf(count(b)) FROM test_missing_target GROUP BY udf(b/2) ORDER BY udf(b/2
 struct<CAST(udf(cast(count(b) as string)) AS BIGINT):bigint>
 -- !query 30 output
 1
-5
+2
+3
 4
 
 
@@ -373,8 +379,10 @@ SELECT udf(count(b)) FROM test_missing_target
 -- !query 33 schema
 struct<CAST(udf(cast(count(b) as string)) AS BIGINT):bigint>
 -- !query 33 output
-7
+4
 3
+2
+1
 
 
 -- !query 34
@@ -394,11 +402,12 @@ test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b/2) ORDER BY udf(x.b/2)
 -- !query 35 schema
-struct<CAST(udf(cast((b div 2) as string)) AS INT):int,CAST(udf(cast(count(cast(udf(cast(b as string)) as int)) as string)) AS BIGINT):bigint>
+struct<CAST(udf(cast((cast(b as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast(count(cast(udf(cast(b as string)) as int)) as string)) AS BIGINT):bigint>
 -- !query 35 output
-0	1
-1	5
-2	4
+0.5	1
+1.0	2
+1.5	3
+2.0	4
 
 
 -- !query 36

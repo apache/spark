@@ -47,13 +47,13 @@ class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("join - sorted columns not in join's outputSet") {
-    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as('df1)
-    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df2)
-    val df3 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df3)
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as("df1")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df2")
+    val df3 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df3")
 
     checkAnswer(
       df.join(df2, $"df1.int" === $"df2.int", "outer").select($"df1.int", $"df2.int2")
-        .orderBy('str_sort.asc, 'str.asc),
+        .orderBy(Symbol("str_sort").asc, Symbol("str").asc),
       Row(null, 6) :: Row(1, 3) :: Row(3, null) :: Nil)
 
     checkAnswer(

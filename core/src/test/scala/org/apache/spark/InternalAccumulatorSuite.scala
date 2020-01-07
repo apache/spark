@@ -90,7 +90,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         TaskContext.get().taskMetrics().testAccum.get.add(1)
         iter
       }
-      .reduceByKey { case (x, y) => x + y }
+      .reduceByKey { (x, y) => x + y }
       .mapPartitions { iter =>
         TaskContext.get().taskMetrics().testAccum.get.add(10)
         iter

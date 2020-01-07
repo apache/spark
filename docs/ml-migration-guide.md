@@ -254,7 +254,7 @@ Deprecations in the `spark.mllib` and `spark.ml` packages include:
  We move all functionality in overridden methods to the corresponding `transformSchema`.
 * [SPARK-14829](https://issues.apache.org/jira/browse/SPARK-14829):
  In `spark.mllib` package, `LinearRegressionWithSGD`, `LassoWithSGD`, `RidgeRegressionWithSGD` and `LogisticRegressionWithSGD` have been deprecated.
- We encourage users to use `spark.ml.regression.LinearRegresson` and `spark.ml.classification.LogisticRegresson`.
+ We encourage users to use `spark.ml.regression.LinearRegression` and `spark.ml.classification.LogisticRegression`.
 * [SPARK-14900](https://issues.apache.org/jira/browse/SPARK-14900):
  In `spark.mllib.evaluation.MulticlassMetrics`, the parameters `precision`, `recall` and `fMeasure` have been deprecated in favor of `accuracy`.
 * [SPARK-15644](https://issues.apache.org/jira/browse/SPARK-15644):
@@ -266,12 +266,12 @@ Deprecations in the `spark.mllib` and `spark.ml` packages include:
 Changes of behavior in the `spark.mllib` and `spark.ml` packages include:
 
 * [SPARK-7780](https://issues.apache.org/jira/browse/SPARK-7780):
- `spark.mllib.classification.LogisticRegressionWithLBFGS` directly calls `spark.ml.classification.LogisticRegresson` for binary classification now.
+ `spark.mllib.classification.LogisticRegressionWithLBFGS` directly calls `spark.ml.classification.LogisticRegression` for binary classification now.
  This will introduce the following behavior changes for `spark.mllib.classification.LogisticRegressionWithLBFGS`:
     * The intercept will not be regularized when training binary classification model with L1/L2 Updater.
     * If users set without regularization, training with or without feature scaling will return the same solution by the same convergence rate.
 * [SPARK-13429](https://issues.apache.org/jira/browse/SPARK-13429):
- In order to provide better and consistent result with `spark.ml.classification.LogisticRegresson`,
+ In order to provide better and consistent result with `spark.ml.classification.LogisticRegression`,
  the default value of `spark.mllib.classification.LogisticRegressionWithLBFGS`: `convergenceTol` has been changed from 1E-4 to 1E-6.
 * [SPARK-12363](https://issues.apache.org/jira/browse/SPARK-12363):
  Fix a bug of `PowerIterationClustering` which will likely change its result.

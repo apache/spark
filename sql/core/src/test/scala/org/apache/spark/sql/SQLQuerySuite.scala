@@ -26,10 +26,11 @@ import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -783,8 +784,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |   SELECT * FROM testData UNION ALL
           |   SELECT * FROM testData) y
           |WHERE x.key = y.key""".stripMargin),
-      testData.rdd.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -2835,6 +2837,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
 
+  test("Support filter clause for aggregate function with hash aggregate") {
+    Seq(("COUNT(a)", 3), ("COLLECT_LIST(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+      val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collectFirst {
+        case agg: HashAggregateExec => agg.aggregateExpressions
+        case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 1)
+      aggregateExpressions.get.foreach { expr =>
+        assert(expr.filter.isDefined)
+      }
+      checkAnswer(df, Row(funcToResult._2) :: Nil)
+    }
+  }
+
+  test("Support filter clause for aggregate function uses SortAggregateExec") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collectFirst {
+        case agg: SortAggregateExec => agg.aggregateExpressions
+      }
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 1)
+      aggregateExpressions.get.foreach { expr =>
+        assert(expr.filter.isDefined)
+      }
+      checkAnswer(df, Row(3) :: Nil)
+    }
+  }
+
   test("Non-deterministic aggregate functions should not be deduplicated") {
     val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -3312,6 +3348,41 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       cubeDF.join(cubeDF, "nums"),
       Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
+  }
+
+  test("SPARK-29860: Fix dataType mismatch issue for InSubquery") {
+    withTempView("ta", "tb", "tc", "td", "te", "tf") {
+      sql("CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(8, 0))) AS ta(id)")
+      sql("CREATE TEMPORARY VIEW tb AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(7, 2))) AS tb(id)")
+      sql("CREATE TEMPORARY VIEW tc AS SELECT * FROM VALUES(CAST(1 AS DOUBLE)) AS tc(id)")
+      sql("CREATE TEMPORARY VIEW td AS SELECT * FROM VALUES(CAST(1 AS FLOAT)) AS td(id)")
+      sql("CREATE TEMPORARY VIEW te AS SELECT * FROM VALUES(CAST(1 AS BIGINT)) AS te(id)")
+      sql("CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
+      val df1 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tb)")
+      checkAnswer(df1, Row(new java.math.BigDecimal(1)))
+      val df2 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tc)")
+      checkAnswer(df2, Row(new java.math.BigDecimal(1)))
+      val df3 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM td)")
+      checkAnswer(df3, Row(new java.math.BigDecimal(1)))
+      val df4 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM te)")
+      checkAnswer(df4, Row(new java.math.BigDecimal(1)))
+      val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
+      checkAnswer(df5, Array.empty[Row])
+    }
+  }
+
+  test("SPARK-28670: create function should throw AnalysisException if UDF class not found") {
+    Seq(true, false).foreach { isTemporary =>
+      val exp = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udtf_test
+             |AS 'org.apache.spark.sql.hive.execution.UDFTest'
+             |USING JAR '/var/invalid/invalid.jar'
+        """.stripMargin)
+      }
+      assert(exp.getMessage.contains("Resources not found"))
+    }
   }
 }
 

@@ -26,6 +26,7 @@ import scala.concurrent.duration._
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
@@ -153,7 +154,6 @@ class HeartbeatReceiverSuite
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
     // Only the second executor should be expired as a dead host
-    verify(scheduler).executorLost(meq(executorId2), any())
     val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
@@ -209,6 +209,12 @@ class HeartbeatReceiverSuite
     // explicitly request new executors. For more detail, see SPARK-8119.
     assert(fakeClusterManager.getTargetNumExecutors === 2)
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
+    // [SPARK-27348] HeartbeatReceiver should remove lost executor from scheduler backend
+    eventually(timeout(5.seconds)) {
+      assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId1))
+      assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId2))
+    }
+    fakeSchedulerBackend.stop()
   }
 
   /** Manually send a heartbeat and return the response. */

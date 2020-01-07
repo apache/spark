@@ -156,7 +156,7 @@ class ObjectHashAggregateSuite
       )
 
       checkAnswer(
-        df.groupBy($"id" % 4 as 'mod).agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.groupBy($"id" % 4 as "mod").agg(aggFunctions.head, aggFunctions.tail: _*),
         data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
           key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         }.toSeq.map {

@@ -191,6 +191,8 @@ class MemoryDataWriter(partition: Int, schema: StructType)
   }
 
   override def abort(): Unit = {}
+
+  override def close(): Unit = {}
 }
 
 

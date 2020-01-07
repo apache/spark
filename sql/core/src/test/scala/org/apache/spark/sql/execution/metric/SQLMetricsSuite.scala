@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -84,8 +85,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     val ds = spark.range(10).filter('id < 5)
     testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
       0L -> (("WholeStageCodegen (1)", Map(
-        "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
-    ), true)
+        "duration total (min, med, max (stageId (attemptId): taskId))" -> {
+          _.toString.matches(timingMetricPattern)
+        })))), true)
   }
 
   test("Aggregate metrics") {
@@ -95,9 +97,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters (min, med, max (stageId (attemptId): taskId))" ->
+          aggregateMetricsPattern),
       Map("number of output rows" -> 1L,
-        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters (min, med, max (stageId (attemptId): taskId))" ->
+          aggregateMetricsPattern))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
       "local blocks read" -> 2L,
@@ -113,9 +117,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     val df2 = testData2.groupBy('a).count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters (min, med, max (stageId (attemptId): taskId))" ->
+          aggregateMetricsPattern),
       Map("number of output rows" -> 3L,
-        "avg hash probe bucket list iters (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters (min, med, max (stageId (attemptId): taskId))" ->
+          aggregateMetricsPattern))
+
     val shuffleExpected2 = Map(
       "records read" -> 4L,
       "local blocks read" -> 4L,
@@ -161,9 +168,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe bucket list iters (min, med, max)")
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toDouble > 1.0)
+        val probes = metrics(nodeId)._2("avg hash probe bucket list iters (min, med, max (stageId" +
+          " (attemptId): taskId))")
+        // Extract min, med, max from the string and strip off everthing else.
+        val index = probes.toString.stripPrefix("\n(").stripSuffix(")").indexOf(" (", 0)
+        probes.toString.stripPrefix("\n(").stripSuffix(")").slice(0, index).split(", ").foreach {
+          probe => assert(probe.toDouble > 1.0)
         }
       }
     }
@@ -208,9 +218,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     val df = Seq(1, 3, 2).toDF("id").sort('id)
     testSparkPlanMetricsWithPredicates(df, 2, Map(
       0L -> (("Sort", Map(
-        "sort time total (min, med, max)" -> {_.toString.matches(timingMetricPattern)},
-        "peak memory total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)},
-        "spill size total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)})))
+        "sort time total (min, med, max (stageId (attemptId): taskId))" -> {
+          _.toString.matches(timingMetricPattern)
+        },
+        "peak memory total (min, med, max (stageId (attemptId): taskId))" -> {
+          _.toString.matches(sizeMetricPattern)
+        },
+        "spill size total (min, med, max (stageId (attemptId): taskId))" -> {
+          _.toString.matches(sizeMetricPattern)
+        })))
     ))
   }
 
@@ -597,5 +613,30 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
       Map(1L -> (("InMemoryTableScan", Map.empty)))
     )
+  }
+
+  test("SPARK-28332: SQLMetric merge should handle -1 properly") {
+    def checkSparkPlanMetrics(plan: SparkPlan, expected: Map[String, Long]): Unit = {
+      expected.foreach { case (metricName: String, metricValue: Long) =>
+        assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
+        val actualMetric = plan.metrics.get(metricName).get
+        assert(actualMetric.value == metricValue,
+          s"The query plan metric $metricName did not match, " +
+            s"expected:$metricValue, actual:${actualMetric.value}")
+      }
+    }
+
+    val df = testData.join(testData2.filter('b === 0), $"key" === $"a", "left_outer")
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+
+    val exchanges = plan.collect {
+      case s: ShuffleExchangeExec => s
+    }
+
+    assert(exchanges.size == 2, "The query plan should have two shuffle exchanges")
+
+    checkSparkPlanMetrics(exchanges(0), Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
+    checkSparkPlanMetrics(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
   }
 }

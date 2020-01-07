@@ -72,6 +72,7 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = {}
+  override def close(): Unit = {}
 }
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {

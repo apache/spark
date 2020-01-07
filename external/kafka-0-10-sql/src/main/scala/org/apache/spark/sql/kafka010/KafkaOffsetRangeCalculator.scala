@@ -23,7 +23,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
- * Class to calculate offset ranges to process based on the the from and until offsets, and
+ * Class to calculate offset ranges to process based on the from and until offsets, and
  * the configured `minPartitions`.
  */
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int]) {

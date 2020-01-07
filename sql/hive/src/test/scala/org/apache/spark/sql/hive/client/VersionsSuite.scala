@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -168,6 +169,34 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: create/get/alter database should pick right user name as owner") {
+      if (version != "0.12") {
+        val currentUser = UserGroupInformation.getCurrentUser.getUserName
+        val ownerName = "SPARK_29425"
+        val db1 = "SPARK_29425_1"
+        val db2 = "SPARK_29425_2"
+        val ownerProps = Map("ownerName" -> ownerName)
+
+        // create database with owner
+        val dbWithOwner = CatalogDatabase(db1, "desc", Utils.createTempDir().toURI, ownerProps)
+        client.createDatabase(dbWithOwner, ignoreIfExists = true)
+        val getDbWithOwner = client.getDatabase(db1)
+        assert(getDbWithOwner.properties("ownerName") === ownerName)
+        // alter database without owner
+        client.alterDatabase(getDbWithOwner.copy(properties = Map()))
+        assert(client.getDatabase(db1).properties("ownerName") === "")
+
+        // create database without owner
+        val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
+        client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
+        val getDbWithoutOwner = client.getDatabase(db2)
+        assert(getDbWithoutOwner.properties("ownerName") === currentUser)
+        // alter database with owner
+        client.alterDatabase(getDbWithoutOwner.copy(properties = ownerProps))
+        assert(client.getDatabase(db2).properties("ownerName") === ownerName)
+      }
     }
 
     test(s"$version: createDatabase with null description") {

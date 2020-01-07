@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -82,9 +82,6 @@ trait ProgressReporter extends Logging {
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
-  /** Count the total input records of this streaming query. */
-  private val querySummary = new QuerySummary()
-
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
@@ -114,8 +111,6 @@ trait ProgressReporter extends Logging {
   def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
     progressBuffer.lastOption.orNull
   }
-
-  def getQuerySummary: QuerySummary = querySummary
 
   /** Begins recording statistics about query progress for a given trigger. */
   protected def startTrigger(): Unit = {
@@ -165,8 +160,6 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
-      querySummary.updateMetric(QuerySummary.TOTAL_INPUT_RECORDS,
-        oldValue => oldValue.asInstanceOf[Long] + numRecords)
       new SourceProgress(
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
@@ -180,6 +173,7 @@ trait ProgressReporter extends Logging {
     val sinkProgress = SinkProgress(
       sink.toString,
       sinkCommitProgress.map(_.numOutputRows))
+    val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -192,7 +186,8 @@ trait ProgressReporter extends Logging {
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
-      sink = sinkProgress)
+      sink = sinkProgress,
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
     if (hasNewData) {
       // Reset noDataEventTimestamp if we processed any data
@@ -331,6 +326,16 @@ trait ProgressReporter extends Logging {
     }
   }
 
+  /** Extracts observed metrics from the most recent query execution. */
+  private def extractObservedMetrics(
+      hasNewData: Boolean,
+      lastExecution: QueryExecution): Map[String, Row] = {
+    if (!hasNewData || lastExecution == null) {
+      return Map.empty
+    }
+    lastExecution.observedMetrics
+  }
+
   /** Records the duration of running `body` for the next query progress update. */
   protected def reportTimeTaken[T](triggerDetailKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
@@ -352,36 +357,4 @@ trait ProgressReporter extends Logging {
   protected def updateStatusMessage(message: String): Unit = {
     currentStatus = currentStatus.copy(message = message)
   }
-}
-
-/**
- * A summary information of the streaming query.
- */
-class QuerySummary {
-  private val summary = new mutable.HashMap[String, Any]
-
-  summary.put(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
-
-  def addMetric(name: String, value: Any): Unit = {
-    summary.put(name, value)
-  }
-
-  def updateMetric(name: String, body: Any => Any): Unit = {
-    if (summary.contains(name)) {
-      val oldValue = summary(name)
-      summary.put(name, body(oldValue))
-    }
-  }
-
-  def getMetric[T](name: String, default: T): T = {
-    if (summary.contains(name)) {
-      summary(name).asInstanceOf[T]
-    } else {
-      default
-    }
-  }
-}
-
-object QuerySummary {
-  val TOTAL_INPUT_RECORDS = "TotalInputRecords"
 }

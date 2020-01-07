@@ -135,7 +135,7 @@ class ForeachDataWriter[T](
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
-  private var closeCalled: Boolean = false
+  private var errorOrNull: Throwable = _
 
   override def write(record: InternalRow): Unit = {
     if (!opened) return
@@ -144,25 +144,24 @@ class ForeachDataWriter[T](
       writer.process(rowConverter(record))
     } catch {
       case t: Throwable =>
-        closeWriter(t)
+        errorOrNull = t
         throw t
     }
+
   }
 
   override def commit(): WriterCommitMessage = {
-    closeWriter(null)
     ForeachWriterCommitMessage
   }
 
   override def abort(): Unit = {
-    closeWriter(new SparkException("Foreach writer has been aborted due to a task failure"))
+    if (errorOrNull == null) {
+      errorOrNull = new SparkException("Foreach writer has been aborted due to a task failure")
+    }
   }
 
-  private def closeWriter(errorOrNull: Throwable): Unit = {
-    if (!closeCalled) {
-      closeCalled = true
-      writer.close(errorOrNull)
-    }
+  override def close(): Unit = {
+    writer.close(errorOrNull)
   }
 }
 

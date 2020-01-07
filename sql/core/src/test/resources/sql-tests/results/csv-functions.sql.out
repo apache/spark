@@ -15,7 +15,7 @@ select from_csv('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yy
 -- !query 1 schema
 struct<from_csv(26/08/2015):struct<time:timestamp>>
 -- !query 1 output
-{"time":2015-08-26 00:00:00.0}
+{"time":2015-08-26 00:00:00}
 
 
 -- !query 2
