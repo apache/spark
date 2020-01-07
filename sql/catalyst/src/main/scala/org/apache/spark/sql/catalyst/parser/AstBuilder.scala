@@ -2499,18 +2499,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   private def checkNamespaceProperties(
-      properties: Map[String, String], ctx: ParserRuleContext): Unit = withOrigin(ctx) {
+      properties: Map[String, String],
+      ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
     import SupportsNamespaces._
     if (!conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)) {
       properties.foreach {
-        case (PROP_LOCATION, _) => throw new ParseException(s"$PROP_LOCATION is a reserved" +
-          s" namespace property, please use the LOCATION clause to specify it.", ctx)
-        case (PROP_COMMENT, _) => throw new ParseException(s"$PROP_COMMENT is a reserved" +
-          s" namespace property, please use the COMMENT clause to specify it.", ctx)
+        case (PROP_LOCATION, _) =>
+          throw new ParseException(s"$PROP_LOCATION is a reserved" + s" namespace property," +
+            s" please use the LOCATION clause to specify it.", ctx)
+        case (PROP_COMMENT, _) =>
+          throw new ParseException(s"$PROP_COMMENT is a reserved" + s" namespace property," +
+            s" please use the COMMENT clause to specify it.", ctx)
         case _ =>
       }
+      properties
+    } else {
+      properties -- RESERVED_PROPERTIES.asScala
     }
   }
+
   /**
    * Create a [[CreateNamespaceStatement]] command.
    *
@@ -2540,7 +2547,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
-    checkNamespaceProperties(properties, ctx)
+    properties = checkNamespaceProperties(properties, ctx)
 
     Option(ctx.comment).map(string).foreach {
       properties += PROP_COMMENT -> _
@@ -2581,8 +2588,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-      val properties = visitPropertyKeyValues(ctx.tablePropertyList)
-      checkNamespaceProperties(properties, ctx)
+      val properties = checkNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
       AlterNamespaceSetPropertiesStatement(
         visitMultipartIdentifier(ctx.multipartIdentifier),
         properties)

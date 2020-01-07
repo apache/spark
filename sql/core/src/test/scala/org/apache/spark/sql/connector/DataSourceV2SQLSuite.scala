@@ -878,14 +878,14 @@ class DataSourceV2SQLSuite
       SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
         withNamespace("testcat.reservedTest") {
           withTempDir { tmpDir =>
-            val sideEffectVal = tmpDir.getCanonicalPath
-            sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='$sideEffectVal')")
+            val noEffectVal = tmpDir.getCanonicalPath
+            sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='$noEffectVal')")
             assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
               .toDF("k", "v")
               .where("k='Properties'")
-              .isEmpty, s"$key is a reserved namespace property")
+              .isEmpty, s"$key is a reserved namespace property and ignored")
             assert(catalog("testcat").asNamespaceCatalog
-              .loadNamespaceMetadata(Array("reservedTest")).get(key) === sideEffectVal)
+              .loadNamespaceMetadata(Array("reservedTest")).get(key) !== noEffectVal)
           }
         }
       }
@@ -1005,15 +1005,15 @@ class DataSourceV2SQLSuite
       SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
         withNamespace("testcat.reservedTest") {
           withTempDir { tmpDir =>
-            val sideEffectVal = tmpDir.getCanonicalPath
+            val noEffectVal = tmpDir.getCanonicalPath
             sql(s"CREATE NAMESPACE testcat.reservedTest")
-            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='$sideEffectVal')")
+            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='$noEffectVal')")
             assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
               .toDF("k", "v")
               .where("k='Properties'")
-              .isEmpty, s"$key is a reserved namespace property")
+              .isEmpty, s"$key is a reserved namespace property and ignored")
             assert(catalog("testcat").asNamespaceCatalog
-              .loadNamespaceMetadata(Array("reservedTest")).get(key) === sideEffectVal)
+              .loadNamespaceMetadata(Array("reservedTest")).get(key) !== noEffectVal)
           }
         }
       }
