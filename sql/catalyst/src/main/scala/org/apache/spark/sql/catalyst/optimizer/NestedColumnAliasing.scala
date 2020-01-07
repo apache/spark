@@ -173,6 +173,13 @@ object GeneratorNestedColumnAliasing {
           Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
       }
 
+    case Project(projectList, g: Generate) if SQLConf.get.nestedSchemaPruningEnabled &&
+        canPruneGenerator(g.generator) =>
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+      }
+
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
       NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
@@ -180,7 +187,8 @@ object GeneratorNestedColumnAliasing {
           pruneGenerate(g, nestedFieldToAlias, attrToAliases)
       }
 
-    case _ => None
+    case _ =>
+      None
   }
 
   private def pruneGenerate(

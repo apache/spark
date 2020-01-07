@@ -597,13 +597,21 @@ object ColumnPruning extends Rule[LogicalPlan] {
       s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
-    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
-      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
-      val newChild = prunedChild(g.child, requiredAttrs)
-      val unrequired = g.generator.references -- p.references
-      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
-        .map(_._2)
-      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+    case p @ Project(_, g: Generate) =>
+      val currP = if (p.references != g.outputSet) {
+        val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+        val newChild = prunedChild(g.child, requiredAttrs)
+        val unrequired = g.generator.references -- p.references
+        val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+          .map(_._2)
+        p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+      } else {
+        p
+      }
+      // If we can prune nested column on Project + Generate, do it now.
+      // Otherwise by transforming down to Generate, it could be pruned individually,
+      // and causes nested column on top Project unable to resolve.
+      GeneratorNestedColumnAliasing.unapply(currP).getOrElse(currP)
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(p) => p
