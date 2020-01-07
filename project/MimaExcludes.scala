@@ -62,6 +62,9 @@ object MimaExcludes {
     // [SPARK-29417][CORE] Resource Scheduling - add TaskContext.resource java api
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resourcesJMap"),
 
+    // [SPARK-27495][CORE] Support Stage Level Scheduling
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resourceProfileId"),
+
     // [SPARK-27410][MLLIB] Remove deprecated / no-op mllib.KMeans getRuns, setRuns
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
