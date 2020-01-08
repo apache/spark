@@ -877,16 +877,14 @@ class DataSourceV2SQLSuite
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
       SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
         withNamespace("testcat.reservedTest") {
-          withTempDir { tmpDir =>
-            val noEffectVal = tmpDir.getCanonicalPath
-            sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='$noEffectVal')")
-            assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
-              .toDF("k", "v")
-              .where("k='Properties'")
-              .isEmpty, s"$key is a reserved namespace property and ignored")
-            assert(catalog("testcat").asNamespaceCatalog
-              .loadNamespaceMetadata(Array("reservedTest")).get(key) !== noEffectVal)
-          }
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(meta.get(key) === null, "reserved properties should not have side effects")
         }
       }
     }
@@ -1004,17 +1002,15 @@ class DataSourceV2SQLSuite
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
       SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
         withNamespace("testcat.reservedTest") {
-          withTempDir { tmpDir =>
-            val noEffectVal = tmpDir.getCanonicalPath
-            sql(s"CREATE NAMESPACE testcat.reservedTest")
-            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='$noEffectVal')")
-            assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
-              .toDF("k", "v")
-              .where("k='Properties'")
-              .isEmpty, s"$key is a reserved namespace property and ignored")
-            assert(catalog("testcat").asNamespaceCatalog
-              .loadNamespaceMetadata(Array("reservedTest")).get(key) !== noEffectVal)
-          }
+          sql(s"CREATE NAMESPACE testcat.reservedTest")
+          sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(meta.get(key) === null, "reserved properties should not have side effects")
         }
       }
     }
