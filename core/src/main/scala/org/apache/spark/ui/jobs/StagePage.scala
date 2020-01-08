@@ -723,13 +723,19 @@ private[ui] class TaskPagedTable(
       })
     val details = if (isMultiline) {
       // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle
+       ('collapsed');clickDetails();" class="expand-details"><span id="hidedetails">+details</span>
+        <span id="showdetails" style="display: none;">-details</span>
       </span> ++
         <div class="stacktrace-details collapsed">
           <pre>{error}</pre>
         </div>
+        <script>
+          function clickDetails() {{
+          $('#showdetails').toggle();
+          $('#hidedetails').toggle();
+          }}
+        </script>
       // scalastyle:on
     } else {
       ""
