@@ -2779,9 +2779,10 @@ object SparkContext extends Logging {
       } else {
         executorCores.get
       }
+      // some cluster managers don't set the EXECUTOR_CORES config by default (standalone
+      // and mesos coarse grained), so we can't rely on that config for those.
       val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
         (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
-      logInfo("check resources executors cores is: " + execCores)
 
       // Number of cores per executor must meet at least one task requirement.
       if (shouldCheckExecCores && execCores < taskCores) {
@@ -2825,17 +2826,27 @@ object SparkContext extends Logging {
         val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
           if (shouldCheckExecCores) {
-            throw new IllegalArgumentException("The number of slots has to be limited by " +
-              "the number of cores, otherwise you waste resources and dynamic allocation " +
-              "doesn't work properly. Please adjust your configuration so that all resources " +
-              "require same number of executor slots.")
+            throw new IllegalArgumentException("The number of slots on an executor has to be " +
+              "limited by the number of cores, otherwise you waste resources and " +
+              "dynamic allocation doesn't work properly. Your configuration has " +
+              s"core/task cpu slots = ${numSlots} and " +
+              s"${taskReq.resourceName} = ${resourceNumSlots}. " +
+              "Please adjust your configuration so that all resources require same number " +
+              "of executor slots.")
           }
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
         }
       }
-      // There have been checks above to make sure the executor resources were specified and are
-      // large enough if any task resources were specified.
+      if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sc.conf)) {
+        // if we can't rely on the executor cores config throw a warning for user
+        logWarning("Please ensure that the number of slots available on your " +
+          "executors is limited by the number of cores to task cpus and not another " +
+          "custom resource. If cores is not the limiting resource then dynamic " +
+          "allocation will not work properly!")
+      }
+      // warn if we would waste any resources due to another resource limiting the number of
+      // slots on an executor
       taskResourceRequirements.foreach { taskReq =>
         val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
         if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
@@ -2844,25 +2855,9 @@ object SparkContext extends Logging {
           } else {
             s"${taskReq.amount}"
           }
-          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
+          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
             s"(exec = ${execAmount}, task = ${taskReqStr}, " +
-            s"runnable tasks = ${resourceNumSlots}) will " +
-            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
-            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
-            s"your configuration."
-          if (Utils.isTesting) {
-            throw new SparkException(message)
-          } else {
-            logWarning(message)
-          }
-        }
-      }
-      if (shouldCheckExecCores && !limitingResourceName.equals("CPU")) {
-        val resourceNumSlots = numSlots * taskCores
-        if (resourceNumSlots < execCores) {
-          val message = s"The configuration of resource: CPU " +
-            s"(exec = ${execCores}, task = ${execCores}, " +
             s"runnable tasks = ${resourceNumSlots}) will " +
             s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
             s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
