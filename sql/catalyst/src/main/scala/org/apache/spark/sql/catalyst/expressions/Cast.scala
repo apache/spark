@@ -1151,16 +1151,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
+          val handleException = if (ansiEnabled) {
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+          } else {
+            s"$evNull =true;"
+          }
           code"""
             try {
               Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
-              if ($ansiEnabled) {
-                throw new NumberFormatException("invalid input syntax for type numeric: $c");
-              } else {
-                $evNull =true;
-              }
+              $handleException
             }
           """
       case BooleanType =>
