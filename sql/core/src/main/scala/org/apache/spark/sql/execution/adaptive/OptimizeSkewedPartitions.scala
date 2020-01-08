@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.Duration
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.rdd.RDD
@@ -31,7 +30,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.ThreadUtils
 
 case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
@@ -179,7 +177,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
         }
       }
       logDebug(s"number of skewed partitions is ${skewedPartitions.size}")
-      if (skewedPartitions.size > 0) {
+      if (skewedPartitions.nonEmpty) {
         val optimizedSmj = smj.transformDown {
           case sort @ SortExec(_, _, shuffleStage: ShuffleQueryStageExec, _) =>
             val shuffleStage = sort.child.asInstanceOf[ShuffleQueryStageExec]
