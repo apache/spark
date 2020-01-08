@@ -2911,21 +2911,21 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
     withTempDir { dir =>
-      val msg = intercept[SparkException] {
-        spark.sql(s"ADD FILE $dir")
-      }.getMessage
-      assert(msg.contains("is a directory and recursive is not turned on"))
+      val testFile = File.createTempFile("testFile", "1", dir)
+      spark.sql(s"ADD FILE $dir")
+      assert(new File(SparkFiles.get(s"${dir.getName}/${testFile.getName}")).exists())
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
     withTempDir { testDir =>
-      val testFile = File.createTempFile("testFile", "1", testDir)
-      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "true") {
-        spark.sql(s"ADD FILE $testDir")
-        assert(new File(SparkFiles.get(s"${testDir.getName}/${testFile.getName}")).exists())
+      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+        val msg = intercept[SparkException] {
+          spark.sql(s"ADD FILE $testDir")
+        }.getMessage
+        assert(msg.contains("is a directory and recursive is not turned on"))
       }
     }
   }
