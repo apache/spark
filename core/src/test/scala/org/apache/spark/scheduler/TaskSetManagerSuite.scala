@@ -32,7 +32,6 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.ResourceUtils._
@@ -1924,8 +1923,9 @@ class TaskSetManagerSuite
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
-    val taskSetManagers = PrivateMethod[mutable.HashMap[Int, mutable.HashMap[Int, TaskSetManager]]](
-      Symbol("taskSetsByStageIdAndAttempt"))
+    val taskSetManagers =
+      PrivateMethod[mutable.HashMap[Int, mutable.HashMap[Int, TaskSetManager]]](
+        Symbol("taskSetsByStageIdAndAttempt"))
     // get the TaskSetManager
     val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
 
@@ -1959,10 +1959,7 @@ class TaskSetManagerSuite
   }
 }
 
-class FakeLongTasks(
-    stageId: Int,
-    partitionId: Int)
-    extends FakeTask(stageId, partitionId) {
+class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {
 
   override def runTask(context: TaskContext): Int = {
     while (true) {
