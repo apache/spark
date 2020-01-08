@@ -192,7 +192,7 @@ object InMemoryFileIndex extends Logging {
     }
 
     logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-      s" The first 100 paths are: ${paths.take(100).mkString(", ")}.")
+      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
