@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -389,20 +389,63 @@ object FileStreamSource {
         s"on a different file system than the source files. source path: $sourcePath" +
         s" / base archive path: $baseArchivePath")
 
-      /**
-       * FileStreamSource reads the files which one of below conditions is met:
-       * 1) file itself is matched with source path
-       * 2) parent directory is matched with source path
-       *
-       * Checking with glob pattern is costly, so set this requirement to eliminate the cases
-       * where the archive path can be matched with source path. For example, when file is moved
-       * to archive directory, destination path will retain input file's path as suffix, so
-       * destination path can't be matched with source path if archive directory's depth is longer
-       * than 2, as neither file nor parent directory of destination path can be matched with
-       * source path.
-       */
-      require(baseArchivePath.depth() > 2, "Base archive path must have at least 2 " +
-        "subdirectories from root directory. e.g. '/data/archive'")
+      require(!isBaseArchivePathMatchedAgainstSourcePattern, "Base archive path cannot be set to" +
+        " the path where archived path can possibly match with source pattern. Ensure the base " +
+        "archive path doesn't match with source pattern in depth, where the depth is minimum of" +
+        " depth on both paths.")
+    }
+
+    private def getAncestorEnsuringDepth(path: Path, depth: Int): Path = {
+      var newPath = path
+      while (newPath.depth() > depth) {
+        newPath = newPath.getParent
+      }
+      newPath
+    }
+
+    private def isBaseArchivePathMatchedAgainstSourcePattern: Boolean = {
+      // We should disallow end users to set base archive path which path matches against source
+      // pattern to avoid checking each source file. There're couple of cases which allow
+      // FileStreamSource to read any depth of subdirectory under the source pattern, so we should
+      // consider all three cases 1) both has same depth 2) base archive path is longer than source
+      // pattern 3) source pattern is longer than base archive path. To handle all cases, we take
+      // min of depth for both paths, and check the match.
+
+      val minDepth = math.min(sourcePath.depth(), baseArchivePath.depth())
+
+      val sourcePathMinDepth = getAncestorEnsuringDepth(sourcePath, minDepth)
+      val baseArchivePathMinDepth = getAncestorEnsuringDepth(baseArchivePath, minDepth)
+
+      val sourceGlobFilters: Seq[GlobFilter] = buildSourceGlobFilters(sourcePathMinDepth)
+
+      var matched = true
+
+      // pathToCompare should have same depth as sourceGlobFilters.length
+      var pathToCompare = baseArchivePathMinDepth
+      var index = 0
+      do {
+        // GlobFilter only matches against its name, not full path so it's safe to compare
+        if (!sourceGlobFilters(index).accept(pathToCompare)) {
+          matched = false
+        } else {
+          pathToCompare = pathToCompare.getParent
+          index += 1
+        }
+      } while (matched && !pathToCompare.isRoot)
+
+      matched
+    }
+
+    private def buildSourceGlobFilters(sourcePath: Path): Seq[GlobFilter] = {
+      val filters = new scala.collection.mutable.MutableList[GlobFilter]()
+
+      var currentPath = sourcePath
+      while (!currentPath.isRoot) {
+        filters += new GlobFilter(currentPath.getName)
+        currentPath = currentPath.getParent
+      }
+
+      filters.toList
     }
 
     override def clean(entry: FileEntry): Unit = {
