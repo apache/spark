@@ -204,9 +204,10 @@ class GBTClassifier @Since("1.4.0") (
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy))
+        $(seed), $(featureSubsetStrategy), Some(instr))
     } else {
-      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
+      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
+        Some(instr))
     }
     baseLearners.foreach(copyValues(_))
 
@@ -323,7 +324,8 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val prediction: Double = margin(features)
     Vectors.dense(Array(-prediction, prediction))
   }

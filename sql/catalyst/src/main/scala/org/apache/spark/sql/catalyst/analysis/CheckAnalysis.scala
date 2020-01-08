@@ -66,20 +66,20 @@ trait CheckAnalysis extends PredicateHelper {
     case _ => None
   }
 
-  private def checkLimitClause(limitExpr: Expression): Unit = {
+  private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => failAnalysis(
-        "The limit expression must evaluate to a constant value, but got " +
+        s"The $name expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        s"The $name expression must be integer type, but got " +
           e.dataType.catalogString)
       case e =>
         e.eval() match {
           case null => failAnalysis(
-            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+            s"The evaluated $name expression must not be null, but got ${limitExpr.sql}")
           case v: Int if v < 0 => failAnalysis(
-            s"The limit expression must be equal to or greater than 0, but got $v")
+            s"The $name expression must be equal to or greater than 0, but got $v")
           case _ => // OK
         }
     }
@@ -91,6 +91,12 @@ trait CheckAnalysis extends PredicateHelper {
     plan.foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
+
+      case u: UnresolvedNamespace =>
+        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTable =>
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
@@ -155,7 +161,7 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
+          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction,
@@ -324,9 +330,11 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+
+          case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)

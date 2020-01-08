@@ -891,9 +891,9 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
 
         val sqlText =
           """
-            |SELECT * FROM t1
+            |SELECT * FROM t1 a
             |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
+            |NOT EXISTS (SELECT * FROM t1 b WHERE a.i = b.i)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collectFirst { case j: Join => j }.get

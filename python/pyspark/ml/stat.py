@@ -19,6 +19,7 @@ import sys
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.linalg import DenseMatrix, Vectors
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
@@ -392,6 +393,22 @@ class SummaryBuilder(JavaWrapper):
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
+
+
+class MultivariateGaussian(object):
+    """Represents a (mean, cov) tuple
+
+    >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
+    >>> (m.mean, m.cov.toArray())
+    (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
+           [ 3.,  2.]]))
+
+    .. versionadded:: 3.0.0
+
+    """
+    def __init__(self, mean, cov):
+        self.mean = mean
+        self.cov = cov
 
 
 if __name__ == "__main__":

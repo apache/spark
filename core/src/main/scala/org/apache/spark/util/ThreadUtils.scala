@@ -18,14 +18,14 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
+import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.generic.CanBuildFrom
-import scala.language.higherKinds
-
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.language.higherKinds
 import scala.util.control.NonFatal
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.rpc.RpcAbortException
@@ -33,7 +33,82 @@ import org.apache.spark.rpc.RpcAbortException
 private[spark] object ThreadUtils {
 
   private val sameThreadExecutionContext =
-    ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
+    ExecutionContext.fromExecutorService(sameThreadExecutorService())
+
+  // Inspired by Guava MoreExecutors.sameThreadExecutor; inlined and converted
+  // to Scala here to avoid Guava version issues
+  def sameThreadExecutorService(): ExecutorService = new AbstractExecutorService {
+    private val lock = new ReentrantLock()
+    private val termination = lock.newCondition()
+    private var runningTasks = 0
+    private var serviceIsShutdown = false
+
+    override def shutdown(): Unit = {
+      lock.lock()
+      try {
+        serviceIsShutdown = true
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def shutdownNow(): java.util.List[Runnable] = {
+      shutdown()
+      java.util.Collections.emptyList()
+    }
+
+    override def isShutdown: Boolean = {
+      lock.lock()
+      try {
+        serviceIsShutdown
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def isTerminated: Boolean = synchronized {
+      lock.lock()
+      try {
+        serviceIsShutdown && runningTasks == 0
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean = {
+      var nanos = unit.toNanos(timeout)
+      lock.lock()
+      try {
+        while (nanos > 0 && !isTerminated()) {
+          nanos = termination.awaitNanos(nanos)
+        }
+        isTerminated()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def execute(command: Runnable): Unit = {
+      lock.lock()
+      try {
+        if (isShutdown()) throw new RejectedExecutionException("Executor already shutdown")
+        runningTasks += 1
+      } finally {
+        lock.unlock()
+      }
+      try {
+        command.run()
+      } finally {
+        lock.lock()
+        try {
+          runningTasks -= 1
+          if (isTerminated()) termination.signalAll()
+        } finally {
+          lock.unlock()
+        }
+      }
+    }
+  }
 
   /**
    * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
