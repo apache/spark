@@ -117,6 +117,7 @@ class InMemoryFileIndex(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+    val startTime = System.nanoTime()
     val output = mutable.LinkedHashSet[FileStatus]()
     val pathsToFetch = mutable.ArrayBuffer[Path]()
     for (path <- paths) {
@@ -137,6 +138,8 @@ class InMemoryFileIndex(
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
     }
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to list leaf files" +
+      s" for ${paths.length} paths.")
     output
   }
 }
@@ -194,7 +197,8 @@ object InMemoryFileIndex extends Logging {
       }
     }
 
-    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
+      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
