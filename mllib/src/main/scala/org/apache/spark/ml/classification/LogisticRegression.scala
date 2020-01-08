@@ -34,7 +34,7 @@ import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
@@ -501,7 +501,7 @@ class LogisticRegression @Since("1.2.0") (
       fitIntercept)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
@@ -513,6 +513,7 @@ class LogisticRegression @Since("1.2.0") (
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -720,7 +721,7 @@ class LogisticRegression @Since("1.2.0") (
               value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+            optInitialModel.get.interceptVector.foreachNonZero { (classIndex, value) =>
               initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }
@@ -1127,7 +1128,8 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
       margins(features)
     } else {

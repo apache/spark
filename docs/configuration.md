@@ -966,7 +966,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td><code>spark.eventLog.erasureCoding.enabled</code></td>
   <td>false</td>
   <td>
     Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
@@ -2423,7 +2423,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Interval at which data received by Spark Streaming receivers is chunked
     into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
-     tuning</a> section in the Spark Streaming programing guide for more details.
+     tuning</a> section in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>
@@ -2434,7 +2434,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for mode details.
+    in the Spark Streaming programming guide for mode details.
   </td>
 </tr>
 <tr>
@@ -2444,7 +2444,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Enable write-ahead logs for receivers. All the input data received through receivers
     will be saved to write-ahead logs that will allow it to be recovered after driver failures.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for more details.
+    in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>

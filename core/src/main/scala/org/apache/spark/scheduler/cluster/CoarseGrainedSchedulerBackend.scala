@@ -95,9 +95,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet; maps
   // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
-  // be considered an app-related failure).
+  // be considered an app-related failure). Visible for testing only.
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private val executorsPendingToRemove = new HashMap[String, Boolean]
+  private[scheduler] val executorsPendingToRemove = new HashMap[String, Boolean]
+
+  // Executors that have been lost, but for which we don't yet know the real exit reason.
+  private val executorsPendingLossReason = new HashSet[String]
 
   // A map to store hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -122,9 +125,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
-
-    // Executors that have been lost, but for which we don't yet know the real exit reason.
-    protected val executorsPendingLossReason = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -285,7 +285,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
@@ -314,7 +314,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        if (executorIsAlive(executorId)) {
+        if (isExecutorActive(executorId)) {
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
@@ -330,11 +330,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
       }
-    }
-
-    private def executorIsAlive(executorId: String): Boolean = synchronized {
-      !executorsPendingToRemove.contains(executorId) &&
-        !executorsPendingLossReason.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -415,7 +410,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
      */
     protected def disableExecutor(executorId: String): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
-        if (executorIsAlive(executorId)) {
+        if (isExecutorActive(executorId)) {
           executorsPendingLossReason += executorId
           true
         } else {
@@ -492,12 +487,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
    * be called in the yarn-client mode when AM re-registers after a failure.
+   * Visible for testing only.
    * */
-  protected def reset(): Unit = {
+  protected[scheduler] def reset(): Unit = {
     val executors: Set[String] = synchronized {
       requestedTotalExecutors = 0
       numPendingExecutors = 0
-      executorsPendingToRemove.clear()
       executorDataMap.keys.toSet
     }
 
@@ -560,7 +555,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
-    executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
+    executorDataMap.contains(id) &&
+      !executorsPendingToRemove.contains(id) &&
+      !executorsPendingLossReason.contains(id)
   }
 
   override def maxNumConcurrentTasks(): Int = synchronized {

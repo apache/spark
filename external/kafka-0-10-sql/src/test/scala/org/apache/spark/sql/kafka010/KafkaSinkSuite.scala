@@ -370,7 +370,7 @@ class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
       iter.foreach(writeTask.write(_))
       writeTask.commit()
     } finally {
-      writeTask.invalidateProducer()
+      writeTask.close()
     }
   }
 }

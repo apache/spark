@@ -794,6 +794,13 @@ class SessionCatalog(
     }
   }
 
+  // TODO: merge it with `isTemporaryTable`.
+  def isTempView(nameParts: Seq[String]): Boolean = {
+    if (nameParts.length > 2) return false
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    isTemporaryTable(nameParts.asTableIdentifier)
+  }
+
   /**
    * Return whether a table with the specified name is a temporary view.
    *

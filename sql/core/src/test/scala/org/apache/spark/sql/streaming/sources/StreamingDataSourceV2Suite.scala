@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRea
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.connector.write.{PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -86,7 +86,7 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
   override def capabilities(): util.Set[TableCapability] = {
     Set(STREAMING_WRITE).asJava
   }
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new FakeWriteBuilder
   }
 }

@@ -22,7 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{execution, SparkSession}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
@@ -102,6 +102,22 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
         val scalarSubquery = execution.ScalarSubquery(
           SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
         subqueryMap.put(exprId.id, scalarSubquery)
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _))
+          if !subqueryMap.contains(exprId.id) =>
+        val executedPlan = compileSubquery(query)
+        verifyAdaptivePlan(executedPlan, query)
+        val expr = if (values.length == 1) {
+          values.head
+        } else {
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        val inSubquery = InSubqueryExec(expr,
+          SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        subqueryMap.put(exprId.id, inSubquery)
       case _ =>
     }))
 
