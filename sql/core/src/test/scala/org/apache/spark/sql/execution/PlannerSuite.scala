@@ -923,7 +923,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         |FROM   range(5)
         |""".stripMargin)
 
-    val Seq(subquery) = df.queryExecution.executedPlan.subqueriesAll
+    val Seq(subquery) = stripAQEPlan(df.queryExecution.executedPlan).subqueriesAll
     subquery.foreach { node =>
       node.expressions.foreach { expression =>
         expression.foreach {

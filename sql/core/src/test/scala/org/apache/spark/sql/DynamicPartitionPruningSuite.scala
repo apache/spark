@@ -1206,7 +1206,9 @@ class DynamicPartitionPruningSuite
   test("join key with multiple references on the filtering plan") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",

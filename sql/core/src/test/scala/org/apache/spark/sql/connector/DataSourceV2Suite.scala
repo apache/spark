@@ -386,7 +386,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
       Seq(2, 3).toDF("a").createTempView("t1")
       val df = t2.where("i < (select max(a) from t1)").select('i)
-      val subqueries = df.queryExecution.executedPlan.collect {
+      val subqueries = stripAQEPlan(df.queryExecution.executedPlan).collect {
         case p => p.subqueries
       }.flatten
       assert(subqueries.length == 1)

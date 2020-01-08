@@ -83,7 +83,7 @@ class CacheManager extends Logging {
       val qe = sparkSession.sessionState.executePlan(planToCache)
       val originalValue = sparkSession.sessionState.conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       val inMemoryRelation = try {
-        // In order to changing the output partitioning, here disable AQE.
+        // Avoiding changing the output partitioning, here disable AQE.
         sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
         InMemoryRelation(
           sparkSession.sessionState.conf.useCompression,

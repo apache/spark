@@ -55,6 +55,7 @@ case class InsertAdaptiveSparkPlan(
     case _: SortExec => true
     case _: SortMergeJoinExec => true
     case _: Exchange => true
+    case a: AdaptiveSparkPlanExec => needShuffle(a.executedPlan)
     case _ => false
   }
 
@@ -66,15 +67,13 @@ case class InsertAdaptiveSparkPlan(
   }
 
   def supportAdaptiveInSubquery(plan: SparkPlan): Boolean = {
-    val flags = ArrayBuffer[Boolean]()
-    plan.foreach(_.expressions.foreach(_.foreach {
-      case expressions.ScalarSubquery(p, _, exprId) =>
-        flags += compileSubquery(p).isInstanceOf[AdaptiveSparkPlanExec]
-      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
-        flags += compileSubquery(query).isInstanceOf[AdaptiveSparkPlanExec]
-      case _ =>
-    }))
-    flags.contains(true)
+    plan.find(_.expressions.exists(_.find {
+      case expressions.ScalarSubquery(p, _, _) =>
+        containShuffle(compileSubquery(p))
+      case expressions.InSubquery(_, ListQuery(query, _, _, _)) =>
+        containShuffle(compileSubquery(query))
+      case _ => false
+    }.isDefined)).isDefined
   }
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
