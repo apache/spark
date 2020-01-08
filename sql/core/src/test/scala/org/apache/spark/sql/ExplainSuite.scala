@@ -256,10 +256,10 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
             "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
               "IN subquery#x\\)\\]"
           val expected_pattern3 =
-            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
               "/df2/.*, ... 99 entries\\]"
           val expected_pattern4 =
-            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
               "/df1/.*, ... 999 entries\\]"
           withNormalizedExplain(sqlText) { normalizedOutput =>
             assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
