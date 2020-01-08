@@ -50,19 +50,6 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def makeAnalyzerWithConf(conf: SQLConf): Analyzer = {
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
-    catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Map.empty),
-      ignoreIfExists = false)
-    catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
-    catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
-    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
-    new Analyzer(catalog, conf) {
-      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
-    }
-  }
-
   protected def getAnalyzer(caseSensitive: Boolean) = {
     if (caseSensitive) caseSensitiveAnalyzer else caseInsensitiveAnalyzer
   }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.net.URI
 import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
@@ -25,7 +26,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -43,6 +44,23 @@ import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  /**
+   * Helper method for SQLConf.ANALYZER_MAX_ITERATIONS tests. This config will set the analyzer
+   * strategy at construction phase, thus we can not test it using withSQLConf at runtime.
+   */
+  private def makeAnalyzerWithConf(conf: SQLConf): Analyzer = {
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
+    catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
+    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    new Analyzer(catalog, conf) {
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)
