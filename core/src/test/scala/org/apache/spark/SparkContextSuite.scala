@@ -902,21 +902,20 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         "executor to: 1. Please adjust your configuration."))
   }
 
-  test("Parse resources executor config cpus wasted") {
+  test("Parse resources executor config cpus not limiting resource") {
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 8, 1024]")
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
-    var error = intercept[SparkException] {
+    var error = intercept[IllegalArgumentException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains(
-      "The configuration of resource: CPU (exec = 8, task = 8, runnable tasks = 2) " +
-        "will result in wasted resources due to resource gpu limiting the number of " +
-        "runnable tasks per executor to: 2. Please adjust your configuration."))
+    assert(error.contains("The number of slots on an executor has to be " +
+      "limited by the number of cores, otherwise you waste resources and " +
+      "dynamic allocation doesn't work properly"))
   }
 
   test("test resource scheduling under local-cluster mode") {
