@@ -250,18 +250,19 @@ case class CreateNamespace(
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
  */
 case class DropNamespace(
-    catalog: CatalogPlugin,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     ifExists: Boolean,
-    cascade: Boolean) extends Command
+    cascade: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
  */
 case class DescribeNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     extended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
 
   override def output: Seq[Attribute] = Seq(
     AttributeReference("name", StringType, nullable = false,
@@ -275,17 +276,29 @@ case class DescribeNamespace(
  * command that works for v2 catalogs.
  */
 case class AlterNamespaceSetProperties(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
-    properties: Map[String, String]) extends Command
+    namespace: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetLocation(
+    namespace: LogicalPlan,
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())
 }
@@ -412,9 +425,10 @@ case class RenameTable(
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(
-    catalog: TableCatalog,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
