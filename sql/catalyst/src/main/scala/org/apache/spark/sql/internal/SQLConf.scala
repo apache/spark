@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -195,38 +196,6 @@ object SQLConf {
         "It was removed to prevent loosing of users data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value.")
-    )
-
-    Map(configs.map { cfg => cfg.key -> cfg } : _*)
-  }
-
-  /**
-   * Holds information about keys that have been deprecated.
-   *
-   * @param key The deprecated key.
-   * @param version Version of Spark where key was deprecated.
-   * @param comment Additional info regarding to the removed config. For example,
-   *                reasons of config deprecation, what users should use instead of it.
-   */
-  case class DeprecatedConfig(key: String, version: String, comment: String)
-
-  /**
-   * Maps deprecated SQL config keys to information about the deprecation.
-   *
-   * The extra information is logged as a warning when the SQL config is present
-   * in the user's configuration.
-   */
-  val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
-    val configs = Seq(
-      DeprecatedConfig("spark.sql.hive.verifyPartitionPath", "3.0.0",
-        "This config is replaced by spark.files.ignoreMissingFiles."),
-      DeprecatedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "2.3",
-        "Behavior for `false` config value is considered as a bug, and " +
-        "it will be prohibited in the future releases."),
-      DeprecatedConfig(
-        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "2.4",
-        "The config allows to switch to the behaviour before Spark 2.4 " +
-        "and will be removed in the future releases.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -740,7 +709,7 @@ object SQLConf {
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
-         "releases and replaced by spark.files.ignoreMissingFiles.")
+         s"releases and replaced by ${SPARK_IGNORE_MISSING_FILES.key}.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2167,6 +2136,38 @@ object SQLConf {
         "defined by `from` and `to`.")
       .booleanConf
       .createWithDefault(false)
+
+  /**
+   * Holds information about keys that have been deprecated.
+   *
+   * @param key The deprecated key.
+   * @param version Version of Spark where key was deprecated.
+   * @param comment Additional info regarding to the removed config. For example,
+   *                reasons of config deprecation, what users should use instead of it.
+   */
+  case class DeprecatedConfig(key: String, version: String, comment: String)
+
+  /**
+   * Maps deprecated SQL config keys to information about the deprecation.
+   *
+   * The extra information is logged as a warning when the SQL config is present
+   * in the user's configuration.
+   */
+  val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
+    val configs = Seq(
+      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0.0",
+        s"This config is replaced by ${SPARK_IGNORE_MISSING_FILES.key}."),
+      DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
+        "Behavior for `false` config value is considered as a bug, and " +
+          "it will be prohibited in the future releases."),
+      DeprecatedConfig(
+        PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
+        "The config allows to switch to the behaviour before Spark 2.4 " +
+          "and will be removed in the future releases.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
 }
 
 /**
