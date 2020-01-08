@@ -2376,7 +2376,18 @@ class Dataset[T] private[sql](
     if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
-      this.select(remainingCols: _*)
+      val df = this.select(remainingCols: _*)
+      withAction("drop", df.queryExecution) { physicalPlan =>
+        Dataset.ofRows(
+          sparkSession,
+          LogicalRDD(
+            physicalPlan.output,
+            physicalPlan.execute().map(_.copy()),
+            physicalPlan.outputPartitioning,
+            physicalPlan.outputOrdering,
+            isStreaming
+          )(sparkSession))
+      }
     }
   }
 
