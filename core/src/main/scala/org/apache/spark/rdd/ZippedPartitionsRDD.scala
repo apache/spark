@@ -70,7 +70,7 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     s.asInstanceOf[ZippedPartitionsPartition].preferredLocations
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdds = null
   }
@@ -89,7 +89,7 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null
@@ -114,7 +114,7 @@ private[spark] class ZippedPartitionsRDD3
       rdd3.iterator(partitions(2), context))
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null
@@ -142,7 +142,7 @@ private[spark] class ZippedPartitionsRDD4
       rdd4.iterator(partitions(3), context))
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null

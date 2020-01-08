@@ -371,7 +371,7 @@ private[ann] trait TopologyModel extends Serializable {
   def forward(data: BDM[Double], includeLastLayer: Boolean): Array[BDM[Double]]
 
   /**
-   * Prediction of the model. See {@link ProbabilisticClassificationModel}
+   * Prediction of the model. See `ProbabilisticClassificationModel``
    *
    * @param features input features
    * @return prediction
@@ -379,7 +379,7 @@ private[ann] trait TopologyModel extends Serializable {
   def predict(features: Vector): Vector
 
   /**
-   * Raw prediction of the model. See {@link ProbabilisticClassificationModel}
+   * Raw prediction of the model. See `ProbabilisticClassificationModel`
    *
    * @param features input features
    * @return raw prediction
@@ -389,7 +389,7 @@ private[ann] trait TopologyModel extends Serializable {
   def predictRaw(features: Vector): Vector
 
   /**
-   * Probability of the model. See {@link ProbabilisticClassificationModel}
+   * Probability of the model. See `ProbabilisticClassificationModel`
    *
    * @param rawPrediction raw prediction vector
    * @return probability

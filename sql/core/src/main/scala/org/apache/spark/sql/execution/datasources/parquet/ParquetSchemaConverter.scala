@@ -26,7 +26,6 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.maxPrecisionForBytes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -171,7 +170,7 @@ class ParquetToSparkSchemaConverter(
 
       case FIXED_LEN_BYTE_ARRAY =>
         originalType match {
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
+          case DECIMAL => makeDecimalType(Decimal.maxPrecisionForBytes(field.getTypeLength))
           case INTERVAL => typeNotImplemented()
           case _ => illegalType()
         }
@@ -411,7 +410,7 @@ class SparkToParquetSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(ParquetSchemaConverter.minBytesForPrecision(precision))
+          .length(Decimal.minBytesForPrecision(precision))
           .named(field.name)
 
       // ========================
@@ -445,7 +444,7 @@ class SparkToParquetSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(ParquetSchemaConverter.minBytesForPrecision(precision))
+          .length(Decimal.minBytesForPrecision(precision))
           .named(field.name)
 
       // ===================================
@@ -583,24 +582,5 @@ private[sql] object ParquetSchemaConverter {
     if (!f) {
       throw new AnalysisException(message)
     }
-  }
-
-  private def computeMinBytesForPrecision(precision : Int) : Int = {
-    var numBytes = 1
-    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
-      numBytes += 1
-    }
-    numBytes
-  }
-
-  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
-  val minBytesForPrecision = Array.tabulate[Int](39)(computeMinBytesForPrecision)
-
-  // Max precision of a decimal value stored in `numBytes` bytes
-  def maxPrecisionForBytes(numBytes: Int): Int = {
-    Math.round(                               // convert double to long
-      Math.floor(Math.log10(                  // number of base-10 digits
-        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
-      .asInstanceOf[Int]
   }
 }

@@ -22,9 +22,13 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import scala.collection.Map
 import scala.collection.mutable
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import sun.misc.Unsafe
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.util.Utils
 
 /**
  * Storage information for each BlockManager.
@@ -193,6 +197,31 @@ private[spark] class StorageStatus(
 
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils extends Logging {
+
+  // In Java 8, the type of DirectBuffer.cleaner() was sun.misc.Cleaner, and it was possible
+  // to access the method sun.misc.Cleaner.clean() to invoke it. The type changed to
+  // jdk.internal.ref.Cleaner in later JDKs, and the .clean() method is not accessible even with
+  // reflection. However sun.misc.Unsafe added a invokeCleaner() method in JDK 9+ and this is
+  // still accessible with reflection.
+  private val bufferCleaner: DirectBuffer => Unit =
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+      val cleanerMethod =
+        Utils.classForName("sun.misc.Unsafe").getMethod("invokeCleaner", classOf[ByteBuffer])
+      val unsafeField = classOf[Unsafe].getDeclaredField("theUnsafe")
+      unsafeField.setAccessible(true)
+      val unsafe = unsafeField.get(null).asInstanceOf[Unsafe]
+      buffer: DirectBuffer => cleanerMethod.invoke(unsafe, buffer)
+    } else {
+      val cleanerMethod = Utils.classForName("sun.misc.Cleaner").getMethod("clean")
+      buffer: DirectBuffer => {
+        // Careful to avoid the return type of .cleaner(), which changes with JDK
+        val cleaner: AnyRef = buffer.cleaner()
+        if (cleaner != null) {
+          cleanerMethod.invoke(cleaner)
+        }
+      }
+    }
+
   /**
    * Attempt to clean up a ByteBuffer if it is direct or memory-mapped. This uses an *unsafe* Sun
    * API that will cause errors if one attempts to read from the disposed buffer. However, neither
@@ -204,14 +233,24 @@ private[spark] object StorageUtils extends Logging {
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
       logTrace(s"Disposing of $buffer")
-      cleanDirectBuffer(buffer.asInstanceOf[DirectBuffer])
+      bufferCleaner(buffer.asInstanceOf[DirectBuffer])
     }
   }
 
-  private def cleanDirectBuffer(buffer: DirectBuffer) = {
-    val cleaner = buffer.cleaner()
-    if (cleaner != null) {
-      cleaner.clean()
+  /**
+   * Get the port used by the external shuffle service. In Yarn mode, this may be already be
+   * set through the Hadoop configuration as the server is launched in the Yarn NM.
+   */
+  def externalShuffleServicePort(conf: SparkConf): Int = {
+    val tmpPort = Utils.getSparkOrYarnConfig(conf, config.SHUFFLE_SERVICE_PORT.key,
+      config.SHUFFLE_SERVICE_PORT.defaultValueString).toInt
+    if (tmpPort == 0) {
+      // for testing, we set "spark.shuffle.service.port" to 0 in the yarn config, so yarn finds
+      // an open port.  But we still need to tell our spark apps the right port to use.  So
+      // only if the yarn config has the port set to 0, we prefer the value in the spark config
+      conf.get(config.SHUFFLE_SERVICE_PORT.key).toInt
+    } else {
+      tmpPort
     }
   }
 }

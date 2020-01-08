@@ -34,6 +34,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
+import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
@@ -106,7 +107,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
-      JsonInferSchema.infer(rdd, parsedOptions, rowParser)
+      new JsonInferSchema(parsedOptions).infer(rdd, rowParser)
     }
   }
 
@@ -164,7 +165,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
     }
   }
 

@@ -31,33 +31,37 @@ trait StateStoreMetricsTest extends StreamTest {
 
   def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery =
     AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated") { q =>
-      val recentProgress = q.recentProgress
-      require(recentProgress.nonEmpty, "No progress made, cannot check num state rows")
-      require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
-        "This test assumes that all progresses are present in q.recentProgress but " +
-          "some may have been dropped due to retention limits")
+      // This assumes that the streaming query will not make any progress while the eventually
+      // is being executed.
+      eventually(timeout(streamingTimeout)) {
+        val recentProgress = q.recentProgress
+        require(recentProgress.nonEmpty, "No progress made, cannot check num state rows")
+        require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
+          "This test assumes that all progresses are present in q.recentProgress but " +
+            "some may have been dropped due to retention limits")
 
-      if (q.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
-      lastQuery = q
+        if (q.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
+        lastQuery = q
 
-      val numStateOperators = recentProgress.last.stateOperators.length
-      val progressesSinceLastCheck = recentProgress
-        .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
-        .filter(_.stateOperators.length == numStateOperators)
+        val numStateOperators = recentProgress.last.stateOperators.length
+        val progressesSinceLastCheck = recentProgress
+          .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
+          .filter(_.stateOperators.length == numStateOperators)
 
-      val allNumUpdatedRowsSinceLastCheck =
-        progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
+        val allNumUpdatedRowsSinceLastCheck =
+          progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
 
-      lazy val debugString = "recent progresses:\n" +
-        progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
+        lazy val debugString = "recent progresses:\n" +
+          progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
 
-      val numTotalRows = recentProgress.last.stateOperators.map(_.numRowsTotal)
-      assert(numTotalRows === total, s"incorrect total rows, $debugString")
+        val numTotalRows = recentProgress.last.stateOperators.map(_.numRowsTotal)
+        assert(numTotalRows === total, s"incorrect total rows, $debugString")
 
-      val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
-      assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
+        val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
+        assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
-      lastCheckedRecentProgressIndex = recentProgress.length - 1
+        lastCheckedRecentProgressIndex = recentProgress.length - 1
+      }
       true
     }
 

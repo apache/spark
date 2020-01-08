@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.UUID
+import java.io.File
+import java.util.{Locale, UUID}
 
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -31,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -350,7 +352,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     withTempDir { tempDir =>
       val queryId = UUID.randomUUID
       val opId = 0
-      val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextString(10)).toString
+      val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextFloat.toString).toString
       val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
 
       implicit val sqlContext = spark.sqlContext
@@ -417,6 +419,63 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(input1, 1.to(1000): _*),
       AddData(input2, 1.to(1000): _*),
       CheckAnswer(1.to(1000): _*))
+  }
+
+  test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
+    val inputStream = MemoryStream[(Int, Long)]
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+
+    val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"), col("timestamp").as("rightTime"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("rightId = leftId AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "inner")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
+
+    testStream(query)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+      Note: The checkpoint was generated using the following input in Spark version 2.4.0
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+      // right: (2, 2L), (4, 4L)
+      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+      assertNumStateRows(7, 7),
+      */
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      // batch 2: same result as above test
+      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
+      assertNumStateRows(11, 6),
+      Execute { query =>
+        // Verify state format = 1
+        val f = query.lastExecution.executedPlan.collect {
+          case f: StreamingSymmetricHashJoinExec => f
+        }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 1)
+      }
+    )
   }
 }
 
@@ -711,6 +770,168 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         Row(103, 110, 206, null)),
       assertNumStateRows(total = 2, updated = 2)
     )
+  }
+
+  test("SPARK-26187 self left outer join should not return outer nulls for already matched rows") {
+    val inputStream = MemoryStream[(Int, Long)]
+
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+
+    val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"), col("timestamp").as("rightTime"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("leftId = rightId AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "leftOuter")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
+
+    testStream(query)(
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+      // right: (2, 2L), (4, 4L)
+      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+      assertNumStateRows(7, 7),
+
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      // batch 2 - global watermark = 5
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L), (6, 6L), (7, 7L), (8, 8L),
+      //       (9, 9L), (10, 10L)
+      // right: (6, 6L), (8, 8L), (10, 10L)
+      // states evicted
+      // left: nothing (it waits for 5 seconds more than watermark due to join condition)
+      // right: (2, 2L), (4, 4L)
+      // NOTE: look for evicted rows in right which are not evicted from left - they were
+      // properly joined in batch 1
+      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
+      assertNumStateRows(13, 8),
+
+      AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+      // batch 3
+      // - global watermark = 9 <= min(9, 10)
+      // states
+      // left: (4, 4L), (5, 5L), (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L), (11, 11L),
+      //       (12, 12L), (13, 13L), (14, 14L), (15, 15L)
+      // right: (10, 10L), (12, 12L), (14, 14L)
+      // states evicted
+      // left: (1, 1L), (2, 2L), (3, 3L)
+      // right: (6, 6L), (8, 8L)
+      CheckNewAnswer(
+        Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
+        Row(1, 1L, null, null), Row(3, 3L, null, null)),
+      assertNumStateRows(15, 7)
+    )
+  }
+
+  test("SPARK-26187 self right outer join should not return outer nulls for already matched rows") {
+    val inputStream = MemoryStream[(Int, Long)]
+
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+
+    // we're just flipping "left" and "right" from left outer join and apply right outer join
+
+    val leftStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("leftId"), col("timestamp").as("leftTime"))
+
+    val rightStream = df.select(col("value").as("rightId"), col("timestamp").as("rightTime"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("leftId = rightId AND leftTime >= rightTime AND " +
+          "leftTime <= rightTime + interval 5 seconds"),
+        joinType = "rightOuter")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
+
+    // we can just flip left and right in the explanation of left outer query test
+    // to assume the status of right outer query, hence skip explaining here
+    testStream(query)(
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+      assertNumStateRows(7, 7),
+
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
+      assertNumStateRows(13, 8),
+
+      AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+      CheckNewAnswer(
+        Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
+        Row(null, null, 1, 1L), Row(null, null, 3, 3L)),
+      assertNumStateRows(15, 7)
+    )
+  }
+
+  test("SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
+    val inputStream = MemoryStream[(Int, Long)]
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+
+    val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"), col("timestamp").as("rightTime"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("rightId = leftId AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "leftOuter")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
+
+    /*
+      Note: The checkpoint was generated using the following input in Spark version 2.4.0
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+      // right: (2, 2L), (4, 4L)
+      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+      assertNumStateRows(7, 7),
+      */
+
+    // we just fail the query if the checkpoint was create from less than Spark 3.0
+    val e = intercept[StreamingQueryException] {
+      val writer = query.writeStream.format("console")
+        .option("checkpointLocation", checkpointDir.getAbsolutePath).start()
+      inputStream.addData((7, 7L), (8, 8L))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+      }
+      throw writer.exception.get
+    }
+    assert(e.getMessage.toLowerCase(Locale.ROOT)
+      .contains("the query is using stream-stream outer join with state format version 1"))
   }
 }
 

@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -54,6 +54,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
     parse(sqlText) { parser =>
       astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+    }
+  }
+
+  /** Creates a multi-part identifier for a given SQL string */
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
     }
   }
 
@@ -84,14 +91,20 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    lexer.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {
@@ -125,13 +138,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new AstBuilder(conf)
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(new SQLConf())
+object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
+  val astBuilder = new AstBuilder(SQLConf.get)
 }
 
 /**
@@ -194,8 +207,17 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val position = Origin(Some(line), Some(charPositionInLine))
-    throw new ParseException(None, msg, position, position)
+    val (start, stop) = offendingSymbol match {
+      case token: CommonToken =>
+        val start = Origin(Some(line), Some(token.getCharPositionInLine))
+        val length = token.getStopIndex - token.getStartIndex + 1
+        val stop = Origin(Some(line), Some(token.getCharPositionInLine + length))
+        (start, stop)
+      case _ =>
+        val start = Origin(Some(line), Some(charPositionInLine))
+        (start, start)
+    }
+    throw new ParseException(None, msg, start, stop)
   }
 }
 
@@ -246,6 +268,14 @@ class ParseException(
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
 case object PostProcessor extends SqlBaseBaseListener {
+
+  /** Throws error message when exiting a explicitly captured wrong identifier rule */
+  override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
+    val ident = ctx.getParent.getText
+
+    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
+      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+  }
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {

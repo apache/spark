@@ -26,14 +26,9 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class StreamingDeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   import testImplicits._
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop()
-  }
 
   test("deduplicate with all columns") {
     val inputData = MemoryStream[String]

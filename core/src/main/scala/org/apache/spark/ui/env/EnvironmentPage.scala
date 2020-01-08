@@ -39,13 +39,20 @@ private[ui] class EnvironmentPage(
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
     val runtimeInformationTable = UIUtils.listingTable(
-      propertyHeader, jvmRow, jvmInformation, fixedWidth = true)
+      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
+      headerClasses = headerClasses)
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
-    val systemPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, appEnv.systemProperties, fixedWidth = true)
+      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
+    val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
+    val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
     val classpathEntriesTable = UIUtils.listingTable(
-      classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
+      classPathHeader, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true,
+      headerClasses = headerClasses)
     val content =
       <span>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
@@ -70,26 +77,37 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
+        <span class="collapse-aggregated-hadoopProperties collapse-table"
+              onClick="collapseTable('collapse-aggregated-hadoopProperties',
+            'aggregated-hadoopProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Hadoop Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-hadoopProperties collapsible-table collapsed">
+          {hadoopPropertiesTable}
+        </div>
         <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">
           <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
+            <span class="collapse-table-arrow arrow-closed"></span>
             <a>System Properties</a>
           </h4>
         </span>
-        <div class="aggregated-systemProperties collapsible-table">
+        <div class="aggregated-systemProperties collapsible-table collapsed">
           {systemPropertiesTable}
         </div>
         <span class="collapse-aggregated-classpathEntries collapse-table"
             onClick="collapseTable('collapse-aggregated-classpathEntries',
             'aggregated-classpathEntries')">
           <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
+            <span class="collapse-table-arrow arrow-closed"></span>
             <a>Classpath Entries</a>
           </h4>
         </span>
-        <div class="aggregated-classpathEntries collapsible-table">
+        <div class="aggregated-classpathEntries collapsible-table collapsed">
           {classpathEntriesTable}
         </div>
       </span>
@@ -98,7 +116,9 @@ private[ui] class EnvironmentPage(
   }
 
   private def propertyHeader = Seq("Name", "Value")
-  private def classPathHeaders = Seq("Resource", "Source")
+  private def classPathHeader = Seq("Resource", "Source")
+  private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
+
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>

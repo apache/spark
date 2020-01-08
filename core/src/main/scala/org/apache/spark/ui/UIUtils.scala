@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
@@ -27,8 +28,6 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.commons.lang3.StringEscapeUtils
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -37,8 +36,6 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
-
-  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -113,12 +110,12 @@ private[spark] object UIUtils extends Logging {
         }
       }
       // if time is more than a year
-      return s"$yearString $weekString $dayString"
+      s"$yearString $weekString $dayString"
     } catch {
       case e: Exception =>
         logError("Error converting time to string", e)
         // if there is some error, return blank string
-        return ""
+        ""
     }
   }
 
@@ -176,12 +173,11 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery-3.4.1.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -199,12 +195,14 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+      "/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.18.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap.min.js")}></script>
@@ -218,7 +216,6 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
       useDataTables: Boolean = false): Seq[Node] = {
@@ -230,7 +227,7 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -312,9 +309,13 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
+      // When headerClasses is not empty, it should have the same length as headers parameter
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // The tooltip information could be None, which indicates header does not have a tooltip.
+      // When tooltipHeaders is not empty, it should have the same length as headers parameter
+      tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -335,11 +336,19 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getTooltip(index: Int): Option[String] = {
+      if (index < tooltipHeaders.size) {
+        tooltipHeaders(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
         <ul class="unstyled">
-          { header.split("\n").map { case t => <li> {t} </li> } }
+          { header.split("\n").map(t => <li> {t} </li>) }
         </ul>
       } else {
         Text(header)
@@ -348,7 +357,15 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        getTooltip(x._2) match {
+          case Some(tooltip) =>
+            <th width={colWidthAttr} class={getClass(x._2)}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {getHeaderContent(x._1)}
+              </span>
+            </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        }
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
@@ -366,7 +383,8 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
     val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
@@ -410,7 +428,7 @@ private[spark] object UIUtils extends Logging {
             class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="right">
+           data-placement="top">
           DAG Visualization
         </a>
       </span>
@@ -427,6 +445,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>
@@ -448,7 +469,7 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like {@code <script>} will cause in
+   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
    * the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
@@ -460,7 +481,6 @@ private[spark] object UIUtils extends Logging {
    *         is true, and an Elem otherwise.
    */
   def makeDescription(desc: String, basePathUri: String, plainText: Boolean = false): NodeSeq = {
-    import scala.language.postfixOps
 
     // If the description can be parsed as HTML and has only relative links, then render
     // as HTML, otherwise render as escaped string
@@ -470,9 +490,7 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
-        allowedNodeLabels.contains(node.label)
-      }
+      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +
@@ -493,8 +511,8 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e.child isEmpty => Text(e.text)
-                case e: Elem if e.child nonEmpty => Text(e.child.flatMap(transform).text)
+                case e: Elem if e.child.isEmpty => Text(e.text)
+                case e: Elem => Text(e.child.flatMap(transform).text)
                 case _ => n
               }
             }
@@ -505,7 +523,7 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e \ "@href" nonEmpty =>
+                case e: Elem if (e \ "@href").nonEmpty =>
                   val relativePath = e.attribute("href").get.toString
                   val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
                   e % Attribute(null, "href", fullUri, Null)
@@ -528,10 +546,10 @@ private[spark] object UIUtils extends Logging {
    */
   def decodeURLParameter(urlParam: String): String = {
     var param = urlParam
-    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
     while (param != decodedParam) {
       param = decodedParam
-      decodedParam = URLDecoder.decode(param, "UTF-8")
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
   }
@@ -548,23 +566,6 @@ private[spark] object UIUtils extends Logging {
       s"/proxy/$id"
     } else {
       origHref
-    }
-  }
-
-  /**
-   * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
-   *
-   * For more information about XSS testing:
-   * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
-   * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
-   */
-  def stripXSS(requestParameter: String): String = {
-    if (requestParameter == null) {
-      null
-    } else {
-      // Remove new lines and single quotes, followed by escaping HTML version 4.0
-      StringEscapeUtils.escapeHtml4(
-        NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
     }
   }
 

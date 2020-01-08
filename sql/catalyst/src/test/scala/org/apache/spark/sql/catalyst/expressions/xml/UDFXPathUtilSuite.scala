@@ -57,7 +57,7 @@ class UDFXPathUtilSuite extends SparkFunSuite {
   test("boolean eval") {
     var ret =
       util.evalBoolean("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[1]/text()")
-    assert(ret == true)
+    assert(ret)
 
     ret = util.evalBoolean("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[4]")
     assert(ret == false)

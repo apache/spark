@@ -28,10 +28,8 @@ private[ui] class ExecutorThreadDumpPage(
     parent: SparkUITab,
     sc: Option[SparkContext]) extends WebUIPage("threadDump") {
 
-  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId =
-      Option(UIUtils.stripXSS(request.getParameter("executorId"))).map { executorId =>
+    val executorId = Option(request.getParameter("executorId")).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing executorId parameter")
@@ -91,7 +89,12 @@ private[ui] class ExecutorThreadDumpPage(
           <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
-          <th onClick="collapseAllThreadStackTrace(false)">Thread Locks</th>
+          <th onClick="collapseAllThreadStackTrace(false)">
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Objects whose lock the thread currently holds">
+              Thread Locks
+            </span>
+          </th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>

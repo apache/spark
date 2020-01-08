@@ -221,7 +221,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
 
   override protected def genericGet(i: Int): Any = values(i).boxed
 
-  override def update(ordinal: Int, value: Any) {
+  override def update(ordinal: Int, value: Any): Unit = {
     if (value == null) {
       setNullAt(ordinal)
     } else {

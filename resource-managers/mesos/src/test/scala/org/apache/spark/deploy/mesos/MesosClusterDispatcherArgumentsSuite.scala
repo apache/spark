@@ -23,7 +23,7 @@ import org.apache.spark.deploy.TestPrematureExit
 class MesosClusterDispatcherArgumentsSuite extends SparkFunSuite
   with TestPrematureExit {
 
-  test("test if spark config args are passed sucessfully") {
+  test("test if spark config args are passed successfully") {
     val args = Array[String]("--master", "mesos://localhost:5050", "--conf", "key1=value1",
       "--conf", "spark.mesos.key2=value2", "--verbose")
     val conf = new SparkConf()

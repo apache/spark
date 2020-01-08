@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,7 +45,7 @@ object StatFunctions extends Logging {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * The algorithm was first present in <a href="https://doi.org/10.1145/375663.375670">
    * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param df the dataframe
@@ -203,7 +203,7 @@ object StatFunctions extends Logging {
         // row.get(0) is column 1
         // row.get(1) is column 2
         // row.get(2) is the frequency
-        val columnIndex = distinctCol2.get(cleanElement(row.get(1))).get
+        val columnIndex = distinctCol2(cleanElement(row.get(1)))
         countsRow.setLong(columnIndex + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
@@ -248,7 +248,9 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
+            new ApproximatePercentile(child,
+              Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
+              .toAggregateExpression(),
             Literal(index))
       } else {
         stats.toLowerCase(Locale.ROOT) match {

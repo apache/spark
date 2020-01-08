@@ -20,18 +20,19 @@ package org.apache.spark.deploy.history
 import java.io.File
 
 import org.mockito.AdditionalAnswers
-import org.mockito.Matchers.{any, anyBoolean, anyLong, eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{anyBoolean, anyLong, eq => meq}
+import org.mockito.Mockito.{doAnswer, spy}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.History._
 import org.apache.spark.status.KVUtils
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
 class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
-  import config._
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   private val MAX_USAGE = 3L
 

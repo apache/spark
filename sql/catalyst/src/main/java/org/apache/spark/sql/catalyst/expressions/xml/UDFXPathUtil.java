@@ -180,7 +180,7 @@ public class UDFXPathUtil {
         return 0;
       }
       // Bound skip by beginning and end of the source
-      long n = Math.min(length - next, ns);
+      int n = (int) Math.min(length - next, ns);
       n = Math.max(-next, n);
       next += n;
       return n;

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
 import java.security.{MessageDigest, NoSuchAlgorithmException}
+import java.util.concurrent.TimeUnit._
 import java.util.zip.CRC32
 
 import scala.annotation.tailrec
@@ -30,10 +31,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +63,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
   }
 }
 
@@ -119,7 +120,7 @@ case class Sha2(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
+    val digestUtils = classOf[DigestUtils].getName
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         if ($eval2 == 224) {
@@ -169,7 +170,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.sha1Hex($c))"
     )
   }
 }
@@ -362,7 +363,10 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def genHashString(input: String, result: String): String = {
-    s"$result = $hasherClassName.hashUTF8String($input, $result);"
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
   }
 
   protected def genHashForMap(
@@ -404,14 +408,15 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+      nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = CodeGenerator.javaType(dataType)
-    ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
@@ -419,6 +424,10 @@ abstract class HashExpression[E] extends Expression {
            |return $result;
          """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |$code
+     """.stripMargin
   }
 
   @tailrec
@@ -464,8 +473,6 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  protected def hashUnsafeBytesBlock(base: MemoryBlock, seed: Long): Long
-
   /**
    * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
    * of input `value`.
@@ -488,10 +495,11 @@ abstract class InterpretedHashFunction {
           val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
-      case c: CalendarInterval => hashInt(c.months, hashLong(c.microseconds, seed))
+      case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
-      case s: UTF8String => hashUnsafeBytesBlock(s.getMemoryBlock(), seed)
+      case s: UTF8String =>
+        hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
 
       case array: ArrayData =>
         val elementType = dataType match {
@@ -578,26 +586,27 @@ object Murmur3HashFunction extends InterpretedHashFunction {
     Murmur3_x86_32.hashLong(l, seed.toInt)
   }
 
-  override protected def hashUnsafeBytes(
-      base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
     Murmur3_x86_32.hashUnsafeBytes(base, offset, len, seed.toInt)
-  }
-
-  override protected def hashUnsafeBytesBlock(
-      base: MemoryBlock, seed: Long): Long = {
-    Murmur3_x86_32.hashUnsafeBytesBlock(base, seed.toInt)
   }
 }
 
 /**
  * A xxHash64 64-bit hash expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark', array(123), 2);
+       5602566077635097486
+  """)
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
   override def dataType: DataType = LongType
 
-  override def prettyName: String = "xxHash"
+  override def prettyName: String = "xxhash64"
 
   override protected def hasherClassName: String = classOf[XXH64].getName
 
@@ -611,13 +620,8 @@ object XxHash64Function extends InterpretedHashFunction {
 
   override protected def hashLong(l: Long, seed: Long): Long = XXH64.hashLong(l, seed)
 
-  override protected def hashUnsafeBytes(
-      base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
     XXH64.hashUnsafeBytes(base, offset, len, seed)
-  }
-
-  override protected def hashUnsafeBytesBlock(base: MemoryBlock, seed: Long): Long = {
-    XXH64.hashUnsafeBytesBlock(base, seed)
   }
 }
 
@@ -725,7 +729,10 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """
 
   override protected def genHashString(input: String, result: String): String = {
-    s"$result = $hasherClassName.hashUTF8String($input);"
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
   }
 
   override protected def genHashForArray(
@@ -778,10 +785,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val childResult = ctx.freshName("childResult")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       val computeFieldHash = nullSafeElementHash(
-        input, index.toString, field.nullable, field.dataType, childResult, ctx)
+        tmpInput, index.toString, field.nullable, field.dataType, childResult, ctx)
       s"""
          |$childResult = 0;
          |$computeFieldHash
@@ -789,10 +797,10 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, CodeGenerator.JAVA_INT -> result),
+      arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
@@ -801,6 +809,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
            |return $result;
            """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |${CodeGenerator.JAVA_INT} $childResult = 0;
+       |$code
+     """.stripMargin
   }
 }
 
@@ -813,13 +826,9 @@ object HiveHashFunction extends InterpretedHashFunction {
     HiveHasher.hashLong(l)
   }
 
-  override protected def hashUnsafeBytes(
-      base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
     HiveHasher.hashUnsafeBytes(base, offset, len)
   }
-
-  override protected def hashUnsafeBytesBlock(
-    base: MemoryBlock, seed: Long): Long = HiveHasher.hashUnsafeBytesBlock(base)
 
   private val HIVE_DECIMAL_MAX_PRECISION = 38
   private val HIVE_DECIMAL_MAX_SCALE = 38
@@ -863,8 +872,8 @@ object HiveHashFunction extends InterpretedHashFunction {
    * Mimics TimestampWritable.hashCode() in Hive
    */
   def hashTimestamp(timestamp: Long): Long = {
-    val timestampInSeconds = timestamp / 1000000
-    val nanoSecondsPortion = (timestamp % 1000000) * 1000
+    val timestampInSeconds = MICROSECONDS.toSeconds(timestamp)
+    val nanoSecondsPortion = (timestamp % MICROS_PER_SECOND) * NANOS_PER_MICROS
 
     var result = timestampInSeconds
     result <<= 30 // the nanosecond part fits in 30 bits
@@ -893,12 +902,11 @@ object HiveHashFunction extends InterpretedHashFunction {
    *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
-    val totalSeconds = calendarInterval.microseconds / CalendarInterval.MICROS_PER_SECOND.toInt
+    val totalMicroSeconds = calendarInterval.days * MICROS_PER_DAY + calendarInterval.microseconds
+    val totalSeconds = totalMicroSeconds / MICROS_PER_SECOND.toInt
     val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
 
-    val nanoSeconds =
-      (calendarInterval.microseconds -
-        (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
+    val nanoSeconds = (totalMicroSeconds - (totalSeconds * MICROS_PER_SECOND.toInt)).toInt * 1000
      (result * 37) + nanoSeconds
   }
 

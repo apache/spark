@@ -22,6 +22,8 @@ import java.io.PrintWriter
 import scala.reflect.ClassTag
 import scala.xml.Utility
 
+import org.apache.spark.util.Utils
+
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -56,11 +58,13 @@ private[shared] object SharedParamsCodeGen {
         " The class with largest value p/t is predicted, where p is the original probability" +
         " of that class and t is the class's threshold",
         isValid = "(t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1",
-        finalMethods = false),
+        finalMethods = false, finalFields = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Array[String]]("outputCols", "output column names"),
+      ParamDesc[Int]("numFeatures", "Number of features. Should be greater than 0",
+        Some("262144"), isValid = "ParamValidators.gt(0)"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
         "every 10 iterations. Note: this setting will be ignored if the checkpoint directory " +
@@ -79,6 +83,9 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
+      ParamDesc[Double]("relativeError", "the relative target precision for the approximate " +
+        "quantile algorithm. Must be in the range [0, 1]",
+        Some("0.001"), isValid = "ParamValidators.inRange(0, 1)", isExpertParam = true),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
         " 0)", isValid = "ParamValidators.gt(0)", finalFields = false),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
@@ -93,9 +100,8 @@ private[shared] object SharedParamsCodeGen {
         Some("false"), isExpertParam = true),
       ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false),
       ParamDesc[String]("distanceMeasure", "The distance measure. Supported options: 'euclidean'" +
-        " and 'cosine'", Some("org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN"),
-        isValid = "(value: String) => " +
-        "org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value)"),
+        " and 'cosine'", Some("\"euclidean\""),
+        isValid = "ParamValidators.inArray(Array(\"euclidean\", \"cosine\"))"),
       ParamDesc[String]("validationIndicatorCol", "name of the column that indicates whether " +
         "each row is for training or for validation. False indicates training; true indicates " +
         "validation.")
@@ -103,9 +109,9 @@ private[shared] object SharedParamsCodeGen {
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
-    val writer = new PrintWriter(file)
-    writer.write(code)
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(file)) { writer =>
+      writer.write(code)
+    }
   }
 
   /** Description of a param. */

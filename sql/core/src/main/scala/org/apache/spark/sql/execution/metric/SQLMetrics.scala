@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
-import java.util.Locale
-import java.util.concurrent.atomic.LongAdder
+import java.util.{Arrays, Locale}
+
+import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
@@ -33,45 +34,45 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
-
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
   // values before calculate max, min, etc.
-  private[this] val _value = new LongAdder
-  private val _zeroValue = initValue
-  _value.add(initValue)
+  private[this] var _value = initValue
+  private var _zeroValue = initValue
 
   override def copy(): SQLMetric = {
-    val newAcc = new SQLMetric(metricType, initValue)
-    newAcc.add(_value.sum())
+    val newAcc = new SQLMetric(metricType, _value)
+    newAcc._zeroValue = initValue
     newAcc
   }
 
-  override def reset(): Unit = this.set(_zeroValue)
+  override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value.add(o.value)
+    case o: SQLMetric =>
+      if (_value < 0) _value = 0
+      if (o.value > 0) _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def isZero(): Boolean = _value.sum() == _zeroValue
+  override def isZero(): Boolean = _value == _zeroValue
 
-  override def add(v: Long): Unit = _value.add(v)
+  override def add(v: Long): Unit = {
+    if (_value < 0) _value = 0
+    _value += v
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
   def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
 
-  def set(v: Long): Unit = {
-    _value.reset()
-    _value.add(v)
-  }
+  def set(v: Long): Unit = _value = v
 
-  def +=(v: Long): Unit = _value.add(v)
+  def +=(v: Long): Unit = add(v)
 
-  override def value: Long = _value.sum()
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -84,6 +85,7 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
@@ -110,11 +112,12 @@ object SQLMetrics {
    * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
-    // The final result of this metric in physical operator UI may looks like:
+    // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
   }
 
@@ -123,7 +126,16 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
+    acc
+  }
+
+  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+    // Same with createTimingMetric, just normalize the unit of time to millisecond.
+    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
   }
 
@@ -138,30 +150,46 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
+  }
+
+  private def toNumberFormat(value: Long): String = {
+    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
+    numberFormat.format(value.toDouble / baseForAvgMetric)
+  }
+
+  def metricNeedsMax(metricsType: String): Boolean = {
+    metricsType != SUM_METRIC
   }
 
   /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
-   */
-  def stringValue(metricsType: String, values: Seq[Long]): String = {
+    */
+  def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
+    // stringMetric = "(driver)" OR (stage $stageId (attempt $attemptId): task $taskId))
+    val stringMetric = if (maxMetrics.isEmpty) {
+      "(driver)"
+    } else {
+      s"(stage ${maxMetrics(1)} (attempt ${maxMetrics(2)}): task ${maxMetrics(3)})"
+    }
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else if (metricsType == AVERAGE_METRIC) {
-      val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-
       val validValues = values.filter(_ > 0)
       val Seq(min, med, max) = {
         val metric = if (validValues.isEmpty) {
-          Seq.fill(3)(0L)
+          val zeros = Seq.fill(3)(0L)
+          zeros.map(v => toNumberFormat(v))
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted.head, sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(toNumberFormat(validValues(0)), toNumberFormat(validValues(validValues.length / 2)),
+            s"${toNumberFormat(validValues(validValues.length - 1))} $stringMetric")
         }
-        metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
+        metric
       }
       s"\n($min, $med, $max)"
     } else {
@@ -169,6 +197,8 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
+      } else if (metricsType == NS_TIMING_METRIC) {
+        duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }
@@ -176,13 +206,15 @@ object SQLMetrics {
       val validValues = values.filter(_ >= 0)
       val Seq(sum, min, med, max) = {
         val metric = if (validValues.isEmpty) {
-          Seq.fill(4)(0L)
+          val zeros = Seq.fill(4)(0L)
+          zeros.map(v => strFormat(v))
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted.sum, sorted.head, sorted(validValues.length / 2),
-            sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(strFormat(validValues.sum), strFormat(validValues(0)),
+            strFormat(validValues(validValues.length / 2)),
+            s"${strFormat(validValues(validValues.length - 1))} $stringMetric")
         }
-        metric.map(strFormat)
+        metric
       }
       s"\n$sum ($min, $med, $max)"
     }

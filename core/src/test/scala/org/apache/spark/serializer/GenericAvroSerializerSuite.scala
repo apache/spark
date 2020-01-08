@@ -25,9 +25,10 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.GenericData.Record
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.SERIALIZER
 
 class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
-  conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+  conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
 
   val schema : Schema = SchemaBuilder
     .record("testRecord").fields()

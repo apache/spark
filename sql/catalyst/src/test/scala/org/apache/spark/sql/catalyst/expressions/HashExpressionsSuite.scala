@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.implicitConversions
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalatest.exceptions.TestFailedException
@@ -30,12 +31,13 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
   test("md5") {
     checkEvaluation(Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
@@ -174,7 +176,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
         DateType,
         expected)
     }
@@ -183,7 +185,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDateType("2017-01-01", 17167)
 
     // boundary cases
-    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("0000-01-01", -719528)
     checkHiveHashForDateType("9999-12-31", 2932896)
 
     // epoch
@@ -208,9 +210,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkHiveHashForTimestampType(
         timestamp: String,
         expected: Long,
-        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+        zoneId: ZoneId = ZoneOffset.UTC): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId).get,
         TimestampType,
         expected)
     }
@@ -223,10 +225,10 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // with different timezone
     checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
-      TimeZone.getTimeZone("US/Pacific"))
+      DateTimeUtils.getZoneId("US/Pacific"))
 
     // boundary cases
-    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645969984)
     checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
 
     // epoch
@@ -252,7 +254,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(CalendarInterval.fromString(interval), CalendarIntervalType, expected)
+      checkHiveHash(IntervalUtils.stringToInterval(UTF8String.fromString(interval)),
+        CalendarIntervalType, expected)
     }
 
     // ----- MICROSEC -----
@@ -629,6 +632,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
       val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
       assert(murmur3HashPlan(input).getInt(0) == murmursHashEval)
+
+      val xxHash64Expr = XxHash64(exprs, 42)
+      val xxHash64Plan = GenerateMutableProjection.generate(Seq(xxHash64Expr))
+      val xxHash64Eval = XxHash64(exprs, 42).eval(input)
+      assert(xxHash64Plan(input).getLong(0) == xxHash64Eval)
 
       val hiveHashExpr = HiveHash(exprs)
       val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))

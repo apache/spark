@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import java.{util => ju}
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Date}
+import java.util.{Calendar, Date, Locale}
+import java.util.concurrent.TimeUnit._
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -28,8 +29,8 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -43,9 +44,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("EventTimeStats") {
-    val epsilon = 10E-6
+  private val epsilon = 10E-6
 
+  test("EventTimeStats") {
     val stats = EventTimeStats(max = 100, min = 10, avg = 20.0, count = 5)
     stats.add(80L)
     stats.max should be (100)
@@ -62,7 +63,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("EventTimeStats: avg on large values") {
-    val epsilon = 10E-6
     val largeValue = 10000000000L // 10B
     // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
@@ -78,6 +78,33 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       count = largeValue)
     stats.merge(stats2)
     stats.avg should be ((largeValue + 0.5) +- epsilon)
+  }
+
+  test("EventTimeStats: zero merge zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats should be (EventTimeStats.zero)
+  }
+
+  test("EventTimeStats: non-zero merge zero") {
+    val stats = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    val stats2 = EventTimeStats.zero
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
+  }
+
+  test("EventTimeStats: zero merge non-zero") {
+    val stats = EventTimeStats.zero
+    val stats2 = EventTimeStats(max = 10, min = 1, avg = 5.0, count = 3)
+    stats.merge(stats2)
+    stats.max should be (10L)
+    stats.min should be (1L)
+    stats.avg should be (5.0 +- epsilon)
+    stats.count should be (3L)
   }
 
   test("error on bad column") {
@@ -278,7 +305,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   test("update mode") {
     val inputData = MemoryStream[Int]
-    spark.conf.set("spark.sql.shuffle.partitions", "10")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "10")
 
     val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -321,12 +348,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
 
     testStream(aggWithWatermark)(
-      AddData(input, currentTimeMs / 1000),
+      AddData(input, MILLISECONDS.toSeconds(currentTimeMs)),
       CheckAnswer(),
-      AddData(input, currentTimeMs / 1000),
+      AddData(input, MILLISECONDS.toSeconds(currentTimeMs)),
       CheckAnswer(),
       assertEventStats { e =>
-        assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
+        assert(timestampFormat.parse(e.get("max")).getTime ===
+          SECONDS.toMillis(MILLISECONDS.toSeconds((currentTimeMs))))
         val watermarkTime = timestampFormat.parse(e.get("watermark"))
         val monthDiff = monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime)
         // monthsSinceEpoch is like `math.floor(num)`, so monthDiff has two possible values.
@@ -698,7 +726,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       val e = intercept[IllegalArgumentException] {
         spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
       }
-      assert(e.getMessage.toLowerCase.contains("valid values are 'min' and 'max'"))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains("valid values are 'min' and 'max'"))
     }
   }
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -51,7 +53,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("AssertNotNUll") {
     val ex = intercept[RuntimeException] {
-      evaluateWithoutCodegen(AssertNotNull(Literal(null), Seq.empty[String]))
+      evaluateWithoutCodegen(AssertNotNull(Literal(null)))
     }.getMessage
     assert(ex.contains("Null value appeared in non-nullable field"))
   }
@@ -107,8 +109,8 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     val floatLit = Literal.create(1.01f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
-    val decimalLit = Literal.create(10.2, DecimalType(20, 2))
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
+    val decimalLit = Literal.create(BigDecimal.valueOf(10.2), DecimalType(20, 2))
 
     assert(analyze(new Nvl(decimalLit, stringLit)).dataType == StringType)
     assert(analyze(new Nvl(doubleLit, decimalLit)).dataType == DoubleType)
@@ -158,7 +160,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 
-  test("Coalesce should not throw 64kb exception") {
+  test("Coalesce should not throw 64KiB exception") {
     val inputs = (1 to 2500).map(x => Literal(s"x_$x"))
     checkEvaluation(Coalesce(inputs), "x_1")
   }
@@ -169,7 +171,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.inlinedMutableStates.size == 1)
   }
 
-  test("AtLeastNNonNulls should not throw 64kb exception") {
+  test("AtLeastNNonNulls should not throw 64KiB exception") {
     val inputs = (1 to 4000).map(x => Literal(s"x_$x"))
     checkEvaluation(AtLeastNNonNulls(1, inputs), true)
   }

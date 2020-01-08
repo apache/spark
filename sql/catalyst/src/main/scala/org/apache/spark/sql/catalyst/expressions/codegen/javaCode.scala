@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.lang.{Boolean => JBool}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.{existentials, implicitConversions}
+import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -114,6 +114,21 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
+
+  /**
+   * Create an `Inline` for Java Class name.
+   */
+  def javaType(javaClass: Class[_]): Inline = Inline(javaClass.getName)
+
+  /**
+   * Create an `Inline` for Java Type name.
+   */
+  def javaType(dataType: DataType): Inline = Inline(CodeGenerator.javaType(dataType))
+
+  /**
+   * Create an `Inline` for boxed Java Type name.
+   */
+  def boxedType(dataType: DataType): Inline = Inline(CodeGenerator.boxedType(dataType))
 }
 
 /**
@@ -128,9 +143,14 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
-  def length: Int = toString.length
+  def length: Int = {
+    // Returns a code length without comments
+    CodeFormatter.stripExtraNewLinesAndComments(toString).length
+  }
 
-  def nonEmpty: Boolean = toString.nonEmpty
+  def isEmpty: Boolean = toString.isEmpty
+
+  def nonEmpty: Boolean = !isEmpty
 
   // The leading prefix that should be stripped from each line.
   // By default we strip blanks or control characters followed by '|' from the line.
@@ -166,7 +186,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     def doTransform(arg: Any): AnyRef = arg match {
       case e: ExprValue => transform(e)
       case Some(value) => Some(doTransform(value))
-      case seq: Traversable[_] => seq.map(doTransform)
+      case seq: Iterable[_] => seq.map(doTransform)
       case other: AnyRef => other
     }
 
@@ -180,12 +200,25 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code"$this\n$other"
   }
 
-  override def verboseString: String = toString
+  override def verboseString(maxFields: Int): String = toString
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 object Block {
 
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
+
+  /**
+   * A custom string interpolator which inlines a string into code block.
+   */
+  implicit class InlineHelper(val sc: StringContext) extends AnyVal {
+    def inline(args: Any*): Inline = {
+      val inlineString = sc.raw(args: _*)
+      Inline(inlineString)
+    }
+  }
 
   implicit def blocksToBlock(blocks: Seq[Block]): Block = blocks.reduceLeft(_ + _)
 
@@ -196,9 +229,8 @@ object Block {
         EmptyBlock
       } else {
         args.foreach {
-          case _: ExprValue =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
-          case _: Block =>
+          case _: ExprValue | _: Inline | _: Block =>
+          case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }
@@ -266,6 +298,14 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
 case object EmptyBlock extends Block with Serializable {
   override val code: String = ""
   override def children: Seq[Block] = Seq.empty
+}
+
+/**
+ * A piece of java code snippet inlines all types of input arguments into a string without
+ * tracking any reference of `JavaCode` instances.
+ */
+case class Inline(codeString: String) extends JavaCode {
+  override val code: String = codeString
 }
 
 /**

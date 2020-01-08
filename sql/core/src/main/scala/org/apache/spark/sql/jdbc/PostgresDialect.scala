@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Types}
+import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
@@ -25,7 +26,8 @@ import org.apache.spark.sql.types._
 
 private object PostgresDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -60,7 +62,10 @@ private object PostgresDialect extends JdbcDialect {
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
     case "date" => Some(DateType)
-    case "numeric" | "decimal" => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" =>
+      // SPARK-26538: handle numeric without explicit precision and scale.
+      Some(DecimalType. SYSTEM_DEFAULT)
     case _ => None
   }
 
@@ -70,14 +75,13 @@ private object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
-    case ShortType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
-    case ByteType => throw new IllegalArgumentException(s"Unsupported type in postgresql: $dt");
     case _ => None
   }
 

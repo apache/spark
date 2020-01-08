@@ -32,13 +32,14 @@ import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kinesis.KinesisUtils;
 
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions;
+import org.apache.spark.streaming.kinesis.KinesisInputDStream;
 import scala.Tuple2;
+import scala.reflect.ClassTag$;
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -135,17 +136,25 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     // Create the Kinesis DStreams
     List<JavaDStream<byte[]>> streamsList = new ArrayList<>(numStreams);
     for (int i = 0; i < numStreams; i++) {
-      streamsList.add(
-          KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-              InitialPositionInStream.LATEST, kinesisCheckpointInterval,
-              StorageLevel.MEMORY_AND_DISK_2())
-      );
+      streamsList.add(JavaDStream.fromDStream(
+          KinesisInputDStream.builder()
+              .streamingContext(jssc)
+              .checkpointAppName(kinesisAppName)
+              .streamName(streamName)
+              .endpointUrl(endpointUrl)
+              .regionName(regionName)
+              .initialPosition(new KinesisInitialPositions.Latest())
+              .checkpointInterval(kinesisCheckpointInterval)
+              .storageLevel(StorageLevel.MEMORY_AND_DISK_2())
+              .build(),
+          ClassTag$.MODULE$.apply(byte[].class)
+      ));
     }
 
     // Union all the streams if there is more than 1 stream
     JavaDStream<byte[]> unionStreams;
     if (streamsList.size() > 1) {
-      unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
+      unionStreams = jssc.union(streamsList.toArray(new JavaDStream[0]));
     } else {
       // Otherwise, just use the 1 stream
       unionStreams = streamsList.get(0);

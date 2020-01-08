@@ -83,14 +83,15 @@ case object Resubmitted extends TaskFailedReason {
 case class FetchFailed(
     bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
-    mapId: Int,
+    mapId: Long,
+    mapIndex: Int,
     reduceId: Int,
     message: String)
   extends TaskFailedReason {
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
-    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId, " +
-      s"message=\n$message\n)"
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndex, " +
+      s"mapId=$mapId, reduceId=$reduceId, message=\n$message\n)"
   }
 
   /**
@@ -128,7 +129,8 @@ case class ExceptionFailure(
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
-    private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil)
+    private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil,
+    private[spark] var metricPeaks: Seq[Long] = Seq.empty)
   extends TaskFailedReason {
 
   /**
@@ -150,6 +152,11 @@ case class ExceptionFailure(
 
   private[spark] def withAccums(accums: Seq[AccumulatorV2[_, _]]): ExceptionFailure = {
     this.accums = accums
+    this
+  }
+
+  private[spark] def withMetricPeaks(metricPeaks: Seq[Long]): ExceptionFailure = {
+    this.metricPeaks = metricPeaks
     this
   }
 
@@ -215,7 +222,8 @@ case object TaskResultLost extends TaskFailedReason {
 case class TaskKilled(
     reason: String,
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
-    private[spark] val accums: Seq[AccumulatorV2[_, _]] = Nil)
+    private[spark] val accums: Seq[AccumulatorV2[_, _]] = Nil,
+    metricPeaks: Seq[Long] = Seq.empty)
   extends TaskFailedReason {
 
   override def toErrorString: String = s"TaskKilled ($reason)"

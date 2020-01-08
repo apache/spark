@@ -26,6 +26,7 @@ import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
@@ -57,15 +58,15 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
     val expected = 0.6546537
     val default = Statistics.corr(x, y)
     val p1 = Statistics.corr(x, y, "pearson")
-    assert(approxEqual(expected, default))
-    assert(approxEqual(expected, p1))
+    assert(expected ~== default absTol 1e-6)
+    assert(expected ~== p1 absTol 1e-6)
 
     // numPartitions >= size for input RDDs
     for (numParts <- List(xData.size, xData.size * 2)) {
       val x1 = sc.parallelize(xData, numParts)
       val y1 = sc.parallelize(yData, numParts)
       val p2 = Statistics.corr(x1, y1)
-      assert(approxEqual(expected, p2))
+      assert(expected ~== p2 absTol 1e-6)
     }
 
     // RDD of zero variance
@@ -78,14 +79,14 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
     val y = sc.parallelize(yData)
     val expected = 0.5
     val s1 = Statistics.corr(x, y, "spearman")
-    assert(approxEqual(expected, s1))
+    assert(expected ~== s1 absTol 1e-6)
 
     // numPartitions >= size for input RDDs
     for (numParts <- List(xData.size, xData.size * 2)) {
       val x1 = sc.parallelize(xData, numParts)
       val y1 = sc.parallelize(yData, numParts)
       val s2 = Statistics.corr(x1, y1, "spearman")
-      assert(approxEqual(expected, s2))
+      assert(expected ~== s2 absTol 1e-6)
     }
 
     // RDD of zero variance => zero variance in ranks
@@ -141,14 +142,14 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
     val a = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
     val b = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
     val p = Statistics.corr(a, b, method = "pearson")
-    assert(approxEqual(p, 0.0, 0.01))
+    assert(p ~== 0.0 absTol 0.01)
   }
 
   def approxEqual(v1: Double, v2: Double, threshold: Double = 1e-6): Boolean = {
     if (v1.isNaN) {
       v2.isNaN
     } else {
-      math.abs(v1 - v2) <= threshold
+      v1 ~== v2 absTol threshold
     }
   }
 

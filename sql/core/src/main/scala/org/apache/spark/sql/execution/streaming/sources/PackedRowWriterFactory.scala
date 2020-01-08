@@ -21,17 +21,18 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
- * to a [[DataSourceWriter]] on the driver.
+ * to a [[BatchWrite]] on the driver.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.
  */
-case object PackedRowWriterFactory extends DataWriterFactory[InternalRow] {
-  override def createDataWriter(
+case object PackedRowWriterFactory extends StreamingDataWriterFactory {
+  override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
@@ -55,10 +56,12 @@ class PackedRowDataWriter() extends DataWriter[InternalRow] with Logging {
   override def write(row: InternalRow): Unit = data.append(row.copy())
 
   override def commit(): PackedRowCommitMessage = {
-    val msg = PackedRowCommitMessage(data.toArray)
-    data.clear()
-    msg
+    PackedRowCommitMessage(data.toArray)
   }
 
-  override def abort(): Unit = data.clear()
+  override def abort(): Unit = {}
+
+  override def close(): Unit = {
+    data.clear()
+  }
 }

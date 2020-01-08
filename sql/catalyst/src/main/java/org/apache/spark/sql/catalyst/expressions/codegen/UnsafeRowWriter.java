@@ -132,47 +132,55 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   public long getFieldOffset(int ordinal) {
-    return startingOffset + nullBitsSize + 8 * ordinal;
+    return startingOffset + nullBitsSize + 8L * ordinal;
   }
 
+  @Override
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeBoolean(offset, value);
   }
 
+  @Override
   public void write(int ordinal, byte value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeByte(offset, value);
   }
 
+  @Override
   public void write(int ordinal, short value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeShort(offset, value);
   }
 
+  @Override
   public void write(int ordinal, int value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeInt(offset, value);
   }
 
+  @Override
   public void write(int ordinal, long value) {
     writeLong(getFieldOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, float value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0);
     writeFloat(offset, value);
   }
 
+  @Override
   public void write(int ordinal, double value) {
     writeDouble(getFieldOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, Decimal input, int precision, int scale) {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       // make sure Decimal object has the same scale as DecimalType
@@ -185,13 +193,13 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // grow the global buffer before writing data.
       holder.grow(16);
 
+      // always zero-out the 16-byte buffer
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
+
       // Make sure Decimal object has the same scale as DecimalType.
       // Note that we may pass in null Decimal object to set null for it.
       if (input == null || !input.changePrecision(precision, scale)) {
-        // zero-out the bytes
-        Platform.putLong(getBuffer(), cursor(), 0L);
-        Platform.putLong(getBuffer(), cursor() + 8, 0L);
-
         BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
@@ -199,8 +207,6 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
         assert numBytes <= 16;
-
-        zeroOutPaddingBytes(numBytes);
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(

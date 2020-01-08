@@ -21,10 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultChannelPromise;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.mockito.Mockito.*;
@@ -42,7 +39,7 @@ import org.apache.spark.network.server.TransportRequestHandler;
 public class TransportRequestHandlerSuite {
 
   @Test
-  public void handleFetchRequestAndStreamRequest() throws Exception {
+  public void handleStreamRequest() {
     RpcHandler rpcHandler = new NoOpRpcHandler();
     OneForOneStreamManager streamManager = (OneForOneStreamManager) (rpcHandler.getStreamManager());
     Channel channel = mock(Channel.class);
@@ -60,80 +57,56 @@ public class TransportRequestHandlerSuite {
     List<ManagedBuffer> managedBuffers = new ArrayList<>();
     managedBuffers.add(new TestManagedBuffer(10));
     managedBuffers.add(new TestManagedBuffer(20));
+    managedBuffers.add(null);
     managedBuffers.add(new TestManagedBuffer(30));
     managedBuffers.add(new TestManagedBuffer(40));
-    long streamId = streamManager.registerStream("test-app", managedBuffers.iterator());
-    streamManager.registerChannel(channel, streamId);
+    long streamId = streamManager.registerStream("test-app", managedBuffers.iterator(), channel);
+
+    Assert.assertEquals(1, streamManager.numStreamStates());
+
     TransportClient reverseClient = mock(TransportClient.class);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
       rpcHandler, 2L);
 
-    RequestMessage request0 = new ChunkFetchRequest(new StreamChunkId(streamId, 0));
+    RequestMessage request0 = new StreamRequest(String.format("%d_%d", streamId, 0));
     requestHandler.handle(request0);
-    assert responseAndPromisePairs.size() == 1;
-    assert responseAndPromisePairs.get(0).getLeft() instanceof ChunkFetchSuccess;
-    assert ((ChunkFetchSuccess) (responseAndPromisePairs.get(0).getLeft())).body() ==
-      managedBuffers.get(0);
+    Assert.assertEquals(1, responseAndPromisePairs.size());
+    Assert.assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof StreamResponse);
+    Assert.assertEquals(managedBuffers.get(0),
+      ((StreamResponse) (responseAndPromisePairs.get(0).getLeft())).body());
 
-    RequestMessage request1 = new ChunkFetchRequest(new StreamChunkId(streamId, 1));
+    RequestMessage request1 = new StreamRequest(String.format("%d_%d", streamId, 1));
     requestHandler.handle(request1);
-    assert responseAndPromisePairs.size() == 2;
-    assert responseAndPromisePairs.get(1).getLeft() instanceof ChunkFetchSuccess;
-    assert ((ChunkFetchSuccess) (responseAndPromisePairs.get(1).getLeft())).body() ==
-      managedBuffers.get(1);
+    Assert.assertEquals(2, responseAndPromisePairs.size());
+    Assert.assertTrue(responseAndPromisePairs.get(1).getLeft() instanceof StreamResponse);
+    Assert.assertEquals(managedBuffers.get(1),
+      ((StreamResponse) (responseAndPromisePairs.get(1).getLeft())).body());
 
     // Finish flushing the response for request0.
     responseAndPromisePairs.get(0).getRight().finish(true);
 
-    RequestMessage request2 = new StreamRequest(String.format("%d_%d", streamId, 2));
+    StreamRequest request2 = new StreamRequest(String.format("%d_%d", streamId, 2));
     requestHandler.handle(request2);
-    assert responseAndPromisePairs.size() == 3;
-    assert responseAndPromisePairs.get(2).getLeft() instanceof StreamResponse;
-    assert ((StreamResponse) (responseAndPromisePairs.get(2).getLeft())).body() ==
-      managedBuffers.get(2);
+    Assert.assertEquals(3, responseAndPromisePairs.size());
+    Assert.assertTrue(responseAndPromisePairs.get(2).getLeft() instanceof StreamFailure);
+    Assert.assertEquals(String.format("Stream '%s' was not found.", request2.streamId),
+        ((StreamFailure) (responseAndPromisePairs.get(2).getLeft())).error);
 
-    // Request3 will trigger the close of channel, because the number of max chunks being
-    // transferred is 2;
     RequestMessage request3 = new StreamRequest(String.format("%d_%d", streamId, 3));
     requestHandler.handle(request3);
+    Assert.assertEquals(4, responseAndPromisePairs.size());
+    Assert.assertTrue(responseAndPromisePairs.get(3).getLeft() instanceof StreamResponse);
+    Assert.assertEquals(managedBuffers.get(3),
+      ((StreamResponse) (responseAndPromisePairs.get(3).getLeft())).body());
+
+    // Request4 will trigger the close of channel, because the number of max chunks being
+    // transferred is 2;
+    RequestMessage request4 = new StreamRequest(String.format("%d_%d", streamId, 4));
+    requestHandler.handle(request4);
     verify(channel, times(1)).close();
-    assert responseAndPromisePairs.size() == 3;
-  }
+    Assert.assertEquals(4, responseAndPromisePairs.size());
 
-  private class ExtendedChannelPromise extends DefaultChannelPromise {
-
-    private List<GenericFutureListener<Future<Void>>> listeners = new ArrayList<>();
-    private boolean success;
-
-    ExtendedChannelPromise(Channel channel) {
-      super(channel);
-      success = false;
-    }
-
-    @Override
-    public ChannelPromise addListener(
-        GenericFutureListener<? extends Future<? super Void>> listener) {
-      @SuppressWarnings("unchecked")
-      GenericFutureListener<Future<Void>> gfListener =
-          (GenericFutureListener<Future<Void>>) listener;
-      listeners.add(gfListener);
-      return super.addListener(listener);
-    }
-
-    @Override
-    public boolean isSuccess() {
-      return success;
-    }
-
-    public void finish(boolean success) {
-      this.success = success;
-      listeners.forEach(listener -> {
-        try {
-          listener.operationComplete(this);
-        } catch (Exception e) {
-          // do nothing
-        }
-      });
-    }
+    streamManager.connectionTerminated(channel);
+    Assert.assertEquals(0, streamManager.numStreamStates());
   }
 }

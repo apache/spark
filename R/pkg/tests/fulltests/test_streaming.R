@@ -127,6 +127,7 @@ test_that("Specify a schema by using a DDL-formatted string when reading", {
   expect_false(awaitTermination(q, 5 * 1000))
   callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people3"))[[1]], 3)
+  stopQuery(q)
 
   expect_error(read.stream(path = parquetPath, schema = "name stri"),
                "DataType stri is not supported.")

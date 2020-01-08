@@ -24,11 +24,13 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
-import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
+import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
+import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -43,40 +45,17 @@ import org.apache.spark.util.Utils
  *    to the name `value`.
  */
 object ExpressionEncoder {
+
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
-    // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = ScalaReflection.mirror
     val tpe = typeTag[T].in(mirror).tpe
 
-    if (ScalaReflection.optionOfProductType(tpe)) {
-      throw new UnsupportedOperationException(
-        "Cannot create encoder for Option of Product type, because Product type is represented " +
-          "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
-          "You can wrap your type with Tuple1 if you do want top level null Product objects, " +
-          "e.g. instead of creating `Dataset[Option[MyClass]]`, you can do something like " +
-          "`val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS`")
-    }
-
     val cls = mirror.runtimeClass(tpe)
-    val flat = !ScalaReflection.definedByConstructorParams(tpe)
-
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = !cls.isPrimitive)
-    val nullSafeInput = if (flat) {
-      inputObject
-    } else {
-      // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
-      // doesn't allow top-level row to be null, only its columns can be null.
-      AssertNotNull(inputObject, Seq("top level Product input object"))
-    }
-    val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
-    val deserializer = ScalaReflection.deserializerFor[T]
-
-    val schema = serializer.dataType
+    val serializer = ScalaReflection.serializerForType(tpe)
+    val deserializer = ScalaReflection.deserializerForType(tpe)
 
     new ExpressionEncoder[T](
-      schema,
-      flat,
-      serializer.flatten,
+      serializer,
       deserializer,
       ClassTag[T](cls))
   }
@@ -86,14 +65,12 @@ object ExpressionEncoder {
     val schema = JavaTypeInference.inferDataType(beanClass)._1
     assert(schema.isInstanceOf[StructType])
 
-    val serializer = JavaTypeInference.serializerFor(beanClass)
-    val deserializer = JavaTypeInference.deserializerFor(beanClass)
+    val objSerializer = JavaTypeInference.serializerFor(beanClass)
+    val objDeserializer = JavaTypeInference.deserializerFor(beanClass)
 
     new ExpressionEncoder[T](
-      schema.asInstanceOf[StructType],
-      flat = false,
-      serializer.flatten,
-      deserializer,
+      objSerializer,
+      objDeserializer,
       ClassTag[T](beanClass))
   }
 
@@ -103,77 +80,56 @@ object ExpressionEncoder {
    * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    encoders.foreach(_.assertUnresolved())
+    if (encoders.length > 22) {
+      throw new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+        "tuple with more than 22 elements are not supported.")
+    }
 
-    val schema = StructType(encoders.zipWithIndex.map {
-      case (e, i) =>
-        val (dataType, nullable) = if (e.flat) {
-          e.schema.head.dataType -> e.schema.head.nullable
-        } else {
-          e.schema -> true
-        }
-        StructField(s"_${i + 1}", dataType, nullable)
-    })
+    encoders.foreach(_.assertUnresolved())
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val serializer = encoders.zipWithIndex.map { case (enc, index) =>
-      val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
+    val newSerializerInput = BoundReference(0, ObjectType(cls), nullable = true)
+    val serializers = encoders.zipWithIndex.map { case (enc, index) =>
+      val boundRefs = enc.objSerializer.collect { case b: BoundReference => b }.distinct
+      assert(boundRefs.size == 1, "object serializer should have only one bound reference but " +
+        s"there are ${boundRefs.size}")
+
+      val originalInputObject = boundRefs.head
       val newInputObject = Invoke(
-        BoundReference(0, ObjectType(cls), nullable = true),
+        newSerializerInput,
         s"_${index + 1}",
-        originalInputObject.dataType)
+        originalInputObject.dataType,
+        returnNullable = originalInputObject.nullable)
 
-      val newSerializer = enc.serializer.map(_.transformUp {
-        case b: BoundReference if b == originalInputObject => newInputObject
-      })
-
-      val serializerExpr = if (enc.flat) {
-        newSerializer.head
-      } else {
-        // For non-flat encoder, the input object is not top level anymore after being combined to
-        // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
-        // null check to handle null case correctly.
-        // e.g. for Encoder[(Int, String)], the serializer expressions will create 2 columns, and is
-        // not able to handle the case when the input tuple is null. This is not a problem as there
-        // is a check to make sure the input object won't be null. However, if this encoder is used
-        // to create a bigger tuple encoder, the original input object becomes a filed of the new
-        // input tuple and can be null. So instead of creating a struct directly here, we should add
-        // a null/None check and return a null struct if the null/None check fails.
-        val struct = CreateStruct(newSerializer)
-        val nullCheck = Or(
-          IsNull(newInputObject),
-          Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
-        If(nullCheck, Literal.create(null, struct.dataType), struct)
+      val newSerializer = enc.objSerializer.transformUp {
+        case BoundReference(0, _, _) => newInputObject
       }
-      Alias(serializerExpr, s"_${index + 1}")()
-    }
 
-    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
-      if (enc.flat) {
-        enc.deserializer.transform {
-          case g: GetColumnByOrdinal => g.copy(ordinal = index)
-        }
-      } else {
-        val input = GetColumnByOrdinal(index, enc.schema)
-        val deserialized = enc.deserializer.transformUp {
-          case UnresolvedAttribute(nameParts) =>
-            assert(nameParts.length == 1)
-            UnresolvedExtractValue(input, Literal(nameParts.head))
-          case GetColumnByOrdinal(ordinal, _) => GetStructField(input, ordinal)
-        }
-        If(IsNull(input), Literal.create(null, deserialized.dataType), deserialized)
+      Alias(newSerializer, s"_${index + 1}")()
+    }
+    val newSerializer = CreateStruct(serializers)
+
+    val newDeserializerInput = GetColumnByOrdinal(0, newSerializer.dataType)
+    val deserializers = encoders.zipWithIndex.map { case (enc, index) =>
+      val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
+      assert(getColExprs.size == 1, "object deserializer should have only one " +
+        s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
+
+      val input = GetStructField(newDeserializerInput, index)
+      enc.objDeserializer.transformUp {
+        case GetColumnByOrdinal(0, _) => input
       }
     }
+    val newDeserializer = NewInstance(cls, deserializers, ObjectType(cls), propagateNull = false)
 
-    val deserializer =
-      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
+    def nullSafe(input: Expression, result: Expression): Expression = {
+      If(IsNull(input), Literal.create(null, result.dataType), result)
+    }
 
     new ExpressionEncoder[Any](
-      schema,
-      flat = false,
-      serializer,
-      deserializer,
+      nullSafe(newSerializerInput, newSerializer),
+      nullSafe(newDeserializerInput, newDeserializer),
       ClassTag(cls))
   }
 
@@ -212,21 +168,104 @@ object ExpressionEncoder {
  * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer`
  * and a `deserializer`.
  *
- * @param schema The schema after converting `T` to a Spark SQL row.
- * @param serializer A set of expressions, one for each top-level field that can be used to
- *                   extract the values from a raw object into an [[InternalRow]].
- * @param deserializer An expression that will construct an object given an [[InternalRow]].
+ * @param objSerializer An expression that can be used to encode a raw object to corresponding
+ *                   Spark SQL representation that can be a primitive column, array, map or a
+ *                   struct. This represents how Spark SQL generally serializes an object of
+ *                   type `T`.
+ * @param objDeserializer An expression that will construct an object given a Spark SQL
+ *                        representation. This represents how Spark SQL generally deserializes
+ *                        a serialized value in Spark SQL representation back to an object of
+ *                        type `T`.
  * @param clsTag A classtag for `T`.
  */
 case class ExpressionEncoder[T](
-    schema: StructType,
-    flat: Boolean,
-    serializer: Seq[Expression],
-    deserializer: Expression,
+    objSerializer: Expression,
+    objDeserializer: Expression,
     clsTag: ClassTag[T])
   extends Encoder[T] {
 
-  if (flat) require(serializer.size == 1)
+  /**
+   * A sequence of expressions, one for each top-level field that can be used to
+   * extract the values from a raw object into an [[InternalRow]]:
+   * 1. If `serializer` encodes a raw object to a struct, strip the outer If-IsNull and get
+   *    the `CreateNamedStruct`.
+   * 2. For other cases, wrap the single serializer with `CreateNamedStruct`.
+   */
+  val serializer: Seq[NamedExpression] = {
+    val clsName = Utils.getSimpleName(clsTag.runtimeClass)
+
+    if (isSerializedAsStructForTopLevel) {
+      val nullSafeSerializer = objSerializer.transformUp {
+        case r: BoundReference =>
+          // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
+          // doesn't allow top-level row to be null, only its columns can be null.
+          AssertNotNull(r, Seq("top level Product or row object"))
+      }
+      nullSafeSerializer match {
+        case If(_: IsNull, _, s: CreateNamedStruct) => s
+        case _ =>
+          throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
+      }
+    } else {
+      // For other input objects like primitive, array, map, etc., we construct a struct to wrap
+      // the serializer which is a column of an row.
+      //
+      // Note: Because Spark SQL doesn't allow top-level row to be null, to encode
+      // top-level Option[Product] type, we make it as a top-level struct column.
+      CreateNamedStruct(Literal("value") :: objSerializer :: Nil)
+    }
+  }.flatten
+
+  /**
+   * Returns an expression that can be used to deserialize an input row to an object of type `T`
+   * with a compatible schema. Fields of the row will be extracted using `UnresolvedAttribute`.
+   * of the same name as the constructor arguments.
+   *
+   * For complex objects that are encoded to structs, Fields of the struct will be extracted using
+   * `GetColumnByOrdinal` with corresponding ordinal.
+   */
+  val deserializer: Expression = {
+    if (isSerializedAsStructForTopLevel) {
+      // We serialized this kind of objects to root-level row. The input of general deserializer
+      // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
+      // transform attributes accessors.
+      objDeserializer.transform {
+        case UnresolvedExtractValue(GetColumnByOrdinal(0, _),
+            Literal(part: UTF8String, StringType)) =>
+          UnresolvedAttribute.quoted(part.toString)
+        case GetStructField(GetColumnByOrdinal(0, dt), ordinal, _) =>
+          GetColumnByOrdinal(ordinal, dt)
+        case If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance) => n
+        case If(IsNull(GetColumnByOrdinal(0, _)), _, i: InitializeJavaBean) => i
+      }
+    } else {
+      // For other input objects like primitive, array, map, etc., we deserialize the first column
+      // of a row to the object.
+      objDeserializer
+    }
+  }
+
+  // The schema after converting `T` to a Spark SQL row. This schema is dependent on the given
+  // serializer.
+  val schema: StructType = StructType(serializer.map { s =>
+    StructField(s.name, s.dataType, s.nullable)
+  })
+
+  /**
+   * Returns true if the type `T` is serialized as a struct by `objSerializer`.
+   */
+  def isSerializedAsStruct: Boolean = objSerializer.dataType.isInstanceOf[StructType]
+
+  /**
+   * If the type `T` is serialized as a struct, when it is encoded to a Spark SQL row, fields in
+   * the struct are naturally mapped to top-level columns in a row. In other words, the serialized
+   * struct is flattened to row. But in case of the `T` is also an `Option` type, it can't be
+   * flattened to top-level row, because in Spark SQL top-level row can't be null. This method
+   * returns true if `T` is serialized as struct and is not `Option` type.
+   */
+  def isSerializedAsStructForTopLevel: Boolean = {
+    isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
+  }
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This
@@ -258,17 +297,29 @@ case class ExpressionEncoder[T](
     analyzer.checkAnalysis(analyzedPlan)
     val resolved = SimplifyCasts(analyzedPlan).asInstanceOf[DeserializeToObject].deserializer
     val bound = BindReferences.bindReference(resolved, attrs)
-    copy(deserializer = bound)
+    copy(objDeserializer = bound)
   }
 
   @transient
-  private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
+  private lazy val extractProjection = GenerateUnsafeProjection.generate({
+    // When using `ExpressionEncoder` directly, we will skip the normal query processing steps
+    // (analyzer, optimizer, etc.). Here we apply the ReassignLambdaVariableID rule, as it's
+    // important to codegen performance.
+    val optimizedPlan = ReassignLambdaVariableID.apply(DummyExpressionHolder(serializer))
+    optimizedPlan.asInstanceOf[DummyExpressionHolder].exprs
+  })
 
   @transient
   private lazy val inputRow = new GenericInternalRow(1)
 
   @transient
-  private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
+  private lazy val constructProjection = SafeProjection.create({
+    // When using `ExpressionEncoder` directly, we will skip the normal query processing steps
+    // (analyzer, optimizer, etc.). Here we apply the ReassignLambdaVariableID rule, as it's
+    // important to codegen performance.
+    val optimizedPlan = ReassignLambdaVariableID.apply(DummyExpressionHolder(Seq(deserializer)))
+    optimizedPlan.asInstanceOf[DummyExpressionHolder].exprs
+  })
 
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
@@ -289,8 +340,8 @@ case class ExpressionEncoder[T](
     extractProjection(inputRow)
   } catch {
     case e: Exception =>
-      throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
+      throw new RuntimeException(s"Error while encoding: $e\n" +
+          s"${serializer.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
   }
 
   /**
@@ -302,7 +353,8 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n" +
+        s"${deserializer.simpleString(SQLConf.get.maxToStringFields)}", e)
   }
 
   /**
@@ -330,4 +382,12 @@ case class ExpressionEncoder[T](
       .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
 
   override def toString: String = s"class[$schemaString]"
+
+  override def makeCopy: ExpressionEncoder[T] = copy()
+}
+
+// A dummy logical plan that can hold expressions and go through optimizer rules.
+case class DummyExpressionHolder(exprs: Seq[Expression]) extends LeafNode {
+  override lazy val resolved = true
+  override def output: Seq[Attribute] = Nil
 }

@@ -22,15 +22,13 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val poolName = Option(UIUtils.stripXSS(request.getParameter("poolname"))).map { poolname =>
+    val poolName = Option(request.getParameter("poolname")).map { poolname =>
       UIUtils.decodeURLParameter(poolname)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing poolname parameter")

@@ -34,7 +34,7 @@ import org.apache.spark.util.IntParam
  */
 private[streaming]
 object RawTextSender extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       // scalastyle:off println
       System.err.println("Usage: RawTextSender <port> <file> <blockSize> <bytesPerSec>")

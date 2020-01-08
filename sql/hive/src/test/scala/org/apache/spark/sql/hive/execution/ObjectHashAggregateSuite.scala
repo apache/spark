@@ -43,6 +43,7 @@ class ObjectHashAggregateSuite
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(s"CREATE TEMPORARY FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
   }
 
@@ -123,7 +124,7 @@ class ObjectHashAggregateSuite
         .add("f2", ArrayType(BooleanType), nullable = true),
 
       // UDT
-      new UDT.MyDenseVectorUDT(),
+      new TestUDT.MyDenseVectorUDT(),
 
       // Others
       StringType,
@@ -155,7 +156,7 @@ class ObjectHashAggregateSuite
       )
 
       checkAnswer(
-        df.groupBy($"id" % 4 as 'mod).agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.groupBy($"id" % 4 as "mod").agg(aggFunctions.head, aggFunctions.tail: _*),
         data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
           key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         }.toSeq.map {
@@ -258,7 +259,7 @@ class ObjectHashAggregateSuite
       StringType, BinaryType, NullType, BooleanType
     )
 
-    val udt = new UDT.MyDenseVectorUDT()
+    val udt = new TestUDT.MyDenseVectorUDT()
 
     val fixedLengthTypes = builtinNumericTypes ++ Seq(BooleanType, NullType)
 
@@ -415,7 +416,7 @@ class ObjectHashAggregateSuite
     actual.zip(expected).foreach { case (lhs: Row, rhs: Row) =>
       assert(lhs.length == rhs.length)
       lhs.toSeq.zip(rhs.toSeq).foreach {
-        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType)
+        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType, false)
         case (a, b) => a == b
       }
     }

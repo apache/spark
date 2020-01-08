@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
@@ -41,6 +41,23 @@ private[spark] trait ClassifierParams
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
+  }
+
+  /**
+   * Extract [[labelCol]], weightCol(if any) and [[featuresCol]] from the given dataset,
+   * and put it in an RDD with strong types.
+   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
+   */
+  protected def extractInstances(
+      dataset: Dataset[_],
+      numClasses: Int): RDD[Instance] = {
+    val validateInstance = (instance: Instance) => {
+      val label = instance.label
+      require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
+        s" dataset with invalid label $label. Labels must be integers in range" +
+        s" [0, $numClasses).")
+    }
+    extractInstances(dataset, validateInstance)
   }
 }
 
@@ -77,15 +94,35 @@ abstract class Classifier[
    * @note Throws `SparkException` if any label is a non-integer or is negative
    */
   protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
-    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
-      s" $numClasses, but requires numClasses > 0.")
+    validateNumClasses(numClasses)
     dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) =>
-        require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
-          s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, $numClasses).")
+        validateLabel(label, numClasses)
         LabeledPoint(label, features)
     }
+  }
+
+  /**
+   * Validates that number of classes is greater than zero.
+   *
+   * @param numClasses Number of classes label can take.
+   */
+  protected def validateNumClasses(numClasses: Int): Unit = {
+    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
+      s" $numClasses, but requires numClasses > 0.")
+  }
+
+  /**
+   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
+   *
+   * @param label The label to validate.
+   * @param numClasses Number of classes label can take.  Labels must be integers in the range
+   *                  [0, numClasses).
+   */
+  protected def validateLabel(label: Double, numClasses: Int): Unit = {
+    require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
+      s" dataset with invalid label $label.  Labels must be integers in range" +
+      s" [0, $numClasses).")
   }
 
   /**
@@ -147,6 +184,19 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /** Number of classes (values which the label can take). */
   def numClasses: Int
 
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(schema,
+        $(predictionCol), numClasses)
+    }
+    if ($(rawPredictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(rawPredictionCol), numClasses)
+    }
+    outputSchema
+  }
+
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
@@ -157,38 +207,43 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @return transformed dataset
    */
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
     var outputData = dataset
     var numColsOutput = 0
     if (getRawPredictionCol != "") {
-      val predictRawUDF = udf { (features: Any) =>
+      val predictRawUDF = udf { features: Any =>
         predictRaw(features.asInstanceOf[FeaturesType])
       }
-      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)))
+      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
+        outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
     if (getPredictionCol != "") {
-      val predUDF = if (getRawPredictionCol != "") {
+      val predCol = if (getRawPredictionCol != "") {
         udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
-        val predictUDF = udf { (features: Any) =>
+        val predictUDF = udf { features: Any =>
           predict(features.asInstanceOf[FeaturesType])
         }
         predictUDF(col(getFeaturesCol))
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF)
+      outputData = outputData.withColumn(getPredictionCol, predCol,
+        outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }
 
     if (numColsOutput == 0) {
-      logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      logWarning(s"$uid: ClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }
+
+  final override def transformImpl(dataset: Dataset[_]): DataFrame =
+    throw new UnsupportedOperationException(s"transformImpl is not supported in $getClass")
 
   /**
    * Predict label for the given features.
@@ -211,7 +266,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    *          This raw prediction may be any real number, where a larger value indicates greater
    *          confidence for that label.
    */
-  protected def predictRaw(features: FeaturesType): Vector
+  @Since("3.0.0")
+  def predictRaw(features: FeaturesType): Vector
 
   /**
    * Given a vector of raw predictions, select the predicted label.

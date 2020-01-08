@@ -25,7 +25,6 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
@@ -35,13 +34,13 @@ import org.apache.spark.util.Utils
 class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   private var sc: SparkContext = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
     sc = new SparkContext("local", "test", conf)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       sc.stop()
     } finally {
@@ -59,9 +58,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
 
   test("for small files minimum split size per node and per rack should be less than or equal to " +
     "maximum split size.") {
-    var dir : File = null;
-    try {
-      dir = Utils.createTempDir()
+    withTempDir { dir =>
       logInfo(s"Local disk address is ${dir.toString}.")
 
       // Set the minsize per node and rack to be larger than the size of the input file.
@@ -75,8 +72,6 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
       }
       // ensure spark job runs successfully without exceptions from the CombineFileInputFormat
       assert(sc.wholeTextFiles(dir.toString).count == 3)
-    } finally {
-      Utils.deleteRecursively(dir)
     }
   }
 }

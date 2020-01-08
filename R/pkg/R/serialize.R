@@ -220,3 +220,14 @@ writeArgs <- function(con, args) {
     }
   }
 }
+
+writeSerializeInArrow <- function(conn, df) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # There looks no way to send each batch in streaming format via socket
+    # connection. See ARROW-4512.
+    # So, it writes the whole Arrow streaming-formatted binary at once for now.
+    writeRaw(conn, arrow::write_arrow(df, raw()))
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}

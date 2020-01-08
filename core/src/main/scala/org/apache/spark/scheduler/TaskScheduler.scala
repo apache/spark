@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.Map
+
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
@@ -43,7 +46,7 @@ private[spark] trait TaskScheduler {
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
   // wait for slave registrations, etc.
-  def postStartHook() { }
+  def postStartHook(): Unit = { }
 
   // Disconnect from the cluster.
   def stop(): Unit
@@ -67,6 +70,10 @@ private[spark] trait TaskScheduler {
   // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
   def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String): Unit
 
+  // Notify the corresponding `TaskSetManager`s of the stage, that a partition has already completed
+  // and they can skip running tasks for it.
+  def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit
+
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 
@@ -74,14 +81,15 @@ private[spark] trait TaskScheduler {
   def defaultParallelism(): Int
 
   /**
-   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
-   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
-   * indicating that the block manager should re-register.
+   * Update metrics for in-progress tasks and executor metrics, and let the master know that the
+   * BlockManager is still alive. Return true if the driver knows about the given block manager.
+   * Otherwise, return false, indicating that the block manager should re-register.
    */
   def executorHeartbeatReceived(
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
-      blockManagerId: BlockManagerId): Boolean
+      blockManagerId: BlockManagerId,
+      executorUpdates: Map[(Int, Int), ExecutorMetrics]): Boolean
 
   /**
    * Get an application ID associated with the job.

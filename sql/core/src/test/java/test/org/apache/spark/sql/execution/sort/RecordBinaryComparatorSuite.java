@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.execution.sort;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TestMemoryManager;
@@ -32,6 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.collection.unsafe.sort.*;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,7 +43,8 @@ import org.junit.Test;
 public class RecordBinaryComparatorSuite {
 
   private final TaskMemoryManager memoryManager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
   private final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
 
   private final int uaoSize = UnsafeAlignedOffset.getUaoSize();
@@ -79,14 +82,14 @@ public class RecordBinaryComparatorSuite {
     int recordLength = row.getSizeInBytes();
 
     Object baseObject = dataPage.getBaseObject();
-    assert(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
+    Assert.assertTrue(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
     long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, pageCursor);
     UnsafeAlignedOffset.putSize(baseObject, pageCursor, recordLength);
     pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, baseObject, pageCursor, recordLength);
     pageCursor += recordLength;
 
-    assert(pos < 2);
+    Assert.assertTrue(pos < 2);
     array.set(pos, recordAddress);
     pos++;
   }
@@ -139,8 +142,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -164,8 +167,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -191,8 +194,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -224,8 +227,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -250,7 +253,117 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
+  }
+
+  @Test
+  public void testBinaryComparatorWhenSubtractionIsDivisibleByMaxIntValue() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, 11);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 11L + Integer.MAX_VALUE);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    Assert.assertTrue(compare(0, 1) > 0);
+  }
+
+  @Test
+  public void testBinaryComparatorWhenSubtractionCanOverflowLongValue() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, Long.MIN_VALUE);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 1);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    Assert.assertTrue(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testBinaryComparatorWhenOnlyTheLastColumnDiffers() throws Exception {
+    int numFields = 4;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setInt(0, 11);
+    row1.setDouble(1, 3.14);
+    row1.setInt(2, -1);
+    row1.setLong(3, 0);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setInt(0, 11);
+    row2.setDouble(1, 3.14);
+    row2.setInt(2, -1);
+    row2.setLong(3, 1);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    Assert.assertTrue(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testCompareLongsAsLittleEndian() {
+    long arrayOffset = Platform.LONG_ARRAY_OFFSET + 4;
+
+    long[] arr1 = new long[2];
+    Platform.putLong(arr1, arrayOffset, 0x0100000000000000L);
+    long[] arr2 = new long[2];
+    Platform.putLong(arr2, arrayOffset + 4, 0x0000000000000001L);
+    // leftBaseOffset is not aligned while rightBaseOffset is aligned,
+    // it will start by comparing long
+    int result1 = binaryComparator.compare(arr1, arrayOffset, 8, arr2, arrayOffset + 4, 8);
+
+    long[] arr3 = new long[2];
+    Platform.putLong(arr3, arrayOffset, 0x0100000000000000L);
+    long[] arr4 = new long[2];
+    Platform.putLong(arr4, arrayOffset, 0x0000000000000001L);
+    // both left and right offset is not aligned, it will start with byte-by-byte comparison
+    int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
+
+    Assert.assertEquals(result1, result2);
+  }
+
+  @Test
+  public void testCompareLongsAsUnsigned() {
+    long arrayOffset = Platform.LONG_ARRAY_OFFSET + 4;
+
+    long[] arr1 = new long[2];
+    Platform.putLong(arr1, arrayOffset + 4, 0xa000000000000000L);
+    long[] arr2 = new long[2];
+    Platform.putLong(arr2, arrayOffset + 4, 0x0000000000000000L);
+    // both leftBaseOffset and rightBaseOffset are aligned, so it will start by comparing long
+    int result1 = binaryComparator.compare(arr1, arrayOffset + 4, 8, arr2, arrayOffset + 4, 8);
+
+    long[] arr3 = new long[2];
+    Platform.putLong(arr3, arrayOffset, 0xa000000000000000L);
+    long[] arr4 = new long[2];
+    Platform.putLong(arr4, arrayOffset, 0x0000000000000000L);
+    // both leftBaseOffset and rightBaseOffset are not aligned,
+    // so it will start with byte-by-byte comparison
+    int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
+
+    Assert.assertEquals(result1, result2);
   }
 }

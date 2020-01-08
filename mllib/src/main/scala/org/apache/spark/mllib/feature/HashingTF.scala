@@ -94,6 +94,11 @@ class HashingTF(val numFeatures: Int) extends Serializable {
    */
   @Since("1.1.0")
   def transform(document: Iterable[_]): Vector = {
+    val seq = transformImpl(document)
+    Vectors.sparse(numFeatures, seq)
+  }
+
+  private def transformImpl(document: Iterable[_]): Seq[(Int, Double)] = {
     val termFrequencies = mutable.HashMap.empty[Int, Double]
     val setTF = if (binary) (i: Int) => 1.0 else (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
     val hashFunc: Any => Int = getHashFunction
@@ -101,7 +106,7 @@ class HashingTF(val numFeatures: Int) extends Serializable {
       val i = Utils.nonNegativeMod(hashFunc(term), numFeatures)
       termFrequencies.put(i, setTF(i))
     }
-    Vectors.sparse(numFeatures, termFrequencies.toSeq)
+    termFrequencies.toSeq
   }
 
   /**
@@ -160,7 +165,7 @@ object HashingTF {
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case s: String =>
         val utf8 = UTF8String.fromString(s)
-        hashUnsafeBytesBlock(utf8.getMemoryBlock(), seed)
+        hashUnsafeBytes(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
       case _ => throw new SparkException("HashingTF with murmur3 algorithm does not " +
         s"support type ${term.getClass.getCanonicalName} of input data.")
     }

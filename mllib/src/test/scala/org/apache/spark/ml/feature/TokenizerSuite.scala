@@ -17,14 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
-@BeanInfo
-case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
+case class TokenizerTestData(rawText: String, wantedTokens: Array[String]) {
+  def getRawText: String = rawText
+  def getWantedTokens: Array[String] = wantedTokens
+}
 
 class TokenizerSuite extends MLTest with DefaultReadWriteTest {
 

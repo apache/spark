@@ -24,8 +24,6 @@ import java.util.Random;
 import java.util.Set;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -144,13 +142,13 @@ public class XXH64Suite {
       int byteArrSize = rand.nextInt(100) * 8;
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
-      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(bytes);
 
       Assert.assertEquals(
-              hasher.hashUnsafeWordsBlock(mb),
-              hasher.hashUnsafeWordsBlock(mb));
+              hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+              hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
-      hashcodes.add(hasher.hashUnsafeWordsBlock(mb));
+      hashcodes.add(hasher.hashUnsafeWords(
+              bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.
@@ -167,13 +165,13 @@ public class XXH64Suite {
       byte[] strBytes = String.valueOf(i).getBytes(StandardCharsets.UTF_8);
       byte[] paddedBytes = new byte[byteArrSize];
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
-      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(paddedBytes);
 
       Assert.assertEquals(
-              hasher.hashUnsafeWordsBlock(mb),
-              hasher.hashUnsafeWordsBlock(mb));
+              hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+              hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
-      hashcodes.add(hasher.hashUnsafeWordsBlock(mb));
+      hashcodes.add(hasher.hashUnsafeWords(
+              paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.

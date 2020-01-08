@@ -318,9 +318,9 @@ class LauncherServer implements Closeable {
             throw new IllegalArgumentException("Received Hello for unknown client.");
           }
         } else {
+          String msgClassName = msg != null ? msg.getClass().getName() : "no message";
           if (handle == null) {
-            throw new IllegalArgumentException("Expected hello, got: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -328,8 +328,7 @@ class LauncherServer implements Closeable {
           } else if (msg instanceof SetState) {
             handle.setState(((SetState)msg).state);
           } else {
-            throw new IllegalArgumentException("Invalid message: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }
         }
       } catch (Exception e) {

@@ -24,8 +24,8 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.existentials
-import scala.util.control.NonFatal
+import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -37,19 +37,20 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.security.SocketAuthHelper
+import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
 
 
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean)
+    preservePartitoning: Boolean,
+    isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
-
-  val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -60,9 +61,12 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuseWorker)
+    val runner = PythonRunner(func)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
+
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 }
 
 /**
@@ -85,7 +89,7 @@ private[spark] case class PythonFunction(
 private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
 /** Thrown for exceptions in user Python code. */
-private[spark] class PythonException(msg: String, cause: Exception)
+private[spark] class PythonException(msg: String, cause: Throwable)
   extends RuntimeException(msg, cause)
 
 /**
@@ -136,8 +140,9 @@ private[spark] object PythonRDD extends Logging {
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def runJob(
       sc: SparkContext,
@@ -155,43 +160,105 @@ private[spark] object PythonRDD extends Logging {
   /**
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
-  def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
-  }
-
-  def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
-  JavaRDD[Array[Byte]] = {
-    val file = new DataInputStream(new FileInputStream(filename))
-    try {
-      val objs = new mutable.ArrayBuffer[Array[Byte]]
-      try {
-        while (true) {
-          val length = file.readInt()
-          val obj = new Array[Byte](length)
-          file.readFully(obj)
-          objs += obj
+  /**
+   * A helper function to create a local RDD iterator and serve it via socket. Partitions are
+   * are collected as separate jobs, by order of index. Partition data is first requested by a
+   * non-zero integer to start a collection job. The response is prefaced by an integer with 1
+   * meaning partition data will be served, 0 meaning the local iterator has been consumed,
+   * and -1 meaning an error occurred during collection. This function is used by
+   * pyspark.rdd._local_iterator_from_socket().
+   *
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
+   */
+  def toLocalIteratorAndServe[T](rdd: RDD[T], prefetchPartitions: Boolean = false): Array[Any] = {
+    val handleFunc = (sock: Socket) => {
+      val out = new DataOutputStream(sock.getOutputStream)
+      val in = new DataInputStream(sock.getInputStream)
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+        // Collects a partition on each iteration
+        val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
+          var result: Array[Any] = null
+          rdd.sparkContext.submitJob(
+            rdd,
+            (iter: Iterator[Any]) => iter.toArray,
+            Seq(i), // The partition we are evaluating
+            (_, res: Array[Any]) => result = res,
+            result)
         }
-      } catch {
-        case eof: EOFException => // No-op
-      }
-      JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
-    } finally {
-      file.close()
+        val prefetchIter = collectPartitionIter.buffered
+
+        // Write data until iteration is complete, client stops iteration, or error occurs
+        var complete = false
+        while (!complete) {
+
+          // Read request for data, value of zero will stop iteration or non-zero to continue
+          if (in.readInt() == 0) {
+            complete = true
+          } else if (prefetchIter.hasNext) {
+
+            // Client requested more data, attempt to collect the next partition
+            val partitionFuture = prefetchIter.next()
+            // Cause the next job to be submitted if prefetchPartitions is enabled.
+            if (prefetchPartitions) {
+              prefetchIter.headOption
+            }
+            val partitionArray = ThreadUtils.awaitResult(partitionFuture, Duration.Inf)
+
+            // Send response there is a partition to read
+            out.writeInt(1)
+
+            // Write the next object and signal end of data for this iteration
+            writeIteratorToStream(partitionArray.toIterator, out)
+            out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+            out.flush()
+          } else {
+            // Send response there are no more partitions to read and close
+            out.writeInt(0)
+            complete = true
+          }
+        }
+      })(catchBlock = {
+        // Send response that an error occurred, original exception is re-thrown
+        out.writeInt(-1)
+      }, finallyBlock = {
+        out.close()
+        in.close()
+      })
     }
+
+    val server = new SocketFuncServer(authHelper, "serve toLocalIterator", handleFunc)
+    Array(server.port, server.secret, server)
   }
 
-  def readBroadcastFromFile(sc: JavaSparkContext, path: String): Broadcast[PythonBroadcast] = {
-    sc.broadcast(new PythonBroadcast(path))
+  def readRDDFromFile(
+      sc: JavaSparkContext,
+      filename: String,
+      parallelism: Int): JavaRDD[Array[Byte]] = {
+    JavaRDD.readRDDFromFile(sc, filename, parallelism)
   }
 
-  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
+  def readRDDFromInputStream(
+      sc: SparkContext,
+      in: InputStream,
+      parallelism: Int): JavaRDD[Array[Byte]] = {
+    JavaRDD.readRDDFromInputStream(sc, in, parallelism)
+  }
+
+  def setupBroadcast(path: String): PythonBroadcast = {
+    new PythonBroadcast(path)
+  }
+
+  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Unit = {
 
     def write(obj: Any): Unit = obj match {
       case null =>
@@ -230,8 +297,8 @@ private[spark] object PythonRDD extends Logging {
       batchSize: Int): JavaRDD[Array[Byte]] = {
     val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
     val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
     val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
@@ -281,7 +348,7 @@ private[spark] object PythonRDD extends Logging {
       valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String],
       batchSize: Int): JavaRDD[Array[Byte]] = {
-    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val conf = getMergedConf(confAsMap, sc.hadoopConfiguration())
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
@@ -298,9 +365,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration): RDD[(K, V)] = {
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
-    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
+    val fc = Utils.classForName[F](inputFormatClass)
     if (path.isDefined) {
       sc.sc.newAPIHadoopFile[K, V, F](path.get, fc, kc, vc, conf)
     } else {
@@ -350,7 +417,7 @@ private[spark] object PythonRDD extends Logging {
       valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String],
       batchSize: Int): JavaRDD[Array[Byte]] = {
-    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val conf = getMergedConf(confAsMap, sc.hadoopConfiguration())
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
@@ -367,9 +434,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration) = {
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
-    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
+    val fc = Utils.classForName[F](inputFormatClass)
     if (path.isDefined) {
       sc.sc.hadoopFile(path.get, fc, kc, vc)
     } else {
@@ -377,7 +444,7 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def writeUTF(str: String, dataOut: DataOutputStream) {
+  def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
@@ -394,38 +461,36 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
-    val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
-    // Close the socket if no connection in 15 seconds
-    serverSocket.setSoTimeout(15000)
+    serveToStream(threadName) { out =>
+      writeIteratorToStream(items, new DataOutputStream(out))
+    }
+  }
 
-    new Thread(threadName) {
-      setDaemon(true)
-      override def run() {
-        try {
-          val sock = serverSocket.accept()
-          authHelper.authClient(sock)
-
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          Utils.tryWithSafeFinally {
-            writeIteratorToStream(items, out)
-          } {
-            out.close()
-            sock.close()
-          }
-        } catch {
-          case NonFatal(e) =>
-            logError(s"Error while sending iterator", e)
-        } finally {
-          serverSocket.close()
-        }
-      }
-    }.start()
-
-    Array(serverSocket.getLocalPort, authHelper.secret)
+  /**
+   * Create a socket server and background thread to execute the writeFunc
+   * with the given OutputStream.
+   *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
+   * Once a connection comes in, it will execute the block of code and pass in
+   * the socket output stream.
+   *
+   * The thread will terminate after the block of code is executed or any
+   * exceptions happen.
+   *
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
+   */
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+    SocketAuthServer.serveToStream(threadName, authHelper)(writeFunc)
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],
@@ -434,29 +499,33 @@ private[spark] object PythonRDD extends Logging {
     PythonHadoopUtil.mergeConfs(baseConf, conf)
   }
 
-  private def inferKeyValueTypes[K, V](rdd: RDD[(K, V)], keyConverterClass: String = null,
-      valueConverterClass: String = null): (Class[_], Class[_]) = {
+  private def inferKeyValueTypes[K, V, KK, VV](rdd: RDD[(K, V)], keyConverterClass: String = null,
+      valueConverterClass: String = null): (Class[_ <: KK], Class[_ <: VV]) = {
     // Peek at an element to figure out key/value types. Since Writables are not serializable,
     // we cannot call first() on the converted RDD. Instead, we call first() on the original RDD
     // and then convert locally.
     val (key, value) = rdd.first()
-    val (kc, vc) = getKeyValueConverters(keyConverterClass, valueConverterClass,
-      new JavaToWritableConverter)
+    val (kc, vc) = getKeyValueConverters[K, V, KK, VV](
+      keyConverterClass, valueConverterClass, new JavaToWritableConverter)
     (kc.convert(key).getClass, vc.convert(value).getClass)
   }
 
-  private def getKeyValueTypes(keyClass: String, valueClass: String):
-      Option[(Class[_], Class[_])] = {
+  private def getKeyValueTypes[K, V](keyClass: String, valueClass: String):
+      Option[(Class[K], Class[V])] = {
     for {
       k <- Option(keyClass)
       v <- Option(valueClass)
     } yield (Utils.classForName(k), Utils.classForName(v))
   }
 
-  private def getKeyValueConverters(keyConverterClass: String, valueConverterClass: String,
-      defaultConverter: Converter[Any, Any]): (Converter[Any, Any], Converter[Any, Any]) = {
-    val keyConverter = Converter.getInstance(Option(keyConverterClass), defaultConverter)
-    val valueConverter = Converter.getInstance(Option(valueConverterClass), defaultConverter)
+  private def getKeyValueConverters[K, V, KK, VV](
+      keyConverterClass: String,
+      valueConverterClass: String,
+      defaultConverter: Converter[_, _]): (Converter[K, KK], Converter[V, VV]) = {
+    val keyConverter = Converter.getInstance(Option(keyConverterClass),
+      defaultConverter.asInstanceOf[Converter[K, KK]])
+    val valueConverter = Converter.getInstance(Option(valueConverterClass),
+      defaultConverter.asInstanceOf[Converter[V, VV]])
     (keyConverter, valueConverter)
   }
 
@@ -468,7 +537,7 @@ private[spark] object PythonRDD extends Logging {
                                keyConverterClass: String,
                                valueConverterClass: String,
                                defaultConverter: Converter[Any, Any]): RDD[(Any, Any)] = {
-    val (kc, vc) = getKeyValueConverters(keyConverterClass, valueConverterClass,
+    val (kc, vc) = getKeyValueConverters[K, V, Any, Any](keyConverterClass, valueConverterClass,
       defaultConverter)
     PythonHadoopUtil.convertRDD(rdd, kc, vc)
   }
@@ -479,7 +548,7 @@ private[spark] object PythonRDD extends Logging {
    * [[org.apache.hadoop.io.Writable]] types already, since Writables are not Java
    * `Serializable` and we can't peek at them. The `path` can be on any Hadoop file system.
    */
-  def saveAsSequenceFile[K, V, C <: CompressionCodec](
+  def saveAsSequenceFile[C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -498,7 +567,7 @@ private[spark] object PythonRDD extends Logging {
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
    * this RDD.
    */
-  def saveAsHadoopFile[K, V, F <: OutputFormat[_, _], C <: CompressionCodec](
+  def saveAsHadoopFile[F <: OutputFormat[_, _], C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -516,7 +585,7 @@ private[spark] object PythonRDD extends Logging {
     val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
-    val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
+    val fc = Utils.classForName[F](outputFormatClass)
     converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec = codec)
   }
 
@@ -529,7 +598,7 @@ private[spark] object PythonRDD extends Logging {
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
    * this RDD.
    */
-  def saveAsNewAPIHadoopFile[K, V, F <: NewOutputFormat[_, _]](
+  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -557,14 +626,14 @@ private[spark] object PythonRDD extends Logging {
    * (mapred vs. mapreduce). Keys/values are converted for output using either user specified
    * converters or, by default, [[org.apache.spark.api.python.JavaToWritableConverter]].
    */
-  def saveAsHadoopDataset[K, V](
+  def saveAsHadoopDataset(
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       confAsMap: java.util.HashMap[String, String],
       keyConverterClass: String,
       valueConverterClass: String,
       useNewAPI: Boolean): Unit = {
-    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val conf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
     val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized),
       keyConverterClass, valueConverterClass, new JavaToWritableConverter)
     if (useNewAPI) {
@@ -592,7 +661,7 @@ private[spark] class PythonAccumulatorV2(
 
   Utils.checkHost(serverHost)
 
-  val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
+  val bufferSize = SparkEnv.get.conf.get(BUFFER_SIZE)
 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
@@ -618,7 +687,7 @@ private[spark] class PythonAccumulatorV2(
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
-    // driver program - but that isn't gauranteed so incase this changes.
+    // driver program - but that isn't guaranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
       super.merge(otherPythonAccumulator)
@@ -643,18 +712,19 @@ private[spark] class PythonAccumulatorV2(
   }
 }
 
-/**
- * A Wrapper for Python Broadcast, which is written into disk by Python. It also will
- * write the data into disk after deserialization, then Python can read it from disks.
- */
-// scalastyle:off no.finalize
 private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
-  with Logging {
+    with Logging {
+
+  // id of the Broadcast variable which wrapped this PythonBroadcast
+  private var broadcastId: Long = _
+  private var encryptionServer: SocketAuthServer[Unit] = null
+  private var decryptionServer: SocketAuthServer[Unit] = null
 
   /**
    * Read data from disks, then copy it to `out`
    */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    out.writeLong(broadcastId)
     val in = new FileInputStream(new File(path))
     try {
       Utils.copyStream(in, out)
@@ -664,33 +734,206 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   }
 
   /**
-   * Write data into disk, using randomly generated name.
+   * Write data into disk and map it to a broadcast block.
    */
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
-    val file = File.createTempFile("broadcast", "", dir)
-    path = file.getAbsolutePath
-    val out = new FileOutputStream(file)
-    Utils.tryWithSafeFinally {
-      Utils.copyStream(in, out)
-    } {
-      out.close()
-    }
-  }
-
-  /**
-   * Delete the file once the object is GCed.
-   */
-  override def finalize() {
-    if (!path.isEmpty) {
-      val file = new File(path)
-      if (file.exists()) {
-        if (!file.delete()) {
-          logWarning(s"Error deleting ${file.getPath}")
+  private def readObject(in: ObjectInputStream): Unit = {
+    broadcastId = in.readLong()
+    val blockId = BroadcastBlockId(broadcastId, "python")
+    val blockManager = SparkEnv.get.blockManager
+    val diskBlockManager = blockManager.diskBlockManager
+    if (!diskBlockManager.containsBlock(blockId)) {
+      Utils.tryOrIOException {
+        val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+        val file = File.createTempFile("broadcast", "", dir)
+        val out = new FileOutputStream(file)
+        Utils.tryWithSafeFinally {
+          val size = Utils.copyStream(in, out)
+          val ct = implicitly[ClassTag[Object]]
+          // SPARK-28486: map broadcast file to a broadcast block, so that it could be
+          // cleared by unpersist/destroy rather than gc(previously).
+          val blockStoreUpdater = blockManager.
+            TempFileBasedBlockStoreUpdater(blockId, StorageLevel.DISK_ONLY, ct, file, size)
+          blockStoreUpdater.save()
+        } {
+          out.close()
         }
       }
     }
-    super.finalize()
+    path = diskBlockManager.getFile(blockId).getAbsolutePath
+  }
+
+  def setBroadcastId(bid: Long): Unit = {
+    this.broadcastId = bid
+  }
+
+  def setupEncryptionServer(): Array[Any] = {
+    encryptionServer = new SocketAuthServer[Unit]("broadcast-encrypt-server") {
+      override def handleConnection(sock: Socket): Unit = {
+        val env = SparkEnv.get
+        val in = sock.getInputStream()
+        val abspath = new File(path).getAbsolutePath
+        val out = env.serializerManager.wrapForEncryption(new FileOutputStream(abspath))
+        DechunkedInputStream.dechunkAndCopyToOutput(in, out)
+      }
+    }
+    Array(encryptionServer.port, encryptionServer.secret)
+  }
+
+  def setupDecryptionServer(): Array[Any] = {
+    decryptionServer = new SocketAuthServer[Unit]("broadcast-decrypt-server-for-driver") {
+      override def handleConnection(sock: Socket): Unit = {
+        val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()))
+        Utils.tryWithSafeFinally {
+          val in = SparkEnv.get.serializerManager.wrapForEncryption(new FileInputStream(path))
+          Utils.tryWithSafeFinally {
+            Utils.copyStream(in, out, false)
+          } {
+            in.close()
+          }
+          out.flush()
+        } {
+          JavaUtils.closeQuietly(out)
+        }
+      }
+    }
+    Array(decryptionServer.port, decryptionServer.secret)
+  }
+
+  def waitTillBroadcastDataSent(): Unit = decryptionServer.getResult()
+
+  def waitTillDataReceived(): Unit = encryptionServer.getResult()
+}
+
+/**
+ * The inverse of pyspark's ChunkedStream for sending data of unknown size.
+ *
+ * We might be serializing a really large object from python -- we don't want
+ * python to buffer the whole thing in memory, nor can it write to a file,
+ * so we don't know the length in advance.  So python writes it in chunks, each chunk
+ * preceeded by a length, till we get a "length" of -1 which serves as EOF.
+ *
+ * Tested from python tests.
+ */
+private[spark] class DechunkedInputStream(wrapped: InputStream) extends InputStream with Logging {
+  private val din = new DataInputStream(wrapped)
+  private var remainingInChunk = din.readInt()
+
+  override def read(): Int = {
+    val into = new Array[Byte](1)
+    val n = read(into, 0, 1)
+    if (n == -1) {
+      -1
+    } else {
+      // if you just cast a byte to an int, then anything > 127 is negative, which is interpreted
+      // as an EOF
+      val b = into(0)
+      if (b < 0) {
+        256 + b
+      } else {
+        b
+      }
+    }
+  }
+
+  override def read(dest: Array[Byte], off: Int, len: Int): Int = {
+    if (remainingInChunk == -1) {
+      return -1
+    }
+    var destSpace = len
+    var destPos = off
+    while (destSpace > 0 && remainingInChunk != -1) {
+      val toCopy = math.min(remainingInChunk, destSpace)
+      val read = din.read(dest, destPos, toCopy)
+      destPos += read
+      destSpace -= read
+      remainingInChunk -= read
+      if (remainingInChunk == 0) {
+        remainingInChunk = din.readInt()
+      }
+    }
+    assert(destSpace == 0 || remainingInChunk == -1)
+    return destPos - off
+  }
+
+  override def close(): Unit = wrapped.close()
+}
+
+private[spark] object DechunkedInputStream {
+
+  /**
+   * Dechunks the input, copies to output, and closes both input and the output safely.
+   */
+  def dechunkAndCopyToOutput(chunked: InputStream, out: OutputStream): Unit = {
+    val dechunked = new DechunkedInputStream(chunked)
+    Utils.tryWithSafeFinally {
+      Utils.copyStream(dechunked, out)
+    } {
+      JavaUtils.closeQuietly(out)
+      JavaUtils.closeQuietly(dechunked)
+    }
   }
 }
-// scalastyle:on no.finalize
+
+/**
+ * Sends decrypted broadcast data to python worker.  See [[PythonRunner]] for entire protocol.
+ */
+private[spark] class EncryptedPythonBroadcastServer(
+    val env: SparkEnv,
+    val idsAndFiles: Seq[(Long, String)])
+    extends SocketAuthServer[Unit]("broadcast-decrypt-server") with Logging {
+
+  override def handleConnection(socket: Socket): Unit = {
+    val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))
+    var socketIn: InputStream = null
+    // send the broadcast id, then the decrypted data.  We don't need to send the length, the
+    // the python pickle module just needs a stream.
+    Utils.tryWithSafeFinally {
+      (idsAndFiles).foreach { case (id, path) =>
+        out.writeLong(id)
+        val in = env.serializerManager.wrapForEncryption(new FileInputStream(path))
+        Utils.tryWithSafeFinally {
+          Utils.copyStream(in, out, false)
+        } {
+          in.close()
+        }
+      }
+      logTrace("waiting for python to accept broadcast data over socket")
+      out.flush()
+      socketIn = socket.getInputStream()
+      socketIn.read()
+      logTrace("done serving broadcast data")
+    } {
+      JavaUtils.closeQuietly(socketIn)
+      JavaUtils.closeQuietly(out)
+    }
+  }
+
+  def waitTillBroadcastDataSent(): Unit = {
+    getResult()
+  }
+}
+
+/**
+ * Helper for making RDD[Array[Byte]] from some python data, by reading the data from python
+ * over a socket.  This is used in preference to writing data to a file when encryption is enabled.
+ */
+private[spark] abstract class PythonRDDServer
+    extends SocketAuthServer[JavaRDD[Array[Byte]]]("pyspark-parallelize-server") {
+
+  def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
+    val in = sock.getInputStream()
+    val dechunkedInput: InputStream = new DechunkedInputStream(in)
+    streamToRDD(dechunkedInput)
+  }
+
+  protected def streamToRDD(input: InputStream): RDD[Array[Byte]]
+
+}
+
+private[spark] class PythonParallelizeServer(sc: SparkContext, parallelism: Int)
+    extends PythonRDDServer {
+
+  override protected def streamToRDD(input: InputStream): RDD[Array[Byte]] = {
+    PythonRDD.readRDDFromInputStream(sc, input, parallelism)
+  }
+}

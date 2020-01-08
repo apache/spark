@@ -58,9 +58,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, BooleanType) === (i % 2 == 0))
+      assert(arrayCopy.get(i, BooleanType) === (i % 2 == 0))
     }
   }
 
@@ -70,9 +72,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ByteType) === i.toByte)
+      assert(arrayCopy.get(i, ByteType) === i.toByte)
     }
   }
 
@@ -82,9 +86,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ShortType) === i.toShort)
+      assert(arrayCopy.get(i, ShortType) === i.toShort)
     }
   }
 
@@ -94,9 +100,25 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, IntegerType) === i)
+      assert(arrayCopy.get(i, IntegerType) === i)
+    }
+  }
+
+  testVectors("date", 10, DateType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendInt(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, DateType) === i)
+      assert(arrayCopy.get(i, DateType) === i)
     }
   }
 
@@ -106,9 +128,25 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, LongType) === i)
+      assert(arrayCopy.get(i, LongType) === i)
+    }
+  }
+
+  testVectors("timestamp", 10, TimestampType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendLong(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, TimestampType) === i)
+      assert(arrayCopy.get(i, TimestampType) === i)
     }
   }
 
@@ -118,9 +156,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, FloatType) === i.toFloat)
+      assert(arrayCopy.get(i, FloatType) === i.toFloat)
     }
   }
 
@@ -130,9 +170,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, DoubleType) === i.toDouble)
+      assert(arrayCopy.get(i, DoubleType) === i.toDouble)
     }
   }
 
@@ -143,9 +185,11 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       assert(array.get(i, StringType) === UTF8String.fromString(s"str$i"))
+      assert(arrayCopy.get(i, StringType) === UTF8String.fromString(s"str$i"))
     }
   }
 
@@ -156,10 +200,12 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
 
     (0 until 10).foreach { i =>
       val utf8 = s"str$i".getBytes("utf8")
       assert(array.get(i, BinaryType) === utf8)
+      assert(arrayCopy.get(i, BinaryType) === utf8)
     }
   }
 
@@ -252,7 +298,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getBoolean(i) == (i % 2 == 0))
@@ -276,7 +322,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getByte(i) == i)
@@ -300,7 +346,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getShort(i) == i)
@@ -324,7 +370,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getInt(i) == i)
@@ -348,7 +394,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getLong(i) == i.toLong)
@@ -372,7 +418,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getFloat(i) == i.toFloat)
@@ -396,7 +442,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)

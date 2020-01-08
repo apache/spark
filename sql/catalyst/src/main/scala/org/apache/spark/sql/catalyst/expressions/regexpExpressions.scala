@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -65,13 +65,13 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
-
+// scalastyle:off line.contains.tab
 /**
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
-    "null if any arguments are null, false otherwise.",
+  usage = "str _FUNC_ pattern[ ESCAPE escape] - Returns true if str matches `pattern` with " +
+    "`escape`, null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -83,32 +83,45 @@ abstract class StringRegexExpression extends BinaryExpression
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)
 
-          The escape character is '\'. If an escape character precedes a special symbol or another
-          escape character, the following character is matched literally. It is invalid to escape
-          any other character.
-
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
           to match "\abc", the pattern should be "\\abc".
 
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
+      * escape - an character added since Spark 3.0. The default escape character is the '\'.
+          If an escape character precedes a special symbol or another escape character, the
+          following character is matched literally. It is invalid to escape any other character.
   """,
   examples = """
     Examples:
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
+      true
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      true
+      > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
-  """)
-case class Like(left: Expression, right: Expression) extends StringRegexExpression {
+  """,
+  since = "1.0.0")
+// scalastyle:on line.contains.tab
+case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
+  extends StringRegexExpression {
 
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right"
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left LIKE $right"
+    case c => s"$left LIKE $right ESCAPE '$c'"
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
@@ -141,10 +154,18 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
     } else {
       val pattern = ctx.freshName("pattern")
       val rightStr = ctx.freshName("rightStr")
+      // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
+      // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
+      // '\"' will cause exception 'Line break in literal not allowed'.
+      val newEscapeChar = if (escapeChar == '\"' || escapeChar == '\\') {
+        s"""\\\\\\$escapeChar"""
+      } else {
+        escapeChar
+      }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
@@ -152,12 +173,13 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   }
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
-      * regexp - a string expression. The pattern string should be a Java regular expression.
+      * regexp - a string expression. The regex string should be a Java regular expression.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
@@ -169,17 +191,20 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   """,
   examples = """
     Examples:
-      When spark.sql.parser.escapedStringLiterals is disabled (default).
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*';
       true
-
-      When spark.sql.parser.escapedStringLiterals is enabled.
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '%SystemDrive%\\\\Users.*';
       true
   """,
   note = """
     Use LIKE to match with simple string pattern.
-  """)
+  """,
+  since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
@@ -229,33 +254,54 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
 
 /**
- * Splits str around pat (pattern is a regular expression).
+ * Splits str around matches of the given regex.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
+  usage = "_FUNC_(str, regex, limit) - Splits `str` around occurrences that match `regex`" +
+    " and returns an array with a length of at most `limit`",
+  arguments = """
+    Arguments:
+      * str - a string expression to split.
+      * regex - a string representing a regular expression. The regex string should be a
+        Java regular expression.
+      * limit - an integer expression which controls the number of times the regex is applied.
+          * limit > 0: The resulting array's length will not be more than `limit`,
+            and the resulting array's last entry will contain all input
+            beyond the last matched regex.
+          * limit <= 0: `regex` will be applied as many times as possible, and
+            the resulting array can be of any size.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
        ["one","two","three",""]
-  """)
-case class StringSplit(str: Expression, pattern: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', -1);
+       ["one","two","three",""]
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
+       ["one","twoBthreeC"]
+  """,
+  since = "1.5.0")
+case class StringSplit(str: Expression, regex: Expression, limit: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = str
-  override def right: Expression = pattern
   override def dataType: DataType = ArrayType(StringType)
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = str :: regex :: limit :: Nil
 
-  override def nullSafeEval(string: Any, regex: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+  def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
+
+  override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
+    val strings = string.asInstanceOf[UTF8String].split(
+      regex.asInstanceOf[UTF8String], limit.asInstanceOf[Int])
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    nullSafeCodeGen(ctx, ev, (str, pattern) =>
+    nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
+      s"""${ev.value} = new $arrayClass($str.split($regex,$limit));""".stripMargin
+    })
   }
 
   override def prettyName: String = "split"
@@ -274,7 +320,8 @@ case class StringSplit(str: Expression, pattern: Expression)
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -373,7 +420,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
-  """)
+  """,
+  since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))

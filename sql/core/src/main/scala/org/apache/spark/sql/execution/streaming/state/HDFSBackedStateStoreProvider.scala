@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util
 import java.util.Locale
+import java.util.concurrent.atomic.LongAdder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -42,7 +43,7 @@ import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * An implementation of [[StateStoreProvider]] and [[StateStore]] in which all the data is backed
- * by files in a HDFS-compatible file system. All updates to the store has to be done in sets
+ * by files in an HDFS-compatible file system. All updates to the store has to be done in sets
  * transactionally, and each set of updates increments the store's version. These versions can
  * be used to re-execute the updates (by retries in RDD operations) on the correct version of
  * the store, and regenerate the store version.
@@ -78,7 +79,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   //   java.util.ConcurrentModificationException
   type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
+  /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
     extends StateStore {
 
@@ -165,7 +166,16 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
 
     override def metrics: StateStoreMetrics = {
-      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate), Map.empty)
+      // NOTE: we provide estimation of cache size as "memoryUsedBytes", and size of state for
+      // current version as "stateOnCurrentVersionSizeBytes"
+      val metricsFromProvider: Map[String, Long] = getMetricsForProvider()
+
+      val customMetrics = metricsFromProvider.flatMap { case (name, value) =>
+        // just allow searching from list cause the list is small enough
+        supportedCustomMetrics.find(_.name == name).map(_ -> value)
+      } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate))
+
+      StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
     /**
@@ -178,6 +188,12 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+  }
+
+  def getMetricsForProvider(): Map[String, Long] = synchronized {
+    Map("memoryUsedBytes" -> SizeEstimator.estimate(loadedMaps),
+      metricLoadedMapCacheHit.name -> loadedMapCacheHitCount.sum(),
+      metricLoadedMapCacheMiss.name -> loadedMapCacheMissCount.sum())
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
@@ -226,7 +242,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
-    Nil
+    metricStateOnCurrentVersionSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss ::
+      Nil
   }
 
   override def toString(): String = {
@@ -247,6 +264,21 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
+  private val loadedMapCacheHitCount: LongAdder = new LongAdder
+  private val loadedMapCacheMissCount: LongAdder = new LongAdder
+
+  private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
+    StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
+      "estimated size of state only on current version")
+
+  private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("loadedMapCacheHitCount",
+      "count of cache hit on states cache in provider")
+
+  private lazy val metricLoadedMapCacheMiss: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("loadedMapCacheMissCount",
+      "count of cache miss on states cache in provider")
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
@@ -311,12 +343,15 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     // Shortcut if the map for this version is already there to avoid a redundant put.
     val loadedCurrentVersionMap = synchronized { Option(loadedMaps.get(version)) }
     if (loadedCurrentVersionMap.isDefined) {
+      loadedMapCacheHitCount.increment()
       return loadedCurrentVersionMap.get
     }
 
     logWarning(s"The state for version $version doesn't exist in loadedMaps. " +
       "Reading snapshot file and delta files if needed..." +
       "Note that this is normal for the first batch of starting query.")
+
+    loadedMapCacheMissCount.increment()
 
     val (result, elapsedMs) = Utils.timeTakenMs {
       val snapshotCurrentVersionMap = readSnapshotFile(version)
@@ -594,7 +629,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     require(allFiles.exists(_.version == version))
 
     val latestSnapshotFileBeforeVersion = allFiles
-      .filter(_.isSnapshot == true)
+      .filter(_.isSnapshot)
       .takeWhile(_.version <= version)
       .lastOption
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {

@@ -213,7 +213,7 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val lossSum = binaryInstances.map { case Instance(l, w, f) =>
       val margin = BLAS.dot(Vectors.dense(stdCoef), f) + intercept
       val prob = 1.0 / (1.0 + math.exp(-margin))
-      -w * l * math.log(prob) - w * (1.0 - l) * math.log(1.0 - prob)
+      -w * l * math.log(prob) - w * (1.0 - l) * math.log1p(-prob)
     }.sum
     val loss = lossSum / weightSum
 

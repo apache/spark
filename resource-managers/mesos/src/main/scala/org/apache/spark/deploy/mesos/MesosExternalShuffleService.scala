@@ -27,7 +27,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.shuffle.ExternalBlockHandler
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage
 import org.apache.spark.network.shuffle.protocol.mesos.{RegisterDriver, ShuffleServiceHeartbeat}
 import org.apache.spark.network.util.TransportConf
@@ -37,10 +37,10 @@ import org.apache.spark.util.ThreadUtils
  * An RPC endpoint that receives registration requests from Spark drivers running on Mesos.
  * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]].
  */
-private[mesos] class MesosExternalShuffleBlockHandler(
+private[mesos] class MesosExternalBlockHandler(
     transportConf: TransportConf,
     cleanerIntervalS: Long)
-  extends ExternalShuffleBlockHandler(transportConf, null) with Logging {
+  extends ExternalBlockHandler(transportConf, null) with Logging {
 
   ThreadUtils.newDaemonSingleThreadScheduledExecutor("shuffle-cleaner-watcher")
     .scheduleAtFixedRate(new CleanerThread(), 0, cleanerIntervalS, TimeUnit.SECONDS)
@@ -114,9 +114,9 @@ private[mesos] class MesosExternalShuffleService(conf: SparkConf, securityManage
   extends ExternalShuffleService(conf, securityManager) {
 
   protected override def newShuffleBlockHandler(
-      conf: TransportConf): ExternalShuffleBlockHandler = {
+      conf: TransportConf): ExternalBlockHandler = {
     val cleanerIntervalS = this.conf.get(SHUFFLE_CLEANER_INTERVAL_S)
-    new MesosExternalShuffleBlockHandler(conf, cleanerIntervalS)
+    new MesosExternalBlockHandler(conf, cleanerIntervalS)
   }
 }
 

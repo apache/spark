@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.yarn.config._
 
 class ApplicationMasterSuite extends SparkFunSuite {
 
@@ -28,7 +29,7 @@ class ApplicationMasterSuite extends SparkFunSuite {
     val port = 18080
     val sparkConf = new SparkConf()
 
-    sparkConf.set("spark.yarn.historyServer.address",
+    sparkConf.set(HISTORY_SERVER_ADDRESS,
       "http://${hadoopconf-yarn.resourcemanager.hostname}:${spark.history.ui.port}")
     val yarnConf = new YarnConfiguration()
     yarnConf.set("yarn.resourcemanager.hostname", host)

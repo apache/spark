@@ -80,7 +80,13 @@ abstract class Covariance(x: Expression, y: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
+       0.6666666666666666
+  """,
+  since = "2.0.0")
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
@@ -90,7 +96,13 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
+       1.0
+  """,
+  since = "2.0.0")
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),

@@ -32,7 +32,7 @@ from pyspark.sql.types import IntegerType, Row, StringType
 from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.utils import install_exception_handler
 
-__all__ = ["SQLContext", "HiveContext"]
+__all__ = ["SQLContext"]
 
 
 class SQLContext(object):
@@ -318,30 +318,12 @@ class SQLContext(object):
 
     @since(1.6)
     def dropTempTable(self, tableName):
-        """ Remove the temp table from catalog.
+        """ Remove the temporary table from catalog.
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
         self.sparkSession.catalog.dropTempView(tableName)
-
-    @since(1.3)
-    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
-        """Creates an external table based on the dataset in a data source.
-
-        It returns the DataFrame associated with the external table.
-
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        created external table.
-
-        :return: :class:`DataFrame`
-        """
-        return self.sparkSession.catalog.createExternalTable(
-            tableName, path, source, schema, **options)
 
     @ignore_unicode_prefix
     @since(1.0)
@@ -466,52 +448,6 @@ class SQLContext(object):
         return StreamingQueryManager(self._ssql_ctx.streams())
 
 
-class HiveContext(SQLContext):
-    """A variant of Spark SQL that integrates with data stored in Hive.
-
-    Configuration for Hive is read from ``hive-site.xml`` on the classpath.
-    It supports running both SQL and HiveQL commands.
-
-    :param sparkContext: The SparkContext to wrap.
-    :param jhiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
-        :class:`HiveContext` in the JVM, instead we make all calls to this object.
-
-    .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
-    """
-
-    def __init__(self, sparkContext, jhiveContext=None):
-        warnings.warn(
-            "HiveContext is deprecated in Spark 2.0.0. Please use " +
-            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            DeprecationWarning)
-        if jhiveContext is None:
-            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
-        else:
-            sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
-        SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
-
-    @classmethod
-    def _createForTesting(cls, sparkContext):
-        """(Internal use only) Create a new HiveContext for testing.
-
-        All test code that touches HiveContext *must* go through this method. Otherwise,
-        you may end up launching multiple derby instances and encounter with incredibly
-        confusing error messages.
-        """
-        jsc = sparkContext._jsc.sc()
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
-        return cls(sparkContext, jtestHive)
-
-    def refreshTable(self, tableName):
-        """Invalidate and refresh all the cached the metadata of the given
-        table. For performance reasons, Spark SQL or the external data source
-        library it uses might cache certain metadata about a table, such as the
-        location of blocks. When those change outside of Spark SQL, users should
-        call this function to invalidate the cache.
-        """
-        self._ssql_ctx.refreshTable(tableName)
-
-
 def _test():
     import os
     import doctest
@@ -536,10 +472,8 @@ def _test():
     globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
-        '"field6":[{"field7": "row2"}]}',
-        '{"field1" : null, "field2": "row3", '
-        '"field3":{"field4":33, "field5": []}}'
+        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},"field6":[{"field7": "row2"}]}',
+        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}'
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
