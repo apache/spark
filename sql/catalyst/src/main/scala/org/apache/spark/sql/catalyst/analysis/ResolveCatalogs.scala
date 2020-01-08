@@ -106,15 +106,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case AlterNamespaceSetPropertiesStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetProperties(catalog, ns, properties)
-
-    case AlterNamespaceSetLocationStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), location) =>
-      AlterNamespaceSetProperties(catalog, ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> location))
-
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
         throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
@@ -194,18 +185,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if !isSessionCatalog(catalog) =>
       CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
 
-    case DropNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), ifExists, cascade) =>
-      DropNamespace(catalog, ns, ifExists, cascade)
-
-    case DescribeNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), extended) =>
-      DescribeNamespace(catalog, ns, extended)
-
-    case ShowNamespacesStatement(NonSessionCatalogAndNamespace(catalog, ns), pattern) =>
-      ShowNamespaces(catalog, ns, pattern)
-
-    case ShowTablesStatement(NonSessionCatalogAndNamespace(catalog, ns), pattern) =>
-      ShowTables(catalog.asTableCatalog, ns, pattern)
-
     case UseStatement(isNamespaceSet, nameParts) =>
       if (isNamespaceSet) {
         SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
@@ -230,14 +209,5 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
-  }
-
-  object NonSessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
-      if (!isSessionCatalog(resolved.catalog)) {
-        Some(resolved.catalog -> resolved.namespace)
-      } else {
-        None
-      }
   }
 }

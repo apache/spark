@@ -119,10 +119,9 @@ private[spark] object ResourceUtils extends Logging {
   def parseAllResourceRequests(
       sparkConf: SparkConf,
       componentName: String): Seq[ResourceRequest] = {
-    listResourceIds(sparkConf, componentName).flatMap { id =>
-      val req = parseResourceRequest(sparkConf, id)
-      if (req.amount > 0) Some(req) else None
-    }
+    listResourceIds(sparkConf, componentName)
+      .map(id => parseResourceRequest(sparkConf, id))
+      .filter(_.amount > 0)
   }
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
