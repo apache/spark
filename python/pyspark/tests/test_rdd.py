@@ -25,7 +25,8 @@ from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import ExecutorResourceRequests, shuffle, RDD, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests
+from pyspark import ExecutorResourceRequests, shuffle, RDD, ResourceProfile,\
+    ResourceProfileBuilder, TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
