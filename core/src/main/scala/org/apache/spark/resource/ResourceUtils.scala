@@ -119,9 +119,9 @@ private[spark] object ResourceUtils extends Logging {
   def parseAllResourceRequests(
       sparkConf: SparkConf,
       componentName: String): Seq[ResourceRequest] = {
-    listResourceIds(sparkConf, componentName).map { id =>
-      parseResourceRequest(sparkConf, id)
-    }
+    listResourceIds(sparkConf, componentName)
+      .map(id => parseResourceRequest(sparkConf, id))
+      .filter(_.amount > 0)
   }
 
   // Used to take a fraction amount from a task resource requirement and split into a real
@@ -155,11 +155,15 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
-    listResourceIds(sparkConf, componentName).map { resourceId =>
+    val resourceIds = listResourceIds(sparkConf, componentName)
+    val rnamesAndAmounts = resourceIds.map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
+      (resourceId.resourceName, amountDouble)
+    }
+    rnamesAndAmounts.filter { case (_, amount) => amount > 0 }.map { case (rName, amountDouble) =>
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
         calculateAmountAndPartsForFraction(amountDouble)
       } else if (amountDouble % 1 != 0) {
@@ -168,7 +172,7 @@ private[spark] object ResourceUtils extends Logging {
       } else {
         (amountDouble.toInt, 1)
       }
-      ResourceRequirement(resourceId.resourceName, amount, parts)
+      ResourceRequirement(rName, amount, parts)
     }
   }
 
@@ -207,10 +211,15 @@ private[spark] object ResourceUtils extends Logging {
     val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
       .filter(_.id.componentName == componentName)
     val otherResourceIds = resourceIdsFromConfs.diff(allocated.map(_.id))
-    allocated ++ otherResourceIds.map { id =>
+    val otherResources = otherResourceIds.flatMap { id =>
       val request = getResourceRequest(sparkConf, id)
-      ResourceAllocation(id, discoverResource(request).addresses)
+      if (request.amount > 0) {
+        Some(ResourceAllocation(id, discoverResource(request).addresses))
+      } else {
+        None
+      }
     }
+    allocated ++ otherResources
   }
 
   private def assertResourceAllocationMeetsRequest(

@@ -196,7 +196,7 @@ _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
     .. note:: The function is non-deterministic because the order of collected results depends
-        on order of rows which may be non-deterministic after a shuffle.
+        on the order of the rows which may be non-deterministic after a shuffle.
 
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_list('age')).collect()
@@ -206,7 +206,7 @@ _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
     .. note:: The function is non-deterministic because the order of collected results depends
-        on order of rows which may be non-deterministic after a shuffle.
+        on the order of the rows which may be non-deterministic after a shuffle.
 
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_set('age')).collect()
@@ -444,8 +444,8 @@ def first(col, ignorenulls=False):
     The function by default returns the first values it sees. It will return the first non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
 
-    .. note:: The function is non-deterministic because its results depends on order of rows which
-        may be non-deterministic after a shuffle.
+    .. note:: The function is non-deterministic because its results depends on the order of the
+        rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
@@ -535,8 +535,8 @@ def last(col, ignorenulls=False):
     The function by default returns the last values it sees. It will return the last non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
 
-    .. note:: The function is non-deterministic because its results depends on order of rows
-        which may be non-deterministic after a shuffle.
+    .. note:: The function is non-deterministic because its results depends on the order of the
+        rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)

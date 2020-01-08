@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -2227,9 +2227,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val builder = new MetadataBuilder
     // Add comment to metadata
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
+    Option(commentSpec()).map(visitCommentSpec).foreach {
+      builder.putString("comment", _)
     }
+
     // Add Hive type string to metadata.
     val rawDataType = typedVisit[DataType](ctx.dataType)
     val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
@@ -2265,14 +2266,35 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
     val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
-    if (STRING == null) structField else structField.withComment(string(STRING))
+    Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)
   }
 
   /**
-   * Create location string.
+   * Create a location string.
    */
   override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
     string(ctx.STRING)
+  }
+
+  /**
+   * Create an optional location string.
+   */
+  protected def visitLocationSpecList(ctx: java.util.List[LocationSpecContext]): Option[String] = {
+    ctx.asScala.headOption.map(visitLocationSpec)
+  }
+
+  /**
+   * Create a comment string.
+   */
+  override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
+    string(ctx.STRING)
+  }
+
+  /**
+   * Create an optional comment string.
+   */
+  protected def visitCommentSpecList(ctx: java.util.List[CommentSpecContext]): Option[String] = {
+    ctx.asScala.headOption.map(visitCommentSpec)
   }
 
   /**
@@ -2513,7 +2535,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
@@ -2525,10 +2547,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     var properties = ctx.tablePropertyList.asScala.headOption
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
-    Option(ctx.comment).map(string).map {
+
+    visitCommentSpecList(ctx.commentSpec()).foreach {
       properties += SupportsNamespaces.PROP_COMMENT -> _
     }
-    ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
+
+    visitLocationSpecList(ctx.locationSpec()).foreach {
       properties += SupportsNamespaces.PROP_LOCATION -> _
     }
 
@@ -2539,7 +2563,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropNamespaceStatement]] command.
+   * Create a [[DropNamespace]] command.
    *
    * For example:
    * {{{
@@ -2547,14 +2571,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    DropNamespaceStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    DropNamespace(
+      UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
       ctx.EXISTS != null,
       ctx.CASCADE != null)
   }
 
   /**
-   * Create an [[AlterNamespaceSetPropertiesStatement]] logical plan.
+   * Create an [[AlterNamespaceSetProperties]] logical plan.
    *
    * For example:
    * {{{
@@ -2564,14 +2588,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetPropertiesStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitPropertyKeyValues(ctx.tablePropertyList))
     }
   }
 
   /**
-   * Create an [[AlterNamespaceSetLocationStatement]] logical plan.
+   * Create an [[AlterNamespaceSetLocation]] logical plan.
    *
    * For example:
    * {{{
@@ -2580,27 +2604,28 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetLocationStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      AlterNamespaceSetLocation(
+        UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitLocationSpec(ctx.locationSpec))
     }
   }
 
   /**
-   * Create a [[ShowNamespacesStatement]] command.
+   * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
       throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
     }
 
-    ShowNamespacesStatement(
-      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowNamespaces(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
 
   /**
-   * Create a [[DescribeNamespaceStatement]].
+   * Create a [[DescribeNamespace]].
    *
    * For example:
    * {{{
@@ -2609,8 +2634,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
-      DescribeNamespaceStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier()),
+      DescribeNamespace(
+        UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier())),
         ctx.EXTENDED != null)
     }
 
@@ -2618,7 +2643,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
@@ -2627,8 +2652,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val comment = Option(ctx.comment).map(string)
+    val location = visitLocationSpecList(ctx.locationSpec())
+    val comment = visitCommentSpecList(ctx.commentSpec())
     (partitioning, bucketSpec, properties, options, location, comment)
   }
 
@@ -2777,11 +2802,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowTablesStatement]] command.
+   * Create a [[ShowTables]] command.
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    ShowTablesStatement(
-      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowTables(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
 
@@ -2810,7 +2836,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     QualifiedColType(
       typedVisit[Seq[String]](ctx.name),
       typedVisit[DataType](ctx.dataType),
-      Option(ctx.comment).map(string),
+      Option(ctx.commentSpec()).map(visitCommentSpec),
       Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
@@ -2859,7 +2885,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitAlterTableColumn(
       ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
     val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
-    if (ctx.dataType == null && ctx.comment == null && ctx.colPosition == null) {
+    if (ctx.dataType == null && ctx.commentSpec() == null && ctx.colPosition == null) {
       operationNotAllowed(
         s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT or a FIRST/AFTER", ctx)
     }
@@ -2868,7 +2894,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
       Option(ctx.dataType).map(typedVisit[DataType]),
-      Option(ctx.comment).map(string),
+      Option(ctx.commentSpec()).map(visitCommentSpec),
       Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
@@ -2896,7 +2922,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       typedVisit[Seq[String]](ctx.table),
       columnNameParts,
       Option(ctx.colType().dataType()).map(typedVisit[DataType]),
-      Option(ctx.colType().STRING()).map(string),
+      Option(ctx.colType().commentSpec()).map(visitCommentSpec),
       Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
@@ -3305,13 +3331,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     }
 
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
 
     val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
       icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.STRING).map(string)
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
       }
     }
 
@@ -3325,7 +3351,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     CreateViewStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       userSpecifiedColumns,
-      ctx.STRING.asScala.headOption.map(string),
+      visitCommentSpecList(ctx.commentSpec()),
       ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
         .getOrElse(Map.empty),
       Option(source(ctx.query)),
@@ -3430,8 +3456,38 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx.TEMPORARY != null)
   }
 
+  /**
+   * Create a CREATE FUNCTION statement.
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   * }}}
+   */
+  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val resources = ctx.resource.asScala.map { resource =>
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
+      resourceType match {
+        case "jar" | "file" | "archive" =>
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
+        case other =>
+          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
+      }
+    }
+
+    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CreateFunctionStatement(
+      functionIdentifier,
+      string(ctx.className),
+      resources,
+      ctx.TEMPORARY != null,
+      ctx.EXISTS != null,
+      ctx.REPLACE != null)
+  }
+
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    val comment = ctx.commennt.getType match {
+    val comment = ctx.comment.getType match {
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
@@ -3440,7 +3496,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
-    val comment = ctx.commennt.getType match {
+    val comment = ctx.comment.getType match {
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }

@@ -106,15 +106,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case AlterNamespaceSetPropertiesStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns, properties)
-
-    case AlterNamespaceSetLocationStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), location) =>
-      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> location))
-
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
         throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
@@ -190,27 +181,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case c @ CreateNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), _, _) =>
+    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
+        if !isSessionCatalog(catalog) =>
       CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
-
-    case DropNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), ifExists, cascade) =>
-      DropNamespace(catalog, ns, ifExists, cascade)
-
-    case DescribeNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), extended) =>
-      DescribeNamespace(catalog.asNamespaceCatalog, ns, extended)
-
-    case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern) =>
-      val namespace = if (ns.nonEmpty) Some(ns) else None
-      ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
-
-    case ShowNamespacesStatement(None, pattern) =>
-      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
-
-    case ShowTablesStatement(Some(NonSessionCatalogAndNamespace(catalog, ns)), pattern) =>
-      ShowTables(catalog.asTableCatalog, ns, pattern)
-
-    case ShowTablesStatement(None, pattern) if !isSessionCatalog(currentCatalog) =>
-      ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
 
     case UseStatement(isNamespaceSet, nameParts) =>
       if (isNamespaceSet) {
@@ -234,14 +207,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
-      case _ => None
-    }
-  }
-
-  object NonSessionCatalogAndNamespace {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndNamespace(catalog, ns) if !isSessionCatalog(catalog) =>
-        Some(catalog -> ns)
       case _ => None
     }
   }
