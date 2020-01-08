@@ -311,13 +311,19 @@ private[ui] class StagePagedTable(
       })
     val details = if (isMultiline) {
       // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle
+       ('collapsed');clickDetails();" class="expand-details"><span id="hidedetails">+details</span>
+        <span id="showdetails" style="display: none;">-details</span>
       </span> ++
         <div class="stacktrace-details collapsed">
           <pre>{failureReason}</pre>
         </div>
+        <script>
+          function clickDetails() {{
+          $('#showdetails').toggle();
+          $('#hidedetails').toggle();
+          }}
+        </script>
       // scalastyle:on
     } else {
       ""
@@ -351,9 +357,9 @@ private[ui] class StagePagedTable(
 
     val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
     val details = if (s.details != null && s.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed');
+        clickDetails();" class="expand-details"><span id="hidedetails">+details</span>
+        <span id="showdetails" style="display: none;">-details</span>
       </span> ++
       <div class="stage-details collapsed">
         {if (cachedRddInfos.nonEmpty) {
@@ -364,6 +370,12 @@ private[ui] class StagePagedTable(
         }}
         <pre>{s.details}</pre>
       </div>
+      <script>
+        function clickDetails() {{
+          $('#showdetails').toggle();
+          $('#hidedetails').toggle();
+        }}
+      </script>
     }
 
     val stageDesc = descriptionOption.map(UIUtils.makeDescription(_, basePathUri))

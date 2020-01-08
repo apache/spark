@@ -863,9 +863,10 @@ $(document).ready(function () {
                                     return "";
                                 } else {
                                     var formHead = msg.substring(0, msg.indexOf("at"));
-                                    var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
+                                    var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed');clickDetails();\" class=\"expand-details\"><span id=\"hidedetails\">+details</span><span id=\"showdetails\" style=\"display: none;\">-details</span></span>";
                                     var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                                    return formHead + form + formMsg;
+                                    var formClickDetails = "<script>function clickDetails() {{$('#showdetails').toggle();$('#hidedetails').toggle();}}</script>"
+                                    return formHead + form + formMsg + formClickDetails;
                                 }
                             },
                             name: "Errors"

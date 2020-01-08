@@ -392,13 +392,19 @@ private[ui] class ExecutionPagedTable(
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
     val details = if (execution.details != null && execution.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed');
+        clickDetails();" class="expand-details"><span id="hidedetails">+details</span>
+        <span id="showdetails" style="display: none;">-details</span>
       </span> ++
       <div class="stage-details collapsed">
         <pre>{execution.description}<br></br>{execution.details}</pre>
       </div>
+      <script>
+        function clickDetails() {{
+          $('#showdetails').toggle();
+          $('#hidedetails').toggle();
+        }}
+      </script>
     } else {
       Nil
     }

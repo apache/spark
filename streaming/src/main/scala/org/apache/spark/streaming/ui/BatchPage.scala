@@ -244,14 +244,19 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def generateOutputOpDescription(outputOp: OutputOperationUIData): Seq[Node] = {
     <div>
       {outputOp.name}
-      <span
-        onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-        class="expand-details">
-          +details
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed');
+        clickDetails();" class="expand-details"><span id="hidedetails">+details</span>
+        <span id="showdetails" style="display: none;">-details</span>
       </span>
       <div class="stage-details collapsed">
         <pre>{outputOp.description}</pre>
       </div>
+      <script>
+        function clickDetails() {{
+        $('#showdetails').toggle();
+        $('#hidedetails').toggle();
+        }}
+      </script>
     </div>
   }
 
