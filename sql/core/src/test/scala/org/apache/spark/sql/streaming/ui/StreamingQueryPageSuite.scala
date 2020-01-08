@@ -24,7 +24,7 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 import scala.xml.Node
 
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryProgress}
+import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.test.SharedSparkSession
 
 class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {

@@ -30,12 +30,15 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -137,6 +140,19 @@ private[sql] class SharedState(
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
   }
+
+  /**
+   * A [[StreamingQueryListener]] for structured streaming ui, it contains all streaming query ui
+   * data to show.
+   */
+  lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] =
+    if (conf.get(UI_ENABLED)) {
+      val statusListener = new StreamingQueryStatusListener(SQLConf.get)
+      sparkContext.ui.foreach(new StreamingQueryTab(statusListener, _))
+      Some(statusListener)
+    } else {
+      None
+    }
 
   /**
    * A catalog that interacts with external systems.

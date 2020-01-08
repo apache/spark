@@ -26,43 +26,61 @@ import scala.collection.mutable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress}
 
+/**
+ * A customized [[StreamingQueryListener]] used in structured streaming UI, which contains all
+ * UI data for both active and inactive query.
+ * TODO: Add support for history server.
+ */
 class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListener {
 
+  /**
+   * We use runId as the key here instead of id in active query status map,
+   * because the runId is unique for every started query, even it its a restart.
+   */
   private val activeQueryStatus = new ConcurrentHashMap[UUID, StreamingQueryUIData]()
-  private val inactiveQueryStatus = new ConcurrentHashMap[UUID, StreamingQueryUIData]()
+  private val inactiveQueryStatus = new mutable.Queue[StreamingQueryUIData]()
 
   private val streamingProgressRetention = sqlConf.streamingProgressRetention
+  private val inactiveQueryStatusRetention = sqlConf.streamingUIInactiveQueryRetention
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
-    activeQueryStatus.putIfAbsent(event.id,
+    activeQueryStatus.putIfAbsent(event.runId,
       new StreamingQueryUIData(event.name, event.id, event.runId))
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
     val queryStatus = activeQueryStatus.getOrDefault(
-      event.progress.id,
+      event.progress.runId,
       new StreamingQueryUIData(event.progress.name, event.progress.id, event.progress.runId))
     queryStatus.updateProcess(event.progress, streamingProgressRetention)
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    val queryStatus = activeQueryStatus.remove(event.id)
+    val queryStatus = activeQueryStatus.remove(event.runId)
     if (queryStatus != null) {
       queryStatus.queryTerminated(event)
-      inactiveQueryStatus.put(event.id, queryStatus)
+      inactiveQueryStatus.synchronized {
+        inactiveQueryStatus += queryStatus
+        while (inactiveQueryStatus.length >= inactiveQueryStatusRetention) {
+          inactiveQueryStatus.dequeue()
+        }
+      }
     }
   }
 
-  def allQueryStatus: Seq[StreamingQueryUIData] = {
-    activeQueryStatus.values().asScala.toSeq ++ inactiveQueryStatus.values().asScala.toSeq
+  def allQueryStatus: Seq[StreamingQueryUIData] = inactiveQueryStatus.synchronized {
+    activeQueryStatus.values().asScala.toSeq ++ inactiveQueryStatus
   }
 }
 
+/**
+ * This class contains all message related to UI display, each instance corresponds to a single
+ * [[org.apache.spark.sql.streaming.StreamingQuery]].
+ */
 private[ui] class StreamingQueryUIData(
     val name: String,
     val id: UUID,
     val runId: UUID) {
-
   val submitTime: Long = System.currentTimeMillis()
 
   /** Holds the most recent query progress updates. */
@@ -71,9 +89,9 @@ private[ui] class StreamingQueryUIData(
   private var _isActive = true
   private var _exception: Option[String] = None
 
-  def isActive: Boolean = _isActive
+  def isActive: Boolean = synchronized { _isActive }
 
-  def exception: Option[String] = _exception
+  def exception: Option[String] = synchronized { _exception }
 
   def queryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = synchronized {
     _isActive = false
@@ -96,4 +114,3 @@ private[ui] class StreamingQueryUIData(
     progressBuffer.lastOption.orNull
   }
 }
-

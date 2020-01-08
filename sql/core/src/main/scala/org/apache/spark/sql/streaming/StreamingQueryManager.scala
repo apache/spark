@@ -38,7 +38,6 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -71,9 +70,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       })
     }
     if (sparkSession.sparkContext.conf.get(UI_ENABLED)) {
-      val statusListener = new StreamingQueryStatusListener(sparkSession.sqlContext.conf)
-      addListener(statusListener)
-      sparkSession.sparkContext.ui.foreach(new StreamingQueryTab(statusListener, _))
+      addListener(sparkSession.sharedState.streamingQueryStatusListener.get)
     }
   } catch {
     case e: Exception =>
