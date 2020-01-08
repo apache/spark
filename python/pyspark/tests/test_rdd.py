@@ -25,7 +25,7 @@ from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import ExecutorResourceRequests, shuffle, RDD, ResourceProfile, TaskResourceRequests
+from pyspark import ExecutorResourceRequests, shuffle, RDD, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
@@ -804,7 +804,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertEqual(task_reqs["gpu"].amount, 2.0)
 
         assert_request_contents(ereqs.requests, treqs.requests)
-        rp = rp_builder.require(ereqs).require(treqs).build()
+        rp = rp_builder.require(ereqs).require(treqs).build
         assert_request_contents(rp.executorResources, rp.taskResources)
         rdd = self.sc.parallelize(range(10)).withResources(rp)
         return_rp = rdd.getResourceProfile()
