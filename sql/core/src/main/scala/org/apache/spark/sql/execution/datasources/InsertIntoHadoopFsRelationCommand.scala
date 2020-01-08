@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.util.Date
 
-import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
@@ -483,22 +482,27 @@ case class InsertIntoHadoopFsRelationCommand(
           case _ => false
         }
 
-        if (pickLock) {
-          true
-        } else {
-          Thread.sleep(HdfsConstants.LEASE_SOFTLIMIT_PERIOD)
-          if (!pickLock) {
-            logWarning(
-              s"""
-                 | Can not get the partition lock after waiting for a soft limit period:
-                 | ${HdfsConstants.LEASE_SOFTLIMIT_PERIOD} ms, it should be owned by another
-                 | running operation.
-                 |""".stripMargin)
-            false
-          } else {
-            true
+        var picked: Boolean = false
+        val startTime = System.currentTimeMillis()
+        var lastTime = startTime
+        val timeOut = HdfsConstants.LEASE_SOFTLIMIT_PERIOD
+
+        while (!picked && lastTime - startTime < timeOut) {
+          lastTime = System.currentTimeMillis()
+          picked = pickLock
+          if (!picked) {
+            Thread.sleep(1000)
           }
         }
+        if (!picked) {
+          logWarning(
+            s"""
+               | Can not get the partition lock after waiting for a soft limit period:
+               | ${HdfsConstants.LEASE_SOFTLIMIT_PERIOD} ms, it should be owned by another
+               | running operation.
+               |""".stripMargin)
+        }
+        picked
       }
     } catch {
       case e: Exception =>
