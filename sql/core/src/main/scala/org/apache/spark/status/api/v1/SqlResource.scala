@@ -29,18 +29,21 @@ import org.apache.spark.ui.UIUtils
 private[v1] class SqlResource extends BaseAppResource {
 
   @GET
-  def sqlList(@QueryParam("details") @DefaultValue("false") details: Boolean):
-   Seq[ExecutionData] = {
+  def sqlList(
+      @DefaultValue("false") @QueryParam("details") details: Boolean,
+      @DefaultValue("0") @QueryParam("offset") offset: Int,
+      @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList().map(prepareExecutionData(_, details))
+      sqlStore.executionsList(offset, length).map(prepareExecutionData(_, details))
     }
   }
 
   @GET
   @Path("{executionId:\\d+}")
-  def sql(@PathParam("executionId") execId: Long,
-          @QueryParam("details") @DefaultValue("false") details: Boolean): ExecutionData = {
+  def sql(
+      @PathParam("executionId") execId: Long,
+      @DefaultValue("false") @QueryParam("details") details: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore
@@ -50,12 +53,14 @@ private[v1] class SqlResource extends BaseAppResource {
     }
   }
 
-  def printableMetrics(metrics: Seq[SQLPlanMetric],
-                        metricValues: Map[Long, String]): Seq[(String, String)] = {
-    metrics.map(metric => (metric.name, metricValues.get(metric.accumulatorId).getOrElse("")))
+  private def printableMetrics(
+      metrics: Seq[SQLPlanMetric],
+      metricValues: Map[Long, String]): Seq[Metrics] = {
+    metrics.map(metric =>
+      Metrics(metric.name, metricValues.get(metric.accumulatorId).getOrElse("")))
   }
 
-  def prepareExecutionData(exec: SQLExecutionUIData, details: Boolean): ExecutionData = {
+  private def prepareExecutionData(exec: SQLExecutionUIData, details: Boolean): ExecutionData = {
     var running = Seq[Int]()
     var completed = Seq[Int]()
     var failed = Seq[Int]()
@@ -63,7 +68,7 @@ private[v1] class SqlResource extends BaseAppResource {
     exec.jobs.foreach {
       case (id, JobExecutionStatus.RUNNING) =>
         running = running :+ id
-      case (id, JobExecutionStatus.SUCCEEDED ) =>
+      case (id, JobExecutionStatus.SUCCEEDED) =>
         completed = completed :+ id
       case (id, JobExecutionStatus.FAILED) =>
         failed = failed :+ id
@@ -78,13 +83,19 @@ private[v1] class SqlResource extends BaseAppResource {
       "RUNNING"
     }
 
-    val duration = UIUtils.formatDuration(
-      exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
+    val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (details) exec.physicalPlanDescription else ""
     val metrics = if (details) printableMetrics(exec.metrics, exec.metricValues) else Seq.empty
-    new ExecutionData(exec.executionId,
-      status, exec.description, planDetails, metrics,
-      UIUtils.formatDate(exec.submissionTime),
-      duration, running, completed, failed)
+    new ExecutionData(
+      exec.executionId,
+      status,
+      exec.description,
+      planDetails,
+      metrics,
+      new Date(exec.submissionTime),
+      duration,
+      running,
+      completed,
+      failed)
   }
 }

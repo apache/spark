@@ -34,12 +34,14 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
  * no state kept in this class, so it's ok to have multiple instances of it in an application.
  */
-class SQLAppStatusStore(
-    store: KVStore,
-    val listener: Option[SQLAppStatusListener] = None) {
+class SQLAppStatusStore(store: KVStore, val listener: Option[SQLAppStatusListener] = None) {
 
   def executionsList(): Seq[SQLExecutionUIData] = {
     store.view(classOf[SQLExecutionUIData]).asScala.toSeq
+  }
+
+  def executionsList(offset: Int, length: Int): Seq[SQLExecutionUIData] = {
+    store.view(classOf[SQLExecutionUIData]).skip(offset).max(length).asScala.toSeq
   }
 
   def execution(executionId: Long): Option[SQLExecutionUIData] = {
@@ -120,7 +122,10 @@ class SparkPlanGraphClusterWrapper(
     val metrics: Seq[SQLPlanMetric]) {
 
   def toSparkPlanGraphCluster(): SparkPlanGraphCluster = {
-    new SparkPlanGraphCluster(id, name, desc,
+    new SparkPlanGraphCluster(
+      id,
+      name,
+      desc,
       new ArrayBuffer() ++ nodes.map(_.toSparkPlanGraphNode()),
       metrics)
   }
@@ -139,7 +144,4 @@ class SparkPlanGraphNodeWrapper(
 
 }
 
-case class SQLPlanMetric(
-    name: String,
-    accumulatorId: Long,
-    metricType: String)
+case class SQLPlanMetric(name: String, accumulatorId: Long, metricType: String)

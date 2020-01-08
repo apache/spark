@@ -16,14 +16,18 @@
  */
 package org.apache.spark.status.api.v1
 
-class ExecutionData (
-    val id : Long,
+import java.util.Date
+
+class ExecutionData private[spark] (
+    val id: Long,
     val status: String,
     val description: String,
     val planDescription: String,
-    val metrics: Seq[(String, String)],
-    val submissionTime: String,
-    val duration: String,
+    val metrics: Seq[Metrics],
+    val submissionTime: Date,
+    val duration: Long,
     val runningJobIds: Seq[Int],
     val successJobIds: Seq[Int],
     val failedJobIds: Seq[Int])
+
+case class Metrics private[spark] (metricName: String, metricValue: String)
