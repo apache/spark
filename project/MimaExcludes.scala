@@ -332,6 +332,10 @@ object MimaExcludes {
     // [SPARK-26457] Show hadoop configurations in HistoryServer environment tab
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this"),
 
+    // [SPARK-30144][ML] Make MultilayerPerceptronClassificationModel extend MultilayerPerceptronParams
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel.layers"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel.this"),
+
     // Data Source V2 API changes
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>

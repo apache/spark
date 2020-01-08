@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
@@ -284,7 +284,7 @@ case class AlterNamespaceSetProperties(
  */
 case class ShowNamespaces(
     catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
+    namespace: Seq[String],
     pattern: Option[String]) extends Command {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())
@@ -453,4 +453,32 @@ case class ShowTableProperties(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan that defines or changes the comment of an NAMESPACE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON (DATABASE|SCHEMA|NAMESPACE) namespaceIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
+ */
+case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON TABLE tableIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
+ */
+case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
 }

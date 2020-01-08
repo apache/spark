@@ -204,14 +204,8 @@ class FMClassifier @Since("3.0.0") (
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val data: RDD[(Double, OldVector)] =
-      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          require(label == 0 || label == 1, s"FMClassifier was given" +
-            s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-            s" FMClassifier currently only supports binary classification.")
-          (label, features)
-      }
+    val labeledPoint = extractLabeledPoints(dataset, numClasses)
+    val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 

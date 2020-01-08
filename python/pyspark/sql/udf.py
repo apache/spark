@@ -84,6 +84,10 @@ class UserDefinedFunction(object):
     User defined function in Python
 
     .. versionadded:: 1.3
+
+    .. note:: The constructor of this class is not supposed to be directly called.
+        Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+        to create this instance.
     """
     def __init__(self, func,
                  returnType=StringType(),

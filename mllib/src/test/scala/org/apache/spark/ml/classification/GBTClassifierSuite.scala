@@ -493,30 +493,31 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("training with sample weights") {
     val df = binaryDataset
     val numClasses = 2
-    val predEquals = (x: Double, y: Double) => x == y
-    // (maxIter, maxDepth)
+    // (maxIter, maxDepth, subsamplingRate, fractionInTol)
     val testParams = Seq(
-      (5, 5),
-      (5, 10)
+      (5, 5, 1.0, 0.99),
+      (5, 10, 1.0, 0.99),
+      (5, 10, 0.95, 0.9)
     )
 
-    for ((maxIter, maxDepth) <- testParams) {
+    for ((maxIter, maxDepth, subsamplingRate, tol) <- testParams) {
       val estimator = new GBTClassifier()
         .setMaxIter(maxIter)
         .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
         .setSeed(seed)
         .setMinWeightFractionPerNode(0.049)
 
       MLTestingUtils.testArbitrarilyScaledWeights[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7))
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol))
       MLTestingUtils.testOutliersWithSmallWeights[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ == _, tol),
         outlierRatio = 2)
       MLTestingUtils.testOversamplingVsWeighting[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7), seed)
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol), seed)
     }
   }
 
