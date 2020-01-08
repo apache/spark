@@ -1911,6 +1911,7 @@ class TaskSetManagerSuite
       .setMaster("local-cluster[2, 1, 2048]")
       // allow to set up at most two executors
       .set("spark.cores.max", "2")
+      .set(config.SCHEDULER_REVIVE_INTERVAL.key, "3m") // don't let it auto revive during test
       .setAppName("CoarseGrainedSchedulerBackend.reset")
     sc = new SparkContext(conf)
     val sched = sc.taskScheduler
@@ -1919,11 +1920,16 @@ class TaskSetManagerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val Seq(exec0, exec1) = backend.getExecutorIds()
 
-    // SPARK-30440: it's possible that tasks have already been scheduled after we call
+    // SPARK-30440: Instead of using a mock schedulerBackend/taskScheduler, we're using
+    // the real `CoarseGrainedSchedulerBackend`/`TaskSchedulerImpl` from the SparkContext
+    // due to the reason that we want to use reset() of `CoarseGrainedSchedulerBackend`.
+    // So, it's possible that tasks have already been scheduled after we call
     // `sched.submitTasks(taskSet)` but before `manager.resourceOffer`. In this case,
     // we'd get None task after `resourceOffer`. So, here, we intentionally set up a
     // 4 tasks TaskSet in order to feed 2 tasks to the executors and leave another two
-    // tasks for our test purpose.
+    // tasks for our test purpose. Also, we've increased revive interval of
+    // `CoarseGrainedSchedulerBackend` to make sure that another 2 tasks won't be scheduled
+    // before manually call `resourceOffer`.
     val taskSet = FakeTask.createTaskSet(4)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
