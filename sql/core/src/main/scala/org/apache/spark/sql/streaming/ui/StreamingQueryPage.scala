@@ -128,19 +128,33 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
       None
     }
 
+    // scalastyle:off
     val content =
-      <h5 id="activequeries">Active Streaming Queries ({activeQueries.length})</h5> ++
-        <div>
-          <ul class="unstyled">
-            {activeQueryTables.getOrElse("No active streaming query has been generated yet.")}
-          </ul>
-        </div> ++
-        <h5 id="completedqueries">Completed Streaming Queries ({inactiveQueries.length})</h5> ++
-        <div>
-          <ul class="unstyled">
-            {inactiveQueryTables.getOrElse("No streaming query has completed yet.")}
-          </ul>
-        </div>
+      <span id="completed" class="collapse-aggregated-activeQueries collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeQueries','aggregated-activeQueries')">
+        <h5 id="activequeries">
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Active Streaming Queries ({activeQueries.length})</a>
+        </h5>
+      </span> ++
+      <div>
+        <ul class="aggregated-activeQueries collapsible-table">
+          {activeQueryTables.getOrElse(Seq.empty[Node])}
+        </ul>
+      </div> ++
+      <span id="completed" class="collapse-aggregated-completedQueries collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedQueries','aggregated-completedQueries')">
+        <h5 id="completedqueries">
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Completed Streaming Queries ({inactiveQueries.length})</a>
+        </h5>
+      </span> ++
+      <div>
+        <ul class="aggregated-completedQueries collapsible-table">
+          {inactiveQueryTables.getOrElse(Seq.empty[Node])}
+        </ul>
+      </div>
+    // scalastyle:on
 
     content
   }

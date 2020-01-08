@@ -90,6 +90,8 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
   collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
   collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
+  collapseTablePageLoad('collapse-aggregated-activeQueries','aggregated-activeQueries');
+  collapseTablePageLoad('collapse-aggregated-completedQueries','aggregated-completedQueries');
 });
 
 $(function() {
