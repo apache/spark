@@ -229,7 +229,7 @@ public class HiveSQLException extends SQLException {
       trace[i] = new StackTraceElement(className, methodName, fileName, lineNumber);
     }
     int common = trace.length - i;
-    if (common > 0) {
+    if (null != parent && common > 0 && common < parent.length) {
       System.arraycopy(parent, parent.length - common, trace, trace.length - common, common);
     }
     if (details.size() > index) {
