@@ -210,13 +210,4 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       case _ => None
     }
   }
-
-  object NonSessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
-      if (!isSessionCatalog(resolved.catalog)) {
-        Some(resolved.catalog -> resolved.namespace)
-      } else {
-        None
-      }
-  }
 }

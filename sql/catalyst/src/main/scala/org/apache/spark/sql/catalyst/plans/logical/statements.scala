@@ -354,15 +354,6 @@ case class CreateNamespaceStatement(
     properties: Map[String, String]) extends ParsedStatement
 
 /**
- * A SHOW NAMESPACES statement, as parsed from SQL.
- */
-case class ShowNamespacesStatement(
-    namespace: LogicalPlan,
-    pattern: Option[String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
  * A USE statement, as parsed from SQL.
  */
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
