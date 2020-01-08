@@ -25,8 +25,8 @@ select length(42);
 -- casting to text in concatenations, so long as the other input is text or
 -- an unknown literal.  So these work:
 -- [SPARK-28033] String concatenation low priority than other arithmeticBinary
--- select string('four: ') || 2+2;
--- select 'four: ' || 2+2;
+select string('four: ') || 2+2;
+select 'four: ' || 2+2;
 
 -- but not this:
 -- Spark SQL implicit cast both side to string

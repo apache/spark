@@ -281,10 +281,10 @@ from numerics
 window w as (order by f_numeric range between
              1 preceding and 1.1 following);  -- currently unsupported
 
--- select id, f_numeric, first(id) over w, last(id) over w
--- from numerics
--- window w as (order by f_numeric range between
---             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+select id, f_numeric, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_numeric range between
+            1.1 preceding and 'NaN' following);  -- error, NaN disallowed
 
 drop table empsalary;
 drop table numerics;

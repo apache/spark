@@ -46,14 +46,14 @@ SELECT float('infinity');
 SELECT float('          -INFINiTY   ');
 -- [SPARK-27923] Spark SQL insert there bad special inputs to NULL
 -- bad special inputs
--- SELECT float('N A N');
--- SELECT float('NaN x');
--- SELECT float(' INFINITY    x');
+SELECT float('N A N');
+SELECT float('NaN x');
+SELECT float(' INFINITY    x');
 
 SELECT float('Infinity') + 100.0;
 SELECT float('Infinity') / float('Infinity');
 SELECT float('nan') / float('nan');
--- SELECT float(decimal('nan'));
+SELECT float(decimal('nan'));
 
 SELECT '' AS five, * FROM FLOAT4_TBL;
 
