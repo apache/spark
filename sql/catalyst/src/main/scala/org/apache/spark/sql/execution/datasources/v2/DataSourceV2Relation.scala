@@ -32,6 +32,10 @@ import org.apache.spark.util.Utils
  * A logical plan representing a data source v2 table.
  *
  * @param table   The table that this relation represents.
+ * @param output the output attributes of this relation
+ * @param catalogIdentifier the string identifier for the catalog
+ * @param identifiers the identifiers for the v2 relation. For multipath dataframe, there could be
+ *                    more than one identifier
  * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
  *                and [[WriteBuilder]].
  */

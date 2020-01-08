@@ -44,7 +44,7 @@ class CatalogManager(
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
-  // Map from catalog back to it's original name for easy name loop up, we don't use the
+  // Map from catalog back to it's original name for easy name look up, we don't use the
   // CatalogPlugin's name as it might be different from the catalog name depending on
   // implementation.
   private val catalogIdentifiers = mutable.HashMap.empty[CatalogPlugin, String]
