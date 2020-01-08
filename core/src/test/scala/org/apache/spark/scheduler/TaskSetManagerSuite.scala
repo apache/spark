@@ -1930,14 +1930,11 @@ class TaskSetManagerSuite
     val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
 
     val (task0, task1) = eventually(timeout(10.seconds), interval(100.milliseconds)) {
-      val task0 = Option(manager.taskInfos(0))
-      val task1 = Option(manager.taskInfos(1))
-      assert(task0.isDefined && task1.isDefined)
-      (task0, task1)
+      (manager.taskInfos(0), manager.taskInfos(1))
     }
 
-    val (taskId0, index0, exec0) = (task0.get.taskId, task0.get.index, task0.get.executorId)
-    val (taskId1, index1, exec1) = (task1.get.taskId, task1.get.index, task1.get.executorId)
+    val (taskId0, index0, exec0) = (task0.taskId, task0.index, task0.executorId)
+    val (taskId1, index1, exec1) = (task1.taskId, task1.index, task1.executorId)
     // set up two running tasks
     assert(manager.taskInfos(taskId0).running)
     assert(manager.taskInfos(taskId1).running)
