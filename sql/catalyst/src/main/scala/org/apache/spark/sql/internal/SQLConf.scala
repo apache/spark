@@ -2155,15 +2155,23 @@ object SQLConf {
    */
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
-      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0.0",
-        s"This config is replaced by ${SPARK_IGNORE_MISSING_FILES.key}."),
+      DeprecatedConfig(VARIABLE_SUBSTITUTE_DEPTH.key, "2.1",
+        "The SQL config is not used by Spark anymore."),
       DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
         "Behavior for `false` config value is considered as a bug, and " +
           "it will be prohibited in the future releases."),
+      DeprecatedConfig(PARQUET_INT64_AS_TIMESTAMP_MILLIS.key, "2.3",
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
       DeprecatedConfig(
         PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
         "The config allows to switch to the behaviour before Spark 2.4 " +
-          "and will be removed in the future releases.")
+          "and will be removed in the future releases."),
+      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0",
+        s"This config is replaced by '${SPARK_IGNORE_MISSING_FILES.key}'."),
+      DeprecatedConfig(ARROW_EXECUTION_ENABLED.key, "3.0",
+        s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
+      DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
+        s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
