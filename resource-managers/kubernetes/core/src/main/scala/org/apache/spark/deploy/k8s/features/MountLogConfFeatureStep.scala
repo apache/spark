@@ -23,11 +23,12 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.io.Source
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, EnvVar, EnvVarBuilder, HasMetadata, PodBuilder, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, EnvVarBuilder, HasMetadata, PodBuilder, VolumeMountBuilder}
 
 import org.apache.spark.deploy.k8s.{Config, KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.launcher.SparkLauncher.{DRIVER_EXTRA_JAVA_OPTIONS, EXECUTOR_EXTRA_JAVA_OPTIONS}
 
 /**
@@ -36,35 +37,28 @@ import org.apache.spark.launcher.SparkLauncher.{DRIVER_EXTRA_JAVA_OPTIONS, EXECU
  */
 class MountLogConfFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep with Logging {
+  // Logging configuration for containers.
+  val JAVA_OPT_FOR_LOGGING = s"-Dlog4j.configuration=file://$LOGGING_MOUNT_DIR/"
+
   private val useExistingConfigMap = conf.get(Config.KUBERNETES_LOGGING_CONF_CONFIG_MAP).isDefined
   private val configMapName: String = conf.get(Config.KUBERNETES_LOGGING_CONF_CONFIG_MAP)
     .getOrElse(s"config-map-logging-conf-${UUID.randomUUID().toString.take(5)}")
   private val loggingConfigFileName: String = conf.get(Config.KUBERNETES_LOGGING_CONF_FILE_NAME)
   private val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
+  private val loggerJVMProp = s"$JAVA_OPT_FOR_LOGGING${loggingConfigFileName}"
 
   private val featureEnabled: Boolean = {
-      (loggingConfURL != null || useExistingConfigMap)
+    (loggingConfURL != null &&
+      conf.get(SparkLauncher.DEPLOY_MODE).equalsIgnoreCase("cluster")) ||
+      useExistingConfigMap
   }
-  private val loggerJVMProp = s"$JAVA_OPT_FOR_LOGGING${loggingConfigFileName}"
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val logConfVolume = s"logger-conf-volume-${UUID.randomUUID().toString.take(5)}"
     if (useExistingConfigMap) {
       logInfo(s"Using an existing config map ${configMapName} for logging configuration.")
     }
-    // Existing value of SPARK_CLASSPATH environment variable.
-    val sparkClasspath =
-      pod.container.getEnv.asScala.find(p => p.getName == ENV_CLASSPATH).map {x => x.getValue}
-    // All other environment variable except SPARK_CLASSPATH.
-    val envVars = pod.container.getEnv.asScala.filterNot(p => p.getName == ENV_CLASSPATH)
-    // Update the classpath with path to logger configuration file.
-    val updatedClasspath = if (sparkClasspath.isDefined) {
-      s"$LOGGING_MOUNT_DIR:${sparkClasspath.get}"
-    } else {
-      LOGGING_MOUNT_DIR
-    }
-    val sparkClasspathEnv =
-      new EnvVarBuilder().withName(ENV_CLASSPATH).withValue(updatedClasspath).build()
+
     val podUpdated = if (featureEnabled) {
       new PodBuilder(pod.pod)
       .editSpec()
@@ -77,26 +71,20 @@ class MountLogConfFeatureStep(conf: KubernetesConf)
         .endSpec()
       .build()
     } else {
-      logDebug(s"Logging configuration not found, mount not performed.")
+      logDebug(s"Logging configuration mount not performed.")
       pod.pod
     }
 
     val configMapVolumeMount = new VolumeMountBuilder()
-        .withName(logConfVolume)
-        .withReadOnly(true)
+      .withName(logConfVolume)
       // We need a separate mounting dir for logging because,
       // Mounting a ConfigMap has limitation that the mounted directory can hold only 1 file.
-        .withMountPath(LOGGING_MOUNT_DIR)
-        .build()
-    // As per https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.14/
-    // #configmapvolumesource-v1-core
-    // Since we do not want the pod creation to fail, in absence of the config map.
-    configMapVolumeMount.setAdditionalProperty("optional", "true")
+      .withMountPath(LOGGING_MOUNT_DIR)
+      .build()
 
     val containerUpdated =
       if (featureEnabled) {
         new ContainerBuilder(pod.container)
-          .withEnv((envVars ++ Seq(sparkClasspathEnv)).asJava)
           .withVolumeMounts(configMapVolumeMount)
           .build()
       } else {
@@ -131,6 +119,7 @@ class MountLogConfFeatureStep(conf: KubernetesConf)
       Map.empty[String, String]
     }
   }
+
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (featureEnabled && !useExistingConfigMap) {
       Seq(buildConfigMap(configMapName))
