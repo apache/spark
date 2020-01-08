@@ -568,14 +568,14 @@ class LogisticRegression @Since("1.2.0") (
           s"coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
-          new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
+          new Array[Int](numCoefficientSets + 1), Array.emptyIntArray, Array.emptyDoubleArray,
           isTransposed = true).compressed
         val interceptVec = if (isMultinomial) {
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
         } else {
           Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
         }
-        (coefMatrix, interceptVec, Array.empty[Double])
+        (coefMatrix, interceptVec, Array.emptyDoubleArray)
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
           instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
@@ -855,7 +855,7 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val centers = Array.fill(numFeatures)(0.0)
+          val centers = Array.ofDim[Double](numFeatures)
           denseCoefficientMatrix.foreachActive { case (i, j, v) =>
             centers(j) += v
           }
