@@ -37,8 +37,8 @@ class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListe
    * We use runId as the key here instead of id in active query status map,
    * because the runId is unique for every started query, even it its a restart.
    */
-  private val activeQueryStatus = new ConcurrentHashMap[UUID, StreamingQueryUIData]()
-  private val inactiveQueryStatus = new mutable.Queue[StreamingQueryUIData]()
+  private[ui] val activeQueryStatus = new ConcurrentHashMap[UUID, StreamingQueryUIData]()
+  private[ui] val inactiveQueryStatus = new mutable.Queue[StreamingQueryUIData]()
 
   private val streamingProgressRetention = sqlConf.streamingProgressRetention
   private val inactiveQueryStatusRetention = sqlConf.streamingUIInactiveQueryRetention
