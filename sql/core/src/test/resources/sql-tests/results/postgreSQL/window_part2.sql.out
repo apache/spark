@@ -450,7 +450,7 @@ struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS 
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
-            1.1 preceding and 'NaN' following)
+             1.1 preceding and 'NaN' following)
 -- !query 28 schema
 struct<>
 -- !query 28 output

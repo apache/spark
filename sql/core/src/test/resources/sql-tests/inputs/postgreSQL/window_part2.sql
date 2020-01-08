@@ -284,7 +284,7 @@ window w as (order by f_numeric range between
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
-            1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
 
 drop table empsalary;
 drop table numerics;

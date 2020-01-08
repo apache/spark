@@ -672,25 +672,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
-    case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, s => {
-        val doubleStr = s.toString
-        try doubleStr.toDouble catch {
-          case _: NumberFormatException =>
-            val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
-            if(d == null) {
-              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-            } else {
-              d.asInstanceOf[Double].doubleValue()
-            }
-        }
-      })
     case StringType =>
       buildCast[UTF8String](_, s => {
         val doubleStr = s.toString
         try doubleStr.toDouble catch {
           case _: NumberFormatException =>
-            Cast.processFloatingPointSpecialLiterals(doubleStr, false)
+            val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
+            if(ansiEnabled && d == null) {
+              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
+            } else {
+              d
+            }
         }
       })
     case BooleanType =>
@@ -705,25 +697,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // FloatConverter
   private[this] def castToFloat(from: DataType): Any => Any = from match {
-    case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, s => {
-        val floatStr = s.toString
-        try floatStr.toFloat catch {
-          case _: NumberFormatException =>
-            val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
-            if (f == null) {
-              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-            } else {
-              f.asInstanceOf[Float].floatValue()
-            }
-        }
-      })
     case StringType =>
       buildCast[UTF8String](_, s => {
         val floatStr = s.toString
         try floatStr.toFloat catch {
           case _: NumberFormatException =>
-            Cast.processFloatingPointSpecialLiterals(floatStr, true)
+            val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
+            if (ansiEnabled && f == null) {
+              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
+            } else {
+              f
+            }
         }
       })
     case BooleanType =>
@@ -1398,23 +1382,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType if ansiEnabled =>
+      (c, evPrim, evNull) => code"$evPrim = $c.toByteExact();"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        val casting = if (ansiEnabled) {
-          s"$evPrim = $c.toByteExact();"
-        } else {
-          s"""
-            if ($c.toByte($wrapper)) {
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toByte($wrapper)) {
               $evPrim = (byte) $wrapper.value;
             } else {
               $evNull = true;
             }
-          """
-        }
-        code"""
-          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1436,23 +1415,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToShortCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
+    case StringType if ansiEnabled =>
+      (c, evPrim, evNull) => code"$evPrim = $c.toShortExact();"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        val casting = if (ansiEnabled) {
-          s"$evPrim = $c.toShortExact();"
-        } else {
-          s"""
-            if ($c.toShort($wrapper)) {
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toShort($wrapper)) {
               $evPrim = (short) $wrapper.value;
             } else {
               $evNull = true;
             }
-          """
-        }
-        code"""
-          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1472,23 +1446,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType if ansiEnabled =>
+      (c, evPrim, evNull) => code"$evPrim = $c.toIntExact();"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        val casting = if (ansiEnabled) {
-          s"$evPrim = $c.toIntExact();"
-        } else {
-          s"""
-            if ($c.toInt($wrapper)) {
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toInt($wrapper)) {
               $evPrim = $wrapper.value;
             } else {
               $evNull = true;
             }
-          """
-        }
-        code"""
-          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1507,23 +1476,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType if ansiEnabled =>
+      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact();"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>
-        val casting = if (ansiEnabled) {
-          s"$evPrim = $c.toLongExact();"
-        } else {
-          s"""
-            if ($c.toLong($wrapper)) {
-              $evPrim = $wrapper.value;
-            } else {
-              $evNull = true;
-            }
-          """
-        }
         code"""
           UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
-          $casting
+          if ($c.toLong($wrapper)) {
+            $evPrim = $wrapper.value;
+          } else {
+            $evNull = true;
+          }
           $wrapper = null;
         """
     case BooleanType =>
@@ -1543,25 +1507,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
-      case StringType if ansiEnabled =>
-        val floatStr = ctx.freshVariable("floatStr", StringType)
-        (c, evPrim, evNull) =>
-          code"""
-          final String $floatStr = $c.toString();
-          try {
-            $evPrim = Float.valueOf($floatStr);
-          } catch (java.lang.NumberFormatException e) {
-            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
-            if (f == null) {
-              throw new NumberFormatException("invalid input syntax for type numeric: $c");
-            } else {
-              $evPrim = f.floatValue();
-            }
-          }
-        """
       case StringType =>
         val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
+          val handleNull = if (ansiEnabled) {
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+          } else {
+            s"$evNull = true;"
+          }
           code"""
           final String $floatStr = $c.toString();
           try {
@@ -1569,7 +1522,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } catch (java.lang.NumberFormatException e) {
             final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
             if (f == null) {
-              $evNull = true;
+              $handleNull
             } else {
               $evPrim = f.floatValue();
             }
@@ -1590,25 +1543,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
-      case StringType if ansiEnabled =>
-        val doubleStr = ctx.freshVariable("doubleStr", StringType)
-        (c, evPrim, evNull) =>
-          code"""
-          final String $doubleStr = $c.toString();
-          try {
-            $evPrim = Double.valueOf($doubleStr);
-          } catch (java.lang.NumberFormatException e) {
-            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
-            if (d == null) {
-              throw new NumberFormatException("invalid input syntax for type numeric: $c");
-            } else {
-              $evPrim = d.doubleValue();
-            }
-          }
-        """
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
+          val handleNull = if (ansiEnabled) {
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+          } else {
+            s"$evNull = true;"
+          }
           code"""
           final String $doubleStr = $c.toString();
           try {
@@ -1616,7 +1558,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } catch (java.lang.NumberFormatException e) {
             final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
             if (d == null) {
-              $evNull = true;
+              $handleNull
             } else {
               $evPrim = d.doubleValue();
             }
