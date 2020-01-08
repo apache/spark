@@ -70,9 +70,9 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
   private def getMapStartIndices(stage: ShuffleQueryStageExec, partitionId: Int): Array[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
-    val numSplits = math.min(conf.getConf(
+    val maxSplits = math.min(conf.getConf(
       SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS), mapPartitionSizes.length)
-    val avgPartitionSize = mapPartitionSizes.sum / numSplits
+    val avgPartitionSize = mapPartitionSizes.sum / maxSplits
     val advisoryPartitionSize = math.max(avgPartitionSize,
       conf.getConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE))
     val partitionIndices = mapPartitionSizes.indices
@@ -80,7 +80,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
     var postMapPartitionSize = mapPartitionSizes(0)
     partitionStartIndices += 0
     partitionIndices.drop(1).foreach { nextPartitionIndex =>
-        var nextMapPartitionSize = mapPartitionSizes(nextPartitionIndex)
+        val nextMapPartitionSize = mapPartitionSizes(nextPartitionIndex)
         if (postMapPartitionSize + nextMapPartitionSize > advisoryPartitionSize) {
           partitionStartIndices += nextPartitionIndex
           postMapPartitionSize = nextMapPartitionSize
@@ -89,8 +89,8 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
         }
     }
 
-    if (partitionStartIndices.size > numSplits) {
-      partitionStartIndices.take(numSplits).toArray
+    if (partitionStartIndices.size > maxSplits) {
+      partitionStartIndices.take(maxSplits).toArray
     } else partitionStartIndices.toArray
   }
 

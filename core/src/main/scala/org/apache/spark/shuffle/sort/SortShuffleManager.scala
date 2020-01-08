@@ -133,14 +133,14 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   override def getReaderForRange[K, C](
       handle: ShuffleHandle,
-      startMapId: Int,
-      endMapId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
     val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByRange(
-      handle.shuffleId, startMapId, endMapId, startPartition, endPartition)
+      handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
       shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))

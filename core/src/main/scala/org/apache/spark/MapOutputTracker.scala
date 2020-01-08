@@ -344,7 +344,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
    * endPartition is excluded from the range) and is produced by
-   * a range of mappers (startMapId, endMapId, startMapId is included and the endMapId is excluded).
+   * a range of mappers (startMapIndex, endMapIndex, startMapIndex is included and
+   * the endMapIndex is excluded).
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
@@ -694,20 +695,20 @@ private[spark] class MapOutputTrackerMaster(
    * executor id on that host.
    *
    * @param dep shuffle dependency object
-   * @param startMapId the start map id
-   * @param endMapId the end map id
+   * @param startMapIndex the start map index
+   * @param endMapIndex the end map index
    * @return a sequence of locations where task runs.
    */
   def getMapLocation(
       dep: ShuffleDependency[_, _, _],
-      startMapId: Int,
-      endMapId: Int): Seq[String] =
+      startMapIndex: Int,
+      endMapIndex: Int): Seq[String] =
   {
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
-        if (startMapId < endMapId && (startMapId >= 0 && endMapId < statuses.length)) {
-          val statusesPicked = statuses.slice(startMapId, endMapId).filter(_ != null)
+        if (startMapIndex < endMapIndex && (startMapIndex >= 0 && endMapIndex < statuses.length)) {
+          val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
           statusesPicked.map(_.location.host).toSeq
         } else {
           Nil
