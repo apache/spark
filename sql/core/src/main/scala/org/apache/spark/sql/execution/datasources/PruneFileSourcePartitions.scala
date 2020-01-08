@@ -105,4 +105,22 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         op
       }
   }
+
+  /**
+    * Split predicate ,Filter partitioning predicate
+    */
+  def splitPredicates(condition: Expression,partitionSet :AttributeSet): Seq[Expression] = {
+    condition match {
+      case And(cond1, cond2) =>
+        splitPredicates(cond1,partitionSet) ++ splitPredicates(cond2,partitionSet)
+      case Or(cond1, cond2)=>
+        val leftSeq = splitPredicates(cond1,partitionSet)
+        val rightSeq = splitPredicates(cond2,partitionSet)
+        if(leftSeq.nonEmpty && rightSeq.nonEmpty)
+          Or(leftSeq.reduceLeft(And),rightSeq.reduceLeft(And)) :: Nil
+        else Nil
+      case other  => if (other.references.subsetOf(partitionSet)) other :: Nil else Nil
+    }
+  }
+
 }
