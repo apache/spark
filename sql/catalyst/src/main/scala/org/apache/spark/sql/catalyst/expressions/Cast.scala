@@ -1390,10 +1390,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toByte($wrapper)) {
-              $evPrim = (byte) $wrapper.value;
-            } else {
-              $evNull = true;
-            }
+            $evPrim = (byte) $wrapper.value;
+          } else {
+            $evNull = true;
+          }
           $wrapper = null;
         """
     case BooleanType =>
@@ -1423,10 +1423,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toShort($wrapper)) {
-              $evPrim = (short) $wrapper.value;
-            } else {
-              $evNull = true;
-            }
+            $evPrim = (short) $wrapper.value;
+          } else {
+            $evNull = true;
+          }
           $wrapper = null;
         """
     case BooleanType =>
@@ -1454,10 +1454,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toInt($wrapper)) {
-              $evPrim = $wrapper.value;
-            } else {
-              $evNull = true;
-            }
+            $evPrim = $wrapper.value;
+          } else {
+            $evNull = true;
+          }
           $wrapper = null;
         """
     case BooleanType =>
