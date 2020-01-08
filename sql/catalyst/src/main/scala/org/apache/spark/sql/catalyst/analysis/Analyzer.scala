@@ -176,6 +176,10 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
+  /**
+   * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
+   * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
+   */
   protected val fixedPoint = FixedPoint(maxIterations, errorOnExceed = true)
 
   /**
