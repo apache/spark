@@ -239,9 +239,9 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       // filterApplicationEnd: Some(true) & Some(true) => filter in
       expectedLines += writeEventToWriter(writer, SparkListenerApplicationEnd(0))
 
-      // filterBlockManagerAdded: Some(true) & Some(false) => filter out
-      writeEventToWriter(writer, SparkListenerBlockManagerAdded(0, BlockManagerId("1", "host1", 1),
-        10))
+      // filterBlockManagerAdded: Some(true) & Some(false) => filter in
+      expectedLines += writeEventToWriter(writer, SparkListenerBlockManagerAdded(
+        0, BlockManagerId("1", "host1", 1), 10))
 
       // filterApplicationStart: Some(false) & Some(false) => filter out
       writeEventToWriter(writer, SparkListenerApplicationStart("app", None, 0, "user", None))

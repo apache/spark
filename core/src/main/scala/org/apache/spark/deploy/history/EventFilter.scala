@@ -91,10 +91,10 @@ private[spark] object EventFilter extends Logging {
 
           event.foreach { e =>
             val results = filters.flatMap(_.acceptFn().lift.apply(e))
-            if (results.isEmpty || !results.contains(false)) {
-              onAccepted(line, e)
-            } else {
+            if (results.nonEmpty && results.forall(_ == false)) {
               onRejected(line, e)
+            } else {
+              onAccepted(line, e)
             }
           }
         } catch {
