@@ -43,6 +43,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file.", e)
+            currentReader = null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
             throw new FileNotFoundException(
@@ -53,6 +54,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
+            currentReader = null
         }
       } else {
         return false
