@@ -1159,7 +1159,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= columns.mkString("(\n  ", ",\n  ", ")\n")
+    builder ++= concatWithMultiLines(columns)
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
