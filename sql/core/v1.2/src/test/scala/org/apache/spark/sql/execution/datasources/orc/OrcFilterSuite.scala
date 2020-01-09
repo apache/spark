@@ -21,10 +21,10 @@ import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf
+
 import scala.collection.JavaConverters._
-
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
-
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -49,7 +49,10 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       checker: (SearchArgument) => Unit): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
-      .select(output.map(e => Column(e)): _*)
+      // SPARK-25557
+      // The following select will flatten the nested data structure,
+      // so comment it out for now until we find a better approach.
+      // .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
@@ -190,24 +193,65 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
+  case class N1[T](a: Option[T])
+  case class N2[T](b: Option[T])
   test("filter pushdown - boolean") {
-    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    val data0 = (true :: false :: Nil).map(b => Tuple1.apply(Option(b)))
+    val data1 = data0.map(x => N1(Some(x)))
+    val data2 = data1.map(x => N2(Some(x)))
 
-      checkFilterPredicate($"_1" === true, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    // zero nesting
+    withOrcDataFrame(data0) { implicit df =>
+      val col = Symbol("_1")
+      checkFilterPredicate(col.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkFilterPredicate(col === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(col <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(col < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(col > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col >= false, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(false) === col, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> col, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > col, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= col, PredicateLeaf.Operator.LESS_THAN)
+    }
 
-      checkFilterPredicate($"_1" < true, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= false, PredicateLeaf.Operator.LESS_THAN)
+    // one level nesting
+    withOrcDataFrame(data1) { implicit df =>
+      val col = Symbol("a._1")
+      checkFilterPredicate(col.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkFilterPredicate(col === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(col <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(col < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(col > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col >= false, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(false) === col, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> col, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > col, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= col, PredicateLeaf.Operator.LESS_THAN)
+    }
 
-      checkFilterPredicate(Literal(false) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(false) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(false) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(true) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+    // two level nesting
+    withOrcDataFrame(data2) { implicit df =>
+      val col = Symbol("b.a._1")
+      checkFilterPredicate(col.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkFilterPredicate(col === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(col <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(col < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(col > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(col >= false, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(false) === col, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> col, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > col, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= col, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 

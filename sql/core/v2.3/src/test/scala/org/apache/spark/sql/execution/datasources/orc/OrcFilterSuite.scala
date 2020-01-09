@@ -50,7 +50,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       checker: (SearchArgument) => Unit): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
-      // SPARK-17636
+      // SPARK-25557
       // The following select will flatten the nested data structure,
       // so comment it out for now until we find a better approach.
       // .select(output.map(e => Column(e)): _*)
@@ -202,7 +202,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     val data1 = data0.map(x => N1(Some(x)))
     val data2 = data1.map(x => N2(Some(x)))
 
-//    // zero nesting
+    // zero nesting
     withOrcDataFrame(data0) { implicit df =>
       val col = Symbol("_1")
       checkFilterPredicate(col.isNull, PredicateLeaf.Operator.IS_NULL)
@@ -255,25 +255,6 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       checkFilterPredicate(Literal(true) >= col, PredicateLeaf.Operator.LESS_THAN_EQUALS)
       checkFilterPredicate(Literal(true) <= col, PredicateLeaf.Operator.LESS_THAN)
     }
-
-//    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-//      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
-//
-//      checkFilterPredicate($"_1" === true, PredicateLeaf.Operator.EQUALS)
-//      checkFilterPredicate($"_1" <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-//
-//      checkFilterPredicate($"_1" < true, PredicateLeaf.Operator.LESS_THAN)
-//      checkFilterPredicate($"_1" > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-//      checkFilterPredicate($"_1" <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-//      checkFilterPredicate($"_1" >= false, PredicateLeaf.Operator.LESS_THAN)
-//
-//      checkFilterPredicate(Literal(false) === $"_1", PredicateLeaf.Operator.EQUALS)
-//      checkFilterPredicate(Literal(false) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-//      checkFilterPredicate(Literal(false) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-//      checkFilterPredicate(Literal(true) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-//      checkFilterPredicate(Literal(true) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-//      checkFilterPredicate(Literal(true) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
-//    }
   }
 
   test("filter pushdown - decimal") {
