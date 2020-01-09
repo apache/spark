@@ -318,17 +318,17 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "nested value class")
   encodeDecodeTest(ValueContainer(1, StringWrapper(null)), "nested value class with null")
   encodeDecodeTest(ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")),
-    new IntWrapper(3)), "complex value class")
+    IntWrapper(3)), "complex value class")
   encodeDecodeTest(
-    Array(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
+    Array(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
     "array of value class")
   encodeDecodeTest(Array.empty[IntWrapper], "empty array of value class")
   encodeDecodeTest(
-    Seq(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
+    Seq(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
     "seq of value class")
   encodeDecodeTest(Seq.empty[IntWrapper], "empty seq of value class")
   encodeDecodeTest(
-    Map(new IntWrapper(1) -> StringWrapper("a"), new IntWrapper(2) -> StringWrapper("b")),
+    Map(IntWrapper(1) -> StringWrapper("a"), IntWrapper(2) -> StringWrapper("b")),
     "map with value class")
 
   encodeDecodeTest(Option(31), "option of int")
