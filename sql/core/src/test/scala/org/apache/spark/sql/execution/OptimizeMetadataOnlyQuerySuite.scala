@@ -117,7 +117,8 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
 
   testNotMetadataOnly(
     "Don't optimize metadata only query for GroupingSet/Union operator",
-    "select partcol1, max(partcol2) from srcpart where partcol1 = 0 group by rollup (partcol1)",
+    "select partcol1, max(partcol2) from srcpart where partcol1 = 0 " +
+      "group by grouping sets (partcol1)",
     "select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
       "select partcol2 from srcpart where partcol1 = 1) t group by partcol2")
 

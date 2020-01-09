@@ -158,13 +158,11 @@ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
 
 -- empty input: first is 0 rows, second 1, third 3 etc.
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
--- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 
 -- empty input with joins tests some important code paths
--- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
  group by grouping sets ((t1.a,t2.b),());
 
@@ -422,12 +420,10 @@ select unhashable_col, unsortable_col,
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
 -- explain (costs off)
 --   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
--- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
 -- explain (costs off)
 --   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
--- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 -- explain (costs off)
 --   select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());

@@ -171,14 +171,10 @@ NULL	NULL	1	1	145	10	19
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by rollup (a,b) order by rsum, a, b
 -- !query 12 schema
-struct<a:int,b:int,sum(c):bigint,rsum:bigint>
+struct<>
 -- !query 12 output
-NULL	NULL	12	12
-1	NULL	10	22
-1	1	8	30
-1	2	2	32
-2	NULL	2	34
-2	2	2	36
+org.apache.spark.sql.AnalysisException
+grouping expressions sequence is empty, and 'default.gstest2.`a`' is not an aggregate function. Wrap '(sum(CAST(default.gstest2.`c` AS BIGINT)) AS `sum(c)`, sum(CAST(default.gstest2.`c` AS BIGINT)) AS `_w0`)' in windowing function(s) or wrap 'default.gstest2.`a`' in first() (or first_value) if you don't care which value you get.;
 
 
 -- !query 13
@@ -194,7 +190,7 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query 14 schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query 14 output
-
+NULL	NULL	NULL	0
 
 
 -- !query 15
@@ -202,7 +198,9 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query 15 schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query 15 output
-
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
 
 
 -- !query 16
@@ -210,7 +208,9 @@ select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
 -- !query 16 schema
 struct<sum(v):bigint,count(1):bigint>
 -- !query 16 output
-
+NULL	0
+NULL	0
+NULL	0
 
 
 -- !query 17
@@ -219,7 +219,7 @@ select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
 -- !query 17 schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query 17 output
-
+NULL	NULL	NULL	0
 
 
 -- !query 18
@@ -428,9 +428,10 @@ select ten, grouping(ten) from onek
 group by rollup(ten) having grouping(ten) > 0
 order by 2,1
 -- !query 32 schema
-struct<ten:int,grouping(ten):tinyint>
+struct<>
 -- !query 32 output
-NULL	1
+org.apache.spark.sql.AnalysisException
+cannot resolve '`spark_grouping_id`' given input columns: [grouping(ten), ten]; line 1 pos 68
 
 
 -- !query 33
@@ -438,9 +439,10 @@ select ten, grouping(ten) from onek
 group by cube(ten) having grouping(ten) > 0
 order by 2,1
 -- !query 33 schema
-struct<ten:int,grouping(ten):tinyint>
+struct<>
 -- !query 33 output
-NULL	1
+org.apache.spark.sql.AnalysisException
+cannot resolve '`spark_grouping_id`' given input columns: [grouping(ten), ten]; line 1 pos 68
 
 
 -- !query 34
@@ -573,7 +575,7 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query 41 schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query 41 output
-
+NULL	NULL	NULL	0
 
 
 -- !query 42
@@ -581,7 +583,9 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query 42 schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query 42 output
-
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
 
 
 -- !query 43
@@ -589,7 +593,9 @@ select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
 -- !query 43 schema
 struct<sum(v):bigint,count(1):bigint>
 -- !query 43 output
-
+NULL	0
+NULL	0
+NULL	0
 
 
 -- !query 44
@@ -625,16 +631,10 @@ NULL	NULL	1	1	37	2	19
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by cube (a,b) order by rsum, a, b
 -- !query 45 schema
-struct<a:int,b:int,sum(c):bigint,rsum:bigint>
+struct<>
 -- !query 45 output
-NULL	NULL	12	12
-NULL	1	8	20
-NULL	2	4	24
-1	NULL	10	34
-1	1	8	42
-1	2	2	44
-2	NULL	2	46
-2	2	2	48
+org.apache.spark.sql.AnalysisException
+grouping expressions sequence is empty, and 'default.gstest2.`a`' is not an aggregate function. Wrap '(sum(CAST(default.gstest2.`c` AS BIGINT)) AS `sum(c)`, sum(CAST(default.gstest2.`c` AS BIGINT)) AS `_w0`)' in windowing function(s) or wrap 'default.gstest2.`a`' in first() (or first_value) if you don't care which value you get.;
 
 
 -- !query 46

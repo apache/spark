@@ -395,5 +395,6 @@ object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
+  val groupingPosName: String = "_gen_grouping_pos"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

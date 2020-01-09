@@ -452,6 +452,7 @@ class Analyzer(
         child: LogicalPlan,
         groupByAliases: Seq[Alias],
         gid: Attribute): LogicalPlan = {
+      assert(selectedGroupByExprs.forall(_.nonEmpty))
       // Change the nullability of group by aliases if necessary. For example, if we have
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
       // should change the nullability of b to be TRUE.
@@ -485,7 +486,7 @@ class Analyzer(
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map {
+        gid: Expression): Seq[NamedExpression] = aggregations.map {
       // collect all the found AggregateExpression, so we can check an expression is part of
       // any AggregateExpression or not.
       val aggsBuffer = ArrayBuffer[Expression]()
@@ -546,13 +547,82 @@ class Analyzer(
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
-      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
-      val groupingAttrs = expand.output.drop(child.output.length)
+      if (selectedGroupByExprs.forall(_.nonEmpty)) {
+        val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
+        val groupingAttrs = expand.output.drop(child.output.length)
+        val aggregations = constructAggregateExprs(
+          finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        Aggregate(groupingAttrs, aggregations, expand)
+      } else {
+        // When an empty grouping set given, we need to follow the non-key aggregate semantics;
+        // it generates a single row having an initial aggregated value (e.g., 0 for `COUNT`)
+        // from an empty input. For example, a query below must return a row (NULL, NULL, 0)
+        // from an empty input (`empty_input`):
+        //
+        // {{{
+        //   SELECT k1, k2, COUNT(v)
+        //     FROM empty_input t(k1, k2, v)
+        //     GROUP BY GROUPING SETS ((), (k1, k2))
+        // }}}
+        //
+        // To comply with the semantics, this rule transforms the query above into an
+        // union query of aggregates with/without keys as follows:
+        //
+        // {{{
+        //   Union([
+        //     Aggregate(
+        //       groupingExprs = ['k1, 'k2, 'spark_grouping_id],
+        //       aggregateExprs = ['k1, 'k2, COUNT('v)],
+        //       output = ['k1, 'k2, 'cnt],
+        //       child = Expand(
+        //         projections = [('k1, 'k2, 'v, 0)],
+        //         output = ['k1, 'k2, 'v, 'spark_grouping_id]),
+        //         child = LocalTableScan [...])),
+        //     Aggregate(
+        //       groupingExprs = [],
+        //       aggregateExprs = [null, null, COUNT('v)],
+        //       output = ['k1, 'k2, 'cnt],
+        //       child = Project(
+        //         projectList = ['v],
+        //         child = LocalTableScan [...]))]
+        // }}}
+        val (nonEmptyGroupingSets, emptyGroupingSets) = selectedGroupByExprs.partition(_.nonEmpty)
 
-      val aggregations = constructAggregateExprs(
-        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        val aggsWithoutKeys = {
+          val mask = Expand.buildBitmask(Nil, groupByAliases.map(_.toAttribute).zipWithIndex.toMap)
+          val gidForEmptyGroup = Alias(Literal.create(mask, IntegerType), "gid")()
+          val aggExprs = aggregationExprs.map {
+            // Do nothing for aggregate expressions
+            case ne if ne.collectFirst { case ae: AggregateExpression => ae }.nonEmpty => ne
+            case ne =>
+              replaceGroupingFunc(ne, finalGroupByExpressions, gidForEmptyGroup).transformDown {
+                // Sets grouping expressions to null literals in `aggregationExprs`
+                case e if finalGroupByExpressions.exists(_.semanticEquals(e)) =>
+                  Alias(Literal(null, e.dataType), e.toString)()
+              }.asInstanceOf[NamedExpression]
+          }
+          emptyGroupingSets.indices.map { _ =>
+            Aggregate(Nil, aggExprs, child)
+          }
+        }
 
-      Aggregate(groupingAttrs, aggregations, expand)
+        if (nonEmptyGroupingSets.nonEmpty) {
+          val aggWithKeys = {
+            val expand = constructExpand(nonEmptyGroupingSets, child, groupByAliases, gid)
+            val groupingAttrs = expand.output.drop(child.output.length)
+            val aggExprs = constructAggregateExprs(
+              finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
+            Aggregate(groupingAttrs, aggExprs, expand)
+          }
+          Union(aggWithKeys +: aggsWithoutKeys)
+        } else {
+          if (aggsWithoutKeys.size > 1) {
+            Union(aggsWithoutKeys)
+          } else {
+            aggsWithoutKeys.head
+          }
+        }
+      }
     }
 
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
@@ -1957,64 +2027,81 @@ class Analyzer(
    * underlying aggregate operator and then projected away after the original operator.
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case f @ Filter(cond, agg @ Aggregate(grouping, originalAggExprs, child)) if agg.resolved =>
 
-        // Try resolving the condition of the filter as though it is in the aggregate clause
-        try {
-          val aggregatedCondition =
-            Aggregate(
-              grouping,
-              Alias(cond, "havingCondition")() :: Nil,
-              child)
-          val resolvedOperator = executeSameContext(aggregatedCondition)
-          def resolvedAggregateFilter =
-            resolvedOperator
-              .asInstanceOf[Aggregate]
-              .aggregateExpressions.head
+    private def mayRewriteAggregate(cond: Expression, agg: Aggregate): Option[LogicalPlan] = {
+      // Try resolving the condition of the filter as though it is in the aggregate clause
+      try {
+        val aggregatedCondition =
+          Aggregate(
+            agg.groupingExpressions,
+            Alias(cond, "havingCondition")() :: Nil,
+            agg.child)
+        val resolvedOperator = executeSameContext(aggregatedCondition)
+        def resolvedAggregateFilter =
+          resolvedOperator
+            .asInstanceOf[Aggregate]
+            .aggregateExpressions.head
 
-          // If resolution was successful and we see the filter has an aggregate in it, add it to
-          // the original aggregate operator.
-          if (resolvedOperator.resolved) {
-            // Try to replace all aggregate expressions in the filter by an alias.
-            val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
-            val transformedAggregateFilter = resolvedAggregateFilter.transform {
-              case ae: AggregateExpression =>
-                val alias = Alias(ae, ae.toString)()
-                aggregateExpressions += alias
-                alias.toAttribute
-              // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
-              case e: Expression if grouping.exists(_.semanticEquals(e)) &&
-                  !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
-                  !agg.output.exists(_.semanticEquals(e)) =>
-                e match {
-                  case ne: NamedExpression =>
-                    aggregateExpressions += ne
-                    ne.toAttribute
-                  case _ =>
-                    val alias = Alias(e, e.toString)()
-                    aggregateExpressions += alias
-                    alias.toAttribute
-                }
-            }
-
-            // Push the aggregate expressions into the aggregate (if any).
-            if (aggregateExpressions.nonEmpty) {
-              Project(agg.output,
-                Filter(transformedAggregateFilter,
-                  agg.copy(aggregateExpressions = originalAggExprs ++ aggregateExpressions)))
-            } else {
-              f
-            }
-          } else {
-            f
+        // If resolution was successful and we see the filter has an aggregate in it, add it to
+        // the original aggregate operator.
+        if (resolvedOperator.resolved) {
+          // Try to replace all aggregate expressions in the filter by an alias.
+          val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
+          val transformedAggregateFilter = resolvedAggregateFilter.transform {
+            case ae: AggregateExpression =>
+              val alias = Alias(ae, ae.toString)()
+              aggregateExpressions += alias
+              alias.toAttribute
+            // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
+            case e: Expression if agg.groupingExpressions.exists(_.semanticEquals(e)) &&
+              !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
+              !agg.output.exists(_.semanticEquals(e)) =>
+              e match {
+                case ne: NamedExpression =>
+                  aggregateExpressions += ne
+                  ne.toAttribute
+                case _ =>
+                  val alias = Alias(e, e.toString)()
+                  aggregateExpressions += alias
+                  alias.toAttribute
+              }
           }
-        } catch {
-          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-          // just return the original plan.
-          case ae: AnalysisException => f
+
+          // Push the aggregate expressions into the aggregate (if any).
+          if (aggregateExpressions.nonEmpty) {
+            val newPlan = Project(agg.output,
+              Filter(transformedAggregateFilter,
+                agg.copy(aggregateExpressions = agg.aggregateExpressions ++ aggregateExpressions)))
+            Some(newPlan)
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      } catch {
+        // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+        // just return the original plan.
+        case ae: AnalysisException => None
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case f @ Filter(cond, agg: Aggregate) if agg.resolved =>
+        mayRewriteAggregate(cond, agg).getOrElse(f)
+
+      case f @ Filter(cond, union: Union)
+          if union.children.forall { p => p.isInstanceOf[Aggregate] && p.resolved } =>
+        val newAggs = union.children.map {
+          case agg: Aggregate => mayRewriteAggregate(cond, agg)
+        }
+        if (newAggs.forall(_.isDefined)) {
+          Union(newAggs.flatten)
+        } else {
+          f
         }
 
+      // TODO: Needs to rewrite the Sort(sortOrder, Union(Aggregate :: ...)) case
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.

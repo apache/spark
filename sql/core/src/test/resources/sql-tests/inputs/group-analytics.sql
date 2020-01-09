@@ -59,4 +59,18 @@ SELECT course, year FROM courseSales GROUP BY CUBE(course, year) ORDER BY groupi
 -- Aliases in SELECT could be used in ROLLUP/CUBE/GROUPING SETS
 SELECT a + b AS k1, b AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2);
 SELECT a + b AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b);
-SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
+SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k);
+
+-- Empty grouping sets in ROLLUP/CUBE/GROUPING SETS
+CREATE TABLE emptyTestData (k1 int, k2 int, v int);
+SELECT k1, k2, COUNT(v) FROM emptyTestData GROUP BY ROLLUP(k1, k2);
+SELECT k1, k2, SUM(v) FROM emptyTestData GROUP BY CUBE(k1, k2);
+SELECT k1, k2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), ());
+SELECT k1, k2, SUM(v) FROM emptyTestData GROUP BY k1, k2 GROUPING SETS(());
+SELECT k1, k2, AVG(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), (), ());
+SELECT k1, k2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((), (k1), (k2), (), ());
+SELECT grouping__id, k1, k2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), ()) ORDER BY grouping__id;
+SELECT grouping__id, k1, k2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), ()) HAVING grouping__id = 3;
+SELECT grouping__id AS gid, k1, k2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), ()) HAVING gid > 1 ORDER BY gid;
+SELECT GROUPING(k1) g1, GROUPING(k2) g2, COUNT(v) FROM emptyTestData GROUP BY GROUPING SETS((k1), (k2), ()) ORDER BY g2, g1;
+DROP TABLE emptyTestData;

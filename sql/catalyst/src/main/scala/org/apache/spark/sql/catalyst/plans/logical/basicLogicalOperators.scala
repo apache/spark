@@ -605,7 +605,7 @@ object Expand {
    * @param attrMap Mapping group by attributes to its index in attributes sequence
    * @return The bitmask which represents the selected attributes out of group by attributes.
    */
-  private def buildBitmask(
+  def buildBitmask(
     groupingSetAttrs: Seq[Attribute],
     attrMap: Map[Attribute, Int]): Int = {
     val numAttributes = attrMap.size
@@ -671,7 +671,7 @@ object Expand {
     // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
     // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
-      val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
+      val gpos = AttributeReference(VirtualColumn.groupingPosName, IntegerType, false)()
       child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
     } else {
       child.output ++ groupByAttrs.map(_.newInstance) :+ gid
