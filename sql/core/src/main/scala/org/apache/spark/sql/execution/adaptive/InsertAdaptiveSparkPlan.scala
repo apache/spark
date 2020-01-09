@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -51,8 +51,7 @@ case class InsertAdaptiveSparkPlan(
 
   def containSubQuery(plan: SparkPlan): Boolean = {
     plan.find(_.expressions.exists(_.find {
-      case _: expressions.ScalarSubquery => true
-      case _: expressions.InSubquery => true
+      case _: SubqueryExpression => true
       case _ => false
     }.isDefined)).isDefined
   }
