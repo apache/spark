@@ -2520,6 +2520,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def cleanNamespaceProperties(
+      properties: Map[String, String],
+      ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
+    import SupportsNamespaces._
+    if (!conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)) {
+      properties.foreach {
+        case (PROP_LOCATION, _) =>
+          throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
+            s" the LOCATION clause to specify it.", ctx)
+        case (PROP_COMMENT, _) =>
+          throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
+            s" the COMMENT clause to specify it.", ctx)
+        case _ =>
+      }
+      properties
+    } else {
+      properties -- RESERVED_PROPERTIES.asScala
+    }
+  }
+
   /**
    * Create a [[CreateNamespaceStatement]] command.
    *
@@ -2535,6 +2555,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    import SupportsNamespaces._
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
@@ -2548,12 +2569,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
+    properties = cleanNamespaceProperties(properties, ctx)
+
     visitCommentSpecList(ctx.commentSpec()).foreach {
-      properties += SupportsNamespaces.PROP_COMMENT -> _
+      properties += PROP_COMMENT -> _
     }
 
     visitLocationSpecList(ctx.locationSpec()).foreach {
-      properties += SupportsNamespaces.PROP_LOCATION -> _
+      properties += PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(
@@ -2563,7 +2586,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropNamespaceStatement]] command.
+   * Create a [[DropNamespace]] command.
    *
    * For example:
    * {{{
@@ -2571,14 +2594,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    DropNamespaceStatement(
+    DropNamespace(
       UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
       ctx.EXISTS != null,
       ctx.CASCADE != null)
   }
 
   /**
-   * Create an [[AlterNamespaceSetPropertiesStatement]] logical plan.
+   * Create an [[AlterNamespaceSetProperties]] logical plan.
    *
    * For example:
    * {{{
@@ -2588,14 +2611,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetPropertiesStatement(
+      val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
+      AlterNamespaceSetProperties(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
-        visitPropertyKeyValues(ctx.tablePropertyList))
+        properties)
     }
   }
 
   /**
-   * Create an [[AlterNamespaceSetLocationStatement]] logical plan.
+   * Create an [[AlterNamespaceSetLocation]] logical plan.
    *
    * For example:
    * {{{
@@ -2604,14 +2628,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetLocationStatement(
+      AlterNamespaceSetLocation(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitLocationSpec(ctx.locationSpec))
     }
   }
 
   /**
-   * Create a [[ShowNamespacesStatement]] command.
+   * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
@@ -2619,13 +2643,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowNamespacesStatement(
+    ShowNamespaces(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
 
   /**
-   * Create a [[DescribeNamespaceStatement]].
+   * Create a [[DescribeNamespace]].
    *
    * For example:
    * {{{
@@ -2634,7 +2658,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
-      DescribeNamespaceStatement(
+      DescribeNamespace(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier())),
         ctx.EXTENDED != null)
     }
@@ -2802,11 +2826,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowTablesStatement]] command.
+   * Create a [[ShowTables]] command.
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowTablesStatement(
+    ShowTables(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }

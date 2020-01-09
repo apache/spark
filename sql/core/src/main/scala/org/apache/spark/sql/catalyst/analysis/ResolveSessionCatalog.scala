@@ -177,21 +177,21 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespaceStatement(SessionCatalogAndNamespace(_, ns), _) =>
+    case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       DescribeDatabaseCommand(ns.head, d.extended)
 
-    case AlterNamespaceSetPropertiesStatement(SessionCatalogAndNamespace(_, ns), properties) =>
+    case AlterNamespaceSetProperties(SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       AlterDatabasePropertiesCommand(ns.head, properties)
 
-    case AlterNamespaceSetLocationStatement(SessionCatalogAndNamespace(_, ns), location) =>
+    case AlterNamespaceSetLocation(SessionCatalogAndNamespace(_, ns), location) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
@@ -326,17 +326,14 @@ class ResolveSessionCatalog(
       val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
+    case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
-    case ShowNamespacesStatement(SessionCatalogAndNamespace(catalog, ns), pattern) =>
-      ShowNamespaces(catalog, ns, pattern)
-
-    case ShowTablesStatement(SessionCatalogAndNamespace(_, ns), pattern) =>
+    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
       assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw new AnalysisException(
