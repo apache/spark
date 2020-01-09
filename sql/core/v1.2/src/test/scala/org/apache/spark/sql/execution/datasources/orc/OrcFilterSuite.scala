@@ -21,8 +21,6 @@ import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf
-
 import scala.collection.JavaConverters._
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
