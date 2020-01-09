@@ -38,8 +38,8 @@ class TableResolutionSuite extends QueryTest with SharedSparkSession with Before
     val tbl = "t"
     val commands = Seq(
       s"DESCRIBE $tbl",
-      s"SHOW TBLPROPERTIES $tbl",
-      s"ALTER TABLE $tbl ADD COLUMN data string"
+      s"SHOW TBLPROPERTIES $tbl"
+      // s"ALTER TABLE $tbl ADD COLUMN data string"
     )
 
     withTempView(s"$tbl") {
@@ -52,7 +52,7 @@ class TableResolutionSuite extends QueryTest with SharedSparkSession with Before
           val ex = intercept[AnalysisException] {
             sql(command)
           }
-          assert(ex.getMessage.contains(s"Invalid command: '$tbl' is a view not a table."))
+          assert(ex.getMessage.contains(s"$tbl is a temp view not table."))
         }
       }
     }

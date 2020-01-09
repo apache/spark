@@ -793,8 +793,6 @@ class Analyzer(
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
@@ -811,23 +809,12 @@ class Analyzer(
           .getOrElse(i)
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        resolveV2Relation(u).map(rel => alter.copy(table = rel)).getOrElse(alter)
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => alter.copy(table = rel))
+          .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
-        resolveV2Relation(u).getOrElse(u)
-    }
-
-    private def resolveV2Relation(unresolved: UnresolvedV2Relation) : Option[NamedRelation] = {
-      val maybeTempView = unresolved.originalNameParts match {
-        case Seq(part) => v1SessionCatalog.lookupTempView(part)
-        case _ => None
-      }
-      if (maybeTempView.isDefined) {
-        unresolved.failAnalysis(
-          s"Invalid command: '${unresolved.originalNameParts.quoted}' is a view not a table.")
-      }
-
-      CatalogV2Util.loadRelation(unresolved.catalog, unresolved.tableName)
+        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
