@@ -397,16 +397,16 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       checkOwner(db1, currentUser, "USER")
       sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
       checkOwner(db1, currentUser, "USER")
-      val e = intercept[AnalysisException](sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a',"
+      val e = intercept[ParseException](sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a',"
         + s"'ownerName'='$owner','ownerType'='XXX')"))
       assert(e.getMessage.contains("ownerName"))
       sql(s"ALTER DATABASE $db1 SET OWNER ROLE $owner")
       checkOwner(db1, owner, "ROLE")
 
-      val e2 = intercept[AnalysisException](
-        sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner', 'ownerType'='XXX')"))
-      assert(e2.getMessage.contains("ownership"))
-      sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('comment'='$owner')")
+      val e2 = intercept[ParseException](
+        sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')"))
+      assert(e2.getMessage.contains("ownerName"))
+      sql(s"CREATE DATABASE $db2")
       checkOwner(db2, currentUser, "USER")
       sql(s"ALTER DATABASE $db2 SET OWNER GROUP $owner")
       checkOwner(db2, owner, "GROUP")
