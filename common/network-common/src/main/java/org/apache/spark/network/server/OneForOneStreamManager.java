@@ -18,7 +18,6 @@
 package org.apache.spark.network.server;
 
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -118,27 +117,31 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
-    LinkedList<StreamState> removedStates = new LinkedList<>();
+    boolean failedToReleaseBuffers = false;
+
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
-        removedStates.add(streams.remove(entry.getKey()));
+        streams.remove(entry.getKey());
+
+        try {
+          // Release all remaining buffers.
+          while (state.buffers.hasNext()) {
+            ManagedBuffer buffer = state.buffers.next();
+            if (buffer != null) {
+              buffer.release();
+            }
+          }
+        } catch (RuntimeException e) {
+          failedToReleaseBuffers = true;
+          logger.error("Exception trying to release remaining StreamState buffers", e);
+        }
       }
     }
 
-    for (StreamState state: removedStates) {
-      // Release all remaining buffers.
-      try {
-        while (state.buffers.hasNext()) {
-          ManagedBuffer buffer = state.buffers.next();
-          if (buffer != null) {
-            buffer.release();
-          }
-        }
-      } catch (RuntimeException e) {
-        logger.error("Exception trying to release remaining StreamState buffers", e);
-      }
+    if (failedToReleaseBuffers) {
+      throw new RuntimeException("Failed to release one or more StreamState buffers");
     }
   }
 
