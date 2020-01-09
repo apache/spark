@@ -66,6 +66,16 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan
 
   /**
+   * Returns the filters that can be use for file listing
+   */
+  def dataFilters: Seq[Expression]
+
+  /**
+   * Create a new `FileScan` instance from the current one with different `dataFilters`.
+   */
+  def withDataFilters(dataFilters: Seq[Expression]): FileScan
+
+  /**
    * If a file with `path` is unsplittable, return the unsplittable reason,
    * otherwise return `None`.
    */
@@ -79,7 +89,8 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   override def equals(obj: Any): Boolean = obj match {
     case f: FileScan =>
       fileIndex == f.fileIndex && readSchema == f.readSchema
-        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters)
+        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters) &&
+        ExpressionSet(dataFilters) == ExpressionSet(f.dataFilters)
 
     case _ => false
   }
@@ -92,6 +103,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
+      "DataFilters" -> seqToString(dataFilters),
       "Location" -> locationDesc)
     val metadataStr = metadata.toSeq.sorted.map {
       case (key, value) =>
@@ -103,7 +115,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listFiles(partitionFilters, Seq.empty)
+    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap

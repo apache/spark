@@ -39,7 +39,8 @@ case class JsonScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    partitionFilters: Seq[Expression] = Seq.empty)
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
   private val parsedOptions = new JSONOptionsInRead(
@@ -90,6 +91,9 @@ case class JsonScan(
 
   override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters)
+
+  override def withDataFilters(dataFilters: Seq[Expression]): FileScan =
+    this.copy(dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options

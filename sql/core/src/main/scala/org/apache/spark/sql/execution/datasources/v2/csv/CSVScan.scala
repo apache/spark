@@ -38,7 +38,8 @@ case class CSVScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    partitionFilters: Seq[Expression] = Seq.empty)
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
@@ -91,6 +92,9 @@ case class CSVScan(
 
   override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters)
+
+  override def withDataFilters(dataFilters: Seq[Expression]): FileScan =
+    this.copy(dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case c: CSVScan => super.equals(c) && dataSchema == c.dataSchema && options == c.options
