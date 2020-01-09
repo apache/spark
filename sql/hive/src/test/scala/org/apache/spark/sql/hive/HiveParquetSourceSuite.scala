@@ -249,9 +249,11 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |LOCATION '${s"${path.getCanonicalPath}"}'""".stripMargin
             sql(topDirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("select * from tbl1"), Nil)
+              checkAnswer(sql("SELECT * FROM tbl1"), Nil)
             } else {
-              intercept[IOException](sql("select * from tbl1").show())
+              val msg = intercept[IOException] {sql("SELECT * FROM tbl1").show()
+              }.getMessage
+                assert(msg.contains("Not a file:"))
             }
 
             val l1DirStatement =
@@ -264,10 +266,13 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
             sql(l1DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("select * from tbl2"),
+              checkAnswer(sql("SELECT * FROM tbl2"),
                 (1 to 2).map(i => Row(i, i, s"parq$i")))
             } else {
-              intercept[IOException](sql("select * from tbl2").show())
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl2").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
             }
 
             val l2DirStatement =
@@ -280,10 +285,12 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
             sql(l2DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("select * from tbl3"),
+              checkAnswer(sql("SELECT * FROM tbl3"),
                 (3 to 4).map(i => Row(i, i, s"parq$i")))
             } else {
-              intercept[IOException](sql("select * from tbl3").show())
+              val msg = intercept[IOException] {sql("SELECT * FROM tbl3").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
             }
 
             val wildcardTopDirStatement =
@@ -296,10 +303,13 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |LOCATION '${new File(s"${path}/*").toURI}'""".stripMargin
             sql(wildcardTopDirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("select * from tbl4"),
+              checkAnswer(sql("SELECT * FROM tbl4"),
                 (1 to 2).map(i => Row(i, i, s"parq$i")))
             } else {
-              intercept[IOException](sql("select * from tbl4").show())
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl4").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
             }
 
             val wildcardL1DirStatement =
@@ -312,10 +322,12 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |LOCATION '${new File(s"${path}/l1/*").toURI}'""".stripMargin
             sql(wildcardL1DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("select * from tbl5"),
+              checkAnswer(sql("SELECT * FROM tbl5"),
                 (1 to 4).map(i => Row(i, i, s"parq$i")))
             } else {
-              intercept[IOException](sql("select * from tbl5").show())
+              val msg = intercept[IOException] {sql("SELECT * FROM tbl5").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
             }
 
             val wildcardL2DirStatement =
@@ -327,7 +339,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                  |STORED AS parquet
                  |LOCATION '${new File(s"${path}/l1/l2/*").toURI}'""".stripMargin
             sql(wildcardL2DirStatement)
-            checkAnswer(sql("select * from tbl6"),
+            checkAnswer(sql("SELECT * FROM tbl6"),
               (3 to 6).map(i => Row(i, i, s"parq$i")))
           }
         }

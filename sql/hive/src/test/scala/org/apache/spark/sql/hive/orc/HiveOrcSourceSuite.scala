@@ -176,24 +176,25 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
         withTempDir { dir =>
           try {
-            hiveClient.runSqlHive("USE default")
-            hiveClient.runSqlHive(
+            sql("USE default")
+            sql(
               """
                 |CREATE EXTERNAL TABLE hive_orc(
                 |  C1 INT,
                 |  C2 INT,
                 |  C3 STRING)
-                |STORED AS orc""".stripMargin)
+                |STORED AS orc
+                |LOCATION '${new File(s"${dir.getCanonicalPath}").toURI}'""".stripMargin)
+
             // Hive throws an exception if I assign the location in the create table statement.
-            hiveClient.runSqlHive(
-              s"ALTER TABLE hive_orc SET LOCATION " +
+            sql(s"ALTER TABLE hive_orc SET LOCATION " +
                 s"'${new File(s"${dir.getCanonicalPath}/l1/").toURI}'")
             hiveClient.runSqlHive(
               """
                 |INSERT INTO TABLE hive_orc
                 |VALUES (1, 1, 'orc1'), (2, 2, 'orc2')""".stripMargin)
 
-            hiveClient.runSqlHive(
+            sql(
               s"ALTER TABLE hive_orc SET LOCATION " +
                 s"'${new File(s"${dir.getCanonicalPath}/l1/l2/").toURI}'")
             hiveClient.runSqlHive(
@@ -201,7 +202,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                 |INSERT INTO TABLE hive_orc
                 |VALUES (3, 3, 'orc3'), (4, 4, 'orc4')""".stripMargin)
 
-            hiveClient.runSqlHive(
+            sql(
               s"ALTER TABLE hive_orc SET LOCATION " +
                 s"'${new File(s"${dir.getCanonicalPath}/l1/l2/l3/").toURI}'")
             hiveClient.runSqlHive(
@@ -219,7 +220,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
               sql(topDirStatement)
-              val topDirSqlStatement = s"select * from tbl1"
+              val topDirSqlStatement = s"SELECT * FROM tbl1"
               if (convertMetastore) {
                 checkAnswer(sql(topDirSqlStatement), Nil)
               } else {
@@ -236,7 +237,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/"}'""".stripMargin
               sql(l1DirStatement)
-              val l1DirSqlStatement = s"select * from tbl2"
+              val l1DirSqlStatement = s"SELECT * FROM tbl2"
               if (convertMetastore) {
                 checkAnswer(sql(l1DirSqlStatement),
                   (1 to 2).map(i => Row(i, i, s"orc$i")))
@@ -254,7 +255,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/"}'""".stripMargin
               sql(l2DirStatement)
-              val l2DirSqlStatement = s"select * from tbl3"
+              val l2DirSqlStatement = s"SELECT * FROM tbl3"
               if (convertMetastore) {
                 checkAnswer(sql(l2DirSqlStatement),
                   (3 to 4).map(i => Row(i, i, s"orc$i")))
@@ -272,7 +273,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${new File(s"${dir}/*").toURI}'""".stripMargin
               sql(wildcardTopDirStatement)
-              val wildcardTopDirSqlStatement = s"select * from tbl4"
+              val wildcardTopDirSqlStatement = s"SELECT * FROM tbl4"
               if (convertMetastore) {
                 checkAnswer(sql(wildcardTopDirSqlStatement),
                   (1 to 2).map(i => Row(i, i, s"orc$i")))
@@ -289,7 +290,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${new File(s"${dir}/l1/*").toURI}'""".stripMargin
               sql(wildcardL1DirStatement)
-              val wildcardL1DirSqlStatement = s"select * from tbl5"
+              val wildcardL1DirSqlStatement = s"SELECT * FROM tbl5"
               if (convertMetastore) {
                 checkAnswer(sql(wildcardL1DirSqlStatement),
                   (1 to 4).map(i => Row(i, i, s"orc$i")))
@@ -306,7 +307,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |STORED AS orc
                    |LOCATION '${new File(s"${dir}/l1/l2/*").toURI}'""".stripMargin
               sql(wildcardL2Statement)
-              val wildcardL2SqlStatement = s"select * from tbl6"
+              val wildcardL2SqlStatement = s"SELECT * FROM tbl6"
               if (convertMetastore) {
                 checkAnswer(sql(wildcardL2SqlStatement),
                   (3 to 6).map(i => Row(i, i, s"orc$i")))
