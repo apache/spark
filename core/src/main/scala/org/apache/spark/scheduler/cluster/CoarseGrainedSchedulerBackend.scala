@@ -198,6 +198,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
+      case DecommissionExecutor(executorId) =>
+        logInfo(s"Received decommission executor message ${executorId}.")
+        decommissionExecutor(executorId)
+
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
 
@@ -273,10 +277,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.executorEndpoint.send(StopExecutor)
         }
         context.reply(true)
-
-      case DecommissionExecutor(executorId) =>
-        logInfo(s"Received decommission executor message ${executorId}.")
-        context.reply(decommissionExecutor(executorId))
 
       case RetrieveSparkAppConfig =>
         val reply = SparkAppConfig(
@@ -384,6 +384,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
+            executorsPendingDecommission -= executorId
             executorsPendingToRemove.remove(executorId).getOrElse(false)
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
@@ -560,9 +561,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     // Only log the failure since we don't care about the result.
-    driverEndpoint.ask[Boolean](DecommissionExecutor(executorId)).onFailure { case t =>
-      logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    driverEndpoint.send(DecommissionExecutor(executorId))
   }
 
   def sufficientResourcesRegistered(): Boolean = true

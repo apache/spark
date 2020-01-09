@@ -19,20 +19,18 @@
 
 
 set -ex
-export LOG=/dev/termination-log
-echo "Asked to decommission" > ${LOG}
+echo "Asked to decommission"
 # Find the pid to signal
 date | tee -a ${LOG}
-WORKER_PID=$(ps axf | grep java |grep org.apache.spark.executor.CoarseGrainedExecutorBackend | grep -v grep)
-echo "Using worker pid $WORKER_PID" | tee -a ${LOG}
-kill -s SIGPWR ${WORKER_PID} | tee -a ${LOG}
+WORKER_PID=$(ps axf | grep java | grep org.apache.spark.executor.CoarseGrainedExecutorBackend | grep -v grep)
+echo "Using worker pid $WORKER_PID"
+kill -s SIGPWR ${WORKER_PID}
 # For now we expect this to timeout, since we don't start exiting the backend.
-echo "Waiting for worker pid to exit" |tee -a ${LOG}
-date | tee -a ${LOG}
+echo "Waiting for worker pid to exit"
 # If the worker does exit stop blocking the cleanup.
-timeout 60 tail --pid=${WORKER_PID} -f /dev/null | tee -a ${LOG}
-date | tee -a ${LOG}
-echo "Done" | tee -a ${LOG}
-date | tee -a ${LOG}
+timeout 60 tail --pid=${WORKER_PID} -f /dev/null
+date
+echo "Done"
+date
 echo "Term log was:"
 cat $LOG

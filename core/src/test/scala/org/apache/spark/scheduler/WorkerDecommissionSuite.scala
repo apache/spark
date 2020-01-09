@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.Semaphore
+
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
@@ -50,25 +52,32 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     // Do a count to wait for the executors to be registered.
     input.count()
     val sleepyRdd = input.mapPartitions{ x =>
-      Thread.sleep(100)
+      Thread.sleep(50)
       x
     }
+    // Listen for the job
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        sem.release()
+      }
+    })
     // Start the task.
     val asyncCount = sleepyRdd.countAsync()
-    // Give the job long enough to start.
-    Thread.sleep(20)
+    // Wait for the job to have started
+    sem.acquire(1)
     // Decommission all the executors, this should not halt the current task.
-    // The master passing message is tested with
+    // decom.sh message passing is tested manually.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     execs.foreach(execId => sched.decommissionExecutor(execId))
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 10.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 2.seconds)
     assert(asyncCountResult === 10)
     // Try and launch task after decommissioning, this should fail
     val postDecommissioned = input.map(x => x)
     val postDecomAsyncCount = postDecommissioned.countAsync()
     val thrown = intercept[java.util.concurrent.TimeoutException]{
-      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 10.seconds)
+      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 2.seconds)
     }
     assert(postDecomAsyncCount.isCompleted === false,
       "After exec decommission new task could not launch")
