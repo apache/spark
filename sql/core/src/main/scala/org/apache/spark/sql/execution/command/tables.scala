@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.command
 import java.net.{URI, URISyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Try}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
+import org.apache.hadoop.fs.permission.{AclEntry, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -501,8 +502,19 @@ case class TruncateTableCommand(
           val fs = path.getFileSystem(hadoopConf)
           val fileStatus = fs.getFileStatus(path)
           // Not all fs impl. support these APIs.
-          val optPermission = Try(fileStatus.getPermission())
-          val optAcls = Try(fs.getAclStatus(path).getEntries)
+          var optPermission: Option[FsPermission] = None
+          try {
+            optPermission = Some(fileStatus.getPermission())
+          } catch {
+            case NonFatal(e) =>
+          }
+
+          var optAcls: Option[java.util.List[AclEntry]] = None
+          try {
+            optAcls = Some(fs.getAclStatus(path).getEntries)
+          } catch {
+            case NonFatal(e) =>
+          }
 
           fs.delete(path, true)
 
@@ -511,21 +523,23 @@ case class TruncateTableCommand(
           // current user can delete the path, we assume the user/group is correct or not an issue.
           fs.mkdirs(path)
           optPermission.foreach { permission =>
-            Try(fs.setPermission(path, permission)) match {
-              case Failure(e) =>
+            try {
+              fs.setPermission(path, permission)
+            } catch {
+              case NonFatal(e) =>
                 throw new AnalysisException(
                   s"Failed to set original permission $permission back to " +
                     s"the created path: $path. Exception: ${e.getMessage}")
-              case _ =>
             }
           }
           optAcls.foreach { acls =>
-            Try(fs.setAcl(path, acls)) match {
-              case Failure(e) =>
+            try {
+              fs.setAcl(path, acls)
+            } catch {
+              case NonFatal(e) =>
                 throw new AnalysisException(
                   s"Failed to set original ACL $acls back to " +
                     s"the created path: $path. Exception: ${e.getMessage}")
-              case _ =>
             }
           }
         } catch {

@@ -1982,7 +1982,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("truncate table - keep acl/permission") {
+  test("SPARK-30312: truncate table - keep acl/permission") {
     import testImplicits._
 
     withSQLConf(
