@@ -204,15 +204,21 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
-        testIgnoreMissingFiles()
-      }
-
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val exception = intercept[SparkException] {
-          testIgnoreMissingFiles()
+      for {
+        ignore <- Seq("true", "false")
+        sources <- Seq("", format)
+      } {
+        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
+          SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
+            if (ignore.toBoolean) {
+              testIgnoreMissingFiles()
+            } else {
+              val exception = intercept[SparkException] {
+                testIgnoreMissingFiles()
+              }
+              assert(exception.getMessage().contains("does not exist"))
+            }
         }
-        assert(exception.getMessage().contains("does not exist"))
       }
     }
   }
