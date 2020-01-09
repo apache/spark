@@ -1170,9 +1170,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     if (dataSourceOptions.nonEmpty) {
-      builder ++= "OPTIONS (\n"
-      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
-      builder ++= ")\n"
+      builder ++= s"OPTIONS ${concatByMultiLines(dataSourceOptions)}"
     }
   }
 
