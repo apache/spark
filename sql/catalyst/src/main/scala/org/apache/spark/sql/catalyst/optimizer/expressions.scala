@@ -92,9 +92,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
    * @param replaceChildren whether to replace attributes with constant values in children
-   * @param nullIsFalse optional boolean that a boolean expression result can be considered to
-   *        e.g. in the case of `WHERE e`, null result of expression `e` means the same as if it
-   *        resulted false
+   * @param nullIsFalse whether a boolean expression result can be considered to false e.g. in the
+   *        case of `WHERE e`, null result of expression `e` means the same as if it resulted false
    * @return A tuple including:
    *         1. Option[Expression]: optional changed condition after traversal
    *         2. EqualityPredicates: propagated mapping of attribute => constant
