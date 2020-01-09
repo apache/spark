@@ -120,7 +120,7 @@ public class OneForOneStreamManagerSuite {
 
     try {
       manager.connectionTerminated(dummyChannel);
-      Assert.fail("connectionTerminated should throw RuntimeException when fails to release all buffers");
+      Assert.fail("connectionTerminated should throw exception when fails to release all buffers");
 
     } catch (RuntimeException e) {
 
