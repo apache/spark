@@ -111,8 +111,7 @@ class DataFrameCallbackSuite extends QueryTest
     val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
 
     df.collect()
-    // Wait for the first `collect` to be caught by our listener.
-    // Otherwise the next `collect` will
+    // Wait for the first `collect` to be caught by our listener. Otherwise the next `collect` will
     // reset the plan metrics.
     sparkContext.listenerBus.waitUntilEmpty()
     df.collect()
