@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -314,5 +315,15 @@ private[sql] object CatalogV2Util {
     val ident = tableName.asIdentifier
     val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
+  }
+
+  def getTableProviderCatalog(
+      provider: SupportsCatalogOptions,
+      catalogManager: CatalogManager,
+      options: CaseInsensitiveStringMap): TableCatalog = {
+    Option(provider.extractCatalog(options))
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.v2SessionCatalog)
+      .asTableCatalog
   }
 }
