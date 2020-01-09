@@ -3385,9 +3385,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-26128: Throw exception on overflow when casting string to Integer.") {
+  test("SPARK-30472: ANSI SQL: Throw exception on format invalid and overflow when casting " +
+    "String to Integer type.") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      sql("SELECT CAST(CAST(2147483648 as STRING) AS INTEGER)").show()
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('abc' as STRING) AS INTEGER)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('2147483648' as STRING) AS INTEGER)").collect()
+      )
     }
   }
 }
