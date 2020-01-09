@@ -394,6 +394,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             // e.g. SUM (DISTINCT a), COUNT (DISTINCT a) FILTER (WHERE id > 1) will output
             // attribute 'a and attribute 'phantom1-a instead of two 'a.
             // Note: We just need to illusion the expression with filter clause.
+            // The illusionary mechanism may result in multiple distinct aggregations uses
+            // different column, so we still need to call `rewrite`.
             val phantomId = i + 1
             val unfoldableChildren = af.children.filter(!_.foldable)
             val exprAttrs = unfoldableChildren.map { e =>
