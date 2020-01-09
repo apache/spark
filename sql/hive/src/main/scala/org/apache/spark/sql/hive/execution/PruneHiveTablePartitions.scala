@@ -19,21 +19,30 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.IOException
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.CastSupport
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, HiveTableRelation}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, BindReferences, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
-  extends Rule[LogicalPlan] with PredicateHelper {
+  extends Rule[LogicalPlan] with CastSupport {
+
+  override val conf = session.sessionState.conf
+
   /**
    * Extract the partition filters from the filters on the table.
    */
@@ -53,18 +62,46 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   }
 
   /**
-   * Prune the hive table using filters on the partitions of the table,
-   * and also update the statistics of the table.
+   * Prune the hive table using filters on the partitions of the table.
    */
-  private def prunedHiveTableWithStats(
-              relation: HiveTableRelation,
-              partitionFilters: Seq[Expression]): HiveTableRelation = {
-    val conf = session.sessionState.conf
-    val prunedPartitions = session.sessionState.catalog.listPartitionsByFilter(
-      relation.tableMeta.identifier,
-      partitionFilters)
+  private def prunePartitions(relation: HiveTableRelation, partitionFilters: Seq[Expression])
+  : Seq[CatalogTablePartition] = {
+    val partitions =
+    if (conf.metastorePartitionPruning) {
+      session.sessionState.catalog.listPartitionsByFilter(
+        relation.tableMeta.identifier, partitionFilters)
+    } else {
+      session.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+    }
+    val shouldKeep = partitionFilters.reduceLeftOption(And).map { filter =>
+      require(filter.dataType == BooleanType,
+        s"Data type of predicate $filter must be ${BooleanType.catalogString} rather than " +
+          s"${filter.dataType.catalogString}.")
+      BindReferences.bindReference(filter, relation.partitionCols)
+    }
+    if (shouldKeep.nonEmpty) {
+      partitions.filter{ partition =>
+        val hivePartition =
+          HiveClientImpl.toHivePartition(partition, HiveClientImpl.toHiveTable(relation.tableMeta))
+        val dataTypes = relation.partitionCols.map(_.dataType)
+        val castedValues = hivePartition.getValues.asScala.zip(dataTypes)
+          .map { case (value, dataType) => cast(Literal(value), dataType).eval(null) }
+        val row = InternalRow.fromSeq(castedValues)
+        shouldKeep.get.eval(row).asInstanceOf[Boolean]
+      }
+    } else {
+      partitions
+    }
+  }
+
+  /**
+   * Update the statistics of the table.
+   */
+  private def updateTableMeta(
+              tableMeta: CatalogTable,
+              prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
     val sizeInBytes = try {
-      val sizeOfPartitions = prunedPartitions.map { partition =>
+      prunedPartitions.map { partition =>
         val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
         val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
         if (rawDataSize.isDefined && rawDataSize.get > 0) {
@@ -73,24 +110,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
           totalSize.get
         } else {
           CommandUtils.calculateLocationSize(
-            session.sessionState, relation.tableMeta.identifier, partition.storage.locationUri)
+            session.sessionState, tableMeta.identifier, partition.storage.locationUri)
         }
       }.sum
-      // If size of partitions is zero fall back to the default size.
-      if (sizeOfPartitions == 0L) conf.defaultSizeInBytes else sizeOfPartitions
     } catch {
       case e: IOException =>
         logWarning("Failed to get table size from HDFS.", e)
         conf.defaultSizeInBytes
     }
-    val newTableMeta =
-      if (relation.tableMeta.stats.isDefined) {
-        relation.tableMeta.copy(
-          stats = Some(relation.tableMeta.stats.get.copy(sizeInBytes = BigInt(sizeInBytes))))
-      } else {
-        relation.tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      }
-    relation.copy(tableMeta = newTableMeta, prunedPartitions = Some(prunedPartitions))
+    tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -99,12 +127,12 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       val partitionPruningFilters = extractPartitionPruningFilters(filters, relation)
       // SPARK-24085: subquery should be skipped for partition pruning
       val hasSubquery = partitionPruningFilters.exists(SubqueryExpression.hasSubquery)
-      val conf = session.sessionState.conf
-      if (conf.metastorePartitionPruning && partitionPruningFilters.nonEmpty && !hasSubquery) {
-        val prunedHiveTable = prunedHiveTableWithStats(relation, partitionPruningFilters)
-        val filterExpression = filters.reduceLeft(And)
-        val filter = Filter(filterExpression, prunedHiveTable)
-        Project(projections, filter)
+      if (partitionPruningFilters.nonEmpty && !hasSubquery) {
+        val newPartitions = prunePartitions(relation, partitionPruningFilters)
+        val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)
+        val newRelation = relation.copy(
+          tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))
+        Project(projections, Filter(filters.reduceLeft(And), newRelation))
       } else {
         op
       }

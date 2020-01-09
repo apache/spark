@@ -128,12 +128,8 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             // If the pruning predicate is used, getHiveQlPartitions should only return the
             // qualified partition; Otherwise, it return all the partitions.
             val expectedNumPartitions = if (hivePruning == "true") 1 else 2
-            val stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'"
-            checkNumScannedPartitions(stmt = stmt, expectedNumPartitions)
-            // prunedPartitions are held in HiveTableRelation
-            val prunedNumPartitions = if (hivePruning == "true") 1 else 0
-            assert(
-              getHiveTableScanExec(stmt).relation.prunedPartitions.size === prunedNumPartitions)
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
           }
         }
 
@@ -141,10 +137,8 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
             // If the pruning predicate does not exist, getHiveQlPartitions should always
             // return all the partitions.
-            val stmt = s"SELECT id, p2 FROM $table WHERE id <= 3"
-            checkNumScannedPartitions(stmt = stmt, expectedNumParts = 2)
-            // no pruning is triggered, no partitions are held in HiveTableRelation
-            assert(getHiveTableScanExec(stmt).relation.prunedPartitions.isEmpty)
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
           }
         }
       }
