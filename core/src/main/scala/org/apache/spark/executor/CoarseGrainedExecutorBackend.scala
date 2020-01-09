@@ -54,7 +54,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     userClassPath: Seq[URL],
     env: SparkEnv,
     resourcesFileOpt: Option[String],
-    resourceProfile: Option[ResourceProfile])
+    resourceProfile: ResourceProfile)
   extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
@@ -81,13 +81,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      val rpIdToRegister = if (resourceProfile.isDefined) {
-        resourceProfile.get.id
-      } else {
-        DEFAULT_RESOURCE_PROFILE_ID
-      }
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, resources, rpIdToRegister))
+        extractAttributes, resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -99,15 +94,9 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
-    // if the resource profile was specified we look at different confs
-    val resources = if (resourceProfile.isDefined) {
-      logDebug(s"Resource profile id is: ${resourceProfile.get.id}")
-      getOrDiscoverAllResourcesForResourceProfileFromRP(resourcesFileOpt, SPARK_EXECUTOR_PREFIX,
-        resourceProfile.get)
-    } else {
-      logDebug(s"Resource profile not known using default configs")
-      getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
-    }
+    logDebug(s"Resource profile id is: ${resourceProfile.id}")
+    val resources = getOrDiscoverAllResourcesForResourceProfile(resourcesFileOpt,
+      SPARK_EXECUTOR_PREFIX, resourceProfile)
     logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
     resources
   }
@@ -242,7 +231,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       resourceProfileId: Int)
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, Arguments, SparkEnv, Option[ResourceProfile]) =>
+    val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
@@ -254,7 +243,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
   def run(
       arguments: Arguments,
-      backendCreateFn: (RpcEnv, Arguments, SparkEnv, Option[ResourceProfile]) =>
+      backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
         CoarseGrainedExecutorBackend): Unit = {
 
     Utils.initDaemon(log)
@@ -296,12 +285,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(rpIdToAsk))
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
-      val rp = if (arguments.resourceProfileId != UNKNOWN_RESOURCE_PROFILE_ID) {
-        Some(cfg.resourceProfile)
-      } else {
-        None
-      }
+      // we have to add the pyspark memory conf into SparkConfs so the PythonRunner can
+      // pick it up properly
+      val pysparkMemoryConf = cfg.resourceProfile.getInternalPysparkMemoryConfs
+      val props = cfg.sparkProperties ++
+        Seq[(String, String)](("spark.app.id", arguments.appId)) ++ pysparkMemoryConf
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
@@ -323,7 +311,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
-      env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, arguments, env, rp))
+      env.rpcEnv.setupEndpoint("Executor",
+        backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile))
       arguments.workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
