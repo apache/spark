@@ -457,9 +457,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
       schema === Schema(
         StructType(Seq(
           StructField("intField", IntegerType, nullable = false),
-          StructField("wrappedInt", StructType(Seq(StructField("i", IntegerType, false)))),
+          StructField("wrappedInt", IntegerType, nullable = false),
           StructField("strField", StringType),
-          StructField("wrappedStr", StructType(Seq(StructField("s", StringType, true)))))),
+          StructField("wrappedStr", StringType)
+        )),
         nullable = true))
   }
 
