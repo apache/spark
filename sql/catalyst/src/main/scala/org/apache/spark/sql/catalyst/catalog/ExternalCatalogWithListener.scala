@@ -194,9 +194,9 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    postToAll(CreatePartitionPreEvent(db, table, parts))
+    postToAll(CreatePartitionPreEvent(db, table))
     delegate.createPartitions(db, table, parts, ignoreIfExists)
-    postToAll(CreatePartitionEvent(db, table, parts))
+    postToAll(CreatePartitionEvent(db, table))
   }
 
   override def dropPartitions(
@@ -206,9 +206,9 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       ignoreIfNotExists: Boolean,
       purge: Boolean,
       retainData: Boolean): Unit = {
-    postToAll(DropPartitionPreEvent(db, table, partSpecs))
+    postToAll(DropPartitionPreEvent(db, table))
     delegate.dropPartitions(db, table, partSpecs, ignoreIfNotExists, purge, retainData)
-    postToAll(DropPartitionEvent(db, table, partSpecs))
+    postToAll(DropPartitionEvent(db, table))
   }
 
   override def renamePartitions(
@@ -216,18 +216,18 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       table: String,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
-    postToAll(RenamePartitionPreEvent(db, table, specs, newSpecs))
+    postToAll(RenamePartitionPreEvent(db, table))
     delegate.renamePartitions(db, table, specs, newSpecs)
-    postToAll(RenamePartitionEvent(db, table, specs, newSpecs))
+    postToAll(RenamePartitionEvent(db, table))
   }
 
   override def alterPartitions(
       db: String,
       table: String,
       parts: Seq[CatalogTablePartition]): Unit = {
-    postToAll(AlterPartitionPreEvent(db, table, parts))
+    postToAll(AlterPartitionPreEvent(db, table))
     delegate.alterPartitions(db, table, parts)
-    postToAll(AlterPartitionEvent(db, table, parts))
+    postToAll(AlterPartitionEvent(db, table))
   }
 
   override def getPartition(

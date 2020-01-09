@@ -236,12 +236,12 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     checkEvents(CreateTablePreEvent("db5", "tbl1") :: CreateTableEvent("db5", "tbl1") :: Nil)
 
     catalog.createPartitions("db5", "tbl1", Seq(partition), ignoreIfExists = false)
-    checkEvents(CreatePartitionPreEvent("db5", "tbl1", Seq(partition)) ::
-      CreatePartitionEvent("db5", "tbl1", Seq(partition)) :: Nil)
+    checkEvents(CreatePartitionPreEvent("db5", "tbl1") ::
+      CreatePartitionEvent("db5", "tbl1") :: Nil)
 
     catalog.createPartitions("db5", "tbl1", Seq(partition), ignoreIfExists = true)
-    checkEvents(CreatePartitionPreEvent("db5", "tbl1", Seq(partition)) ::
-      CreatePartitionEvent("db5", "tbl1", Seq(partition)) :: Nil)
+    checkEvents(CreatePartitionPreEvent("db5", "tbl1") ::
+      CreatePartitionEvent("db5", "tbl1") :: Nil)
 
     // RENAME
     val newPartition = CatalogTablePartition(spec = Map("key1" -> "1", "key2" -> "2"),
@@ -249,25 +249,25 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
 
     catalog.renamePartitions("db5", "tbl1", Seq(partition.spec), Seq(newPartition.spec))
     checkEvents(
-      RenamePartitionPreEvent("db5", "tbl1", Seq(partition.spec), Seq(newPartition.spec)) ::
-        RenamePartitionEvent("db5", "tbl1", Seq(partition.spec), Seq(newPartition.spec)) ::
+      RenamePartitionPreEvent("db5", "tbl1") ::
+        RenamePartitionEvent("db5", "tbl1") ::
         Nil)
 
     // ALTER
     catalog.alterPartitions("db5", "tbl1", Seq.empty)
-    checkEvents(AlterPartitionPreEvent("db5", "tbl1", Seq.empty) ::
-      AlterPartitionEvent("db5", "tbl1", Seq.empty) :: Nil)
+    checkEvents(AlterPartitionPreEvent("db5", "tbl1") ::
+      AlterPartitionEvent("db5", "tbl1") :: Nil)
 
     // DROP
     intercept[AnalysisException] {
       catalog.dropPartitions("db5", "tbl2", Seq(newPartition.spec),
         ignoreIfNotExists = false, purge = true, retainData = false)
     }
-    checkEvents(DropPartitionPreEvent("db5", "tbl2", Seq(newPartition.spec)) :: Nil)
+    checkEvents(DropPartitionPreEvent("db5", "tbl2") :: Nil)
 
     catalog.dropPartitions("db5", "tbl1", Seq(newPartition.spec),
       ignoreIfNotExists = false, purge = true, retainData = false)
-    checkEvents(DropPartitionPreEvent("db5", "tbl1", Seq(newPartition.spec)) ::
-      DropPartitionEvent("db5", "tbl1", Seq(newPartition.spec)) :: Nil)
+    checkEvents(DropPartitionPreEvent("db5", "tbl1") ::
+      DropPartitionEvent("db5", "tbl1") :: Nil)
   }
 }
