@@ -178,18 +178,23 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
 
-          Seq("0").toDF("a").write.format(format).save(new Path(basePath, "first").toString)
-          Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
+          Seq("0").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
+          Seq("1").toDF("a").write.format(format).save(new Path(basePath, "fourth").toString)
 
+          val firstPath = new Path(basePath, "first")
           val thirdPath = new Path(basePath, "third")
           val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
-          Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
-          val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
+          Seq("2").toDF("a").write.format(format).save(firstPath.toString)
+          Seq("3").toDF("a").write.format(format).save(thirdPath.toString)
+          val files = Seq(firstPath, thirdPath).flatMap { p =>
+            fs.listStatus(p).filter(_.isFile).map(_.getPath)
+          }
 
           val df = spark.read.format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
-            new Path(basePath, "third").toString)
+            new Path(basePath, "third").toString,
+            new Path(basePath, "fourth").toString)
 
           // Make sure all data files are deleted and can't be opened.
           files.foreach(f => fs.delete(f, false))
@@ -202,15 +207,21 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
-        testIgnoreMissingFiles()
-      }
-
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val exception = intercept[SparkException] {
-          testIgnoreMissingFiles()
+      for {
+        ignore <- Seq("true", "false")
+        sources <- Seq("", format)
+      } {
+        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
+          SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
+            if (ignore.toBoolean) {
+              testIgnoreMissingFiles()
+            } else {
+              val exception = intercept[SparkException] {
+                testIgnoreMissingFiles()
+              }
+              assert(exception.getMessage().contains("does not exist"))
+            }
         }
-        assert(exception.getMessage().contains("does not exist"))
       }
     }
   }
