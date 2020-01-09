@@ -152,8 +152,10 @@ case class HashAggregateExec(
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
-    // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+    // ImperativeAggregate and filter predicate are not supported right now
+    // TODO: SPARK-30027 Support codegen for filter exprs in HashAggregateExec
+    !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
+        aggregateExpressions.exists(_.filter.isDefined))
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

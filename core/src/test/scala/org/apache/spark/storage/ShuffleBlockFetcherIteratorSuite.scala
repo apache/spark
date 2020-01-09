@@ -341,6 +341,51 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs().size === 1)
   }
 
+  test("fetch continuous blocks in batch respects maxBlocksInFlightPerAddress") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure remote blocks would return the merged block
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlocks = Seq[BlockId](
+      ShuffleBlockId(0, 3, 0),
+      ShuffleBlockId(0, 3, 1),
+      ShuffleBlockId(0, 3, 2),
+      ShuffleBlockId(0, 3, 3))
+    val mergedRemoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 3, 0, 4) -> createMockManagedBuffer())
+    val transfer = createMockTransfer(mergedRemoteBlocks)
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (remoteBmId, remoteBlocks.map(blockId => (blockId, 1L, 1)))
+    ).toIterator
+
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      48 * 1024 * 1024,
+      Int.MaxValue,
+      1,
+      Int.MaxValue,
+      true,
+      false,
+      metrics,
+      true)
+
+    assert(iterator.hasNext)
+    val (blockId, inputStream) = iterator.next()
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    // Make sure we release buffers when a wrapped input stream is closed.
+    val mockBuf = mergedRemoteBlocks(blockId)
+    verifyBufferRelease(mockBuf, inputStream)
+  }
+
   test("release current unexhausted buffer in case the task completes early") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)

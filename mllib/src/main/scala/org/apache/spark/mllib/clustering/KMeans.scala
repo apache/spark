@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -219,11 +219,6 @@ class KMeans private (
       data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-
     // Compute squared norms and cache them.
     val norms = data.map { case (v, _) =>
       Vectors.norm(v, 2.0)
@@ -232,15 +227,13 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
       (new VectorWithNorm(v, norm), w)
     }
-    zippedData.persist()
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
     model
   }
 
@@ -258,7 +251,6 @@ class KMeans private (
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val dataVectorWithNorm = data.map(d => d._1)
-    val weights = data.map(d => d._2)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -284,7 +276,6 @@ class KMeans private (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val costAccum = sc.doubleAccumulator
-      val countAccum = sc.longAccumulator
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
@@ -302,7 +293,6 @@ class KMeans private (
         pointsAndWeights.foreach { case (point, weight) =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
           costAccum.add(cost * weight)
-          countAccum.add(1)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
           clusterWeightSum(bestCenter) += weight
         }
@@ -315,7 +305,7 @@ class KMeans private (
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(countAccum.value))
+        instr.foreach(_.logNumExamples(costAccum.count))
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 

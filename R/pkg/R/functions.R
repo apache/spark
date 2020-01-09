@@ -879,8 +879,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -1024,8 +1024,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -3706,7 +3706,7 @@ setMethod("create_map",
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3727,7 +3727,7 @@ setMethod("collect_list",
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method
