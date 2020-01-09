@@ -28,8 +28,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -721,6 +724,49 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
             }
             assert(smJoinExec.nonEmpty)
           }
+        }
+      }
+    }
+  }
+
+  test("File source v2: support partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      allFileBasedDataSources.foreach { format =>
+        withTempPath { dir =>
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format(format)
+            .partitionBy("p1", "p2")
+            .option("header", true)
+            .save(dir.getCanonicalPath)
+          val df = spark
+            .read
+            .format(format)
+            .option("header", true)
+            .load(dir.getCanonicalPath)
+            .where("p1 = 1 and p2 = 2 and value != \"a\"")
+
+          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+            case f: Filter => f.condition
+          }
+          assert(filterCondition.isDefined)
+          // The partitions filters should be pushed down and no need to be reevaluated.
+          assert(filterCondition.get.collectFirst {
+            case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
+          }.isEmpty)
+
+          val fileScan = df.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: FileScan) => f
+          }
+          assert(fileScan.nonEmpty)
+          assert(fileScan.get.partitionFilters.nonEmpty)
+          assert(fileScan.get.planInputPartitions().forall { partition =>
+            partition.asInstanceOf[FilePartition].files.forall { file =>
+              file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
+            }
+          })
+          checkAnswer(df, Row("b", 1, 2))
         }
       }
     }
