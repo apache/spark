@@ -433,6 +433,7 @@ private[spark] class ExecutorMonitor(
       execResourceProfileCount.put(resourceProfileId, numExecsWithRpId + 1)
       val unknownCount = execResourceProfileCount.get(UNKNOWN_RESOURCE_PROFILE_ID)
       execResourceProfileCount.put(UNKNOWN_RESOURCE_PROFILE_ID, unknownCount - 1)
+      execResourceProfileCount.remove(UNKNOWN_RESOURCE_PROFILE_ID, 0)
     }
     execTracker
   }

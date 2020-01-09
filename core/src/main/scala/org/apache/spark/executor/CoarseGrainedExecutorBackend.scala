@@ -284,7 +284,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 

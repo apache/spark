@@ -48,6 +48,8 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
+  private val _internalConfs: Map[String, String] =
+    ResourceProfile.createResourceProfileInternalConfs(this)
 
   def id: Int = _id
 
@@ -62,6 +64,8 @@ class ResourceProfile(
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = {
     executorResources.asJava
   }
+
+  private[spark] def getInternalConfs: Map[String, String] = _internalConfs
 
   // Note that some cluster managers don't set the executor cores explicitly so
   // be sure to check the Option as required
@@ -293,7 +297,8 @@ object ResourceProfile extends Logging {
   // for testing only
   private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
     clearDefaultProfile
-    val prof = getOrCreateDefaultProfile(conf)
+    // force recreate it after clearing
+    getOrCreateDefaultProfile(conf)
   }
 
   // for testing only

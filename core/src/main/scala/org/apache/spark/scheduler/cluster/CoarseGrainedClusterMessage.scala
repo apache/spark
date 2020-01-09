@@ -29,7 +29,7 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
-  case object RetrieveSparkAppConfig extends CoarseGrainedClusterMessage
+  case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
 
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],

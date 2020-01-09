@@ -718,7 +718,7 @@ private[yarn] class YarnAllocator(
                 appAttemptId.getApplicationId.toString,
                 securityMgr,
                 localResources,
-                rp
+                rp.id
               ).run()
               updateInternalState()
             } catch {
