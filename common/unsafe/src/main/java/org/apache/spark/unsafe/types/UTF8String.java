@@ -1076,7 +1076,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * This is done solely for better performance and is not expected to be used by end users.
    */
   public static class LongWrapper extends IntWrapper {
-    public transient long value = 0l;
+    public transient long value = 0;
   }
 
   /**
