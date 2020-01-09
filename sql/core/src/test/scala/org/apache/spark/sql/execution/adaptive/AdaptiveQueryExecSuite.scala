@@ -607,7 +607,7 @@ class AdaptiveQueryExecSuite
       // and the main sql will also not be inserted the "AdaptiveSparkPlanExec" node.
       // Here change the subquery to contain the exchange node.
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
-        " ON key = a  AND key NOT IN (select a from testData3 group by a) where value = '1'"
+        " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
       )
     }
   }
