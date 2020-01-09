@@ -1175,28 +1175,30 @@ private[spark] object Utils extends Logging {
     val MiB = 1L << 20
     val KiB = 1L << 10
 
-    if (size >= BigInt(1L << 11) * EiB) {
+    val sign = if (size >= 0) "" else "-"
+    val sizeAbs = size.abs
+    if (sizeAbs >= BigInt(1L << 11) * EiB) {
       // The number is too large, show it in scientific notation.
-      BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
+      sign + BigDecimal(sizeAbs, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
     } else {
       val (value, unit) = {
-        if (size >= 2 * EiB) {
-          (BigDecimal(size) / EiB, "EiB")
-        } else if (size >= 2 * PiB) {
-          (BigDecimal(size) / PiB, "PiB")
-        } else if (size >= 2 * TiB) {
-          (BigDecimal(size) / TiB, "TiB")
-        } else if (size >= 2 * GiB) {
-          (BigDecimal(size) / GiB, "GiB")
-        } else if (size >= 2 * MiB) {
-          (BigDecimal(size) / MiB, "MiB")
-        } else if (size >= 2 * KiB) {
-          (BigDecimal(size) / KiB, "KiB")
+        if (sizeAbs >= 2 * EiB) {
+          (BigDecimal(sizeAbs) / EiB, "EiB")
+        } else if (sizeAbs >= 2 * PiB) {
+          (BigDecimal(sizeAbs) / PiB, "PiB")
+        } else if (sizeAbs >= 2 * TiB) {
+          (BigDecimal(sizeAbs) / TiB, "TiB")
+        } else if (sizeAbs >= 2 * GiB) {
+          (BigDecimal(sizeAbs) / GiB, "GiB")
+        } else if (sizeAbs >= 2 * MiB) {
+          (BigDecimal(sizeAbs) / MiB, "MiB")
+        } else if (sizeAbs >= 2 * KiB) {
+          (BigDecimal(sizeAbs) / KiB, "KiB")
         } else {
-          (BigDecimal(size), "B")
+          (BigDecimal(sizeAbs), "B")
         }
       }
-      "%.1f %s".formatLocal(Locale.US, value, unit)
+      sign + "%.1f %s".formatLocal(Locale.US, value, unit)
     }
   }
 
