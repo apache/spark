@@ -1118,4 +1118,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       assert(!spark.catalog.isCached("t1"))
     }
   }
+
+  test("SPARK-30470: uncache temp tables") {
+    withTempView("tempTable") {
+      sql("CACHE TABLE tempTable as select * from testData")
+      assertCached(sql("SELECT COUNT(*) FROM tempTable"))
+      spark.catalog.clearTempTableCache()
+      assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
+    }
+  }
 }

@@ -387,6 +387,11 @@ abstract class Catalog {
   def clearCache(): Unit
 
   /**
+   * Removes cached temp tables from the in-memory cache.
+   */
+  def clearTempTableCache(): Unit
+
+  /**
    * Invalidates and refreshes all the cached data and metadata of the given table. For performance
    * reasons, Spark SQL or the external data source library it uses might cache certain metadata
    * about a table, such as the location of blocks. When those change outside of Spark SQL, users

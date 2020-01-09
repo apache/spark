@@ -79,7 +79,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     ctx.sparkSession.sessionState.catalog.getTempViewNames().foreach(ctx.uncacheTable)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    val sqlContext = sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    sqlContext.clearTempTableCache()
   }
 
   def setConfMap(conf: SQLContext, confMap: java.util.Map[String, String]): Unit = {

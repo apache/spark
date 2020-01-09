@@ -447,6 +447,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Removes cached temp tables or views from the in-memory cache.
+   */
+  override def clearTempTableCache(): Unit = {
+    sessionCatalog.listLocalTempViews("*")
+      .map(_.identifier).filter(isCached(_)).foreach(uncacheTable(_))
+  }
+
+  /**
    * Returns true if the [[Dataset]] is currently cached in-memory.
    *
    * @group cachemgmt

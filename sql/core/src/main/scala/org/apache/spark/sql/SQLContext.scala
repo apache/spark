@@ -226,6 +226,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.catalog.clearCache()
   }
 
+  /**
+   * Removes cached temp tables from the in-memory cache.
+   */
+  def clearTempTableCache(): Unit = {
+    sparkSession.catalog.clearTempTableCache()
+  }
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
