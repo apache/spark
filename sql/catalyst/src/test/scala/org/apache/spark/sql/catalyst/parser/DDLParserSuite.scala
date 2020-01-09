@@ -753,13 +753,13 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+      DescribeTable(UnresolvedTable(Seq("t")), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+      DescribeTable(UnresolvedTable(Seq("t")), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+      DescribeTable(UnresolvedTable(Seq("t")), Map.empty, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+      DescribeTable(UnresolvedTable(Seq("t")), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -1861,11 +1861,11 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTablePropertiesStatement(Seq("a", "b", "c"), None))
+      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTablePropertiesStatement(Seq("a", "b", "c"), Some("propKey1")))
+      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {

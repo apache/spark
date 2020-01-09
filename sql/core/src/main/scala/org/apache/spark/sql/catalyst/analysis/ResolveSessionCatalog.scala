@@ -201,22 +201,21 @@ class ResolveSessionCatalog(
     case RenameTableStatement(SessionCatalogAndTable(_, oldName), newNameParts, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
 
-    case DescribeTableStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-      }.getOrElse {
-        // The v1 `DescribeTableCommand` can describe view as well.
-        if (isView(tbl)) {
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-        } else {
-          if (partitionSpec.nonEmpty) {
-            throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
+    case d @ DescribeTable(SessionCatalogAndResolvedTable(resolved), partitionSpec, isExtended) =>
+      resolved.table match {
+        case _: V1Table =>
+          DescribeTableCommand(getTableIdentifier(resolved), partitionSpec, isExtended)
+        case _ =>
+          // The v1 `DescribeTableCommand` can describe view as well.
+          if (isView(resolved.identifier.asMultipartIdentifier)) {
+            DescribeTableCommand(getTableIdentifier(resolved), partitionSpec, isExtended)
+          } else {
+            if (partitionSpec.nonEmpty) {
+              throw new AnalysisException(
+                "DESCRIBE TABLE does not support partition for v2 tables.")
+            }
+            d
           }
-          val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-          DescribeTable(r, isExtended)
-        }
       }
 
     case DescribeColumnStatement(
@@ -486,10 +485,8 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowTablePropertiesStatement(SessionCatalogAndTable(_, tbl), propertyKey) =>
-      ShowTablePropertiesCommand(
-        tbl.asTableIdentifier,
-        propertyKey)
+    case ShowTableProperties(SessionCatalogAndResolvedTable(resolved), propertyKey) =>
+      ShowTablePropertiesCommand(getTableIdentifier(resolved), propertyKey)
 
     case DescribeFunctionStatement(CatalogAndIdentifier(catalog, ident), extended) =>
       val functionIdent =
@@ -589,6 +586,16 @@ class ResolveSessionCatalog(
     }
   }
 
+  object SessionCatalogAndResolvedTable {
+    def unapply(resolved: ResolvedTable): Option[ResolvedTable] = {
+      if (isSessionCatalog(resolved.catalog)) {
+        Some(resolved)
+      } else {
+        None
+      }
+    }
+  }
+
   object SessionCatalogAndNamespace {
     def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
       if (isSessionCatalog(resolved.catalog)) {
@@ -596,6 +603,11 @@ class ResolveSessionCatalog(
       } else {
         None
       }
+  }
+
+  private def getTableIdentifier(resolved: ResolvedTable): TableIdentifier = {
+    assert(resolved.identifier.namespace.length < 2)
+    TableIdentifier(resolved.identifier.name, resolved.identifier.namespace.headOption)
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {

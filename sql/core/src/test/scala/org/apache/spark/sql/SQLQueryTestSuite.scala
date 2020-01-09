@@ -461,7 +461,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
-          | _: DescribeTableStatement
           | _: DescribeColumnStatement => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)

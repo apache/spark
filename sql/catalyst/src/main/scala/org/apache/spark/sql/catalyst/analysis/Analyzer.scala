@@ -810,14 +810,8 @@ class Analyzer(
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
-      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        resolveV2Relation(u).map(rel => desc.copy(table = rel)).getOrElse(desc)
-
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         resolveV2Relation(u).map(rel => alter.copy(table = rel)).getOrElse(alter)
-
-      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        resolveV2Relation(u).map(rel => show.copy(table = rel)).getOrElse(show)
 
       case u: UnresolvedV2Relation =>
         resolveV2Relation(u).getOrElse(u)

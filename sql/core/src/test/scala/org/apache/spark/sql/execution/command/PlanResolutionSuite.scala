@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -76,8 +76,11 @@ class PlanResolutionSuite extends AnalysisTest {
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
         case "v1Table" =>
+          val catalogTable = mock(classOf[CatalogTable])
+          when(catalogTable.tableType).thenReturn(CatalogTableType.MANAGED)
           val v1Table = mock(classOf[V1Table])
           when(v1Table.schema).thenReturn(new StructType().add("i", "int"))
+          when(v1Table.v1Table).thenReturn(catalogTable)
           v1Table
         case "v1Table1" =>
           val v1Table1 = mock(classOf[V1Table])
@@ -87,6 +90,9 @@ class PlanResolutionSuite extends AnalysisTest {
           table
         case "v2Table1" =>
           table1
+        // Table named "v" is considered as a view in `ResolveSessionCatalog`.
+        case "v" =>
+          table
         case name =>
           throw new NoSuchTableException(name)
       }
@@ -143,7 +149,8 @@ class PlanResolutionSuite extends AnalysisTest {
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
       analyzer.ResolveTables,
-      analyzer.ResolveRelations)
+      analyzer.ResolveRelations,
+      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")))
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -827,13 +834,13 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeTable(_: DataSourceV2Relation, isExtended) =>
+            case DescribeTable(_: ResolvedTable, _, isExtended) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeTable(_: DataSourceV2Relation, isExtended) =>
+            case DescribeTable(_: ResolvedTable, _, isExtended) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -846,8 +853,8 @@ class PlanResolutionSuite extends AnalysisTest {
             TableIdentifier(tblName, None), Map("a" -> "1"), false)
           comparePlans(parsed3, expected3)
         } else {
-          val e = intercept[AnalysisException](parseAndResolve(sql3))
-          assert(e.message.contains("DESCRIBE TABLE does not support partition for v2 tables"))
+          // val e = intercept[AnalysisException](parseAndResolve(sql3))
+          // assert(e.message.contains("DESCRIBE TABLE does not support partition for v2 tables"))
         }
     }
 

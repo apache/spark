@@ -118,13 +118,6 @@ trait CheckAnalysis extends PredicateHelper {
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
-      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
