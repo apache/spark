@@ -43,10 +43,18 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(PROP_COMMENT))
-    rows += toCatalystRow("Location", metadata.get(PROP_LOCATION))
-    rows += toCatalystRow("Owner Name", metadata.getOrDefault(PROP_OWNER_NAME, ""))
-    rows += toCatalystRow("Owner Type", metadata.getOrDefault(PROP_OWNER_TYPE, ""))
+    Option(metadata.get(PROP_COMMENT)).foreach {
+      rows += toCatalystRow("Description", _)
+    }
+    Option(metadata.get(PROP_LOCATION)).foreach {
+      rows += toCatalystRow("Location", _)
+    }
+    Option(metadata.get(PROP_OWNER_NAME)).foreach {
+      rows += toCatalystRow("Owner Name", _)
+    }
+    Option(metadata.get(PROP_OWNER_TYPE)).foreach {
+      rows += toCatalystRow("Owner Type", _)
+    }
 
     if (isExtended) {
       val properties = metadata.asScala -- RESERVED_PROPERTIES.asScala
