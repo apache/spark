@@ -219,11 +219,6 @@ class KMeans private (
       data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-
     // Compute squared norms and cache them.
     val norms = data.map { case (v, _) =>
       Vectors.norm(v, 2.0)
@@ -232,15 +227,13 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
       (new VectorWithNorm(v, norm), w)
     }
-    zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
     model
   }
 

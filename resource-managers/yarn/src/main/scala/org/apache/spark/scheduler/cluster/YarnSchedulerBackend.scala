@@ -198,7 +198,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * and re-registered itself to driver after a failure. The stale state in driver should be
    * cleaned.
    */
-  override protected def reset(): Unit = {
+  override protected[scheduler] def reset(): Unit = {
     super.reset()
     sc.executorAllocationManager.foreach(_.reset())
   }

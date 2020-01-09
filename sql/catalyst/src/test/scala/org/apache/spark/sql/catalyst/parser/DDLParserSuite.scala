@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -746,8 +745,10 @@ class DDLParserSuite extends AnalysisTest {
   test("describe database") {
     val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
     val sql2 = "DESCRIBE DATABASE a.b"
-    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
-    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
+    comparePlans(parsePlan(sql1),
+      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
+    comparePlans(parsePlan(sql2),
+      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
@@ -1107,16 +1108,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
-      ShowTablesStatement(None, None))
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
-      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+      ShowTables(UnresolvedNamespace(Seq("tbl")), Some("*dog*")))
   }
 
   test("show table extended") {
@@ -1231,78 +1232,86 @@ class DDLParserSuite extends AnalysisTest {
   test("drop namespace") {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = false))
+      DropNamespace(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespace(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespace(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = true))
+      DropNamespace(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
 
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+      DropNamespace(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
   }
 
   test("set namespace properties") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
 
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
-      AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+      AlterNamespaceSetProperties(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
   }
 
   test("set namespace location") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+      AlterNamespaceSetLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespacesStatement(None, Some("defau*")))
+      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
   }
 
   test("show databases: FROM/IN operator is not allowed") {
@@ -1318,16 +1327,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   test("analyze table statistics") {
@@ -1916,7 +1925,43 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
       DropFunctionStatement(Seq("a", "b", "c"), true, true))
+  }
 
+  test("CREATE FUNCTION") {
+    parseCompare("CREATE FUNCTION a as 'fun'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(), false, false, false))
+
+    parseCompare("CREATE FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, false))
+
+    parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, true))
+
+    parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), true, false, false))
+
+    parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, true, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(ArchiveResource, "a")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(FileResource, "f")),
+        false, false, false))
+
+    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j"),
+        FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
+        false, false, false))
+
+    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
+      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
   }
 
   private case class TableSpec(
@@ -1982,5 +2027,23 @@ class DDLParserSuite extends AnalysisTest {
             s" from query, got ${other.getClass.getName}.")
       }
     }
+  }
+
+  test("comment on") {
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), "NULL"))
+
+    comparePlans(
+      parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
+      CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
   }
 }

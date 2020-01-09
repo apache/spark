@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -92,10 +93,14 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
+ *                      that the table is resolved only once if a table is used multiple times
+ *                      in a query.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
-    nestedViewDepth: Int = 0)
+    nestedViewDepth: Int = 0,
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -110,7 +115,7 @@ object AnalysisContext {
   def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(
-      catalogAndNamespace, nestedViewDepth = originContext.nestedViewDepth + 1)
+      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
     set(context)
     try f finally { set(originContext) }
   }
@@ -197,6 +202,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -721,6 +727,19 @@ class Analyzer(
     }
   }
 
+  case class ResolveNamespace(catalogManager: CatalogManager)
+    extends Rule[LogicalPlan] with LookupCatalog {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
+        s.copy(namespace =
+          ResolvedNamespace(currentCatalog.asNamespaceCatalog, catalogManager.currentNamespace))
+      case UnresolvedNamespace(Seq()) =>
+        ResolvedNamespace(currentCatalog.asNamespaceCatalog, Seq.empty[String])
+      case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
+        ResolvedNamespace(catalog.asNamespaceCatalog, ns)
+    }
+  }
+
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   /**
@@ -735,6 +754,11 @@ class Analyzer(
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      case u @ UnresolvedTable(ident) =>
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -772,6 +796,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
+          .getOrElse(u)
+
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
@@ -859,6 +888,18 @@ class Analyzer(
 
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
+
+      case u @ UnresolvedTable(identifier: Seq[String]) =>
+        expandRelationName(identifier) match {
+          case SessionCatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                u.failAnalysis(s"$ident is a view not table.")
+              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
+              case None => u
+            }
+          case _ => u
+        }
     }
 
     // Look up a relation from the session catalog with the following logic:
@@ -870,7 +911,9 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table)
+              val key = catalog.name +: ident.namespace :+ ident.name
+              AnalysisContext.get.relationCache.getOrElseUpdate(
+                key, v1SessionCatalog.getRelation(v1Table.v1Table))
             case table =>
               DataSourceV2Relation.create(table)
           }
@@ -1011,7 +1054,7 @@ class Analyzer(
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
 
-      right.collect {
+      val conflictPlans = right.collect {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
@@ -1057,27 +1100,31 @@ class Analyzer(
               .nonEmpty =>
           (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
       }
-        // Only handle first case, others will be fixed on the next pass.
-        .headOption match {
-        case None =>
-          /*
-           * No result implies that there is a logical plan node that produces new references
-           * that this rule cannot handle. When that is the case, there must be another rule
-           * that resolves these conflicts. Otherwise, the analysis will fail.
-           */
-          right
-        case Some((oldRelation, newRelation)) =>
-          val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          right transformUp {
-            case r if r == oldRelation => newRelation
-          } transformUp {
-            case other => other transformExpressions {
-              case a: Attribute =>
-                dedupAttr(a, attributeRewrites)
-              case s: SubqueryExpression =>
-                s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
-            }
+
+      /*
+       * Note that it's possible `conflictPlans` can be empty which implies that there
+       * is a logical plan node that produces new references that this rule cannot handle.
+       * When that is the case, there must be another rule that resolves these conflicts.
+       * Otherwise, the analysis will fail.
+       */
+      if (conflictPlans.isEmpty) {
+        right
+      } else {
+        val attributeRewrites = AttributeMap(conflictPlans.flatMap {
+          case (oldRelation, newRelation) => oldRelation.output.zip(newRelation.output)})
+        val conflictPlanMap = conflictPlans.toMap
+        // transformDown so that we can replace all the old Relations in one turn due to
+        // the reason that `conflictPlans` are also collected in pre-order.
+        right transformDown {
+          case r => conflictPlanMap.getOrElse(r, r)
+        } transformUp {
+          case other => other transformExpressions {
+            case a: Attribute =>
+              dedupAttr(a, attributeRewrites)
+            case s: SubqueryExpression =>
+              s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
           }
+        }
       }
     }
 

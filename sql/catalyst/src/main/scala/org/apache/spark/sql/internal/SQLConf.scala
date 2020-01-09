@@ -409,7 +409,7 @@ object SQLConf {
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
-        "on a relocatable serializer, the concatenation support codec in use and the new version" +
+        "on a relocatable serializer, the concatenation support codec in use and the new version " +
         "shuffle fetch protocol.")
       .booleanConf
       .createWithDefault(true)
@@ -558,7 +558,7 @@ object SQLConf {
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
     .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
       "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
-      "extended type. In this mode, the microsecond portion of the timestamp value will be" +
+      "extended type. In this mode, the microsecond portion of the timestamp value will be " +
       "truncated.")
     .booleanConf
     .createWithDefault(false)
@@ -639,8 +639,9 @@ object SQLConf {
   val PARQUET_OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.parquet.output.committer.class")
     .doc("The output committer class used by Parquet. The specified class needs to be a " +
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter. Typically, it's also a subclass " +
-      "of org.apache.parquet.hadoop.ParquetOutputCommitter. If it is not, then metadata summaries" +
-      "will never be created, irrespective of the value of parquet.summary.metadata.level")
+      "of org.apache.parquet.hadoop.ParquetOutputCommitter. If it is not, then metadata " +
+      "summaries will never be created, irrespective of the value of " +
+      "parquet.summary.metadata.level")
     .internal()
     .stringConf
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
@@ -677,7 +678,7 @@ object SQLConf {
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
-    .doc("When native, use the native version of ORC support instead of the ORC library in Hive." +
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive. " +
       "It is 'hive' by default prior to Spark 2.4.")
     .internal()
     .stringConf
@@ -1226,8 +1227,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
       .doc("Policy to calculate the global watermark value when there are multiple watermark " +
         "operators in a streaming query. The default value is 'min' which chooses " +
-        "the minimum watermark reported across multiple operators. Other alternative value is" +
-        "'max' which chooses the maximum across multiple operators." +
+        "the minimum watermark reported across multiple operators. Other alternative value is " +
+        "'max' which chooses the maximum across multiple operators. " +
         "Note: This configuration cannot be changed between query restarts from the same " +
         "checkpoint location.")
       .stringConf
@@ -1382,7 +1383,7 @@ object SQLConf {
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
       .doc("When true, SQL commands use parallel file listing, " +
-        "as opposed to single thread listing." +
+        "as opposed to single thread listing. " +
         "This usually speeds up commands that need to list many directories.")
       .booleanConf
       .createWithDefault(true)
@@ -1703,13 +1704,13 @@ object SQLConf {
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
-      "an output as binary. Otherwise, it returns as a string. ")
+      "an output as binary. Otherwise, it returns as a string.")
     .booleanConf
     .createWithDefault(false)
 
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
-      "an output as binary. Otherwise, it returns as a string. ")
+      "an output as binary. Otherwise, it returns as a string.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1717,7 +1718,7 @@ object SQLConf {
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
       .doc("When this option is set to true, partition column values will be validated with " +
-        "user-specified schema. If the validation fails, a runtime exception is thrown." +
+        "user-specified schema. If the validation fails, a runtime exception is thrown. " +
         "When this option is set to false, the partition column value will be converted to null " +
         "if it can not be casted to corresponding user-specified schema.")
       .booleanConf
@@ -2130,10 +2131,19 @@ object SQLConf {
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
       .internal()
       .doc("When true, the `from` bound is not taken into account in conversion of " +
-        "a day-time string to an interval, and the `to` bound is used to skip" +
+        "a day-time string to an interval, and the `to` bound is used to skip " +
         "all interval units out of the specified range. If it is set to `false`, " +
         "`ParseException` is thrown if the input does not match to the pattern " +
         "defined by `from` and `to`.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PROPERTY_NON_RESERVED =
+    buildConf("spark.sql.legacy.property.nonReserved")
+      .internal()
+      .doc("When true, all database and table properties are not reserved and available for " +
+        "create/alter syntaxes. But please be aware that the reserved properties will be " +
+        "silently removed.")
       .booleanConf
       .createWithDefault(false)
 
