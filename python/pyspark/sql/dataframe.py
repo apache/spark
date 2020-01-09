@@ -2143,7 +2143,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     # Two aliases below were added for pandas compatibility many years ago.
     # There are too many differences compared to pandas and we cannot just
     # make it "compatible" by adding aliases. Therefore, we stop adding such
-    # aliases as of SPARK-30464 at this moment. Two methods below remain just
+    # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
     groupby = copy_func(
         groupBy,
