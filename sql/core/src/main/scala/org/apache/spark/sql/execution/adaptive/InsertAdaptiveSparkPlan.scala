@@ -41,16 +41,20 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = adaptiveExecutionContext.session.sessionState.conf
 
-  private def needShuffle(plan: SparkPlan): Boolean = plan match {
-    case plan => !plan.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
-    case _: Exchange => true
-  }
-
   def containShuffle(plan: SparkPlan): Boolean = {
     plan.find {
-      case p: SparkPlan if needShuffle(p) => true
+      case plan => !plan.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
+      case _: Exchange => true
       case _ => false
     }.isDefined
+  }
+
+  def containSubQuery(plan: SparkPlan): Boolean = {
+    plan.find(_.expressions.exists(_.find {
+      case _: expressions.ScalarSubquery => true
+      case _: expressions.InSubquery => true
+      case _ => false
+    }.isDefined)).isDefined
   }
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
@@ -58,7 +62,7 @@ case class InsertAdaptiveSparkPlan(
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
     case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan)
-      && (isSubquery || containShuffle(plan)) =>
+      && (containSubQuery(plan) || containShuffle(plan) || isSubquery) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.

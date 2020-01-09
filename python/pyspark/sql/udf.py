@@ -430,7 +430,8 @@ class UDFRegistration(object):
         >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.createOrReplaceTempView("df")
-        >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name order by name desc").collect()
+        >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name
+        ...     order by name desc").collect()
         [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
         """
 
