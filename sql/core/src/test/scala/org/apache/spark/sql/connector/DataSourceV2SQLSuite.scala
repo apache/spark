@@ -885,7 +885,7 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(!Option(meta.get(key)).exists(_.contains("foo")),
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
       }
@@ -1016,7 +1016,7 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(!Option(meta.get(key)).exists(_.contains("foo")),
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
       }
