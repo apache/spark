@@ -179,6 +179,23 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     checkAnswer(load("t1", Some(catalogName)), df2.toDF())
   }
 
+  test("fail on user specified schema when reading - session catalog") {
+    sql(s"create table t1 (id bigint) using $format")
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format(format).option("name", "t1").schema("id bigint").load()
+    }
+    assert(e.getMessage.contains("not support user specified schema"))
+  }
+
+  test("fail on user specified schema when reading - testcat catalog") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format(format).option("name", "t1").option("catalog", catalogName)
+        .schema("id bigint").load()
+    }
+    assert(e.getMessage.contains("not support user specified schema"))
+  }
+
   private def load(name: String, catalogOpt: Option[String]): DataFrame = {
     val dfr = spark.read.format(format).option("name", "t1")
     catalogOpt.foreach(cName => dfr.option("catalog", cName))

@@ -48,6 +48,6 @@ public interface SupportsCatalogOptions extends TableProvider {
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
    */
   default String extractCatalog(CaseInsensitiveStringMap options) {
-    return null;
+    return CatalogManager.SESSION_CATALOG_NAME();
   }
 }

@@ -216,6 +216,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = provider match {
+        case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
+          throw new IllegalArgumentException(
+            s"$source does not support user specified schema. Please don't specify the schema.")
         case hasCatalog: SupportsCatalogOptions =>
           val ident = hasCatalog.extractIdentifier(dsOptions)
           val catalog = CatalogV2Util.getTableProviderCatalog(
