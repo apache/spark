@@ -31,10 +31,10 @@ import org.apache.spark.sql.types.IntegerType
  * First example: query without filter clauses (in scala):
  * {{{
  *   val data = Seq(
- *     ("a", "ca1", "cb1", 10),
- *     ("a", "ca1", "cb2", 5),
- *     ("b", "ca1", "cb1", 13))
- *     .toDF("key", "cat1", "cat2", "value")
+ *     (1, "a", "ca1", "cb1", 10),
+ *     (2, "a", "ca1", "cb2", 5),
+ *     (3, "b", "ca1", "cb1", 13))
+ *     .toDF("id", "key", "cat1", "cat2", "value")
  *   data.createOrReplaceTempView("data")
  *
  *   val agg = data.groupBy($"key")
@@ -137,7 +137,7 @@ import org.apache.spark.sql.types.IntegerType
  *    functions = [COUNT(DISTINCT 'cat1) with FILTER('id > 1),
  *                 COUNT(DISTINCT 'cat1),
  *                 sum('value)]
- *    output = ['key, 'cat1_cnt1, 'cat2_cnt2, 'total])
+ *    output = ['key, 'cat1_cnt1, 'cat1_cnt2, 'total])
  *   LocalTableScan [...]
  * }}}
  *
@@ -148,7 +148,7 @@ import org.apache.spark.sql.types.IntegerType
  *      functions = [count(if (('gid = 1)) 'phantom1 else null),
  *                   count(if (('gid = 2)) 'phantom2 else null),
  *                   first(if (('gid = 0)) 'total else null) ignore nulls]
- *      output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
+ *      output = ['key, 'cat1_cnt, 'cat1_cnt2, 'total])
  *     Aggregate(
  *        key = ['key, 'phantom1, 'phantom2, 'gid]
  *        functions = [sum('value)]
@@ -362,7 +362,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         }.asInstanceOf[NamedExpression]
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
-    } else {
+    } else if (distinctAggGroups.size == 1) {
       val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
       if (distinctAggExpressions.exists(_.filter.isDefined)) {
         val regularAggExprs = regularAggExpressions.filter(e => e.children.exists(!_.foldable))
@@ -385,6 +385,15 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
         val rewriteDistinctOperatorMap = distinctAggExprs.zipWithIndex.map {
           case (ae @ AggregateExpression(af, _, _, filter, _), i) =>
+            // Why do we need to construct the phantom id ?
+            // First, In order to reduce costs, it is better to handle the filter clause locally.
+            // e.g. COUNT (DISTINCT a) FILTER (WHERE id > 1), evaluate expression
+            // If(id > 1) 'a else null first, and use the result as output.
+            // Second, If more than one DISTINCT aggregate expression uses the same column,
+            // We need to construct the phantom attributes so as the output not lost.
+            // e.g. SUM (DISTINCT a), COUNT (DISTINCT a) FILTER (WHERE id > 1) will output
+            // attribute 'a and attribute 'phantom1-a instead of two 'a.
+            // Note: We just need to illusion the expression with filter clause.
             val phantomId = i + 1
             val unfoldableChildren = af.children.filter(!_.foldable)
             val exprAttrs = unfoldableChildren.map { e =>
@@ -401,11 +410,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             }
             (projection, exprAttrs, (ae, aggExpr))
         }
-        val rewriteDistinctAttrMap = rewriteDistinctOperatorMap.map(_._2).flatten
+        val rewriteDistinctAttrMap = rewriteDistinctOperatorMap.flatMap(_._2)
         val distinctAggChildAttrs = rewriteDistinctAttrMap.map(_._2)
-        val allAggAttrs = (regularAggChildAttrMap.map(_._2) ++ distinctAggChildAttrs)
+        val allAggAttrs = regularAggChildAttrMap.map(_._2) ++ distinctAggChildAttrs
         // Construct the aggregate input projection.
-        val rewriteDistinctProjections = rewriteDistinctOperatorMap.map(_._1).flatten
+        val rewriteDistinctProjections = rewriteDistinctOperatorMap.flatMap(_._1)
         val rewriteAggProjections =
           Seq((a.groupingExpressions ++ regularAggChildren ++ rewriteDistinctProjections))
         val groupByMap = a.groupingExpressions.collect {
@@ -431,6 +440,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       } else {
         a
       }
+    } else {
+      a
     }
   }
 

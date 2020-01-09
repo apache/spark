@@ -1749,10 +1749,10 @@ class Analyzer(
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
-                  filter.foreach(e => if (!e.deterministic) {
+                  if (filter.isDefined && !filter.get.deterministic) {
                     failAnalysis("FILTER expression is non-deterministic, " +
                       "it cannot be used in aggregate functions")
-                  })
+                  }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
