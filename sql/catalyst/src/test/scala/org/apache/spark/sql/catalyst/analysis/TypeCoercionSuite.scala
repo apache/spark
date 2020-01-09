@@ -1454,7 +1454,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val rule = TypeCoercion.PromoteStrings(conf)
     ruleTest(rule,
       GreaterThan(Literal("123"), Literal(1)),
-      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+      GreaterThan(Cast(Literal("123"), DoubleType), Cast(Literal(1), DoubleType)))
     ruleTest(rule,
       LessThan(Literal(true), Literal("123")),
       LessThan(Literal(true), Cast(Literal("123"), BooleanType)))

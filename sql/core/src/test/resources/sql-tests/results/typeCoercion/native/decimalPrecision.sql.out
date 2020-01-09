@@ -4961,7 +4961,7 @@ true
 -- !query
 SELECT cast(1 as decimal(3, 0))  = cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -4969,7 +4969,7 @@ true
 -- !query
 SELECT cast(1 as decimal(5, 0))  = cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -4977,7 +4977,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -4985,7 +4985,7 @@ true
 -- !query
 SELECT cast(1 as decimal(20, 0)) = cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -5689,7 +5689,7 @@ true
 -- !query
 SELECT cast(1 as decimal(3, 0))  <=> cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) <=> CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) <=> CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -5697,7 +5697,7 @@ true
 -- !query
 SELECT cast(1 as decimal(5, 0))  <=> cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) <=> CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) <=> CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -5705,7 +5705,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) <=> CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) <=> CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -5713,7 +5713,7 @@ true
 -- !query
 SELECT cast(1 as decimal(20, 0)) <=> cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) <=> CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) <=> CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -6417,7 +6417,7 @@ false
 -- !query
 SELECT cast(1 as decimal(3, 0))  < cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) < CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) < CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -6425,7 +6425,7 @@ false
 -- !query
 SELECT cast(1 as decimal(5, 0))  < cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) < CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) < CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -6433,7 +6433,7 @@ false
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) < CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) < CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -6441,7 +6441,7 @@ false
 -- !query
 SELECT cast(1 as decimal(20, 0)) < cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) < CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) < CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -7149,7 +7149,7 @@ true
 -- !query
 SELECT cast(1 as decimal(3, 0))  <= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) <= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) <= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -7157,7 +7157,7 @@ true
 -- !query
 SELECT cast(1 as decimal(5, 0))  <= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) <= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) <= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -7165,7 +7165,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) <= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) <= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -7173,7 +7173,7 @@ true
 -- !query
 SELECT cast(1 as decimal(20, 0)) <= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) <= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) <= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -7881,7 +7881,7 @@ false
 -- !query
 SELECT cast(1 as decimal(3, 0))  > cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) > CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) > CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -7889,7 +7889,7 @@ false
 -- !query
 SELECT cast(1 as decimal(5, 0))  > cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) > CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) > CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -7897,7 +7897,7 @@ false
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) > CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) > CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -7905,7 +7905,7 @@ false
 -- !query
 SELECT cast(1 as decimal(20, 0)) > cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) > CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) > CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 false
 
@@ -8613,7 +8613,7 @@ true
 -- !query
 SELECT cast(1 as decimal(3, 0))  >= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) >= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) >= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -8621,7 +8621,7 @@ true
 -- !query
 SELECT cast(1 as decimal(5, 0))  >= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) >= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) >= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -8629,7 +8629,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) >= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) >= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -8637,7 +8637,7 @@ true
 -- !query
 SELECT cast(1 as decimal(20, 0)) >= cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) >= CAST(CAST(1 AS STRING) AS DOUBLE)):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) >= CAST(CAST(1 AS STRING) AS DECIMAL(38,0))):boolean>
 -- !query output
 true
 
@@ -9345,7 +9345,7 @@ false
 -- !query
 SELECT cast(1 as decimal(3, 0))  <> cast(1 as string) FROM t
 -- !query schema
-struct<(NOT (CAST(CAST(1 AS DECIMAL(3,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
+struct<(NOT (CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0)))):boolean>
 -- !query output
 false
 
@@ -9353,7 +9353,7 @@ false
 -- !query
 SELECT cast(1 as decimal(5, 0))  <> cast(1 as string) FROM t
 -- !query schema
-struct<(NOT (CAST(CAST(1 AS DECIMAL(5,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
+struct<(NOT (CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0)))):boolean>
 -- !query output
 false
 
@@ -9361,7 +9361,7 @@ false
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(1 as string) FROM t
 -- !query schema
-struct<(NOT (CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
+struct<(NOT (CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0)))):boolean>
 -- !query output
 false
 
@@ -9369,7 +9369,7 @@ false
 -- !query
 SELECT cast(1 as decimal(20, 0)) <> cast(1 as string) FROM t
 -- !query schema
-struct<(NOT (CAST(CAST(1 AS DECIMAL(20,0)) AS DOUBLE) = CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
+struct<(NOT (CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(38,0)) = CAST(CAST(1 AS STRING) AS DECIMAL(38,0)))):boolean>
 -- !query output
 false
 

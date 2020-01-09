@@ -136,11 +136,16 @@ object TypeCoercion {
     case (TimestampType, DateType) => Some(TimestampType)
     case (DateType, TimestampType) => Some(TimestampType)
 
-    // There is no proper decimal type we can pick,
-    // using double type is the best we can do.
-    // See SPARK-22469 for details.
-    case (n: DecimalType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: DecimalType) => Some(DoubleType)
+    case (s: StringType, n: IntegralType) => Some(LongType)
+    case (n: IntegralType, s: StringType) => Some(LongType)
+
+    case (s: StringType, n: DecimalType) => Some(DecimalType(DecimalType.MAX_PRECISION, n.scale))
+    case (n: DecimalType, s: StringType) => Some(DecimalType(DecimalType.MAX_PRECISION, n.scale))
+
+    case (StringType, FloatType) => Some(DoubleType)
+    case (FloatType, StringType) => Some(DoubleType)
+    case (StringType, DoubleType) => Some(DoubleType)
+    case (DoubleType, StringType) => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if l != StringType => Some(l)

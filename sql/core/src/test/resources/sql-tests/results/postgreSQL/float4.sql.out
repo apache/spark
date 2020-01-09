@@ -171,6 +171,7 @@ struct<four:string,f1:float>
 	0.0
 	1.2345679E-20
 	1.2345679E20
+	1004.3
 
 
 -- !query
@@ -178,7 +179,7 @@ SELECT '' AS one, f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3'
 -- !query schema
 struct<one:string,f1:float>
 -- !query output
-	1004.3
+
 
 
 -- !query
@@ -189,6 +190,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
@@ -199,6 +201,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
