@@ -30,11 +30,11 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.AccumulatorMode.AccumulatorMode
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorMode, AccumulatorV2, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorMode, AccumulatorV2, DoubleAccumulator, LongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-  import AccumulatorSuite.createLongAccum
+  import AccumulatorSuite.{createDoubleAccum, createLongAccum}
 
   override def afterEach(): Unit = {
     try {
@@ -89,10 +89,224 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(AccumulatorContext.get(100000).isEmpty)
   }
 
+  test("long accumulator fragments all") {
+    val acc = createLongAccum("long", mode = AccumulatorMode.All)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1L)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2L)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 4)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 5)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 6)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 8)
+  }
+
+  test("long accumulator fragments max") {
+    val acc = createLongAccum("long", mode = AccumulatorMode.Max)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1L)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2L)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 2)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 4)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 4)
+  }
+
+  test("long accumulator fragments last") {
+    val acc = createLongAccum("long", mode = AccumulatorMode.Last)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1L)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2L)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 2)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 2)
+  }
+
+  test("double accumulator fragments all") {
+    val acc = createDoubleAccum("double", mode = AccumulatorMode.All)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1.0)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2.0)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 4)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 5)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 6)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 8)
+  }
+
+  test("double accumulator fragments max") {
+    val acc = createDoubleAccum("double", mode = AccumulatorMode.Max)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1.0)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2.0)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 2)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 4)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 4)
+  }
+
+  test("double accumulator fragments last") {
+    val acc = createDoubleAccum("double", mode = AccumulatorMode.Last)
+    assert(acc.value == 0)
+
+    val acc1 = acc.copyAndReset()
+    acc1.add(1.0)
+
+    val acc2 = acc.copyAndReset()
+    acc2.add(2.0)
+
+    // first fragment
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    acc.merge(acc2, Some(1))
+    assert(acc.value == 2)
+
+    acc.merge(acc1, Some(1))
+    assert(acc.value == 1)
+
+    // second fragment
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 2)
+
+    acc.merge(acc2, Some(2))
+    assert(acc.value == 3)
+
+    acc.merge(acc1, Some(2))
+    assert(acc.value == 2)
+  }
+
 }
 
 private[spark] object AccumulatorSuite {
   import InternalAccumulator._
+
+  /**
+   * Create a double accumulator and register it to `AccumulatorContext`.
+   */
+  def createDoubleAccum(
+      name: String,
+      countFailedValues: Boolean = false,
+      initValue: Double = 0,
+      id: Long = AccumulatorContext.newId(),
+      mode: AccumulatorMode = AccumulatorMode.All): DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    acc.setValue(initValue)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
+    AccumulatorContext.register(acc)
+    acc
+  }
 
   /**
    * Create a long accumulator and register it to `AccumulatorContext`.

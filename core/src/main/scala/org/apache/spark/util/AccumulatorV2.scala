@@ -362,15 +362,35 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   override def merge(other: AccumulatorV2[jl.Long, jl.Long],
                      fragmentId: Option[Int] = None): Unit = other match {
     case o: LongAccumulator =>
-      val (fragmentSum, fragmentCount) =
-        fragmentId
-          .flatMap(_fragments.put(_, (o.sum, o.count)))
-          .getOrElse((0L, 0L))
-      _sum += o.sum - fragmentSum
-      _count += o.count - fragmentCount
+      metadata.mode match {
+        case AccumulatorMode.All =>
+          _sum += o.sum
+          _count += o.count
+        case AccumulatorMode.Max =>
+          val (fragmentSum, fragmentCount) =
+            fragmentId
+              .flatMap(_fragments.remove)
+              .getOrElse((0L, 0L))
+          val maxSum = math.max(fragmentSum, o.sum)
+          val maxCount = math.max(fragmentCount, o.count)
+          _sum += maxSum - fragmentSum
+          _count += maxCount - fragmentCount
+          fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
+        case AccumulatorMode.Last =>
+          val (fragmentSum, fragmentCount) =
+            fragmentId
+              .flatMap(_fragments.put(_, (o.sum, o.count)))
+              .getOrElse((0L, 0L))
+          _sum += o.sum - fragmentSum
+          _count += o.count - fragmentCount
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+      }
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
@@ -446,12 +466,31 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   override def merge(other: AccumulatorV2[jl.Double, jl.Double],
                      fragmentId: Option[Int] = None): Unit = other match {
     case o: DoubleAccumulator =>
-      val (fragmentSum, fragmentCount) =
-        fragmentId
-          .flatMap(_fragments.put(_, (o.sum, o.count)))
-          .getOrElse((0.0, 0L))
-      _sum += o.sum - fragmentSum
-      _count += o.count - fragmentCount
+      metadata.mode match {
+        case AccumulatorMode.All =>
+          _sum += o.sum
+          _count += o.count
+        case AccumulatorMode.Max =>
+          val (fragmentSum, fragmentCount) =
+            fragmentId
+              .flatMap(_fragments.remove)
+              .getOrElse((0.0, 0L))
+          val maxSum = math.max(fragmentSum, o.sum)
+          val maxCount = math.max(fragmentCount, o.count)
+          _sum += maxSum - fragmentSum
+          _count += maxCount - fragmentCount
+          fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
+        case AccumulatorMode.Last =>
+          val (fragmentSum, fragmentCount) =
+            fragmentId
+              .flatMap(_fragments.put(_, (o.sum, o.count)))
+              .getOrElse((0.0, 0L))
+          _sum += o.sum - fragmentSum
+          _count += o.count - fragmentCount
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+      }
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
