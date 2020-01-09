@@ -802,6 +802,31 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
 </div>
 </div>
 
+### Producer Caching
+
+Given Kafka producer instance is designed to be thread-safe, Spark initializes a Kafka producer instance and co-use across tasks for same caching key.
+
+The caching key is built up from the following information:
+
+* Kafka producer configuration
+
+The following properties are available to configure the producer pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.producer.cache.timeout</td>
+  <td>The minimum amount of time a producer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>10m (10 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.producer.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for producer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minutes)</td>
+</tr>
+</table>
+
+Idle eviction thread periodically removes producers which are not used longer than given timeout. Note that the producer is shared and used concurrently, so the last used timestamp is determined by the moment the producer instance is returned and reference count is 0.
 
 ## Kafka Specific Configurations
 
