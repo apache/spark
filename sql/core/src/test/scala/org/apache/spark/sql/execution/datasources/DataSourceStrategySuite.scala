@@ -70,37 +70,6 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     }
   }
 
-  test("column name containing dot can not be pushed down") {
-    val fieldsWithoutDot = StructField("cint", IntegerType, nullable = true) ::
-      StructField("cstr", StringType, nullable = true) :: Nil
-
-    val fieldsWithDot = StructField("column.cint", IntegerType, nullable = true) ::
-      StructField("column.cstr", StringType, nullable = true) :: Nil
-
-    val attrNested1 = 'a.struct(StructType(fieldsWithDot))
-    val attrIntNested1 = GetStructField(attrNested1, 0, None)
-    val attrStrNested1 = GetStructField(attrNested1, 1, None)
-
-    val attrNested2 = 'b.struct(StructType(
-      StructField("c", StructType(fieldsWithDot), nullable = true) :: Nil))
-    val attrIntNested2 = GetStructField(GetStructField(attrNested2, 0, None), 0, None)
-    val attrStrNested2 = GetStructField(GetStructField(attrNested2, 0, None), 1, None)
-
-    val attrNestedWithDotInTopLevel = Symbol("column.a").struct(StructType(fieldsWithoutDot))
-    val attrIntNested1WithDotInTopLevel = GetStructField(attrNestedWithDotInTopLevel, 0, None)
-    val attrStrNested1WithDotInTopLevel = GetStructField(attrNestedWithDotInTopLevel, 1, None)
-
-    Seq((Symbol("column.cint").int, Symbol("column.cstr").string), // no nesting
-      (attrIntNested1, attrStrNested1), // one level nesting
-      (attrIntNested1WithDotInTopLevel, attrStrNested1WithDotInTopLevel), // one level nesting
-      (attrIntNested2, attrStrNested2) // two level nesting
-    ).foreach { case (attrInt, attrStr) =>
-      testTranslateSimpleExpression(
-        attrInt, attrStr, "", "", isResultNone = true)
-      testTranslateComplexExpression(attrInt, "", isResultNone = true)
-    }
-  }
-
   // `isResultNone` is used when testing invalid input expression
   // containing dots which translates into None
   private def testTranslateSimpleExpression(

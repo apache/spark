@@ -187,7 +187,6 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   case class N1[T](a: Option[T])
-
   case class N2[T](b: Option[T])
 
   test("filter pushdown - boolean") {
@@ -197,12 +196,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
     // zero nesting
     withParquetDataFrame(data0) { implicit df =>
-      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
-
-      checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
-      checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
-      checkFilterPredicate('_1 =!= true, classOf[NotEq[_]], false)
+      val col = Symbol("_1")
+      checkFilterPredicate(col.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(col.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
+      checkFilterPredicate(col === true, classOf[Eq[_]], true)
+      checkFilterPredicate(col <=> true, classOf[Eq[_]], true)
+      checkFilterPredicate(col =!= true, classOf[NotEq[_]], false)
     }
 
     // one level nesting
@@ -1448,6 +1447,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
+        // SPARK-17636
         // The following select will flatten the nested data structure,
         // so comment it out for now until we find a better approach.
         // .select(output.map(e => Column(e)): _*)
@@ -1510,7 +1510,10 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
-        .select(output.map(e => Column(e)): _*)
+        // SPARK-17636
+        // The following select will flatten the nested data structure,
+        // so comment it out for now until we find a better approach.
+        // .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {

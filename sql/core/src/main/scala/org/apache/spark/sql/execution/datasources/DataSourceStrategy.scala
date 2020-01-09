@@ -447,11 +447,9 @@ object DataSourceStrategy {
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = {
     // Recursively try to find an attribute name from the top level that can be pushed down.
     def attrName(e: Expression): Option[String] = e match {
-      // In Spark and many data sources such as parquet, dots are used as a column path delimiter;
-      // thus, we don't translate such expressions.
-      case a: Attribute if !a.name.contains(".") =>
+      case a: Attribute if a.dataType != StructType =>
         Some(a.name)
-      case s: GetStructField if !s.childSchema(s.ordinal).name.contains(".") =>
+      case s: GetStructField if s.childSchema(s.ordinal).dataType != StructType =>
         attrName(s.child).map(_ + s".${s.childSchema(s.ordinal).name}")
       case _ =>
         None

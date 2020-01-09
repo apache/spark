@@ -59,8 +59,7 @@ case class OrcScanBuilder(
         // changed `hadoopConf` in executors.
         OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
       }
-      val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
-      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
+      _pushedFilters = OrcFilters.convertibleFilters(schema, filters).toArray
     }
     filters
   }
