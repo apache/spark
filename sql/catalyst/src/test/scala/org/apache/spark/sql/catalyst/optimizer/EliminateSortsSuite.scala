@@ -310,9 +310,25 @@ class EliminateSortsSuite extends PlanTest {
   }
 
   test("should not remove orderBy in sortBy clause") {
-    val plan = testRelation.orderBy('a.asc).sortBy('b.desc)
-    val optimized = Optimize.execute(plan.analyze)
-    val correctAnswer = testRelation.orderBy('a.asc).sortBy('b.desc).analyze
-    comparePlans(optimized, correctAnswer)
+    val plan1 = testRelation.orderBy('a.asc).sortBy('b.desc)
+    val optimized1 = Optimize.execute(plan1.analyze)
+    val correctAnswer1 = testRelation.orderBy('a.asc).sortBy('b.desc).analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val plan2 = testRelation
+      .orderBy('c.asc)
+      .select('a, 'b)
+      .where('a > Literal(10))
+      .orderBy('b.asc)
+      .orderBy('a.asc)
+      .sortBy('a.asc)
+      .sortBy('b.asc)
+    val optimized2 = Optimize.execute(plan2.analyze)
+    val correctAnswer2 = testRelation
+      .select('a, 'b)
+      .where('a > Literal(10))
+      .orderBy('a.asc)
+      .sortBy('b.asc).analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 }

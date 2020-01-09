@@ -990,7 +990,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
   private def recursiveRemoveSort(parent: Sort, plan: LogicalPlan): LogicalPlan = plan match {
     case s @ Sort(_, _, child) =>
       if (parent.global == s.global) {
-        recursiveRemoveSort(child)
+        recursiveRemoveSort(s, child)
       } else {
         s.copy(child = recursiveRemoveSort(child))
       }
