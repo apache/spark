@@ -158,10 +158,12 @@ object DecimalType extends AbstractDataType {
   private[sql] def fromJavaBigDecimal(d: JavaBigDecimal): DecimalType = {
     val (precision, scale) = if (d.scale < 0 && SQLConf.get.ansiEnabled) {
       (d.precision - d.scale, 0)
+    } else if (d.precision <= d.scale) {
+      (d.scale + 1, d.scale)
     } else {
       (d.precision, d.scale)
     }
-    DecimalType(Math.max(precision, scale), scale)
+    DecimalType(precision, scale)
   }
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
