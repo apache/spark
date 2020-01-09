@@ -480,11 +480,29 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => IntervalUtils.safeStringToInterval(s))
   }
 
+  private[this] def onStringToIntegerFailed(
+      intWrapper: IntWrapper,
+      str: UTF8String,
+      ansiEnabled: Boolean,
+      typeName: String): Any = {
+    if (ansiEnabled) {
+      if (intWrapper.formatInvalid) {
+        throw new ArithmeticException(s"Invalid input syntax for type integer: $str")
+      } else {
+        throw new ArithmeticException(s"Casting $str to $typeName causes overflow")
+      }
+    } else {
+      null
+    }
+  }
+
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else {
+        onStringToIntegerFailed(result, s, ansiEnabled, "Long")
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -501,7 +519,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else {
+        onStringToIntegerFailed(result, s, ansiEnabled, "Int")
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -523,7 +543,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
         result.value.toShort
       } else {
-        null
+        onStringToIntegerFailed(result, s, ansiEnabled, "Short")
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toShort else 0.toShort)
@@ -564,7 +584,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
         result.value.toByte
       } else {
-        null
+        onStringToIntegerFailed(result, s, ansiEnabled, "Byte")
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toByte else 0.toByte)

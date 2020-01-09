@@ -3384,6 +3384,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       assert(exp.getMessage.contains("Resources not found"))
     }
   }
+
+  test("SPARK-26128: Throw exception on overflow when casting string to Integer.") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      sql("SELECT CAST(CAST(2147483648 as STRING) AS INTEGER)").show()
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
