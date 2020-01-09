@@ -47,7 +47,10 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       checker: (SearchArgument) => Unit): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
-      .select(output.map(e => Column(e)): _*)
+      // SPARK-25557
+      // The following select will flatten the nested data structure,
+      // so comment it out for now until we find a better approach.
+      // .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
     var maybeRelation: Option[HadoopFsRelation] = None
