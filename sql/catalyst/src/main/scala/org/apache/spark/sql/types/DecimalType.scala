@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{BigDecimal => JavaBigDecimal}
 import java.util.Locale
 
 import scala.reflect.runtime.universe.typeTag
@@ -145,26 +144,13 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
-    case v: Short => fromBigDecimal(BigDecimal(v))
-    case v: Int => fromBigDecimal(BigDecimal(v))
-    case v: Long => fromBigDecimal(BigDecimal(v))
+    case v: Short => fromDecimal(Decimal(v))
+    case v: Int => fromDecimal(Decimal(v))
+    case v: Long => fromDecimal(Decimal(v))
     case _ => forType(literal.dataType)
   }
 
-  private[sql] def fromBigDecimal(d: BigDecimal): DecimalType = {
-    fromJavaBigDecimal(d.underlying())
-  }
-
-  private[sql] def fromJavaBigDecimal(d: JavaBigDecimal): DecimalType = {
-    val (precision, scale) = if (d.scale < 0 && SQLConf.get.ansiEnabled) {
-      (d.precision - d.scale, 0)
-    } else if (d.precision <= d.scale) {
-      (d.scale + 1, d.scale)
-    } else {
-      (d.precision, d.scale)
-    }
-    DecimalType(precision, scale)
-  }
+  private[sql] def fromDecimal(d: Decimal): DecimalType = DecimalType(d.precision, d.scale)
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))

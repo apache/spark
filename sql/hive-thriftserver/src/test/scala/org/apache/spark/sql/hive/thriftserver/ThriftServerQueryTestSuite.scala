@@ -389,7 +389,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       case t: Timestamp =>
         HiveResult.toHiveString((t, TimestampType))
       case d: java.math.BigDecimal =>
-        HiveResult.toHiveString((d, DecimalType.fromBigDecimal(d)))
+        HiveResult.toHiveString((d, DecimalType.fromDecimal(Decimal(d))))
       case bin: Array[Byte] =>
         HiveResult.toHiveString((bin, BinaryType))
       case other =>
