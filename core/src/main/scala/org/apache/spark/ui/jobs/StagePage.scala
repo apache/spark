@@ -289,7 +289,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         val executorOverhead = serializationTime + deserializationTime
         val executorRunTime = if (taskInfo.duration.isDefined) {
           totalExecutionTime - executorOverhead - gettingResultTime
-	} else {
+        } else {
           metricsOpt.map(_.executorRunTime).getOrElse(
             totalExecutionTime - executorOverhead - gettingResultTime)
         }
