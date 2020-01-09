@@ -21,7 +21,6 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Evolving
@@ -92,7 +91,6 @@ class ResourceProfile(
 }
 
 object ResourceProfile extends Logging {
-
   // task resources
   val CPUS = "cpus"
   // Executor resources
@@ -106,32 +104,6 @@ object ResourceProfile extends Logging {
 
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
-
-  private[spark] val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
-
-  private[spark] def resourceProfileIntConfPrefix(rpId: Int): String = {
-    s"$SPARK_RP_EXEC_PREFIX.$rpId."
-  }
-
-  private[spark] def resourceProfileCustomResourceIntConfPrefix(rpId: Int): String = {
-    s"${resourceProfileIntConfPrefix(rpId)}resource."
-  }
-
-  // Helper class for constructing the resource profile internal configs used to pass to
-  // executors. The configs look like:
-  // spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
-  // Note the prefix is passed in because custom resource configs have an extra "resource."
-  // in the name to differentiate them from the standard spark configs.
-  private[spark] case class ResourceProfileInternalConf(prefix: String, resourceName: String) {
-    def resourceNameConf: String = s"$prefix$resourceName"
-    def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
-    def resourceNameAndDiscovery: String = s"$resourceName.${ResourceUtils.DISCOVERY_SCRIPT}"
-    def resourceNameAndVendor: String = s"$resourceName.${ResourceUtils.VENDOR}"
-
-    def amountConf: String = s"$prefix$resourceNameAndAmount"
-    def discoveryScriptConf: String = s"$prefix$resourceNameAndDiscovery"
-    def vendorConf: String = s"$prefix$resourceNameAndVendor"
-  }
 
   private lazy val nextProfileId = new AtomicInteger(0)
 
@@ -204,62 +176,5 @@ object ResourceProfile extends Logging {
   private[spark] def getCustomExecutorResources(
       rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
     rp.executorResources.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
-  }
-
-  /**
-   * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
-   * It pulls any custom resources from the ResourceProfile and the pyspark.memory and
-   * returns a Map of key to value where the keys get formatted as:
-   *
-   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
-   * Note that for custom resources the resourceName looks like: resource.gpu.
-   */
-  private[spark] def createResourceProfileInternalConfs(
-      rp: ResourceProfile
-  ): Map[String, String] = {
-    val ret = new mutable.HashMap[String, String]()
-    val customResource = getCustomExecutorResources(rp)
-    customResource.foreach { case (name, req) =>
-      val execIntConf =
-        ResourceProfileInternalConf(resourceProfileCustomResourceIntConfPrefix(rp.id), name)
-      ret(execIntConf.amountConf) = req.amount.toString
-      if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
-      if (req.discoveryScript.nonEmpty) ret(execIntConf.discoveryScriptConf) = req.discoveryScript
-    }
-    ret.toMap
-  }
-
-  /**
-   * Parse out just the resourceName given the map of confs. It only looks for confs that
-   * end with .amount because we should always have one of those for every resource.
-   * Format is expected to be: [resourcename].amount, where resourceName could have multiple
-   * .'s like gpu.foo.amount
-   */
-  private def listResourceNames(confs: Map[String, String]): Seq[String] = {
-    confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
-      map { case (key, _) => key.substring(0, key.lastIndexOf(s".${ResourceUtils.AMOUNT}")) }.toSeq
-  }
-
-  /**
-   * Get the executor custom ResourceRequests(GPUs, FPGAs, etc) from the internal resource confs
-   * The configs looks like:
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
-   */
-  private[spark] def getCustomResourceRequestsFromInternalConfs(
-      sparkConf: SparkConf,
-      rpId: Int): Seq[ResourceRequest] = {
-    val execRpIdConfPrefix = resourceProfileCustomResourceIntConfPrefix(rpId)
-    val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
-    val execResourceNames = listResourceNames(execConfs)
-    val resourceReqs = execResourceNames.map { rName =>
-      val intConf =
-        ResourceProfileInternalConf(execRpIdConfPrefix, rName)
-      val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
-      val vendor = execConfs.get(intConf.resourceNameAndVendor)
-      val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
-      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, rName)
-      ResourceRequest(resourceId, amount, discoveryScript, vendor)
-    }
-    resourceReqs
   }
 }

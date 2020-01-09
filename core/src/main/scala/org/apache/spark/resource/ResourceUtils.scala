@@ -202,17 +202,21 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def parseAllocated(
+      resourcesFileOpt: Option[String],
+      componentName: String): Seq[ResourceAllocation] = {
+    resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
+      .filter(_.id.componentName == componentName)
+  }
+
   private def parseAllocatedOrDiscoverResources(
       sparkConf: SparkConf,
       componentName: String,
-      resourcesFileOpt: Option[String],
-      resourceIdsFromConfs: Seq[ResourceID],
-      getResourceRequest: (SparkConf, ResourceID) => ResourceRequest): Seq[ResourceAllocation] = {
-    val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
-      .filter(_.id.componentName == componentName)
-    val otherResourceIds = resourceIdsFromConfs.diff(allocated.map(_.id))
+      resourcesFileOpt: Option[String]): Seq[ResourceAllocation] = {
+    val allocated = parseAllocated(resourcesFileOpt, componentName)
+    val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))
     val otherResources = otherResourceIds.flatMap { id =>
-      val request = getResourceRequest(sparkConf, id)
+      val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
         Some(ResourceAllocation(id, discoverResource(request).addresses))
       } else {
@@ -238,6 +242,17 @@ private[spark] object ResourceUtils extends Logging {
     requests.foreach(r => assertResourceAllocationMeetsRequest(allocated(r.id), r))
   }
 
+  private def assertAllResourceAllocationsMatchResourceProfile(
+      allocations: Map[String, ResourceInformation],
+      execReqs: Map[String, ExecutorResourceRequest]): Unit = {
+    execReqs.foreach { case (rName, req) =>
+      require(allocations.contains(rName) && allocations(rName).addresses.size >= req.amount,
+        s"Resource: ${rName}, with addresses: " +
+          s"${allocations(rName).addresses.mkString(",")} " +
+          s"is less than what the user requested: ${req.amount})")
+    }
+  }
+
   /**
    * Gets all allocated resource information for the input component from input resources file and
    * the application level Spark configs. It first looks to see if resource were explicitly
@@ -253,22 +268,19 @@ private[spark] object ResourceUtils extends Logging {
       componentName: String,
       resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     val requests = parseAllResourceRequests(sparkConf, componentName)
-    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName,
-      resourcesFileOpt, listResourceIds(sparkConf, componentName), parseResourceRequest)
+    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt)
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     resourceInfoMap
   }
 
   /**
-   * This function is just like getOrDiscoverallResources, except for it uses the ResourceProfile
+   * This function is similar to getOrDiscoverallResources, except for it uses the ResourceProfile
    * information instead of the application level configs.
-   * It gets the ResourceProfile details using the spark internal confs that looks like:
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
    *
-   * It first looks to see if resource were explicitly
-   * specified in the resources file (this would include specified address assignments and it only
-   * specified in certain cluster managers) and then it looks at the ResourceProfile configs to get
+   * It first looks to see if resource were explicitly specified in the resources file
+   * (this would include specified address assignments and it only specified in certain
+   * cluster managers) and then it looks at the ResourceProfile to get
    * any others not specified in the file. The resources not explicitly set in the file require a
    * discovery script for it to run to get the addresses of the resource.
    * It also verifies the resource allocation meets required amount for each resource.
@@ -276,18 +288,21 @@ private[spark] object ResourceUtils extends Logging {
    * @return a map from resource name to resource info
    */
   def getOrDiscoverAllResourcesForResourceProfile(
-      resourceProfileId: Int,
-      sparkConf: SparkConf,
       resourcesFileOpt: Option[String],
-      componentName: String): Map[String, ResourceInformation] = {
-    val requests =
-      ResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
-    val resourceIdToRequest = requests.map(req => (req.id, req)).toMap
-    val requestResourceIds = resourceIdToRequest.keySet.toSeq
-    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,
-      requestResourceIds, ((sparkConf: SparkConf, id: ResourceID) => resourceIdToRequest(id)))
-    assertAllResourceAllocationsMeetRequests(allocations, requests)
-    allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
+      componentName: String,
+      resourceProfile: ResourceProfile): Map[String, ResourceInformation] = {
+    val fileAllocated = parseAllocated(resourcesFileOpt, componentName)
+    val fileAllocResMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
+    // only want to look at the ResourceProfile for resources not in the resources file
+    val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
+    val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
+    val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
+      val addrs = discoverResource(rName, Option(execRequest.discoveryScript)).addresses
+      (rName, new ResourceInformation(rName, addrs))
+    }
+    val allAllocations = fileAllocResMap ++ rpAllocations
+    assertAllResourceAllocationsMatchResourceProfile(allAllocations, execReq)
+    allAllocations
   }
 
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
@@ -298,9 +313,9 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   // visible for test
-  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
-    val resourceName = resourceRequest.id.resourceName
-    val script = resourceRequest.discoveryScript
+  private[spark] def discoverResource(
+      resourceName: String,
+      script: Option[String]): ResourceInformation = {
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)
       // check that script exists and try to execute
@@ -320,6 +335,13 @@ private[spark] object ResourceUtils extends Logging {
         s"script returned resource name ${result.name} and we were expecting $resourceName.")
     }
     result
+  }
+
+  // visible for test
+  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
+    val resourceName = resourceRequest.id.resourceName
+    val script = resourceRequest.discoveryScript
+    discoverResource(resourceName, script)
   }
 
   // known types of resources

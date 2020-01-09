@@ -150,22 +150,22 @@ class ResourceUtilsSuite extends SparkFunSuite
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
         dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
-      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(rpId,
-        conf,
+      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(
         Some(resourcesFile),
-        SPARK_EXECUTOR_PREFIX)
+        SPARK_EXECUTOR_PREFIX,
+        ResourceProfile.getOrCreateDefaultProfile(conf))
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val prefix = ResourceProfile.resourceProfileCustomResourceIntConfPrefix(rpId)
-      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(prefix, GPU)
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")
-      conf.set(gpuInternalConf.amountConf, "2")
-      conf.set(gpuInternalConf.discoveryScriptConf, gpuDiscovery)
-      val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(1,
-        conf, Some(resourcesFile), SPARK_EXECUTOR_PREFIX)
+      val rpBuilder = new ResourceProfileBuilder()
+      val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
+      val treqs = new TaskResourceRequests().resource(GPU, 1)
+      val rp = rpBuilder.require(ereqs).require(treqs).build
+      val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
+        Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp)
       val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
       assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
