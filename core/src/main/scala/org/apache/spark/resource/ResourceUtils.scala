@@ -20,6 +20,7 @@ package org.apache.spark.resource
 import java.io.File
 import java.nio.file.{Files, Paths}
 
+import scala.collection.immutable.HashSet
 import scala.util.control.NonFatal
 
 import org.json4s.DefaultFormats
@@ -27,8 +28,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_WARNING_TESTING, SPARK_TASK_PREFIX}
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_WARNING_TESTING, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -230,6 +230,19 @@ private[spark] object ResourceUtils extends Logging {
     requests.foreach(r => assertResourceAllocationMeetsRequest(allocated(r.id), r))
   }
 
+  private def assertAllResourceAllocationsMeetRequestsRP(
+      allocations: Map[String, ResourceInformation],
+      execReqs: Map[String, ExecutorResourceRequest]): Unit = {
+    execReqs.foreach { case (rName, req) =>
+      val alloc = allocations.getOrElse(rName,
+        throw new SparkException(s"$rName missing from allocations"))
+      require(alloc.addresses.size >= req.amount,
+        s"Resource: ${rName}, with addresses: " +
+          s"${alloc.addresses.mkString(",")} " +
+          s"is less than what the user requested: ${req.amount})")
+    }
+  }
+
   /**
    * Gets all allocated resource information for the input component from input resources file and
    * the application level Spark configs. It first looks to see if resource were explicitly
@@ -282,6 +295,27 @@ private[spark] object ResourceUtils extends Logging {
     allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
   }
 
+  def getOrDiscoverAllResourcesForResourceProfileFromRP(
+      resourcesFileOpt: Option[String],
+      componentName: String,
+      resourceProfile: ResourceProfile): Map[String, ResourceInformation] = {
+
+    val fileAllocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
+      .filter(_.id.componentName == componentName)
+    val fileAllocMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
+    // only want to look at the ResourceProfile for resources not in the resources file
+    val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
+    val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocMap.contains(rname) }
+    val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
+      val addrs = discoverResourceHelper(rName, Option(execRequest.discoveryScript)).addresses
+      (rName, new ResourceInformation(rName, addrs))
+    }
+    val allAllocations = (fileAllocMap ++ rpAllocations)
+    assertAllResourceAllocationsMeetRequestsRP(allAllocations, execReq)
+    allAllocations
+  }
+
+
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
     logInfo("==============================================================")
@@ -290,9 +324,9 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   // visible for test
-  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
-    val resourceName = resourceRequest.id.resourceName
-    val script = resourceRequest.discoveryScript
+  private[spark] def discoverResourceHelper(
+      resourceName: String,
+      script: Option[String]): ResourceInformation = {
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)
       // check that script exists and try to execute
@@ -312,6 +346,13 @@ private[spark] object ResourceUtils extends Logging {
         s"script returned resource name ${result.name} and we were expecting $resourceName.")
     }
     result
+  }
+
+  // visible for test
+  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
+    val resourceName = resourceRequest.id.resourceName
+    val script = resourceRequest.discoveryScript
+    discoverResourceHelper(resourceName, script)
   }
 
   def validateTaskCpusLargeEnough(execCores: Int, taskCpus: Int): Boolean = {

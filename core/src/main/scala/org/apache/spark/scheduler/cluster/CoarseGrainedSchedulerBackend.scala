@@ -264,12 +264,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RetrieveSparkAppConfig(resourceProfileId) =>
         // add the extra resources from the resource profile.
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
-        val resourceProfileSeq = rp.getInternalConfs.toSeq
-        logWarning("resource profile config seq is: " + resourceProfileSeq)
+        logWarning("resource profile id is: " + rp.id + " rp is: " + rp)
         val reply = SparkAppConfig(
-          sparkProperties ++ resourceProfileSeq,
+          sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          Option(delegationTokens.get()))
+          Option(delegationTokens.get()),
+          rp)
         context.reply(reply)
     }
 

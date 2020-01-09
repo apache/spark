@@ -22,6 +22,7 @@ import java.net.URL
 import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.YarnContainerInfoHelper
 
@@ -40,7 +41,7 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     userClassPath: Seq[URL],
     env: SparkEnv,
     resourcesFile: Option[String],
-    resourceProfileId: Int)
+    resourceProfile: Option[ResourceProfile])
   extends CoarseGrainedExecutorBackend(
     rpcEnv,
     driverUrl,
@@ -51,7 +52,7 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     userClassPath,
     env,
     resourcesFile,
-    resourceProfileId) with Logging {
+    resourceProfile) with Logging {
 
   private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
 
@@ -69,11 +70,12 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv) =>
-      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
-      new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
-        arguments.resourcesFileOpt, arguments.resourceProfileId)
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments,
+      SparkEnv, Option[ResourceProfile]) => CoarseGrainedExecutorBackend = {
+      case (rpcEnv, arguments, env, resourceProfile) =>
+        new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
+          arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
+          arguments.resourcesFileOpt, resourceProfile)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
       this.getClass.getCanonicalName.stripSuffix("$"))

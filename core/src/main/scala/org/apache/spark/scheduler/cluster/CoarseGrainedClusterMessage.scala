@@ -34,7 +34,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
-      hadoopDelegationCreds: Option[Array[Byte]])
+      hadoopDelegationCreds: Option[Array[Byte]],
+      resourceProfile: ResourceProfile)
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
