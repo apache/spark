@@ -1075,8 +1075,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Wrapper over `long` to allow result of parsing long from string to be accessed via reference.
    * This is done solely for better performance and is not expected to be used by end users.
    */
-  public static class LongWrapper extends IntWrapper {
+  public static class LongWrapper implements Serializable {
     public transient long value = 0;
+    public transient boolean formatInvalid = false;
   }
 
   /**
