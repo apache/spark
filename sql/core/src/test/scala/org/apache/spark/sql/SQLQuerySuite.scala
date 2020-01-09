@@ -3387,10 +3387,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-26218: Fix the corner case when casting float to Integer") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       intercept[ArithmeticException](
-        sql("SELECT CAST(CAST(2147483648 as FLOAT) as Integer)").explain()
+        sql("SELECT CAST(CAST(2147483648 as FLOAT) as Integer)").collect()
       )
       intercept[ArithmeticException](
-        sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").show()
+        sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").collect()
       )
     }
   }
