@@ -30,7 +30,7 @@ import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryPage(parent: StreamingQueryTab, statusListener: StreamingQueryStatusListener)
-  extends WebUIPage("") with Logging {
+    extends WebUIPage("") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
 
