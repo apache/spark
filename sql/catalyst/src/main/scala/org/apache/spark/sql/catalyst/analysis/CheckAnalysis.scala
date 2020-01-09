@@ -471,7 +471,7 @@ trait CheckAnalysis extends PredicateHelper {
                 val fieldName = update.fieldNames.quoted
                 if (!update.nullable && field.nullable) {
                   throw new AnalysisException(
-                    s"Cannot change optional column to required: $fieldName")
+                    s"Cannot change nullable column to non-nullable: $fieldName")
                 }
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)

@@ -328,7 +328,7 @@ trait AlterTableTests extends SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
       }
-      assert(e.message.contains("Cannot change optional column to required"))
+      assert(e.message.contains("Cannot change nullable column to non-nullable"))
     }
   }
 

@@ -2903,6 +2903,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column nullability.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
+   * }}}
+   */
   override def visitAlterColumnNullability(ctx: AlterColumnNullabilityContext): LogicalPlan = {
     withOrigin(ctx) {
       val nullable = ctx.setOrDrop.getType match {
