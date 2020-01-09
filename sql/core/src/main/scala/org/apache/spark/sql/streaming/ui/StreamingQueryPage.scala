@@ -26,12 +26,10 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
-import org.apache.spark.sql.execution.streaming.StreamQueryStore
-import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
+class StreamingQueryPage(parent: StreamingQueryTab, statusListener: StreamingQueryStatusListener)
   extends WebUIPage("") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -42,9 +40,8 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
   }
 
   def generateDataRow(request: HttpServletRequest, queryActive: Boolean)
-    (streamQuery: (StreamingQuery, Long)): Seq[Node] = {
+    (query: StreamingQueryUIData): Seq[Node] = {
 
-    val (query, timeSinceStart) = streamQuery
     def details(detail: Any): Seq[Node] = {
       if (queryActive) {
         return Seq.empty[Node]
@@ -76,11 +73,11 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
     val name = UIUtils.getQueryName(query)
     val status = UIUtils.getQueryStatus(query)
     val duration = if (queryActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - timeSinceStart)
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.submitTime)
     } else {
       withNoProgress(query, {
         val endTimeMs = query.lastProgress.timestamp
-        SparkUIUtils.formatDurationVerbose(df.parse(endTimeMs).getTime - timeSinceStart)
+        SparkUIUtils.formatDurationVerbose(df.parse(endTimeMs).getTime - query.submitTime)
       }, "-")
     }
 
@@ -89,7 +86,7 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
       <td> {status} </td>
       <td> {query.id} </td>
       <td> <a href={statisticsLink}> {query.runId} </a> </td>
-      <td> {SparkUIUtils.formatDate(timeSinceStart)} </td>
+      <td> {SparkUIUtils.formatDate(query.submitTime)} </td>
       <td> {duration} </td>
       <td> {withNoProgress(query, {
         (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
@@ -100,12 +97,12 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
           query.recentProgress.length).formatted("%.2f") }, "NaN")}
       </td>
       <td> {withNoProgress(query, { query.lastProgress.batchId }, "NaN")} </td>
-      {details(query.exception.map(_.message).getOrElse("-"))}
+      {details(query.exception.getOrElse("-"))}
     </tr>
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) = store.allStreamQueries.partition(_._1.isActive)
+    val (activeQueries, inactiveQueries) = statusListener.allQueryStatus.partition(_.isActive)
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input /sec",

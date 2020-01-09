@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming.ui
 
-import org.apache.spark.sql.streaming.StreamingQuery
-
 private[ui] object UIUtils {
 
   /**
@@ -36,7 +34,7 @@ private[ui] object UIUtils {
    * Execute a block of code when there is already one completed batch in streaming query,
    * otherwise return `default` value.
    */
-  def withNoProgress[T](query: StreamingQuery, body: => T, default: T): T = {
+  def withNoProgress[T](query: StreamingQueryUIData, body: => T, default: T): T = {
     if (query.lastProgress != null) {
       body
     } else {
@@ -44,7 +42,7 @@ private[ui] object UIUtils {
     }
   }
 
-  def getQueryName(query: StreamingQuery): String = {
+  def getQueryName(query: StreamingQueryUIData): String = {
     if (query.name == null || query.name.isEmpty) {
       "<no name>"
     } else {
@@ -52,7 +50,7 @@ private[ui] object UIUtils {
     }
   }
 
-  def getQueryStatus(query: StreamingQuery): String = {
+  def getQueryStatus(query: StreamingQueryUIData): String = {
     if (query.isActive) {
       "RUNNING"
     } else {
