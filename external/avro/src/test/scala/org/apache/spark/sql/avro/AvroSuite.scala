@@ -1544,6 +1544,7 @@ class AvroV2Suite extends AvroSuite {
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
+      assert(fileScan.get.dataFilters.nonEmpty)
       assert(fileScan.get.planInputPartitions().forall { partition =>
         partition.asInstanceOf[FilePartition].files.forall { file =>
           file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
