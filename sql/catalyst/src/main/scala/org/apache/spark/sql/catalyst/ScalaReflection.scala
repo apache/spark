@@ -358,11 +358,11 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if definedByConstructorParams(t) =>
-        val params = getConstructorParameters(t)
+        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
 
         val cls = getClassFromType(tpe)
 
-        val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
+        val arguments = unwrappedParams.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = walkedTypePath.recordField(clsName, fieldName)
@@ -584,8 +584,8 @@ object ScalaReflection extends ScalaReflection {
           throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
 
-        val params = getConstructorParameters(t)
-        val fields = params.map { case (fieldName, fieldType) =>
+        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
+        val fields = unwrappedParams.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
             throw QueryExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
@@ -788,9 +788,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.ByteTpe) => Schema(ByteType, nullable = false)
       case t if isSubtype(t, definitions.BooleanTpe) => Schema(BooleanType, nullable = false)
       case t if definedByConstructorParams(t) =>
-        val params = getConstructorParameters(t)
+        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
         Schema(StructType(
-          params.map { case (fieldName, fieldType) =>
+          unwrappedParams.map { case (fieldName, fieldType) =>
             val Schema(dataType, nullable) = schemaFor(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
@@ -845,6 +845,24 @@ object ScalaReflection extends ScalaReflection {
       case _ => isSubtype(tpe.dealias, localTypeOf[Product]) ||
         isSubtype(tpe.dealias, localTypeOf[DefinedByConstructorParams])
     }
+  }
+
+  /**
+   * [SPARK-20384] Create an underlying param for a given parameter of value class.
+   * When a member of case class is value class `extends AnyVal`, the member's parameter type
+   * for encoder should be the underlying type. This is to be consistent with the generated
+   * type of that member, and avoid compile error.
+   * @param param param (type is consistent with [[ScalaReflection.getConstructorParameters]])
+   * @return unwrapped param
+   */
+  private def unwrapValueClassParam(param: (String, `Type`)): (String, `Type`) = {
+    val (name, typ) = param
+    val unwrappedTyp = if (typ.typeSymbol.asClass.isDerivedValueClass) {
+      getConstructorParameters(typ.dealias).head._2
+    } else {
+      typ
+    }
+    (name, unwrappedTyp)
   }
 
   val typeJavaMapping = Map[DataType, Class[_]](
