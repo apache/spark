@@ -3392,7 +3392,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         sql("SELECT CAST(CAST('abc' as STRING) AS INTEGER)").collect()
       )
       intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('abc' as STRING) AS BYTE)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('abc' as STRING) AS SHORT)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('abc' as STRING) AS LONG)").collect()
+      )
+      intercept[ArithmeticException](
         sql("SELECT CAST(CAST('2147483648' as STRING) AS INTEGER)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('128' as STRING) AS BYTE)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('32768' as STRING) AS SHORT)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST('9223372036854775808' as STRING) AS LONG)").collect()
       )
     }
   }
