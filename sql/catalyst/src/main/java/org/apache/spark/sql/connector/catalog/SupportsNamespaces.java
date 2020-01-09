@@ -64,10 +64,10 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_OWNER_TYPE = "ownerType";
 
   /**
-   * The list of immutable namespace properties, which can not be removed or changed directly by
+   * The list of reserved namespace properties, which can not be removed or changed directly by
    * the syntax:
    * {{
-   *   ALTER (DATABASE|SCHEMA|NAMESPACE) SET DBPROPERTIES(...)
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
    * }}
    *
    * They need specific syntax to modify

@@ -1097,6 +1097,7 @@ ansiNonReserved
     | OVER
     | OVERLAY
     | OVERWRITE
+    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
