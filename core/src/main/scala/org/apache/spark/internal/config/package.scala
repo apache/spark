@@ -1522,8 +1522,4 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
-  private[spark] val RESOURCE_PROFILE_MANAGER_TESTING =
-    ConfigBuilder("spark.testing.resourceProfileManager")
-      .booleanConf
-      .createWithDefault(false)
 }

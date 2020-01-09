@@ -94,8 +94,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     logDebug(s"Resource profile id is: ${resourceProfile.id}")
-    val resources = getOrDiscoverAllResourcesForResourceProfile(resourcesFileOpt,
-      SPARK_EXECUTOR_PREFIX, resourceProfile)
+    val resources = getOrDiscoverAllResourcesForResourceProfile(
+      resourcesFileOpt,
+      SPARK_EXECUTOR_PREFIX,
+      resourceProfile)
     logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
     resources
   }
@@ -283,8 +285,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(rpIdToAsk))
-      val props = cfg.sparkProperties ++
-        Seq[(String, String)](("spark.app.id", arguments.appId))
+      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
