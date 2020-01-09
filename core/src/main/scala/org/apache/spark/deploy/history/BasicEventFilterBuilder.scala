@@ -66,11 +66,9 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-    _stageToTasks.get(taskStart.stageId) match {
-      case Some(tasks) =>
-        totalTasks += 1
-        tasks += taskStart.taskInfo.taskId
-      case _ =>
+    totalTasks += 1
+    _stageToTasks.get(taskStart.stageId).foreach { tasks =>
+      tasks += taskStart.taskInfo.taskId
     }
   }
 

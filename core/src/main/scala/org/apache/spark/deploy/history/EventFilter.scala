@@ -59,7 +59,7 @@ private[spark] trait EventFilter {
   def acceptFn(): PartialFunction[SparkListenerEvent, Boolean]
 }
 
-object EventFilter extends Logging {
+private[spark] object EventFilter extends Logging {
   case class FilterStatistics(
       totalJobs: Long,
       liveJobs: Long,

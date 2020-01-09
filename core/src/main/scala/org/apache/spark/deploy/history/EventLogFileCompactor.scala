@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  * represents approximate rate of filtered-out events. Score is being calculated via applying
  * heuristic; task events tend to take most size in event log.
  */
-class EventLogFileCompactor(
+private[spark] class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     fs: FileSystem) extends Logging {
@@ -134,7 +134,7 @@ class EventLogFileCompactor(
   }
 
   /**
-   * This class rewrites the event log files into one compact file: the compact file will only
+   * This method rewrites the event log files into one compact file: the compact file will only
    * contain the events which pass the filters. Events will be dropped only when all filters
    * decide to reject the event or don't mind about the event. Otherwise, the original line for
    * the event is written to the compact file as it is.
@@ -200,9 +200,11 @@ class EventLogFileCompactor(
  * @param compactIndex The index of compact file if the compaction is successful.
  *                     Otherwise it will be None.
  */
-case class CompactionResult(code: CompactionResultCode.Value, compactIndex: Option[Long])
+private[spark] case class CompactionResult(
+    code: CompactionResultCode.Value,
+    compactIndex: Option[Long])
 
-object CompactionResultCode extends Enumeration {
+private[spark] object CompactionResultCode extends Enumeration {
   val SUCCESS, NOT_ENOUGH_FILES, LOW_SCORE_FOR_COMPACTION = Value
 }
 
