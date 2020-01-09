@@ -29,7 +29,6 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils}
 
 class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
-
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")

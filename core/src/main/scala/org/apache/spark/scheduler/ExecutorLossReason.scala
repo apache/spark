@@ -60,7 +60,7 @@ case class SlaveLost(_message: String = "Slave lost", workerLost: Boolean = fals
   extends ExecutorLossReason(_message)
 
 /**
- * A loss reason that means the worker is marked for decommissioning.
+ * A loss reason that means the executor is marked for decommissioning.
  *
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
