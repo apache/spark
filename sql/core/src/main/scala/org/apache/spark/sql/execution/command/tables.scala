@@ -506,14 +506,14 @@ case class TruncateTableCommand(
           try {
             optPermission = Some(fileStatus.getPermission())
           } catch {
-            case NonFatal(e) =>
+            case NonFatal(_) => // do nothing
           }
 
           var optAcls: Option[java.util.List[AclEntry]] = None
           try {
             optAcls = Some(fs.getAclStatus(path).getEntries)
           } catch {
-            case NonFatal(e) =>
+            case NonFatal(_) => // do nothing
           }
 
           fs.delete(path, true)
