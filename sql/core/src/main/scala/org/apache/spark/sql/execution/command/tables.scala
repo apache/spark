@@ -527,7 +527,7 @@ case class TruncateTableCommand(
               fs.setPermission(path, permission)
             } catch {
               case NonFatal(e) =>
-                throw new AnalysisException(
+                throw new SecurityException(
                   s"Failed to set original permission $permission back to " +
                     s"the created path: $path. Exception: ${e.getMessage}")
             }
@@ -537,7 +537,7 @@ case class TruncateTableCommand(
               fs.setAcl(path, acls)
             } catch {
               case NonFatal(e) =>
-                throw new AnalysisException(
+                throw new SecurityException(
                   s"Failed to set original ACL $acls back to " +
                     s"the created path: $path. Exception: ${e.getMessage}")
             }
