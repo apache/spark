@@ -43,7 +43,7 @@ case class InsertAdaptiveSparkPlan(
 
   def containShuffle(plan: SparkPlan): Boolean = {
     plan.find {
-      case plan => !plan.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
+      case plan: SparkPlan => !plan.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
       case _: Exchange => true
       case _ => false
     }.isDefined
