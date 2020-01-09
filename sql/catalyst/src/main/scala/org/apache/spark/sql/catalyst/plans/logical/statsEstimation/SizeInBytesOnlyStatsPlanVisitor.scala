@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -125,7 +127,37 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitPivot(p: Pivot): Statistics = default(p)
 
-  override def visitProject(p: Project): Statistics = visitUnaryNode(p)
+  //    // There should be some overhead in Row object, the size should not be zero when there is
+  //    // no columns, this help to prevent divide-by-zero error.
+  //    val childRowSize = EstimationUtils.getSizePerRow(p.child.output)
+  //    val outputRowSize = EstimationUtils.getSizePerRow(p.output)
+  //    // Assume there will be the same number of rows as child has.
+  //    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
+  //    if (sizeInBytes == 0) {
+  //      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+  //      // (product of children).
+  //      sizeInBytes = 1
+  //    }
+  //
+  //    // Don't propagate rowCount and attributeStats, since they are not estimated here.
+  //    Statistics(sizeInBytes = sizeInBytes)
+
+  override def visitProject(p: Project): Statistics = {
+    p match {
+      case PhysicalOperation(_, _, relation: HiveTableRelation)
+        if (relation.partitionCols.nonEmpty) =>
+        val childRowSize =
+          EstimationUtils.getSizePerRow(p.child.output.filter(!relation.partitionCols.contains(_)))
+        val outputRowSize =
+          EstimationUtils.getSizePerRow(p.output.filter(!relation.partitionCols.contains(_)))
+        var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
+        if (sizeInBytes == 0) {
+          sizeInBytes = 1
+        }
+        Statistics(sizeInBytes = sizeInBytes)
+      case _ => visitUnaryNode(p)
+    }
+  }
 
   override def visitRepartition(p: Repartition): Statistics = default(p)
 
