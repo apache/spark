@@ -671,7 +671,7 @@ object Expand {
     // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
     // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
-      val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
+      val gpos = AttributeReference(VirtualColumn.groupingPosName, IntegerType, false)()
       child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
     } else {
       child.output ++ groupByAttrs.map(_.newInstance) :+ gid

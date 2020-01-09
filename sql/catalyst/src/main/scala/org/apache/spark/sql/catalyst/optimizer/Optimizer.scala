@@ -132,6 +132,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ComputeCurrentTime,
       GetCurrentDatabase(catalogManager),
       RewriteDistinctAggregates,
+      RewriteGroupingAnalyticsWithoutKeys,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -222,6 +223,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ComputeCurrentTime.ruleName ::
       GetCurrentDatabase(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
+      RewriteGroupingAnalyticsWithoutKeys.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
       ReplaceExceptWithFilter.ruleName ::
