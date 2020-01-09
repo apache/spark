@@ -388,12 +388,13 @@ case class CatalogTable(
 }
 
 object CatalogTable {
+  val VIEW_PREFIX = "view."
   // Starting from Spark 3.0, we don't use this property any more. `VIEW_CATALOG_AND_NAMESPACE` is
   // used instead.
-  val VIEW_DEFAULT_DATABASE = "view.default.database"
+  val VIEW_DEFAULT_DATABASE = VIEW_PREFIX + "default.database"
 
-  val VIEW_CATALOG_AND_NAMESPACE = "view.catalogAndNamespace.numParts"
-  val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = "view.catalogAndNamespace.part."
+  val VIEW_CATALOG_AND_NAMESPACE = VIEW_PREFIX + "catalogAndNamespace.numParts"
+  val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
   // Convert the current catalog and namespace to properties.
   def catalogAndNamespaceToProps(
       currentCatalog: String,
@@ -409,7 +410,7 @@ object CatalogTable {
     props.toMap
   }
 
-  val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
+  val VIEW_QUERY_OUTPUT_PREFIX = VIEW_PREFIX + "query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
 }

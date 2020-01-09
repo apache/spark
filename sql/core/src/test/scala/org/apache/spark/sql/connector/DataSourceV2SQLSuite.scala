@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -865,6 +866,32 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("CreateNameSpace: reserved properties") {
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        val exception = intercept[ParseException] {
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
+        }
+        assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(!Option(meta.get(key)).exists(_.contains("foo")),
+            "reserved properties should not have side effects")
+        }
+      }
+    }
+  }
+
   test("DropNamespace: basic tests") {
     // Session catalog is used.
     sql("CREATE NAMESPACE ns")
@@ -963,6 +990,36 @@ class DataSourceV2SQLSuite
         Row("Owner Type", "USER"),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
+    }
+  }
+
+  test("AlterNamespaceSetProperties: reserved properties") {
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql("CREATE NAMESPACE testcat.reservedTest")
+          val exception = intercept[ParseException] {
+            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='dummyVal')")
+          }
+          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+        }
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql(s"CREATE NAMESPACE testcat.reservedTest")
+          sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(!Option(meta.get(key)).exists(_.contains("foo")),
+            "reserved properties should not have side effects")
+        }
+      }
     }
   }
 
@@ -1859,6 +1916,18 @@ class DataSourceV2SQLSuite
 
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+  }
+
+  test("CREATE FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
+    }
+    assert(e.message.contains("CREATE FUNCTION is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
     assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }

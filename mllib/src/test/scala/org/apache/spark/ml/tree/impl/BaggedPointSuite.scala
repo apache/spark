@@ -91,8 +91,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
         baggedRDD.map(_.subsampleCounts.map(_.toDouble)).collect()
       EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
-      // should ignore weight function for now
-      assert(baggedRDD.collect().forall(_.sampleWeight === 1.0))
+      assert(baggedRDD.collect().forall(_.sampleWeight === 2.0))
     }
   }
 

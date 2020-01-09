@@ -1010,7 +1010,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove reversed properties") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
