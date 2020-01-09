@@ -1040,11 +1040,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // view columns shouldn't have data type info
         s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
       }
-      builder ++= concatWithMultiLines(viewColumns)
+      builder ++= concatByMultiLines(viewColumns)
     }
   }
 
-  private def concatWithMultiLines(iter: Iterable[String]): String = {
+  private def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 
@@ -1055,7 +1055,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"TBLPROPERTIES ${concatWithMultiLines(props)}"
+      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
     }
   }
 
@@ -1069,7 +1069,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }.map(_.toDDL)
 
     if (columns.nonEmpty) {
-      builder ++= concatWithMultiLines(columns)
+      builder ++= concatByMultiLines(columns)
     }
   }
 
@@ -1101,7 +1101,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"WITH SERDEPROPERTIES ${concatWithMultiLines(serdeProps)})"
+      builder ++= s"WITH SERDEPROPERTIES ${concatByMultiLines(serdeProps)}"
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -1138,7 +1138,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"TBLPROPERTIES ${concatWithMultiLines(props)}"
+      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
     }
   }
 
@@ -1159,7 +1159,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= concatWithMultiLines(columns)
+    builder ++= concatByMultiLines(columns)
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
