@@ -187,7 +187,8 @@ object ResourceProfile extends Logging {
   // for testing only
   private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
     clearDefaultProfile
-    val prof = getOrCreateDefaultProfile(conf)
+    // force recreate it after clearing
+    getOrCreateDefaultProfile(conf)
   }
 
   // for testing only
