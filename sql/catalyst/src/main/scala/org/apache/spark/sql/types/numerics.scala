@@ -121,8 +121,8 @@ object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toFloat
-  private val intLowerBound = Int.MinValue.toFloat
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
   private val longUpperBound = Long.MaxValue.toFloat
   private val longLowerBound = Long.MinValue.toFloat
 
