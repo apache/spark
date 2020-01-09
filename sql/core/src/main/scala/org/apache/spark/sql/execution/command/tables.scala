@@ -1040,11 +1040,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // view columns shouldn't have data type info
         s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
       }
-      builder ++= concatInMultiLines(viewColumns)
+      builder ++= concatWithMultiLines(viewColumns)
     }
   }
 
-  private def concatInMultiLines(iter: Iterable[String]): String = {
+  private def concatWithMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 
@@ -1055,7 +1055,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"TBLPROPERTIES ${concatInMultiLines(props)}"
+      builder ++= s"TBLPROPERTIES ${concatWithMultiLines(props)}"
     }
   }
 
@@ -1069,7 +1069,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }.map(_.toDDL)
 
     if (columns.nonEmpty) {
-      builder ++= concatInMultiLines(columns)
+      builder ++= concatWithMultiLines(columns)
     }
   }
 
@@ -1101,7 +1101,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"WITH SERDEPROPERTIES ${concatInMultiLines(serdeProps)})"
+      builder ++= s"WITH SERDEPROPERTIES ${concatWithMultiLines(serdeProps)})"
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -1138,7 +1138,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= s"TBLPROPERTIES ${concatInMultiLines(props)}"
+      builder ++= s"TBLPROPERTIES ${concatWithMultiLines(props)}"
     }
   }
 
