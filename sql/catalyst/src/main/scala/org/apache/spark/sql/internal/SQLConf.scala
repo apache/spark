@@ -2136,6 +2136,15 @@ object SQLConf {
         "defined by `from` and `to`.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_PROPERTY_NON_RESERVED =
+    buildConf("spark.sql.legacy.property.nonReserved")
+      .internal()
+      .doc("When true, all database and table properties are not reserved and available for " +
+        "create/alter syntaxes. But please be aware that the reserved properties will be " +
+        "silently removed.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
