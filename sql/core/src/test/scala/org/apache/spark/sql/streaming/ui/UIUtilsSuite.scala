@@ -21,18 +21,18 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryProgress}
+import org.apache.spark.sql.streaming.StreamingQueryProgress
 
 class UIUtilsSuite extends SparkFunSuite with Matchers {
   test("streaming query started with no batch completed") {
-    val query = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
+    val query = mock(classOf[StreamingQueryUIData], RETURNS_SMART_NULLS)
     when(query.lastProgress).thenReturn(null)
 
     assert(0 == UIUtils.withNoProgress(query, 1, 0))
   }
 
   test("streaming query started with at least one batch completed") {
-    val query = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
+    val query = mock(classOf[StreamingQueryUIData], RETURNS_SMART_NULLS)
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
     when(query.lastProgress).thenReturn(progress)
 

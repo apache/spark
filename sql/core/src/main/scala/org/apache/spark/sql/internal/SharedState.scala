@@ -18,6 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
@@ -28,14 +30,15 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.streaming.StreamQueryStore
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.sql.streaming.ui.StreamingQueryTab
+import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -119,6 +122,13 @@ private[sql] class SharedState(
   private[sql] val activeQueriesLock = new Object
 
   /**
+   * A map of active streaming queries to the session specific StreamingQueryManager that manages
+   * the lifecycle of that stream.
+   */
+  @GuardedBy("activeQueriesLock")
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
+
+  /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
@@ -132,15 +142,17 @@ private[sql] class SharedState(
   }
 
   /**
-   * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
-   * of the stream.
+   * A [[StreamingQueryListener]] for structured streaming ui, it contains all streaming query ui
+   * data to show.
    */
-  @GuardedBy("activeQueriesLock")
-  private[sql] val streamQueryStore: StreamQueryStore = {
-    val store = new StreamQueryStore()
-    sparkContext.ui.foreach(new StreamingQueryTab(store, _))
-    store
-  }
+  lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] =
+    if (conf.get(UI_ENABLED)) {
+      val statusListener = new StreamingQueryStatusListener(SQLConf.get)
+      sparkContext.ui.foreach(new StreamingQueryTab(statusListener, _))
+      Some(statusListener)
+    } else {
+      None
+    }
 
   /**
    * A catalog that interacts with external systems.

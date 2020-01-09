@@ -17,18 +17,17 @@
 package org.apache.spark.sql.streaming.ui
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class StreamingQueryTab(val store: StreamQueryStore, sparkUI: SparkUI)
+class StreamingQueryTab(val statusListener: StreamingQueryStatusListener, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
 
   override val name = "Structured Streaming"
 
   val parent = sparkUI
 
-  attachPage(new StreamingQueryPage(this, store))
-  attachPage(new StreamingQueryStatisticsPage(this, store))
+  attachPage(new StreamingQueryPage(this, statusListener))
+  attachPage(new StreamingQueryStatisticsPage(this, statusListener))
   parent.attachTab(this)
 
   parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
