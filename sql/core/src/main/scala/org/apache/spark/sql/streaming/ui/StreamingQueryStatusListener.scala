@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress}
 
 /**
- * A customized [[StreamingQueryListener]] used in structured streaming UI, which contains all
+ * A customized StreamingQueryListener used in structured streaming UI, which contains all
  * UI data for both active and inactive query.
  * TODO: Add support for history server.
  */

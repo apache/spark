@@ -633,8 +633,8 @@ private[spark] object UIUtils extends Logging {
    * There may be different duration labels in each batch. So we need to
    * mark those missing duration label as '0d' to avoid UI rending error.
    */
-  def durationDataPadding(values: Array[(Long, ju.Map[String, JLong])])
-    : Array[(Long, Map[String, Double])] = {
+  def durationDataPadding(
+      values: Array[(Long, ju.Map[String, JLong])]): Array[(Long, Map[String, Double])] = {
     val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
     values.map { case (x, y) =>
       val dataPadding = operationLabels.map(d =>
