@@ -2135,10 +2135,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                               "should have been DataFrame." % type(result)
         return result
 
-    ##########################################################################################
-    # Pandas compatibility
-    ##########################################################################################
+    where = copy_func(
+        filter,
+        sinceversion=1.3,
+        doc=":func:`where` is an alias for :func:`filter`.")
 
+    # Two aliases below were added for pandas compatibility many years ago.
+    # There are too many differences compared to pandas and we cannot just
+    # make it "compatible" by adding aliases. Therefore, we stop adding such
+    # aliases as of SPARK-30464 at this moment. Two methods below remain just
+    # for legacy users currently.
     groupby = copy_func(
         groupBy,
         sinceversion=1.4,
@@ -2148,11 +2154,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         dropDuplicates,
         sinceversion=1.4,
         doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
-
-    where = copy_func(
-        filter,
-        sinceversion=1.3,
-        doc=":func:`where` is an alias for :func:`filter`.")
 
 
 def _to_scala_map(sc, jm):
