@@ -102,9 +102,10 @@ case class ShuffleExchangeExec(
 
   def createSkewedShuffleRDD(
       partitionIndex: Int,
-      startMapId: Int,
-      endMapId: Int): SkewedShuffledRowRDD = {
-    new SkewedShuffledRowRDD(shuffleDependency, partitionIndex, startMapId, endMapId, readMetrics)
+      startMapIndex: Int,
+      endMapIndex: Int): SkewedShuffledRowRDD = {
+    new SkewedShuffledRowRDD(shuffleDependency,
+      partitionIndex, startMapIndex, endMapIndex, readMetrics)
   }
 
   /**

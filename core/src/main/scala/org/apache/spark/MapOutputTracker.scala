@@ -758,6 +758,8 @@ private[spark] class MapOutputTrackerMaster(
        endMapIndex: Int,
        startPartition: Int,
        endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    logDebug(s"Fetching outputs for shuffle $shuffleId, mappers $startMapIndex - $endMapIndex" +
+      s"partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>

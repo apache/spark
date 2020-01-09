@@ -166,15 +166,7 @@ case class ShuffleQueryStageExec(
 
   private def getPartitionIndexRanges(): Array[(Int, Int)] = {
     val length = shuffle.shuffleDependency.partitioner.numPartitions
-    val partitionStartIndices = ArrayBuffer[Int]()
-    val partitionEndIndices = ArrayBuffer[Int]()
-    (0 until length).map { i =>
-      if (!excludedPartitions.contains(i)) {
-        partitionStartIndices += i
-        partitionEndIndices += i + 1
-      }
-    }
-    partitionStartIndices.zip(partitionEndIndices).toArray
+    (0 until length).filterNot(excludedPartitions.contains).map(i => (i, i + 1)).toArray
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null

@@ -80,13 +80,13 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
     var postMapPartitionSize = mapPartitionSizes(0)
     partitionStartIndices += 0
     partitionIndices.drop(1).foreach { nextPartitionIndex =>
-        val nextMapPartitionSize = mapPartitionSizes(nextPartitionIndex)
-        if (postMapPartitionSize + nextMapPartitionSize > advisoryPartitionSize) {
-          partitionStartIndices += nextPartitionIndex
-          postMapPartitionSize = nextMapPartitionSize
-        } else {
-          postMapPartitionSize += nextMapPartitionSize
-        }
+      val nextMapPartitionSize = mapPartitionSizes(nextPartitionIndex)
+      if (postMapPartitionSize + nextMapPartitionSize > advisoryPartitionSize) {
+        partitionStartIndices += nextPartitionIndex
+        postMapPartitionSize = nextMapPartitionSize
+      } else {
+        postMapPartitionSize += nextMapPartitionSize
+      }
     }
 
     if (partitionStartIndices.size > maxSplits) {
@@ -180,7 +180,6 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       if (skewedPartitions.nonEmpty) {
         val optimizedSmj = smj.transformDown {
           case sort @ SortExec(_, _, shuffleStage: ShuffleQueryStageExec, _) =>
-            val shuffleStage = sort.child.asInstanceOf[ShuffleQueryStageExec]
             val newStage = shuffleStage.copy(
               excludedPartitions = skewedPartitions.toSet)
             newStage.resultOption = shuffleStage.resultOption
@@ -219,20 +218,20 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
 /**
  * A wrapper of shuffle query stage, which submits one reduce task to read a single
- * shuffle partition 'partitionIndex' produced by the mappers in range [startMapId, endMapId).
+ * shuffle partition 'partitionIndex' produced by the mappers in range [startMapIndex, endMapIndex).
  * This is used to handle the skewed partitions.
  *
  * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange
  *              node during canonicalization.
  * @param partitionIndex The pre shuffle partition index.
- * @param startMapId The start map id.
- * @param endMapId The end map id.
+ * @param startMapIndex The start map index.
+ * @param endMapIndex The end map index.
  */
 case class SkewedShufflePartitionReader(
     child: QueryStageExec,
     partitionIndex: Int,
-    startMapId: Int,
-    endMapId: Int) extends LeafExecNode {
+    startMapIndex: Int,
+    endMapIndex: Int) extends LeafExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -245,7 +244,7 @@ case class SkewedShufflePartitionReader(
     if (cachedSkewedShuffleRDD == null) {
       cachedSkewedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.shuffle.createSkewedShuffleRDD(partitionIndex, startMapId, endMapId)
+          stage.shuffle.createSkewedShuffleRDD(partitionIndex, startMapIndex, endMapIndex)
         case _ =>
           throw new IllegalStateException("operating on canonicalization plan")
       }
