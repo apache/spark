@@ -2533,7 +2533,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
             s" the COMMENT clause to specify it.", ctx)
         case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
-          throw new ParseException(s"$ownership is a reserved namespace property", ctx)
+          throw new ParseException(s"$ownership is a reserved namespace property , please use" +
+            " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
         case _ =>
       }
       properties
