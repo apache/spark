@@ -383,6 +383,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_pandas_udf_cogrouped_map",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.test_pandas_udf_grouped_map",
+        "pyspark.sql.tests.test_pandas_udf_iter",
         "pyspark.sql.tests.test_pandas_udf_scalar",
         "pyspark.sql.tests.test_pandas_udf_window",
         "pyspark.sql.tests.test_readwriter",
