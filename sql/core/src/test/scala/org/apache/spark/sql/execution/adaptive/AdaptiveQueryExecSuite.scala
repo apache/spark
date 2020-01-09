@@ -607,5 +607,4 @@ class AdaptiveQueryExecSuite
       )
     }
   }
-
 }
