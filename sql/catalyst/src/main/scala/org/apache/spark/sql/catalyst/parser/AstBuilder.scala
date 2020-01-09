@@ -2520,6 +2520,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def cleanNamespaceProperties(
+      properties: Map[String, String],
+      ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
+    import SupportsNamespaces._
+    if (!conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)) {
+      properties.foreach {
+        case (PROP_LOCATION, _) =>
+          throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
+            s" the LOCATION clause to specify it.", ctx)
+        case (PROP_COMMENT, _) =>
+          throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
+            s" the COMMENT clause to specify it.", ctx)
+        case _ =>
+      }
+      properties
+    } else {
+      properties -- RESERVED_PROPERTIES.asScala
+    }
+  }
+
   /**
    * Create a [[CreateNamespaceStatement]] command.
    *
@@ -2535,6 +2555,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    import SupportsNamespaces._
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
@@ -2548,12 +2569,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
+    properties = cleanNamespaceProperties(properties, ctx)
+
     visitCommentSpecList(ctx.commentSpec()).foreach {
-      properties += SupportsNamespaces.PROP_COMMENT -> _
+      properties += PROP_COMMENT -> _
     }
 
     visitLocationSpecList(ctx.locationSpec()).foreach {
-      properties += SupportsNamespaces.PROP_LOCATION -> _
+      properties += PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(
@@ -2588,9 +2611,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
+      val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
       AlterNamespaceSetProperties(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
-        visitPropertyKeyValues(ctx.tablePropertyList))
+        properties)
     }
   }
 
