@@ -113,6 +113,16 @@ object ReferenceValueClass {
   case class Container(data: Int)
 }
 
+case class StringWrapper(s: String) extends AnyVal
+case class ValueContainer(
+                           a: Int,
+                           b: StringWrapper) // a string column
+case class IntWrapper(i: Int) extends AnyVal
+case class ComplexValueClassContainer(
+                                       a: Int,
+                                       b: ValueContainer,
+                                       c: IntWrapper)
+
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
@@ -303,6 +313,23 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
+  encodeDecodeTest(StringWrapper("a"), "string value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "nested value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper(null)), "nested value class with null")
+  encodeDecodeTest(ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")),
+    new IntWrapper(3)), "complex value class")
+  encodeDecodeTest(
+    Array(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
+    "array of value class")
+  encodeDecodeTest(Array.empty[IntWrapper], "empty array of value class")
+  encodeDecodeTest(
+    Seq(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
+    "seq of value class")
+  encodeDecodeTest(Seq.empty[IntWrapper], "empty seq of value class")
+  encodeDecodeTest(
+    Map(new IntWrapper(1) -> StringWrapper("a"), new IntWrapper(2) -> StringWrapper("b")),
+    "map with value class")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")
