@@ -215,7 +215,8 @@ trait PartitionEvent extends TableEvent
 case class CreatePartitionPreEvent(
     database: String,
     name: String,
-    parts: Seq[CatalogTablePartition]) extends PartitionEvent
+    parts: Seq[CatalogTablePartition])
+  extends PartitionEvent
 
 /**
  * Event fired after a partition has been created.
@@ -223,7 +224,8 @@ case class CreatePartitionPreEvent(
 case class CreatePartitionEvent(
     database: String,
     name: String,
-    parts: Seq[CatalogTablePartition]) extends PartitionEvent
+    parts: Seq[CatalogTablePartition])
+  extends PartitionEvent
 
 /**
  * Event fired before a partition is dropped.
@@ -231,7 +233,8 @@ case class CreatePartitionEvent(
 case class DropPartitionPreEvent(
     database: String,
     name: String,
-    partSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionEvent
 
 /**
  * Event fired after a partition has been dropped.
@@ -239,7 +242,8 @@ case class DropPartitionPreEvent(
 case class DropPartitionEvent(
     database: String,
     name: String,
-    partSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionEvent
 
 /**
  * Event fired before a function is renamed.
@@ -248,7 +252,8 @@ case class RenamePartitionPreEvent(
     database: String,
     name: String,
     specs: Seq[TablePartitionSpec],
-    newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+    newSpecs: Seq[TablePartitionSpec])
+  extends PartitionEvent
 
 /**
  * Event fired after a function has been renamed.
@@ -257,7 +262,8 @@ case class RenamePartitionEvent(
     database: String,
     name: String,
     specs: Seq[TablePartitionSpec],
-    newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+    newSpecs: Seq[TablePartitionSpec])
+  extends PartitionEvent
 
 /**
  * Event fired before a function is altered.
@@ -265,7 +271,8 @@ case class RenamePartitionEvent(
 case class AlterPartitionPreEvent(
     database: String,
     name: String,
-    parts: Seq[CatalogTablePartition]) extends PartitionEvent
+    parts: Seq[CatalogTablePartition])
+  extends PartitionEvent
 
 /**
  * Event fired after a function has been altered.
@@ -273,5 +280,6 @@ case class AlterPartitionPreEvent(
 case class AlterPartitionEvent(
     database: String,
     name: String,
-    parts: Seq[CatalogTablePartition]) extends PartitionEvent
+    parts: Seq[CatalogTablePartition])
+  extends PartitionEvent
 
