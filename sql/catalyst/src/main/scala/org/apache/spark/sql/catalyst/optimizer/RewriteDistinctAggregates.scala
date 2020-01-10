@@ -145,22 +145,22 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  *   Aggregate(
  *      key = ['key]
- *      functions = [count(if (('gid = 1)) 'phantom1 else null),
- *                   count(if (('gid = 2)) 'phantom2 else null),
+ *      functions = [count(if (('gid = 1)) 'phantom1-cat1 else null),
+ *                   count(if (('gid = 2)) 'phantom2-cat1 else null),
  *                   first(if (('gid = 0)) 'total else null) ignore nulls]
  *      output = ['key, 'cat1_cnt, 'cat1_cnt2, 'total])
  *     Aggregate(
- *        key = ['key, 'phantom1, 'phantom2, 'gid]
+ *        key = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid]
  *        functions = [sum('value)]
- *        output = ['key, 'phantom1, 'phantom2, 'gid, 'total])
+ *        output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid, 'total])
  *       Expand(
  *           projections = [('key, null, null, 0, 'value),
- *                         ('key, 'phantom1, null, 1, null),
- *                         ('key, null, 'phantom2, 2, null)]
- *           output = ['key, 'phantom1, 'phantom2, 'gid, 'value])
+ *                         ('key, 'phantom1-cat1, null, 1, null),
+ *                         ('key, null, 'phantom2-cat1, 2, null)]
+ *           output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid, 'value])
  *         Expand(
  *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat1, cast('value as bigint))]
- *            output = ['key, 'phantom1, 'phantom2, 'value])
+ *            output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'value])
  *           LocalTableScan [...]
  * }}}
  *
@@ -392,7 +392,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             // Second, If more than one DISTINCT aggregate expression uses the same column,
             // We need to construct the phantom attributes so as the output not lost.
             // e.g. SUM (DISTINCT a), COUNT (DISTINCT a) FILTER (WHERE id > 1) will output
-            // attribute 'a and attribute 'phantom1-a instead of two 'a.
+            // attribute 'phantom1-a and attribute 'phantom2-a instead of two 'a.
             // Note: We just need to illusion the expression with filter clause.
             // The illusionary mechanism may result in multiple distinct aggregations uses
             // different column, so we still need to call `rewrite`.
