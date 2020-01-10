@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.RemovedConfig
+import org.apache.spark.sql.internal.SQLConf.{DeprecatedConfig, RemovedConfig}
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -30,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf.RemovedConfig
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
+class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) extends Logging {
 
   /**
    * Sets the given Spark runtime configuration property.
@@ -40,6 +41,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   def set(key: String, value: String): Unit = {
     requireNonStaticConf(key)
     requireDefaultValueOfRemovedConf(key, value)
+    logDeprecationWarning(key)
     sqlConf.setConfString(key, value)
   }
 
@@ -128,6 +130,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def unset(key: String): Unit = {
     requireNonStaticConf(key)
+    logDeprecationWarning(key)
     sqlConf.unsetConf(key)
   }
 
@@ -166,6 +169,18 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
           throw new AnalysisException(
             s"The SQL config '$configName' was removed in the version $version. $comment")
         }
+    }
+  }
+
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
     }
   }
 }
