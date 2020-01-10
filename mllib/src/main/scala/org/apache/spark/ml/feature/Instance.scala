@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.linalg.Vector
+import scala.collection.mutable
+
+import org.apache.spark.ml.linalg._
 
 /**
  * Class that represents an instance of weighted data point with label and features.
@@ -27,6 +29,125 @@ import org.apache.spark.ml.linalg.Vector
  * @param features The vector of features for this data point.
  */
 private[spark] case class Instance(label: Double, weight: Double, features: Vector)
+
+
+/**
+ * Class that represents an block of instance.
+ */
+private[spark] class InstanceBlock(
+    private val labels: Array[Double],
+    private val weights: Array[Double],
+    private val featureMatrix: Matrix) {
+  require(labels.length == featureMatrix.numRows)
+  require(featureMatrix.isTransposed)
+  if (weights.nonEmpty) {
+    require(labels.length == weights.length)
+  }
+
+  def size: Int = labels.length
+
+  def numFeatures: Int = featureMatrix.numCols
+
+  def instanceIterator: Iterator[Instance] = {
+    if (weights.nonEmpty) {
+      labels.iterator.zip(weights.iterator).zip(featureMatrix.rowIter)
+        .map { case ((label, weight), vec) => Instance(label, weight, vec) }
+    } else {
+      labels.iterator.zip(featureMatrix.rowIter)
+        .map { case (label, vec) => Instance(label, 1.0, vec) }
+    }
+  }
+
+  def getLabel(i: Int): Double = labels(i)
+
+  def labelIter: Iterator[Double] = labels.iterator
+
+  def getWeight(i: Int): Double = {
+    if (weights.nonEmpty) {
+      weights(i)
+    } else {
+      1.0
+    }
+  }
+
+  def weightIter: Iterator[Double] = {
+    if (weights.nonEmpty) {
+      weights.iterator
+    } else {
+      Iterator.fill(size)(1.0)
+    }
+  }
+
+  // directly get the non-zero iterator of i-th row vector without array copy or slice
+  val getNonZeroIter: Int => Iterator[(Int, Double)] = {
+    featureMatrix match {
+      case dm: DenseMatrix =>
+        (i: Int) =>
+          val start = numFeatures * i
+          Iterator.tabulate(numFeatures)(j => (j, dm.values(start + j)))
+            .filter(_._2 != 0)
+      case sm: SparseMatrix =>
+        (i: Int) =>
+          val start = sm.colPtrs(i)
+          val end = sm.colPtrs(i + 1)
+          Iterator.tabulate(end - start)(i =>
+            (sm.rowIndices(start + i), sm.values(start + i))
+          ).filter(_._2 != 0)
+    }
+  }
+}
+
+private[spark] object InstanceBlock {
+
+  def fromInstances(instances: Seq[Instance]): InstanceBlock = {
+    val labels = instances.map(_.label).toArray
+    val weights = if (instances.exists(_.weight != 1)) {
+      instances.map(_.weight).toArray
+    } else {
+      Array.emptyDoubleArray
+    }
+    val numRows = instances.length
+    val numCols = instances.head.features.size
+    val denseSize = Matrices.getDenseSize(numCols, numRows)
+    val nnz = instances.iterator.map(_.features.numNonzeros).sum
+    val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
+    val matrix = if (denseSize < sparseSize) {
+      val values = Array.ofDim[Double](numRows * numCols)
+      var offset = 0
+      var j = 0
+      while (j < numRows) {
+        instances(j).features.foreachNonZero { (i, v) =>
+          values(offset + i) = v
+        }
+        offset += numCols
+        j += 1
+      }
+      new DenseMatrix(numRows, numCols, values, true)
+    } else {
+      val colIndices = mutable.ArrayBuilder.make[Int]
+      val values = mutable.ArrayBuilder.make[Double]
+      val rowPtrs = mutable.ArrayBuilder.make[Int]
+      var rowPtr = 0
+      rowPtrs += 0
+      var j = 0
+      while (j < numRows) {
+        var nnz = 0
+        instances(j).features.foreachNonZero { (i, v) =>
+          colIndices += i
+          values += v
+          nnz += 1
+        }
+        rowPtr += nnz
+        rowPtrs += rowPtr
+        j += 1
+      }
+      new SparseMatrix(numRows, numCols, rowPtrs.result(),
+        colIndices.result(), values.result(), true)
+    }
+    new InstanceBlock(labels, weights, matrix)
+  }
+}
+
 
 /**
  * Case class that represents an instance of data point with

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 
 /**
@@ -32,14 +32,12 @@ import org.apache.spark.ml.linalg._
  *
  * @param bcCoefficients The coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
- * @param bcFeaturesStd The standard deviation values of the features.
  */
 private[ml] class HingeAggregator(
-    bcFeaturesStd: Broadcast[Array[Double]],
+    numFeatures: Int,
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[Instance, HingeAggregator] {
+  extends DifferentiableLossAggregator[InstanceBlock, HingeAggregator] {
 
-  private val numFeatures: Int = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
@@ -62,16 +60,13 @@ private[ml] class HingeAggregator(
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
-      val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray
       val localGradientSumArray = gradientSumArray
 
       val dotProduct = {
         var sum = 0.0
         features.foreachNonZero { (index, value) =>
-          if (localFeaturesStd(index) != 0.0) {
-            sum += localCoefficients(index) * value / localFeaturesStd(index)
-          }
+          sum += localCoefficients(index) * value
         }
         if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
         sum
@@ -88,9 +83,7 @@ private[ml] class HingeAggregator(
       if (1.0 > labelScaled * dotProduct) {
         val gradientScale = -labelScaled * weight
         features.foreachNonZero { (index, value) =>
-          if (localFeaturesStd(index) != 0.0) {
-            localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
-          }
+          localGradientSumArray(index) += value * gradientScale
         }
         if (fitIntercept) {
           localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
@@ -101,5 +94,57 @@ private[ml] class HingeAggregator(
       weightSum += weight
       this
     }
+  }
+
+  /**
+   * Add a new training instance to this HingeAggregator, and update the loss and gradient
+   * of the objective function.
+   *
+   * @param instanceBlock The InstanceBlock to be added.
+   * @return This HingeAggregator object.
+   */
+  def add(instanceBlock: InstanceBlock): this.type = {
+//    instanceBlock.instanceIterator.foreach(this.add)
+    require(numFeatures == instanceBlock.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${instanceBlock.numFeatures}.")
+    require(instanceBlock.weightIter.forall(_ >= 0),
+      s"instance weights ${instanceBlock.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+
+    if (instanceBlock.weightIter.forall(_ == 0)) return this
+    val localCoefficients = coefficientsArray
+    val localGradientSumArray = gradientSumArray
+    val intercept = if (fitIntercept) localCoefficients(numFeatures) else 0.0
+
+    var i = 0
+    while (i < instanceBlock.size) {
+      val weight = instanceBlock.getWeight(i)
+      if (weight > 0) {
+        var dot = intercept
+        instanceBlock.getNonZeroIter(i).foreach { case (index, value) =>
+          dot += localCoefficients(index) * value
+        }
+
+        // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
+        // Therefore the gradient is -(2y - 1)*x
+        val label = instanceBlock.getLabel(i)
+        val labelScaled = 2 * label - 1.0
+        val loss = math.max((1.0 - labelScaled * dot) * weight, 0.0)
+
+        if (loss != 0) {
+          val gradientScale = -labelScaled * weight
+          instanceBlock.getNonZeroIter(i).foreach { case (index, value) =>
+            localGradientSumArray(index) += value * gradientScale
+          }
+          if (fitIntercept) {
+            localGradientSumArray(numFeatures) += gradientScale
+          }
+          lossSum += loss
+        }
+        weightSum += weight
+      }
+      i += 1
+    }
+
+    this
   }
 }

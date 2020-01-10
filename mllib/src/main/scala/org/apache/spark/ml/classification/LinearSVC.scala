@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -159,15 +159,13 @@ class LinearSVC @Since("2.2.0") (
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-
-    val instances = extractInstances(dataset)
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
+
+    val sc = dataset.sparkSession.sparkContext
+    val instances = extractInstances(dataset)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
       (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
@@ -208,10 +206,10 @@ class LinearSVC @Since("2.2.0") (
         throw new SparkException(msg)
       }
 
-      val featuresStd = summarizer.std.toArray
+      val featuresStd = summarizer.std.compressed
+      val bcFeaturesStd = sc.broadcast(featuresStd)
       val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
-      val bcFeaturesStd = instances.context.broadcast(featuresStd)
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
         Some(new L2Regularization(regParamL2, shouldApply,
@@ -220,8 +218,22 @@ class LinearSVC @Since("2.2.0") (
         None
       }
 
-      val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
-      val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+      val blocks = instances.mapPartitions { iter =>
+        val featuresStdVec = bcFeaturesStd.value
+        iter.map { case Instance(label, weight, features) =>
+          val standardized = Array.ofDim[Double](numFeatures)
+          features.foreachNonZero { (i, v) =>
+            val std = featuresStdVec(i)
+            if (std != 0) {
+              standardized(i) = v / std
+            }
+          }
+          Instance(label, weight, Vectors.dense(standardized).compressed)
+        }.grouped(4096).map(InstanceBlock.fromInstances)
+      }.persist(StorageLevel.MEMORY_AND_DISK).setName("training dataset (blockSize=4096)")
+
+      val getAggregatorFunc = new HingeAggregator(numFeatures, $(fitIntercept))(_)
+      val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,
         $(aggregationDepth))
 
       def regParamL1Fun = (index: Int) => 0D
@@ -238,6 +250,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
+      blocks.unpersist()
       bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
@@ -268,7 +281,6 @@ class LinearSVC @Since("2.2.0") (
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
 
-    if (handlePersistence) instances.unpersist()
 
     copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
