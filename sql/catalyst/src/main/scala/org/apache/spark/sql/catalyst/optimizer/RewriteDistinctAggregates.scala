@@ -392,7 +392,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             // Second, If more than one DISTINCT aggregate expression uses the same column,
             // We need to construct the phantom attributes so as the output not lost.
             // e.g. SUM (DISTINCT a), COUNT (DISTINCT a) FILTER (WHERE id > 1) will output
-            // attribute 'phantom1-a and attribute 'phantom2-a instead of two 'a.
+            // attribute '_gen_distinct-1 and attribute '_gen_distinct-2 instead of two 'a.
             // Note: We just need to illusion the expression with filter clause.
             // The illusionary mechanism may result in multiple distinct aggregations uses
             // different column, so we still need to call `rewrite`.
