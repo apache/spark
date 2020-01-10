@@ -145,22 +145,22 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  *   Aggregate(
  *      key = ['key]
- *      functions = [count(if (('gid = 1)) 'phantom1-cat1 else null),
- *                   count(if (('gid = 2)) 'phantom2-cat1 else null),
+ *      functions = [count(if (('gid = 1)) '_gen_distinct_1 else null),
+ *                   count(if (('gid = 2)) '_gen_distinct_2 else null),
  *                   first(if (('gid = 0)) 'total else null) ignore nulls]
  *      output = ['key, 'cat1_cnt, 'cat1_cnt2, 'total])
  *     Aggregate(
- *        key = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid]
+ *        key = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid]
  *        functions = [sum('value)]
- *        output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid, 'total])
+ *        output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'total])
  *       Expand(
  *           projections = [('key, null, null, 0, 'value),
- *                         ('key, 'phantom1-cat1, null, 1, null),
- *                         ('key, null, 'phantom2-cat1, 2, null)]
- *           output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'gid, 'value])
+ *                         ('key, '_gen_distinct_1, null, 1, null),
+ *                         ('key, null, '_gen_distinct_2, 2, null)]
+ *           output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
  *         Expand(
  *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat1, cast('value as bigint))]
- *            output = ['key, 'phantom1-cat1, 'phantom2-cat1, 'value])
+ *            output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'value])
  *           LocalTableScan [...]
  * }}}
  *
@@ -399,7 +399,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val phantomId = NamedExpression.newExprId.id
             val unfoldableChildren = af.children.filter(!_.foldable)
             val exprAttrs = unfoldableChildren.map { e =>
-              (e, AttributeReference(s"phantom$phantomId-${e.sql}", e.dataType, nullable = true)())
+              (e, AttributeReference(s"_gen_distinct_$phantomId", e.dataType, nullable = true)())
             }
             val exprAttrLookup = exprAttrs.toMap
             val newChildren = af.children.map(c => exprAttrLookup.getOrElse(c, c))
