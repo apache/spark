@@ -40,7 +40,8 @@ package org.apache.spark
  *
  * Diagrammatically:
  *
- * {{{                                                          +---------------------------+
+ * {{{
+ *                                                              +---------------------------+
  *       +-------------+                                        |       MemoryManager       |
  *       | MemConsumer |----+                                   |                           |
  *       +-------------+    |    +-------------------+          |  +---------------------+  |
@@ -59,7 +60,8 @@ package org.apache.spark
  *                          +--->| TaskMemoryManager |----+     |  |OffHeapExecMemPool   |  |
  *                               +-------------------+          |  +---------------------+  |
  *                                                              |                           |
- * }}}                                                          +---------------------------+
+ *                                                              +---------------------------+
+ * }}}
  *
  *
  * There is one implementation of [[org.apache.spark.memory.MemoryManager]]:
