@@ -61,19 +61,15 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   def partitionFilters: Seq[Expression]
 
   /**
-   * Create a new `FileScan` instance from the current one with different `partitionFilters`.
-   */
-  def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan
-
-  /**
    * Returns the filters that can be use for file listing
    */
   def dataFilters: Seq[Expression]
 
   /**
-   * Create a new `FileScan` instance from the current one with different `dataFilters`.
+   * Create a new `FileScan` instance from the current one
+   * with different `partitionFilters` and `dataFilters`
    */
-  def withDataFilters(dataFilters: Seq[Expression]): FileScan
+  def withFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan
 
   /**
    * If a file with `path` is unsplittable, return the unsplittable reason,

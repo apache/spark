@@ -89,11 +89,9 @@ case class JsonScan(
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
   }
 
-  override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters)
-
-  override def withDataFilters(dataFilters: Seq[Expression]): FileScan =
-    this.copy(dataFilters = dataFilters)
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options
