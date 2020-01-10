@@ -248,35 +248,4 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("1 second", 0, "divide by zero")
     check(s"${Int.MaxValue} months", 0.9, "integer overflow")
   }
-
-  test("make interval") {
-    def check(
-        years: Int = 0,
-        months: Int = 0,
-        weeks: Int = 0,
-        days: Int = 0,
-        hours: Int = 0,
-        minutes: Int = 0,
-        seconds: Int = 0,
-        millis: Int = 0,
-        micros: Int = 0): Unit = {
-      val secFrac = seconds * MICROS_PER_SECOND + millis * MICROS_PER_MILLIS + micros
-      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
-        Literal(days), Literal(hours), Literal(minutes), Literal(Decimal(secFrac, 8, 6)))
-      val totalMonths = years * MONTHS_PER_YEAR + months
-      val totalDays = weeks * DAYS_PER_WEEK + days
-      val totalMicros = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR
-      val expected = new CalendarInterval(totalMonths, totalDays, totalMicros)
-      checkEvaluation(intervalExpr, expected)
-    }
-
-    check(months = 0, days = 0, micros = 0)
-    check(years = -123)
-    check(weeks = 123)
-    check(millis = -123)
-    check(9999, 11, 0, 31, 23, 59, 59, 999, 999)
-    check(years = 10000, micros = -1)
-    check(-9999, -11, 0, -31, -23, -59, -59, -999, -999)
-    check(years = -10000, micros = 1)
-  }
 }
