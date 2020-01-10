@@ -383,8 +383,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             (ae, aggExpr)
         }
         val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
-        val rewriteDistinctOperatorMap = distinctAggExprs.zipWithIndex.map {
-          case (ae @ AggregateExpression(af, _, _, filter, _), i) =>
+        val rewriteDistinctOperatorMap = distinctAggExprs.map {
+          case ae @ AggregateExpression(af, _, _, filter, _) =>
             // Why do we need to construct the phantom id ?
             // First, In order to reduce costs, it is better to handle the filter clause locally.
             // e.g. COUNT (DISTINCT a) FILTER (WHERE id > 1), evaluate expression
@@ -396,7 +396,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             // Note: We just need to illusion the expression with filter clause.
             // The illusionary mechanism may result in multiple distinct aggregations uses
             // different column, so we still need to call `rewrite`.
-            val phantomId = i + 1
+            val phantomId = NamedExpression.newExprId.id
             val unfoldableChildren = af.children.filter(!_.foldable)
             val exprAttrs = unfoldableChildren.map { e =>
               (e, AttributeReference(s"phantom$phantomId-${e.sql}", e.dataType, nullable = true)())
