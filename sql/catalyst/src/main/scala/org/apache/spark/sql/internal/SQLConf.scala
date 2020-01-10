@@ -2147,6 +2147,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE = buildConf("spark.sql.legacy.addDirectory.recursive")
+    .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
+      "command of SQL. If false, then only a single file can be added.")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2400,6 +2406,8 @@ class SQLConf extends Serializable with Logging {
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
+
+  def addDirectoryRecursiveEnabled: Boolean = getConf(LEGACY_ADD_DIRECTORY_USING_RECURSIVE)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
