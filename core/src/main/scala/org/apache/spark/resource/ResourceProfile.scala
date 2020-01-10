@@ -115,16 +115,20 @@ object ResourceProfile extends Logging {
 
   private[spark] def getOrCreateDefaultProfile(conf: SparkConf): ResourceProfile = {
     // check to see if the default profile was initialized yet
-    defaultProfileRef.compareAndSet(null, {
-      val taskResources = getDefaultTaskResources(conf)
-      val executorResources = getDefaultExecutorResources(conf)
-      val defProf = new ResourceProfile(executorResources, taskResources)
-      logInfo("Default ResourceProfile created, executor resources: " +
-        s"${defProf.executorResources}, task resources: " +
-        s"${defProf.taskResources}")
-      defProf.setToDefaultProfile
-      defProf
-    } )
+    if (defaultProfileRef.get == null) {
+      synchronized {
+        if (defaultProfileRef.get == null) {
+          val taskResources = getDefaultTaskResources(conf)
+          val executorResources = getDefaultExecutorResources(conf)
+          val defProf = new ResourceProfile(executorResources, taskResources)
+          logInfo("Default ResourceProfile created, executor resources: " +
+            s"${defProf.executorResources}, task resources: " +
+            s"${defProf.taskResources}")
+          defProf.setToDefaultProfile
+          defaultProfileRef.compareAndSet(null, defProf)
+        }
+      }
+    }
     defaultProfileRef.get()
   }
 
