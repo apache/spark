@@ -539,7 +539,7 @@ The following properties are available to configure the consumer pool:
 <tr>
   <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
   <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>1m (1 minute)</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.cache.jmx.enable</td>
@@ -580,7 +580,7 @@ The following properties are available to configure the fetched data pool:
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
   <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>1m (1 minute)</td>
 </tr>
 </table>
 
@@ -822,7 +822,7 @@ The following properties are available to configure the producer pool:
 <tr>
   <td>spark.kafka.producer.cache.evictorThreadRunInterval</td>
   <td>The interval of time between runs of the idle evictor thread for producer pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>1m (1 minute)</td>
 </tr>
 </table>
 
