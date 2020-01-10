@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -709,7 +710,7 @@ object SQLConf {
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
-         "releases and replaced by spark.files.ignoreMissingFiles.")
+         s"releases and replaced by ${SPARK_IGNORE_MISSING_FILES.key}.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2145,6 +2146,46 @@ object SQLConf {
         "silently removed.")
       .booleanConf
       .createWithDefault(false)
+
+  /**
+   * Holds information about keys that have been deprecated.
+   *
+   * @param key The deprecated key.
+   * @param version Version of Spark where key was deprecated.
+   * @param comment Additional info regarding to the removed config. For example,
+   *                reasons of config deprecation, what users should use instead of it.
+   */
+  case class DeprecatedConfig(key: String, version: String, comment: String)
+
+  /**
+   * Maps deprecated SQL config keys to information about the deprecation.
+   *
+   * The extra information is logged as a warning when the SQL config is present
+   * in the user's configuration.
+   */
+  val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
+    val configs = Seq(
+      DeprecatedConfig(VARIABLE_SUBSTITUTE_DEPTH.key, "2.1",
+        "The SQL config is not used by Spark anymore."),
+      DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
+        "Behavior for `false` config value is considered as a bug, and " +
+          "it will be prohibited in the future releases."),
+      DeprecatedConfig(PARQUET_INT64_AS_TIMESTAMP_MILLIS.key, "2.3",
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
+      DeprecatedConfig(
+        PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
+        "The config allows to switch to the behaviour before Spark 2.4 " +
+          "and will be removed in the future releases."),
+      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0",
+        s"This config is replaced by '${SPARK_IGNORE_MISSING_FILES.key}'."),
+      DeprecatedConfig(ARROW_EXECUTION_ENABLED.key, "3.0",
+        s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
+      DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
+        s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
 }
 
 /**
