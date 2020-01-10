@@ -23,10 +23,11 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -189,6 +190,37 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         sql("ALTER TABLE t ALTER COLUMN i TYPE INT FIRST")
       }
       assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
+    }
+  }
+
+  test("SPARK-25403 refresh the table after inserting data") {
+    withTable("t") {
+      val catalog = spark.sessionState.catalog
+      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      sql("CREATE TABLE t (a INT) USING parquet")
+      sql("INSERT INTO TABLE t VALUES (1)")
+      assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+      assert(spark.table("t").count() === 1)
+      assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+    }
+  }
+
+  test("SPARK-19784 refresh the table after altering the table location") {
+    withTable("t") {
+      withTempDir { dir =>
+        val catalog = spark.sessionState.catalog
+        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val p1 = s"${dir.getCanonicalPath}/p1"
+        val p2 = s"${dir.getCanonicalPath}/p2"
+        sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
+        sql("INSERT INTO TABLE t VALUES (1)")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        spark.range(5).toDF("a").write.parquet(p2)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$p2'")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        assert(spark.table("t").count() === 5)
+        assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+      }
     }
   }
 }
@@ -2875,6 +2907,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
         val table = catalog.getTableMetadata(TableIdentifier("t4"))
         assert(table.provider == Some("parquet"))
+      }
+    }
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
+    val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
+    val testFile = File.createTempFile("testFile", "1", directoryToAdd)
+    spark.sql(s"ADD FILE $directoryToAdd")
+    assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
+    withTempDir { testDir =>
+      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+        val msg = intercept[SparkException] {
+          spark.sql(s"ADD FILE $testDir")
+        }.getMessage
+        assert(msg.contains("is a directory and recursive is not turned on"))
       }
     }
   }

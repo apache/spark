@@ -23,8 +23,8 @@ import sys
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
-    to_arrow_type, to_arrow_schema
+from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.util import _get_argspec
 
 __all__ = ["UDFRegistration"]
@@ -46,7 +46,7 @@ def _create_udf(f, returnType, evalType):
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                     PythonEvalType.SQL_MAP_PANDAS_ITER_UDF):
 
-        from pyspark.sql.utils import require_minimum_pyarrow_version
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
         require_minimum_pyarrow_version()
 
         argspec = _get_argspec(f)
@@ -84,6 +84,10 @@ class UserDefinedFunction(object):
     User defined function in Python
 
     .. versionadded:: 1.3
+
+    .. note:: The constructor of this class is not supposed to be directly called.
+        Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+        to create this instance.
     """
     def __init__(self, func,
                  returnType=StringType(),

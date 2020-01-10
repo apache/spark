@@ -80,7 +80,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
-            "referencing a temporary view `temp_jtv1`. " +
+            "referencing a temporary view temp_jtv1. " +
             "Please create a temp view instead by CREATE TEMP VIEW"))
 
           val globalTempDB = spark.sharedState.globalTempViewManager.database
@@ -89,7 +89,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
           }.getMessage
           assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-            s"a temporary view `global_temp`.`global_temp_jtv1`"))
+            s"a temporary view global_temp.global_temp_jtv1"))
         }
       }
     }

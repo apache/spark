@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.internal
 
+import scala.collection.mutable.ArrayBuffer
+import scala.language.reflectiveCalls
+
 import org.apache.hadoop.fs.Path
+import org.apache.log4j.{AppenderSkeleton, Level}
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -25,7 +30,6 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
 
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -320,4 +324,42 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
+  test("set removed config to non-default value") {
+    val config = "spark.sql.fromJsonForceNullableSchema"
+    val defaultValue = true
+
+    spark.conf.set(config, defaultValue)
+
+    val e = intercept[AnalysisException] {
+      spark.conf.set(config, !defaultValue)
+    }
+    assert(e.getMessage.contains(config))
+  }
+
+  test("log deprecation warnings") {
+    val logAppender = new AppenderSkeleton {
+      val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+      override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
+      override def close(): Unit = {}
+      override def requiresLayout(): Boolean = false
+    }
+    def check(config: String): Unit = {
+      assert(logAppender.loggingEvents.exists(
+        e => e.getLevel == Level.WARN &&
+        e.getRenderedMessage.contains(config)))
+    }
+
+    val config1 = "spark.sql.hive.verifyPartitionPath"
+    withLogAppender(logAppender) {
+      spark.conf.set(config1, true)
+    }
+    check(config1)
+
+    val config2 = "spark.sql.execution.pandas.respectSessionTimeZone"
+    withLogAppender(logAppender) {
+      spark.conf.unset(config2)
+    }
+    check(config2)
+  }
 }
