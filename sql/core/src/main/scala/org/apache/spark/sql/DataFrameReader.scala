@@ -227,7 +227,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
         case _: SupportsRead if table.supports(BATCH_READ) =>
-          // TODO: Pass the PathIdentifiers as the list to V2Relation once that's implemented.
           Dataset.ofRows(
             sparkSession,
             DataSourceV2Relation.create(table, catalogOpt, ident, dsOptions))
