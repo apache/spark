@@ -74,7 +74,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS), mapPartitionSizes.length)
     val avgPartitionSize = mapPartitionSizes.sum / maxSplits
     val advisoryPartitionSize = math.max(avgPartitionSize,
-      conf.getConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE))
+      conf.getConf(SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD))
     val partitionIndices = mapPartitionSizes.indices
     val partitionStartIndices = ArrayBuffer[Int]()
     var postMapPartitionSize = mapPartitionSizes(0)
@@ -168,11 +168,13 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
             //       obtaining the raw data size of per partition,
             val leftSkewedReader = SkewedShufflePartitionReader(
               left, partitionId, leftMapIdStartIndices(i), leftEndMapId)
+            val leftSort = smj.left.asInstanceOf[SortExec].copy(child = leftSkewedReader)
 
             val rightSkewedReader = SkewedShufflePartitionReader(right, partitionId,
                 rightMapIdStartIndices(j), rightEndMapId)
-            subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
-              leftSkewedReader, rightSkewedReader)
+            val rightSort = smj.right.asInstanceOf[SortExec].copy(child = rightSkewedReader)
+              subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
+                leftSort, rightSort)
           }
         }
       }
@@ -239,6 +241,10 @@ case class SkewedShufflePartitionReader(
     UnknownPartitioning(1)
   }
   private var cachedSkewedShuffleRDD: SkewedShuffledRowRDD = null
+
+  override def nodeName: String = s"SkewedShuffleReader SkewedShuffleQueryStage: ${child}" +
+    s" SkewedPartition: ${partitionIndex} startMapIndex: ${startMapIndex}" +
+    s" endMapIndex: ${endMapIndex}"
 
   override def doExecute(): RDD[InternalRow] = {
     if (cachedSkewedShuffleRDD == null) {
