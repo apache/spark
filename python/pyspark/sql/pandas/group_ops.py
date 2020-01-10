@@ -88,7 +88,7 @@ class PandasGroupedOpsMixin(object):
     @since(3.0)
     def applyInPandas(self, func, schema):
         """
-        It is an alias :meth:`pyspark.sql.DataFrame.apply`; however, it takes a Python
+        It is an alias :meth:`pyspark.sql.GroupedData.apply`; however, it takes a Python
         native function directly.
 
         :param func: a Python native function that takes a `pandas.DataFrame`, and outputs a
