@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.api.v1
+package org.apache.spark.status.api.v1.sql
 
 import java.util.Date
-import javax.ws.rs.{DefaultValue, GET, Path, PathParam, Produces, QueryParam}
+import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
+
 import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class SqlResource extends BaseAppResource {

@@ -14,14 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1.sql
 
-package org.apache.spark.status.api.v1
+import java.util.Date
 
-import javax.ws.rs.Path
+class ExecutionData private[spark] (
+    val id: Long,
+    val status: String,
+    val description: String,
+    val planDescription: String,
+    val metrics: Seq[Metrics],
+    val submissionTime: Date,
+    val duration: Long,
+    val runningJobIds: Seq[Int],
+    val successJobIds: Seq[Int],
+    val failedJobIds: Seq[Int])
 
-@Path("/v1")
-private[v1] class ApiSqlRootResource extends ApiRequestContext {
-
-  @Path("applications/{appId}/sql")
-  def sqlList(): Class[SqlResource] = classOf[SqlResource]
-}
+case class Metrics private[spark] (metricName: String, metricValue: String)
