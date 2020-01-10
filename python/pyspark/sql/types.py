@@ -1438,16 +1438,19 @@ class Row(tuple):
     It is not allowed to omit a named argument to represent the value is
     None or missing. This should be explicitly set to None in this case.
 
-    NOTE: As of Spark 3.0.0, the Row field names are no longer sorted
-    alphabetically. To enable field sorting to create Rows compatible with
-    Spark 2.x, set the environment variable "PYSPARK_ROW_FIELD_SORTING_ENABLED"
-    to "true". This option is deprecated and will be removed in future versions
-    of Spark. For Python versions < 3.6, named arguments can no longer be used
-    without enabling field sorting with the environment variable above because
-    order of the arguments is not guaranteed to be the same as entered, see
-    https://www.python.org/dev/peps/pep-0468. If this is detected, a warning
-    will be issued and the Row will fallback to sort the field names
-    automatically.
+    NOTE: As of Spark 3.0.0, Rows created from named arguments no longer have
+    field names sorted alphabetically and will be ordered in the position as
+    entered. To enable sorting for Rows compatible with Spark 2.x, set the
+    environment variable "PYSPARK_ROW_FIELD_SORTING_ENABLED" to "true". This
+    option is deprecated and will be removed in future versions of Spark. For
+    Python versions < 3.6, the order of named arguments is not guaranteed to
+    be the same as entered, see https://www.python.org/dev/peps/pep-0468. In
+    this case, a warning will be issued and the Row will fallback to sort the
+    field names automatically.
+
+    NOTE: Examples with Row in pydocs are run with the environment variable
+    "PYSPARK_ROW_FIELD_SORTING_ENABLED" set to "true" which results in output
+    where fields are sorted.
 
     >>> row = Row(name="Alice", age=11)
     >>> row
