@@ -141,7 +141,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val collectSubModelsParam = $(collectSubModels)
 
     val subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
-      Some(Array.fill[Model[_]](epm.length)(null))
+      Some(Array.ofDim[Model[_]](epm.length))
     } else None
 
     // Fit models in a Future for training in parallel
@@ -398,7 +398,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
       val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill[Model[_]](estimatorParamMaps.length)(null)
+        val _subModels = Array.ofDim[Model[_]](estimatorParamMaps.length)
         for (paramIndex <- 0 until estimatorParamMaps.length) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =

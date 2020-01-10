@@ -408,7 +408,7 @@ class NaiveBayesModel private[ml] (
   @transient private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
     case Bernoulli =>
       val negTheta = theta.map(value => math.log1p(-math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
+      val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
       val thetaMinusNegTheta = theta.map { value =>
         value - math.log1p(-math.exp(value))
       }

@@ -125,6 +125,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
+    children.foreach(_.resetMetrics())
   }
 
   /**
@@ -463,7 +464,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       }
       val sc = sqlContext.sparkContext
       val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
-        if (it.hasNext) it.next() else (0L, Array.empty[Byte]), partsToScan)
+        if (it.hasNext) it.next() else (0L, Array.emptyByteArray), partsToScan)
 
       var i = 0
 
