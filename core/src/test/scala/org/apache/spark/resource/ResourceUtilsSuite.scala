@@ -60,6 +60,20 @@ class ResourceUtilsSuite extends SparkFunSuite
     }
   }
 
+  test("Resource discoverer amount 0") {
+    val conf = new SparkConf
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoverScript",
+        """{"name": "gpu"}""")
+      conf.set(EXECUTOR_GPU_ID.amountConf, "0")
+      conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, scriptPath)
+
+      val res = getOrDiscoverAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
+      assert(res.isEmpty)
+    }
+  }
+
   test("Resource discoverer multiple resource types") {
     val conf = new SparkConf
     assume(!(Utils.isWindows))
@@ -73,6 +87,13 @@ class ResourceUtilsSuite extends SparkFunSuite
         """{"name": "fpga", "addresses": ["f1", "f2", "f3"]}""")
       conf.set(EXECUTOR_FPGA_ID.amountConf, "2")
       conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, fpgaDiscovery)
+
+      // test one with amount 0 to make sure ignored
+      val fooDiscovery = createTempScriptWithExpectedOutput(dir, "fooDiscoverScript",
+        """{"name": "foo", "addresses": ["f1", "f2", "f3"]}""")
+      val fooId = ResourceID(SPARK_EXECUTOR_PREFIX, "foo")
+      conf.set(fooId.amountConf, "0")
+      conf.set(fooId.discoveryScriptConf, fooDiscovery)
 
       val resources = getOrDiscoverAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
       assert(resources.size === 2)

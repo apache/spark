@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
 import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -74,7 +74,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
