@@ -80,7 +80,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     val sqlContext = sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
-    sqlContext.clearTempTableCache()
+    // Drop local temp tables and clear caches from in-memory cache on session closed to avoid
+    // leaks. Refer to SPARK-30470 for more details.
+    dropLocalTempTables(sqlContext)
   }
 
   def setConfMap(conf: SQLContext, confMap: java.util.Map[String, String]): Unit = {
@@ -89,5 +91,15 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       val kv = iterator.next()
       conf.setConf(kv.getKey, kv.getValue)
     }
+  }
+
+  /**
+   * Drop all local temp tables and removes their caches from the in-memory cache.
+   */
+  def dropLocalTempTables(conf: SQLContext): Unit = {
+    val sessionCatalog = conf.sessionState.catalog
+    sessionCatalog.listLocalTempViews("*")
+      .map(_.identifier)
+      .foreach(conf.sparkSession.catalog.dropTempView(_))
   }
 }
