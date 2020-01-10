@@ -220,8 +220,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           (catalog.loadTable(ident), catalogManager.catalogIdentifier(catalog), Seq(ident))
         case _ =>
           userSpecifiedSchema match {
-            case Some(schema) => (provider.getTable(dsOptions, schema), None, Seq.empty)
-            case _ => (provider.getTable(dsOptions), None, Seq.empty)
+            case Some(schema) => (provider.getTable(dsOptions, schema), None, Nil)
+            case _ => (provider.getTable(dsOptions), None, Nil)
           }
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._

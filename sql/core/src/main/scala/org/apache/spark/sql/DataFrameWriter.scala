@@ -271,7 +271,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             case tableProvider: TableProvider =>
               val t = tableProvider.getTable(dsOptions)
               if (t.supports(BATCH_WRITE)) {
-                (t, None, Seq.empty)
+                (t, None, Nil)
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we

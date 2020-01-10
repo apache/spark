@@ -56,7 +56,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       TableCapabilityCheck.apply(DataSourceV2Relation.create(
         CapabilityTable(),
         None,
-        Seq.empty,
+        Nil,
         CaseInsensitiveStringMap.empty))
     }
     assert(e.message.contains("does not support batch scan"))
@@ -93,7 +93,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       DataSourceV2Relation.create(
         CapabilityTable(),
         None,
-        Seq.empty,
+        Nil,
         CaseInsensitiveStringMap.empty),
       TestRelation)
 
@@ -110,7 +110,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           CapabilityTable(write),
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty),
         TestRelation)
 
@@ -129,7 +129,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           table,
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty),
         TestRelation,
         Literal(true))
@@ -152,7 +152,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           table,
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty), TestRelation,
         Literal(true))
 
@@ -170,7 +170,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           table,
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty),
         TestRelation,
         EqualTo(AttributeReference("x", LongType)(), Literal(5)))
@@ -190,7 +190,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           table,
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty),
         TestRelation,
         EqualTo(AttributeReference("x", LongType)(), Literal(5)))
@@ -208,7 +208,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
         DataSourceV2Relation.create(
           table,
           None,
-          Seq.empty,
+          Nil,
           CaseInsensitiveStringMap.empty),
         TestRelation)
 
@@ -226,7 +226,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       DataSourceV2Relation.create(
         table,
         None,
-        Seq.empty,
+        Nil,
         CaseInsensitiveStringMap.empty),
       TestRelation)
 
