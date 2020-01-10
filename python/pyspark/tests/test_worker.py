@@ -175,6 +175,7 @@ class WorkerReuseTest(PySparkTestCase):
         for pid in current_pids:
             self.assertTrue(pid in previous_pids)
 
+
 @unittest.skipIf(
     not has_resource_module,
     "Memory limit feature in Python worker is dependent on "
