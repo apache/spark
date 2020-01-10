@@ -3069,6 +3069,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       cubeDF.join(cubeDF, "nums"),
       Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
   }
+
+  test("SPARK-30447: fix constant propagation inside NOT") {
+    withTempView("t") {
+      Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
+      val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
+
+      checkAnswer(df, Row(1))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
