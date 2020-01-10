@@ -872,6 +872,8 @@ class JDBCSuite extends QueryTest
       Some(DoubleType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPLTZ, "TIMESTAMP", 0, null) ==
+        Some(TimestampType))
   }
 
   test("MsSqlServerDialect jdbc type mapping") {
