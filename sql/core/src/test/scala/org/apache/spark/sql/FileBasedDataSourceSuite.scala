@@ -784,14 +784,15 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("File source v2: support passing data filters to FileScan") {
+  test("File source v2: support passing data filters to FileScan without partitionFilters") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>
         withTempPath { dir =>
           Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
-            .toDF("value", "col1", "col2")
+            .toDF("value", "p1", "p2")
             .write
             .format(format)
+            .partitionBy("p1", "p2")
             .option("header", true)
             .save(dir.getCanonicalPath)
           val df = spark
@@ -799,7 +800,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
             .format(format)
             .option("header", true)
             .load(dir.getCanonicalPath)
-            .where("col1 = 1 and col2 = 2 and value != \"a\"")
+            .where("value = 'a'")
 
           val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
             case f: Filter => f.condition
@@ -812,7 +813,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)
           assert(fileScan.get.dataFilters.nonEmpty)
-          checkAnswer(df, Row("b", 1, 2))
+          checkAnswer(df, Row("a", 1, 2))
         }
       }
     }

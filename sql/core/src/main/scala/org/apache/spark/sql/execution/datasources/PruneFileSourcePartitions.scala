@@ -100,7 +100,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       val (partitionKeyFilters, dataFilters) =
         getPartitionKeyFiltersAndDataFilters(scan.sparkSession, v2Relation,
           scan.readPartitionSchema, filters, output)
-      if (partitionKeyFilters.nonEmpty || dataFilters.nonEmpty) {
+      // The dataFilters are pushed down only once
+      if ((partitionKeyFilters.nonEmpty || dataFilters.nonEmpty) && scan.dataFilters.isEmpty) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withFilters(partitionKeyFilters.toSeq, dataFilters))
         // The pushed down partition filters don't need to be reevaluated.

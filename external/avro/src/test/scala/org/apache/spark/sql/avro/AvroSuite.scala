@@ -1554,6 +1554,36 @@ class AvroV2Suite extends AvroSuite {
     }
   }
 
+  test("Avro source v2: support passing data filters to FileScan without partitionFilters") {
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+        .toDF("value", "p1", "p2")
+        .write
+        .format("avro")
+        .option("header", true)
+        .save(dir.getCanonicalPath)
+      val df = spark
+        .read
+        .format("avro")
+        .option("header", true)
+        .load(dir.getCanonicalPath)
+        .where("value = 'a'")
+
+      val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+        case f: Filter => f.condition
+      }
+      assert(filterCondition.isDefined)
+
+      val fileScan = df.queryExecution.executedPlan collectFirst {
+        case BatchScanExec(_, f: AvroScan) => f
+      }
+      assert(fileScan.nonEmpty)
+      assert(fileScan.get.partitionFilters.isEmpty)
+      assert(fileScan.get.dataFilters.nonEmpty)
+      checkAnswer(df, Row("a", 1, 2))
+    }
+  }
+
   private def getBatchScanExec(plan: SparkPlan): BatchScanExec = {
     plan.find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
   }
