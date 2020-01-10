@@ -93,7 +93,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * @param condition condition to be traversed
    * @param replaceChildren whether to replace attributes with constant values in children
    * @param nullIsFalse whether a boolean expression result can be considered to false e.g. in the
-   *        case of `WHERE e`, null result of expression `e` means the same as if it resulted false
+   *                    case of `WHERE e`, null result of expression `e` means the same as if it
+   *                    resulted false
    * @return A tuple including:
    *         1. Option[Expression]: optional changed condition after traversal
    *         2. EqualityPredicates: propagated mapping of attribute => constant
@@ -147,6 +148,11 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       case _ => (None, Seq.empty)
     }
 
+  // We need to take into account if an attribute is nullable and the context of the conjunctive
+  // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
+  // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
+  // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
+  // null result of the enclosed expression means.
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
     !ar.nullable || nullIsFalse
 
