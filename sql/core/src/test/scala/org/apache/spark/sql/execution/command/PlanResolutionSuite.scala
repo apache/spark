@@ -26,11 +26,11 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeTable, DropTable, InsertAction, InsertIntoStatement, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -106,10 +106,15 @@ class PlanResolutionSuite extends AnalysisTest {
       invocation.getArgument[String](0) match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name =>
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
+    when(manager.catalogIdentifier(testCat)).thenReturn(Some("testcat"))
+    when(manager.catalogIdentifier(v2SessionCatalog))
+      .thenReturn(Some(CatalogManager.SESSION_CATALOG_NAME))
     when(manager.currentCatalog).thenReturn(testCat)
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
@@ -126,7 +131,10 @@ class PlanResolutionSuite extends AnalysisTest {
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
+    when(manager.catalogIdentifier(testCat)).thenReturn(Some("testcat"))
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
+    when(manager.catalogIdentifier(v2SessionCatalog))
+      .thenReturn(Some(CatalogManager.SESSION_CATALOG_NAME))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -142,8 +150,9 @@ class PlanResolutionSuite extends AnalysisTest {
       CTESubstitution,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables,
-      analyzer.ResolveRelations)
+      ResolveInlineTables(conf),
+      analyzer.ResolveRelations,
+      analyzer.ResolveTables)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -1063,6 +1072,59 @@ class PlanResolutionSuite extends AnalysisTest {
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  val DSV2ResolutionTests = {
+    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.v2Table"
+    Seq(
+      ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
+      ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
+      (s"ALTER TABLE $v2SessionCatalogTable ALTER COLUMN i TYPE bigint", true),
+      ("INSERT INTO TABLE tab VALUES (1)", false),
+      ("INSERT INTO TABLE testcat.tab VALUES (1)", false),
+      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1)", true),
+      ("DESC TABLE tab", false),
+      ("DESC TABLE testcat.tab", false),
+      (s"DESC TABLE $v2SessionCatalogTable", true),
+      ("SHOW TBLPROPERTIES tab", false),
+      ("SHOW TBLPROPERTIES testcat.tab", false),
+      (s"SHOW TBLPROPERTIES $v2SessionCatalogTable", true),
+      ("SELECT * from tab", false),
+      ("SELECT * from testcat.tab", false),
+      (s"SELECT * from ${CatalogManager.SESSION_CATALOG_NAME}.v2Table", true)
+    )
+  }
+
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+    test(s"Data source V2 relation resolution '$sql'") {
+      val parsed = parseAndResolve(sql, withDefault = true)
+      val catlogIdent = if (isSessionCatlog) CatalogManager.SESSION_CATALOG_NAME else "testcat"
+      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      parsed match {
+        case AlterTable(_, _, r: DataSourceV2Relation, _) =>
+          assert(r.catalogIdentifier.exists(_ == catlogIdent))
+          assert(r.identifiers.size == 1)
+          assert(r.identifiers.head.name() == tableIdent)
+        case Project(_, r: DataSourceV2Relation) =>
+          assert(r.catalogIdentifier.exists(_ == catlogIdent))
+          assert(r.identifiers.size == 1)
+          assert(r.identifiers.head.name() == tableIdent)
+        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
+          assert(r.catalogIdentifier.exists(_ == catlogIdent))
+          assert(r.identifiers.size == 1)
+          assert(r.identifiers.head.name() == tableIdent)
+        case DescribeTable(r: DataSourceV2Relation, _) =>
+          assert(r.catalogIdentifier.exists(_ == catlogIdent))
+          assert(r.identifiers.size == 1)
+          assert(r.identifiers.head.name() == tableIdent)
+        case ShowTableProperties(r: DataSourceV2Relation, _) =>
+          assert(r.catalogIdentifier.exists(_ == catlogIdent))
+          assert(r.identifiers.size == 1)
+          assert(r.identifiers.head.name() == tableIdent)
+        case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
+          assert(t.identifier == tableIdent)
+      }
     }
   }
 
