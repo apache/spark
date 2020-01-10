@@ -392,17 +392,21 @@ object SimplifyBinaryComparison
 
   private def canSimplifyComparison(
       plan: LogicalPlan, left: Expression, right: Expression): Boolean = {
-    if (!left.nullable && !right.nullable && left.semanticEquals(right)) {
-      true
-    } else {
-      // We do more checks for non-nullable cases
-      plan match {
-        case Filter(fc, _) =>
-          splitConjunctivePredicates(fc).exists { condition =>
-            condition.semanticEquals(IsNotNull(left)) && condition.semanticEquals(IsNotNull(right))
-          }
-        case _ => false
+    if (left.semanticEquals(right)) {
+      if (!left.nullable && !right.nullable) {
+        true
+      } else {
+        // We do more checks for non-nullable cases
+        plan match {
+          case Filter(fc, _) =>
+            splitConjunctivePredicates(fc).exists { condition =>
+              condition.semanticEquals(IsNotNull(left))
+            }
+          case _ => false
+        }
       }
+    } else {
+      false
     }
   }
 
