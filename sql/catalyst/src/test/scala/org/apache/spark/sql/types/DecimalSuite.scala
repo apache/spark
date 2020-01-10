@@ -66,17 +66,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
-  test("creating decimals with negative scale") {
-    checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
-    checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
-    checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
-    checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+  test("creating decimals with negative scale under legacy mode") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
+      checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
+      checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
+      checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
+      checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
+      checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+    }
   }
 
-  test("SPARK-30252: Negative scale is not allowed under ansi mode") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+  test("SPARK-30252: Negative scale is not allowed by default") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "false") {
       def checkNegativeScaleDecimal(d: => Decimal): Unit = {
         intercept[AnalysisException](d)
           .getMessage

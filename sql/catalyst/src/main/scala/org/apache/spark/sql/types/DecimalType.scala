@@ -42,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 @Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
-  DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
+  DecimalType.checkNegativeScale(scale)
 
   if (scale > precision) {
     throw new AnalysisException(
@@ -156,8 +156,8 @@ object DecimalType extends AbstractDataType {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
   }
 
-  private[sql] def checkNegativeScaleIfAnsiEnabled(scale: Int): Unit = {
-    if (scale < 0 && SQLConf.get.ansiEnabled) {
+  private[sql] def checkNegativeScale(scale: Int): Unit = {
+    if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
       throw new AnalysisException(s"Negative scale is not allowed under ansi mode: $scale")
     }
   }
@@ -172,7 +172,7 @@ object DecimalType extends AbstractDataType {
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
     // Assumptions:
-    checkNegativeScaleIfAnsiEnabled(scale)
+    checkNegativeScale(scale)
     assert(precision >= scale)
 
     if (precision <= MAX_PRECISION) {
