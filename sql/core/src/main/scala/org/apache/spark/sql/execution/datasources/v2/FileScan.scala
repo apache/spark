@@ -61,7 +61,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   def partitionFilters: Seq[Expression]
 
   /**
-   * Returns the filters that can be use for file listing
+   * Returns the data filters that can be use for file listing
    */
   def dataFilters: Seq[Expression]
 
