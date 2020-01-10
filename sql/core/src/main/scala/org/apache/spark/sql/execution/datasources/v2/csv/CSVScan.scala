@@ -22,11 +22,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
-import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -39,7 +39,8 @@ case class CSVScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    pushedFilters: Array[Filter])
+    pushedFilters: Array[Filter],
+    partitionFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
@@ -103,4 +104,8 @@ case class CSVScan(
   override def description(): String = {
     super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
+
+  override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters)
+
 }

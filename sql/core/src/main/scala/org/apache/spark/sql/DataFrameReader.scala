@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, Univocit
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
-import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -206,9 +206,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = userSpecifiedSchema match {
-        case Some(schema) => provider.getTable(dsOptions, schema)
-        case _ => provider.getTable(dsOptions)
+      val table = provider match {
+        case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
+          throw new IllegalArgumentException(
+            s"$source does not support user specified schema. Please don't specify the schema.")
+        case hasCatalog: SupportsCatalogOptions =>
+          val ident = hasCatalog.extractIdentifier(dsOptions)
+          val catalog = CatalogV2Util.getTableProviderCatalog(
+            hasCatalog,
+            sparkSession.sessionState.catalogManager,
+            dsOptions)
+          catalog.loadTable(ident)
+        case _ =>
+          userSpecifiedSchema match {
+            case Some(schema) => provider.getTable(dsOptions, schema)
+            case _ => provider.getTable(dsOptions)
+          }
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
