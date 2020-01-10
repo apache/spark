@@ -22,7 +22,6 @@ import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
-
 import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
