@@ -2,58 +2,58 @@
 UDF with mixed input types
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to string:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to string wholestage off            124            148          33          0.8        1240.0       1.0X
-long/nullable int/string to string wholestage on             57             63           5          1.8         571.2       2.2X
+long/nullable int/string to string wholestage off            279            320          58          0.4        2789.3       1.0X
+long/nullable int/string to string wholestage on            182            188           7          0.6        1818.0       1.5X
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to option:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to option wholestage off             39             40           0          2.5         392.2       1.0X
-long/nullable int/string to option wholestage on             35             44           8          2.9         350.6       1.1X
+long/nullable int/string to option wholestage off            133            137           5          0.8        1332.3       1.0X
+long/nullable int/string to option wholestage on            110            118           8          0.9        1097.3       1.2X
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to primitive:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to primitive wholestage off             34             35           1          3.0         335.1       1.0X
-long/nullable int/string to primitive wholestage on             33             34           1          3.0         328.3       1.0X
+long/nullable int/string to primitive wholestage off             69             83          19          1.4         694.7       1.0X
+long/nullable int/string to primitive wholestage on             66             81          18          1.5         657.5       1.1X
 
 
 ================================================================================================
 UDF with primitive types
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to string:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to string wholestage off             39             40           0          2.5         394.8       1.0X
-long/nullable int to string wholestage on             39             40           1          2.5         392.8       1.0X
+long/nullable int to string wholestage off             76             80           5          1.3         761.5       1.0X
+long/nullable int to string wholestage on             65             67           2          1.5         654.2       1.2X
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to option:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to option wholestage off             25             25           0          3.9         253.7       1.0X
-long/nullable int to option wholestage on             26             26           1          3.9         257.9       1.0X
+long/nullable int to option wholestage off             49             50           2          2.0         487.9       1.0X
+long/nullable int to option wholestage on             50             66          12          2.0         503.6       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to primitive:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to primitive wholestage off             26             27           1          3.8         262.4       1.0X
-long/nullable int to primitive wholestage on             29             30           1          3.4         293.2       0.9X
+long/nullable int to primitive wholestage off             48             58          14          2.1         483.5       1.0X
+long/nullable int to primitive wholestage on             46             52           6          2.2         456.8       1.1X
 
-Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Baseline                                             21             22           1          4.8         209.4       1.0X
-With identity UDF                                    24             25           1          4.1         242.9       0.9X
+Baseline                                             39             41           3          2.6         385.8       1.0X
+With identity UDF                                    44             46           3          2.3         444.4       0.9X
 
 
