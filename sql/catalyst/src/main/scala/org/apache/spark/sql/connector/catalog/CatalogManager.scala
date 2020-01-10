@@ -48,6 +48,7 @@ class CatalogManager(
   // CatalogPlugin's name as it might be different from the catalog name depending on
   // implementation.
   private val catalogIdentifiers = mutable.HashMap.empty[CatalogPlugin, String]
+  catalogIdentifiers(defaultSessionCatalog) = SESSION_CATALOG_NAME
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -61,6 +62,13 @@ class CatalogManager(
     }
   }
 
+  /**
+   * Returns the identifier string for the given catalog
+   *
+   * @param catalog catalog to look up
+   * @return string identifier for the given catalog. If the catalog hasn't be registered return
+    *        None
+   */
   def catalogIdentifier(catalog: CatalogPlugin): Option[String] = synchronized {
     catalogIdentifiers.get(catalog)
   }
