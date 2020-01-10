@@ -195,6 +195,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
+      val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
       val pathsOption = if (paths.isEmpty) {
@@ -206,7 +207,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = provider match {
+      val (table, catalogOpt, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
           throw new IllegalArgumentException(
             s"$source does not support user specified schema. Please don't specify the schema.")
@@ -214,13 +215,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           val ident = hasCatalog.extractIdentifier(dsOptions)
           val catalog = CatalogV2Util.getTableProviderCatalog(
             hasCatalog,
-            sparkSession.sessionState.catalogManager,
+            catalogManager,
             dsOptions)
-          catalog.loadTable(ident)
+          (catalog.loadTable(ident), catalogManager.catalogIdentifier(catalog), Seq(ident))
         case _ =>
           userSpecifiedSchema match {
-            case Some(schema) => provider.getTable(dsOptions, schema)
-            case _ => provider.getTable(dsOptions)
+            case Some(schema) => (provider.getTable(dsOptions, schema), None, Seq.empty)
+            case _ => (provider.getTable(dsOptions), None, Seq.empty)
           }
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -229,7 +230,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           // TODO: Pass the PathIdentifiers as the list to V2Relation once that's implemented.
           Dataset.ofRows(
             sparkSession,
-            DataSourceV2Relation.create(table, None, Seq.empty, dsOptions))
+            DataSourceV2Relation.create(table, catalogOpt, ident, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }

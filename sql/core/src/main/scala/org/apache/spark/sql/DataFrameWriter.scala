@@ -258,7 +258,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      import df.sparkSession.sessionState.analyzer.catalogManager
+      val catalogManager = df.sparkSession.sessionState.catalogManager
       mode match {
         case SaveMode.Append | SaveMode.Overwrite =>
           val (table, catalogOpt, ident) = provider match {
@@ -267,7 +267,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), Some(catalog), Seq(ident))
+              (catalog.loadTable(ident), catalogManager.catalogIdentifier(catalog), Seq(ident))
             case tableProvider: TableProvider =>
               val t = tableProvider.getTable(dsOptions)
               if (t.supports(BATCH_WRITE)) {
@@ -280,12 +280,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
           }
 
-          val relation = DataSourceV2Relation.create(
-            table,
-            catalogOpt.map(catalogManager.catalogIdentifier(_)).flatten,
-            ident,
-            dsOptions
-          )
+          val relation = DataSourceV2Relation.create(table, catalogOpt, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
