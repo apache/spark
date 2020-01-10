@@ -1984,42 +1984,54 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-30312: truncate table - keep acl/permission") {
     import testImplicits._
+    val ignorePermissionAcl = Seq(true, false)
 
-    withSQLConf(
-      "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
-      "fs.file.impl.disable.cache" -> "true") {
-      withTable("tab1") {
-        sql("CREATE TABLE tab1 (col INT) USING parquet")
-        sql("INSERT INTO tab1 SELECT 1")
-        checkAnswer(spark.table("tab1"), Row(1))
+    ignorePermissionAcl.foreach { ignore =>
+      withSQLConf(
+        "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> ignore.toString) {
+        withTable("tab1") {
+          sql("CREATE TABLE tab1 (col INT) USING parquet")
+          sql("INSERT INTO tab1 SELECT 1")
+          checkAnswer(spark.table("tab1"), Row(1))
 
-        val tablePath = new Path(spark.sessionState.catalog
-          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+          val tablePath = new Path(spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
 
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val fs = tablePath.getFileSystem(hadoopConf)
-        val fileStatus = fs.getFileStatus(tablePath);
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fs = tablePath.getFileSystem(hadoopConf)
+          val fileStatus = fs.getFileStatus(tablePath);
 
-        fs.setPermission(tablePath, new FsPermission("777"))
-        assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
+          fs.setPermission(tablePath, new FsPermission("777"))
+          assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
 
-        // Set ACL to table path.
-        val customAcl = new java.util.ArrayList[AclEntry]()
-        customAcl.add(new AclEntry.Builder()
-          .setType(AclEntryType.USER)
-          .setScope(AclEntryScope.ACCESS)
-          .setPermission(FsAction.READ).build())
-        fs.setAcl(tablePath, customAcl)
-        assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
+          // Set ACL to table path.
+          val customAcl = new java.util.ArrayList[AclEntry]()
+          customAcl.add(new AclEntry.Builder()
+            .setType(AclEntryType.USER)
+            .setScope(AclEntryScope.ACCESS)
+            .setPermission(FsAction.READ).build())
+          fs.setAcl(tablePath, customAcl)
+          assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
 
-        sql("TRUNCATE TABLE tab1")
-        assert(spark.table("tab1").collect().isEmpty)
+          sql("TRUNCATE TABLE tab1")
+          assert(spark.table("tab1").collect().isEmpty)
 
-        val fileStatus2 = fs.getFileStatus(tablePath)
-        assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
-        val aclEntries = fs.getAclStatus(tablePath).getEntries()
-        assert(aclEntries.size() == 1)
-        assert(aclEntries.get(0) == customAcl.get(0))
+          val fileStatus2 = fs.getFileStatus(tablePath)
+          if (ignore) {
+            assert(fileStatus2.getPermission().toString() == "rwxr-xr-x")
+          } else {
+            assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
+          }
+          val aclEntries = fs.getAclStatus(tablePath).getEntries()
+          if (ignore) {
+            assert(aclEntries.size() == 0)
+          } else {
+            assert(aclEntries.size() == 1)
+            assert(aclEntries.get(0) == customAcl.get(0))
+          }
+        }
       }
     }
   }
