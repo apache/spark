@@ -168,25 +168,22 @@ public interface TableChange {
    * @return a TableChange for the update
    */
   static TableChange updateColumnType(String[] fieldNames, DataType newDataType) {
-    return new UpdateColumnType(fieldNames, newDataType, true);
+    return new UpdateColumnType(fieldNames, newDataType);
   }
 
   /**
-   * Create a TableChange for updating the type of a field.
+   * Create a TableChange for updating the nullability of a field.
    * <p>
-   * The field names are used to find the field to update.
+   * The name is used to find the field to update.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
-   * @param newDataType the new data type
+   * @param nullable the nullability
    * @return a TableChange for the update
    */
-  static TableChange updateColumnType(
-      String[] fieldNames,
-      DataType newDataType,
-      boolean isNullable) {
-    return new UpdateColumnType(fieldNames, newDataType, isNullable);
+  static TableChange updateColumnNullability(String[] fieldNames, boolean nullable) {
+    return new UpdateColumnNullability(fieldNames, nullable);
   }
 
   /**
@@ -488,12 +485,10 @@ public interface TableChange {
   final class UpdateColumnType implements ColumnChange {
     private final String[] fieldNames;
     private final DataType newDataType;
-    private final boolean isNullable;
 
-    private UpdateColumnType(String[] fieldNames, DataType newDataType, boolean isNullable) {
+    private UpdateColumnType(String[] fieldNames, DataType newDataType) {
       this.fieldNames = fieldNames;
       this.newDataType = newDataType;
-      this.isNullable = isNullable;
     }
 
     @Override
@@ -505,23 +500,59 @@ public interface TableChange {
       return newDataType;
     }
 
-    public boolean isNullable() {
-      return isNullable;
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnType that = (UpdateColumnType) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        newDataType.equals(that.newDataType);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newDataType);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
+  }
+
+  /**
+   * A TableChange to update the nullability of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
+  final class UpdateColumnNullability implements ColumnChange {
+    private final String[] fieldNames;
+    private final boolean nullable;
+
+    private UpdateColumnNullability(String[] fieldNames, boolean nullable) {
+      this.fieldNames = fieldNames;
+      this.nullable = nullable;
+    }
+
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    public boolean nullable() {
+      return nullable;
     }
 
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
-      UpdateColumnType that = (UpdateColumnType) o;
-      return isNullable == that.isNullable &&
-        Arrays.equals(fieldNames, that.fieldNames) &&
-        newDataType.equals(that.newDataType);
+      UpdateColumnNullability that = (UpdateColumnNullability) o;
+      return nullable == that.nullable &&
+        Arrays.equals(fieldNames, that.fieldNames);
     }
 
     @Override
     public int hashCode() {
-      int result = Objects.hash(newDataType, isNullable);
+      int result = Objects.hash(nullable);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }

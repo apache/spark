@@ -127,11 +127,12 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
+            Some(field.copy(dataType = update.newDataType))
+          })
+
+        case update: UpdateColumnNullability =>
+          replace(schema, update.fieldNames, field => {
+            Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>

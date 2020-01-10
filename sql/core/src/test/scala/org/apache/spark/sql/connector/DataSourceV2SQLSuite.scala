@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite
@@ -86,7 +86,7 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
 
     val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -94,7 +94,9 @@ class DataSourceV2SQLSuite
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
+    assert(table.schema == new StructType()
+      .add("id", LongType, nullable = false)
+      .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
@@ -361,14 +363,14 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    spark.sql("REPLACE TABLE testcat.table_name (id bigint) USING foo")
+    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL) USING foo")
     val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
     assert(replaced.schema().fields.length === 1,
         "Replaced table should have new schema.")
-    assert(replaced.schema().fields(0).name === "id",
+    assert(replaced.schema().fields(0) === StructField("id", LongType, nullable = false),
       "Replaced table should have new schema.")
   }
 
