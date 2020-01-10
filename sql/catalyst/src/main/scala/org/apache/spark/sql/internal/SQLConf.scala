@@ -1171,13 +1171,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val VARIABLE_SUBSTITUTE_DEPTH =
-    buildConf("spark.sql.variable.substitute.depth")
-      .internal()
-      .doc("Deprecated: The maximum replacements the substitution engine will do.")
-      .intConf
-      .createWithDefault(40)
-
   val ENABLE_TWOLEVEL_AGG_MAP =
     buildConf("spark.sql.codegen.aggregate.map.twolevel.enabled")
       .internal()
@@ -2171,8 +2164,6 @@ object SQLConf {
    */
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
-      DeprecatedConfig(VARIABLE_SUBSTITUTE_DEPTH.key, "2.1",
-        "The SQL config is not used by Spark anymore."),
       DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
         "Behavior for `false` config value is considered as a bug, and " +
           "it will be prohibited in the future releases."),
@@ -2520,8 +2511,6 @@ class SQLConf extends Serializable with Logging {
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
-
-  def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
