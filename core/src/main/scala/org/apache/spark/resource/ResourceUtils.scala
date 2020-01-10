@@ -211,10 +211,15 @@ private[spark] object ResourceUtils extends Logging {
       resourcesFileOpt: Option[String]): Seq[ResourceAllocation] = {
     val allocated = parseAllocated(resourcesFileOpt, componentName)
     val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))
-    allocated ++ otherResourceIds.map { id =>
+    val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
-      ResourceAllocation(id, discoverResource(request).addresses)
+      if (request.amount > 0) {
+        Some(ResourceAllocation(id, discoverResource(request).addresses))
+      } else {
+        None
+      }
     }
+    allocated ++ otherResources
   }
 
   private def assertResourceAllocationMeetsRequest(
