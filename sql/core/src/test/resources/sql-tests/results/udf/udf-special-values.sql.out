@@ -55,7 +55,7 @@ struct<CAST(udf(cast(x as string)) AS STRING):string>
 -- !query 5
 SELECT udf(x) FROM (VALUES 0.00000001, 0.00000002, 0.00000003) v(x)
 -- !query 5 schema
-struct<CAST(udf(cast(x as string)) AS DECIMAL(8,8)):decimal(8,8)>
+struct<CAST(udf(cast(x as string)) AS DECIMAL(9,8)):decimal(9,8)>
 -- !query 5 output
 0.00000001
 0.00000002

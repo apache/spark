@@ -13,7 +13,7 @@ struct<>
 -- !query 1
 select a / b from t
 -- !query 1 schema
-struct<(CAST(a AS DECIMAL(2,1)) / CAST(b AS DECIMAL(2,1))):decimal(8,6)>
+struct<(a / b):decimal(8,6)>
 -- !query 1 output
 NULL
 
@@ -21,7 +21,7 @@ NULL
 -- !query 2
 select a % b from t
 -- !query 2 schema
-struct<(CAST(a AS DECIMAL(2,1)) % CAST(b AS DECIMAL(2,1))):decimal(1,1)>
+struct<(a % b):decimal(2,1)>
 -- !query 2 output
 NULL
 
@@ -29,7 +29,7 @@ NULL
 -- !query 3
 select pmod(a, b) from t
 -- !query 3 schema
-struct<pmod(CAST(a AS DECIMAL(2,1)), CAST(b AS DECIMAL(2,1))):decimal(1,1)>
+struct<pmod(a, b):decimal(2,1)>
 -- !query 3 output
 NULL
 
