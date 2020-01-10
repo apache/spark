@@ -183,7 +183,7 @@ case class DescribeDatabaseCommand(
         Row("Owner Type", allDbProperties.getOrElse(PROP_OWNER_TYPE, "")) :: Nil
 
     if (extended) {
-      val properties = allDbProperties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+      val properties = allDbProperties -- RESERVED_PROPERTIES.asScala
       val propertiesStr =
         if (properties.isEmpty) {
           ""

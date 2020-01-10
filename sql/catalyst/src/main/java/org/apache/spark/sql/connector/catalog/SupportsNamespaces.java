@@ -64,9 +64,16 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_OWNER_TYPE = "ownerType";
 
   /**
-   * The list of reserved namespace properties.
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
    */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
+  List<String> RESERVED_PROPERTIES =
+    Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
 
   /**
    * Return a default namespace for the catalog.

@@ -23,6 +23,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
@@ -2906,6 +2907,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
         val table = catalog.getTableMetadata(TableIdentifier("t4"))
         assert(table.provider == Some("parquet"))
+      }
+    }
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
+    val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
+    val testFile = File.createTempFile("testFile", "1", directoryToAdd)
+    spark.sql(s"ADD FILE $directoryToAdd")
+    assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
+    withTempDir { testDir =>
+      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+        val msg = intercept[SparkException] {
+          spark.sql(s"ADD FILE $testDir")
+        }.getMessage
+        assert(msg.contains("is a directory and recursive is not turned on"))
       }
     }
   }
