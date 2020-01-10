@@ -38,29 +38,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         TableChange.addColumn(
           col.name.toArray,
           col.dataType,
-          true,
+          col.nullable,
           col.comment.orNull,
           col.position.orNull)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
-      val colNameArray = colName.toArray
-      val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colNameArray, newDataType, true)
+    case a @ AlterTableAlterColumnStatement(
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
+      val colName = a.column.toArray
+      val typeChange = a.dataType.map { newDataType =>
+        TableChange.updateColumnType(colName, newDataType)
       }
-      val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colNameArray, newComment)
+      val nullabilityChange = a.nullable.map { nullable =>
+        TableChange.updateColumnNullability(colName, nullable)
       }
-      val positionChange = pos.map { newPosition =>
-        TableChange.updateColumnPosition(colNameArray, newPosition)
+      val commentChange = a.comment.map { newComment =>
+        TableChange.updateColumnComment(colName, newComment)
+      }
+      val positionChange = a.position.map { newPosition =>
+        TableChange.updateColumnPosition(colName, newPosition)
       }
       createAlterTable(
         nameParts,
         catalog,
         tbl,
-        typeChange.toSeq ++ commentChange ++ positionChange)
+        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
 
     case AlterTableRenameColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
