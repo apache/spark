@@ -108,30 +108,24 @@ object ResourceProfile extends Logging {
   private lazy val nextProfileId = new AtomicInteger(0)
 
   // The default resource profile uses the application level configs.
-  // var so that it can be reset for testing purposes.
-  private var defaultProfileRef: AtomicReference[ResourceProfile] =
+  private val defaultProfileRef: AtomicReference[ResourceProfile] =
     new AtomicReference[ResourceProfile]()
 
   private[spark] def getNextProfileId: Int = nextProfileId.getAndIncrement()
 
   private[spark] def getOrCreateDefaultProfile(conf: SparkConf): ResourceProfile = {
-    val defaultProf = defaultProfileRef.get()
     // check to see if the default profile was initialized yet
-    if (defaultProf == null) {
-      val prof = synchronized {
-        val taskResources = getDefaultTaskResources(conf)
-        val executorResources = getDefaultExecutorResources(conf)
-        val defProf = new ResourceProfile(executorResources, taskResources)
-        logInfo("Default ResourceProfile created, executor resources: " +
-          s"${defProf.executorResources}, task resources: " +
-          s"${defProf.taskResources}")
-        defProf.setToDefaultProfile
-        defProf
-      }
-      prof
-    } else {
-      defaultProf
-    }
+    defaultProfileRef.compareAndSet(null, {
+      val taskResources = getDefaultTaskResources(conf)
+      val executorResources = getDefaultExecutorResources(conf)
+      val defProf = new ResourceProfile(executorResources, taskResources)
+      logInfo("Default ResourceProfile created, executor resources: " +
+        s"${defProf.executorResources}, task resources: " +
+        s"${defProf.taskResources}")
+      defProf.setToDefaultProfile
+      defProf
+    } )
+    defaultProfileRef.get()
   }
 
   private def getDefaultTaskResources(conf: SparkConf): Map[String, TaskResourceRequest] = {
@@ -165,7 +159,7 @@ object ResourceProfile extends Logging {
 
   // for testing only
   private[spark] def clearDefaultProfile: Unit = {
-    defaultProfileRef = new AtomicReference[ResourceProfile]()
+    defaultProfileRef.set(null)
   }
 
   private[spark] def getCustomTaskResources(

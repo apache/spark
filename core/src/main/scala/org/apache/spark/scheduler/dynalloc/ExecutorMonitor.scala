@@ -315,12 +315,16 @@ private[spark] class ExecutorMonitor(
     logInfo(s"New executor ${event.executorId} has registered (new total is ${executors.size()})")
   }
 
+  private def decrementExecResourceProfileCount(rpId: Int): Unit = {
+    val count = execResourceProfileCount.getOrDefault(rpId, 0)
+    execResourceProfileCount.replace(rpId, count, count - 1)
+    execResourceProfileCount.remove(rpId, 0)
+  }
+
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val removed = executors.remove(event.executorId)
     if (removed != null) {
-      val count = execResourceProfileCount.getOrDefault(removed.resourceProfileId, 0)
-      execResourceProfileCount.replace(removed.resourceProfileId, count, count - 1)
-      execResourceProfileCount.remove(removed.resourceProfileId, 0)
+      decrementExecResourceProfileCount(removed.resourceProfileId)
       if (!removed.pendingRemoval) {
         nextTimeout.set(Long.MinValue)
       }
@@ -431,9 +435,7 @@ private[spark] class ExecutorMonitor(
       execTracker.resourceProfileId = resourceProfileId
       // fix up the counts for each resource profile id
       execResourceProfileCount.put(resourceProfileId, numExecsWithRpId + 1)
-      val unknownCount = execResourceProfileCount.get(UNKNOWN_RESOURCE_PROFILE_ID)
-      execResourceProfileCount.put(UNKNOWN_RESOURCE_PROFILE_ID, unknownCount - 1)
-      execResourceProfileCount.remove(UNKNOWN_RESOURCE_PROFILE_ID, 0)
+      decrementExecResourceProfileCount(UNKNOWN_RESOURCE_PROFILE_ID)
     }
     execTracker
   }
