@@ -68,7 +68,6 @@ class AvroOptions(
    * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
    * is taken into account. If the former one is not set too, file extensions are ignored.
    */
-  @deprecated("Use the general data source option pathGlobFilter for filtering file names", "3.0")
   val ignoreExtension: Boolean = {
     def warn(s: String): Unit = logWarning(
       s"$s is deprecated, and it will be not use by Avro datasource in the future releases. " +
