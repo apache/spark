@@ -546,6 +546,24 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     checkModelData(model, newModel)
   }
 
+  test("Load RFormulaModel prior to Spark 3.0") {
+    val modelPath = testFile("ml-models/rFormulaModel-2.4.4")
+    val loadedModel = RFormulaModel.load(modelPath)
+
+    val dataset = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
+    val rFormula = new RFormula().setFormula("id ~ a:b")
+    val expectedModel = rFormula.fit(dataset)
+
+    assert(loadedModel.resolvedFormula.label === expectedModel.resolvedFormula.label)
+    assert(loadedModel.resolvedFormula.terms === expectedModel.resolvedFormula.terms)
+    assert(loadedModel.resolvedFormula.hasIntercept === expectedModel.resolvedFormula.hasIntercept)
+    assert(loadedModel.resolvedFormula.evalExprs === expectedModel.resolvedFormula.evalExprs)
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.4.4")
+  }
+
   test("should support all NumericType labels") {
     val formula = new RFormula().setFormula("label ~ features")
       .setLabelCol("x")

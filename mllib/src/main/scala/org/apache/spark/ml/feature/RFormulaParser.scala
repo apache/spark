@@ -369,7 +369,7 @@ private[ml] trait EvalExprParser extends RegexParsers {
   private def nonEmptyString: Parser[String] = rep1(char) ^^ {_.mkString}
 
   private def stringParenProduct: Parser[String] = ((string) ~ paren ~ (string)) ^^ {
-    case l ~ m ~ r => l + m  + r }
+    case l ~ m ~ r => l + m + r }
 
   private def products: Parser[String] = rep(stringParenProduct) ^^ {_.mkString}
 

@@ -363,19 +363,15 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
-  private val foldExprs = (df: DataFrame) => resolvedFormula.evalExprs.foldLeft(df) _
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
-    val withExprs = foldExprs(dataset.toDF) {
-      case(df, colname) => df.withColumn(colname, expr(colname))
-    }
+    val withExprs = dataset.toDF
+      .withColumns(resolvedFormula.evalExprs, resolvedFormula.evalExprs.map(expr))
     val withFeatures = pipelineModel.transform(withExprs)
     val withLabel = transformLabel(withFeatures)
-    foldExprs(withLabel) {
-      case(df, colname) => df.drop(col(s"`$colname`"))
-    }
+    withLabel.drop(resolvedFormula.evalExprs.map(colname => s"`colname`"): _*)
   }
 
   @Since("1.5.0")
@@ -444,9 +440,9 @@ class RFormulaModel private[feature](
     val spark = SparkSession.builder().getOrCreate()
     val dummyRDD = spark.sparkContext.emptyRDD[Row]
     val dummyDF = spark.createDataFrame(dummyRDD, schema)
-    foldExprs(dummyDF) {
-      case(df, colname) => df.withColumn(colname, expr(colname))
-    }.schema
+    val withExprs = dummyDF
+      .withColumns(resolvedFormula.evalExprs, resolvedFormula.evalExprs.map(expr))
+    withExprs.schema
   }
 
   private def transformDropExprsSchema(schema: StructType): StructType = {
