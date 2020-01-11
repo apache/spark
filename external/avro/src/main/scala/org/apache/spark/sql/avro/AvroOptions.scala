@@ -70,6 +70,9 @@ class AvroOptions(
    */
   @deprecated("Use the general data source option pathGlobFilter for filtering file names", "3.0")
   val ignoreExtension: Boolean = {
+    def warn(s: String): Unit = logWarning(
+      s"$s is deprecated, and it will be not use by Avro datasource in the future releases. " +
+      "Use the general data source option pathGlobFilter for filtering file names.")
     val ignoreFilesWithoutExtensionByDefault = false
     val ignoreFilesWithoutExtension = conf.getBoolean(
       AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
@@ -78,7 +81,17 @@ class AvroOptions(
     parameters
       .get(AvroOptions.ignoreExtensionKey)
       .map(_.toBoolean)
-      .getOrElse(!ignoreFilesWithoutExtension)
+      .map { ignoreExtensionOption =>
+        if (ignoreExtensionOption != !ignoreFilesWithoutExtensionByDefault) {
+          warn(s"The Avro option '${AvroOptions.ignoreExtensionKey}'")
+        }
+        ignoreExtensionOption
+      }.getOrElse {
+        if (ignoreFilesWithoutExtension != ignoreFilesWithoutExtensionByDefault) {
+          warn(s"The Hadoop's config '${AvroFileFormat.IgnoreFilesWithoutExtensionProperty}'")
+        }
+        !ignoreFilesWithoutExtension
+      }
   }
 
   /**

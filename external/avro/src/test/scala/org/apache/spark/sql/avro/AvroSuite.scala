@@ -24,6 +24,8 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, TimeZone, UUID}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+import scala.language.reflectiveCalls
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
@@ -32,6 +34,8 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
+import org.apache.log4j.AppenderSkeleton
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
@@ -1496,6 +1500,35 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin)
+  }
+
+
+  test("deprecation warning for ignoreExtension") {
+    val logAppender = new AppenderSkeleton {
+      val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+      override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
+      override def close(): Unit = {}
+      override def requiresLayout(): Boolean = false
+    }
+    def check(key: String): Unit = {
+      assert(logAppender.loggingEvents.exists(
+        _.getRenderedMessage.contains(s"'$key' is deprecated")))
+    }
+
+    withLogAppender(logAppender) {
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
+        spark.read.format("avro").load(testAvro).collect()
+      }
+    }
+    check(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+
+    withLogAppender(logAppender) {
+      spark.read
+        .option(AvroOptions.ignoreExtensionKey, false)
+        .format("avro").load(testAvro).collect()
+    }
+    check(AvroOptions.ignoreExtensionKey)
   }
 }
 
