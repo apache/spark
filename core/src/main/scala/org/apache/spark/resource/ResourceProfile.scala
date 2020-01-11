@@ -18,7 +18,8 @@
 package org.apache.spark.resource
 
 import java.util.{Map => JMap}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.AtomicInteger
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -225,26 +226,31 @@ object ResourceProfile extends Logging {
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
   private lazy val nextProfileId = new AtomicInteger(0)
+  private val DEFAULT_PROFILE_LOCK = new Object()
 
   // The default resource profile uses the application level configs.
-  private val defaultProfileRef: AtomicReference[ResourceProfile] =
-    new AtomicReference[ResourceProfile]()
+  // var so that it can be reset for testing purposes.
+  @GuardedBy("DEFAULT_PROFILE_LOCK")
+  private var defaultProfile: Option[ResourceProfile] = None
 
   private[spark] def getNextProfileId: Int = nextProfileId.getAndIncrement()
 
   private[spark] def getOrCreateDefaultProfile(conf: SparkConf): ResourceProfile = {
-    // check to see if the default profile was initialized yet
-    defaultProfileRef.compareAndSet(null, {
-      val taskResources = getDefaultTaskResources(conf)
-      val executorResources = getDefaultExecutorResources(conf)
-      val defProf = new ResourceProfile(executorResources, taskResources)
-      logInfo("Default ResourceProfile created, executor resources: " +
-        s"${defProf.executorResources}, task resources: " +
-        s"${defProf.taskResources}")
-      defProf.setToDefaultProfile
-      defProf
-    } )
-    defaultProfileRef.get()
+    DEFAULT_PROFILE_LOCK.synchronized {
+      defaultProfile match {
+        case Some(prof) => prof
+        case None =>
+          val taskResources = getDefaultTaskResources(conf)
+          val executorResources = getDefaultExecutorResources(conf)
+          val defProf = new ResourceProfile(executorResources, taskResources)
+          defProf.setToDefaultProfile
+          defaultProfile = Some(defProf)
+          logInfo("Default ResourceProfile created, executor resources: " +
+            s"${defProf.executorResources}, task resources: " +
+            s"${defProf.taskResources}")
+          defProf
+      }
+    }
   }
 
   private def getDefaultTaskResources(conf: SparkConf): Map[String, TaskResourceRequest] = {
@@ -278,7 +284,9 @@ object ResourceProfile extends Logging {
 
   // for testing only
   private[spark] def clearDefaultProfile: Unit = {
-    defaultProfileRef.set(null)
+    DEFAULT_PROFILE_LOCK.synchronized {
+      defaultProfile = None
+    }
   }
 
   private[spark] def getCustomTaskResources(
