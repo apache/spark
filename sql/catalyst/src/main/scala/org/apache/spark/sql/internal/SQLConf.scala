@@ -1576,6 +1576,14 @@ object SQLConf {
         "turning the flag on provides a way for these sources to see these partitionBy columns.")
       .booleanConf
       .createWithDefault(false)
+
+  val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
+    buildConf("spark.sql.truncateTable.ignorePermissionAcl")
+      .internal()
+      .doc("When set to true, TRUNCATE TABLE command will not try to set back original " +
+        "permission and ACLs when re-creating the table/partition paths.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1982,6 +1990,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+
+  def truncateTableIgnorePermissionAcl: Boolean =
+    getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
 
   /** ********************** SQLConf functionality methods ************ */
 

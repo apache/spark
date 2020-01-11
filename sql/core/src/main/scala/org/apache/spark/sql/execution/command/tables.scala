@@ -26,6 +26,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
+import org.apache.hadoop.fs.permission.{AclEntry, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -457,13 +458,58 @@ case class TruncateTableCommand(
         partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
+    val ignorePermissionAcl = SQLConf.get.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
         try {
           val fs = path.getFileSystem(hadoopConf)
+
+          // Not all fs impl. support these APIs.
+          var optPermission: Option[FsPermission] = None
+          var optAcls: Option[java.util.List[AclEntry]] = None
+          if (!ignorePermissionAcl) {
+            val fileStatus = fs.getFileStatus(path)
+            try {
+              optPermission = Some(fileStatus.getPermission())
+            } catch {
+              case NonFatal(_) => // do nothing
+            }
+
+            try {
+              optAcls = Some(fs.getAclStatus(path).getEntries)
+            } catch {
+              case NonFatal(_) => // do nothing
+            }
+          }
+
           fs.delete(path, true)
+          // We should keep original permission/acl of the path.
+          // For owner/group, only super-user can set it, for example on HDFS. Because
+          // current user can delete the path, we assume the user/group is correct or not an issue.
           fs.mkdirs(path)
+          if (!ignorePermissionAcl) {
+            optPermission.foreach { permission =>
+              try {
+                fs.setPermission(path, permission)
+              } catch {
+                case NonFatal(e) =>
+                  throw new SecurityException(
+                    s"Failed to set original permission $permission back to " +
+                      s"the created path: $path. Exception: ${e.getMessage}")
+              }
+            }
+            optAcls.foreach { acls =>
+              try {
+                fs.setAcl(path, acls)
+              } catch {
+                case NonFatal(e) =>
+                  throw new SecurityException(
+                    s"Failed to set original ACL $acls back to " +
+                      s"the created path: $path. Exception: ${e.getMessage}")
+              }
+            }
+          }
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
