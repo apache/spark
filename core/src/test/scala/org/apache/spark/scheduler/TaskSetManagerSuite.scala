@@ -1814,7 +1814,7 @@ class TaskSetManagerSuite
 
     // Offer resources for the task to start
     for (i <- 1 to numTasks) {
-      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, taskCpus)
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, numCoresPerTask)
     }
     (manager, clock)
   }
@@ -1945,7 +1945,8 @@ class TaskSetManagerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val tasks = Array.tabulate[Task[_]](2)(partition => new FakeLongTasks(stageId = 0, partition))
-    val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null)
+    val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
