@@ -64,11 +64,7 @@ class PandasConversionMixin(object):
         import numpy as np
         import pandas as pd
 
-        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
-            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
-        else:
-            timezone = None
-
+        timezone = self.sql_ctx._conf.sessionLocalTimeZone()
         if self.sql_ctx._conf.arrowPySparkEnabled():
             use_arrow = True
             try:
@@ -231,11 +227,7 @@ class SparkConversionMixin(object):
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
         require_minimum_pandas_version()
 
-        if self._wrapped._conf.pandasRespectSessionTimeZone():
-            timezone = self._wrapped._conf.sessionLocalTimeZone()
-        else:
-            timezone = None
-
+        timezone = self._wrapped._conf.sessionLocalTimeZone()
         # If no schema supplied by user then get the names of columns only
         if schema is None:
             schema = [str(x) if not isinstance(x, basestring) else
