@@ -1974,7 +1974,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
           val fileStatus2 = fs.getFileStatus(tablePath)
           if (ignore) {
-            assert(fileStatus2.getPermission().toString() == "rwxr-xr-x")
+            assert(fileStatus2.getPermission().toString() != "rwxrwxrwx")
           } else {
             assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
           }
