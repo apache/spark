@@ -48,8 +48,10 @@ case class CSVScanBuilder(
   private var _pushedFilters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    _pushedFilters = filters
-    CSVFilters.unsupportedFilters(filters)
+    if (sparkSession.sessionState.conf.csvFilterPushDown) {
+      _pushedFilters = CSVFilters.pushedFilters(filters, dataSchema)
+    }
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters

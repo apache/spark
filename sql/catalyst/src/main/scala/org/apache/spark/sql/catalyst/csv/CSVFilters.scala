@@ -124,24 +124,24 @@ class CSVFilters(
 
   // Checks that all filters refer to an field in the data schema
   private def checkFilters(): Boolean = {
-    val refs = filters.flatMap(_.references).toSet
-    val fieldNames = dataSchema.fields.map(_.name).toSet
-    refs.forall(fieldNames.contains(_))
+    filters.forall(CSVFilters.checkFilterRefs(_, dataSchema))
   }
 }
 
 object CSVFilters {
+  private def checkFilterRefs(filter: sources.Filter, schema: StructType): Boolean = {
+    val fieldNames = schema.fields.map(_.name).toSet
+    filter.references.forall(fieldNames.contains(_))
+  }
+
   /**
-   * Returns the filters currently not supported by CSV datasource.
+   * Returns the filters currently supported by CSV datasource.
    * @param filters The filters pushed down to CSV datasource.
-   * @return a sub-set of `filters` that cannot be handled by CSV datasource.
+   * @param schema data schema of CSV files.
+   * @return a sub-set of `filters` that can be handled by CSV datasource.
    */
-  def unsupportedFilters(filters: Array[sources.Filter]): Array[sources.Filter] = {
-    if (SQLConf.get.csvFilterPushDown) {
-      Array.empty
-    } else {
-      filters
-    }
+  def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
+    filters.filter(checkFilterRefs(_, schema))
   }
 
   private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
