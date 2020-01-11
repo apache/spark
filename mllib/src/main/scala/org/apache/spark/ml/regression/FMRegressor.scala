@@ -248,7 +248,7 @@ private[ml] object FactorizationMachines {
     (0 until factors.numCols).foreach { f =>
       var sumSquare = 0.0
       var sum = 0.0
-      features.foreachActive { case (index, value) =>
+      features.foreachNonZero { case (index, value) =>
         val vx = factors(index, f) * value
         sumSquare += vx * vx
         sum += vx
@@ -410,22 +410,19 @@ class FMRegressor @Since("3.0.0") (
       dataset: Dataset[_]
     ): FMRegressionModel = instrumented { instr =>
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val data: RDD[(Double, OldVector)] =
-      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          (label, features)
-      }
-
-    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
 
-    val numFeatures = data.first()._2.size
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val labeledPoint = extractLabeledPoints(dataset)
+    val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
+
+    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
     val coefficients = trainImpl(data, numFeatures, SquaredError)
 
@@ -463,6 +460,7 @@ class FMRegressionModel private[regression] (
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
 
+  @Since("3.0.0")
   override def predict(features: Vector): Double = {
     getRawPrediction(features, intercept, linear, factors)
   }
@@ -603,14 +601,14 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
     if (fitIntercept) rawPrediction += weights(weights.size - 1)
     if (fitLinear) {
-      data.foreachActive { case (index, value) =>
+      data.foreachNonZero { case (index, value) =>
         rawPrediction += weights(vWeightsSize + index) * value
       }
     }
     (0 until factorSize).foreach { f =>
       var sumSquare = 0.0
       var sum = 0.0
-      data.foreachActive { case (index, value) =>
+      data.foreachNonZero { case (index, value) =>
         val vx = weights(index * factorSize + f) * value
         sumSquare += vx * vx
         sum += vx
@@ -634,12 +632,12 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         val gardSize = data.indices.length * factorSize +
           (if (fitLinear) data.indices.length else 0) +
           (if (fitIntercept) 1 else 0)
-        val gradIndex = Array.fill(gardSize)(0)
-        val gradValue = Array.fill(gardSize)(0.0)
+        val gradIndex = Array.ofDim[Int](gardSize)
+        val gradValue = Array.ofDim[Double](gardSize)
         var gradI = 0
         val vWeightsSize = numFeatures * factorSize
 
-        data.foreachActive { case (index, value) =>
+        data.foreachNonZero { case (index, value) =>
           (0 until factorSize).foreach { f =>
             gradIndex(gradI) = index * factorSize + f
             gradValue(gradI) = value * sumVX(f) - weights(index * factorSize + f) * value * value
@@ -647,7 +645,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
           }
         }
         if (fitLinear) {
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradIndex(gradI) = vWeightsSize + index
             gradValue(gradI) = value
             gradI += 1
@@ -660,17 +658,17 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
         OldVectors.sparse(weights.size, gradIndex, gradValue)
       case data: OldLinalg.DenseVector =>
-        val gradient = Array.fill(weights.size)(0.0)
+        val gradient = Array.ofDim[Double](weights.size)
         val vWeightsSize = numFeatures * factorSize
 
         if (fitIntercept) gradient(weights.size - 1) += 1.0
         if (fitLinear) {
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradient(vWeightsSize + index) += value
           }
         }
         (0 until factorSize).foreach { f =>
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradient(index * factorSize + f) +=
               value * sumVX(f) - weights(index * factorSize + f) * value * value
           }

@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.tree._
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -43,17 +46,19 @@ private[spark] object GradientBoostedTrees extends Logging {
       input: RDD[Instance],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => Instance((x.label * 2) - 1, x.weight, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
@@ -76,12 +81,14 @@ private[spark] object GradientBoostedTrees extends Logging {
       validationInput: RDD[Instance],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, validationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -89,7 +96,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         val remappedValidationInput = validationInput.map(
           x => Instance((x.label * 2) - 1, x.weight, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -106,13 +113,14 @@ private[spark] object GradientBoostedTrees extends Logging {
    *         corresponding to every sample.
    */
   def computeInitialPredictionAndError(
-      data: RDD[Instance],
+      data: RDD[TreePoint],
       initTreeWeight: Double,
       initTree: DecisionTreeRegressionModel,
-      loss: OldLoss): RDD[(Double, Double)] = {
-    data.map { case Instance(label, _, features) =>
-      val pred = updatePrediction(features, 0.0, initTree, initTreeWeight)
-      val error = loss.computeError(pred, label)
+      loss: OldLoss,
+      bcSplits: Broadcast[Array[Array[Split]]]): RDD[(Double, Double)] = {
+    data.map { treePoint =>
+      val pred = updatePrediction(treePoint, 0.0, initTree, initTreeWeight, bcSplits.value)
+      val error = loss.computeError(pred, treePoint.label)
       (pred, error)
     }
   }
@@ -129,17 +137,36 @@ private[spark] object GradientBoostedTrees extends Logging {
    *         corresponding to each sample.
    */
   def updatePredictionError(
-      data: RDD[Instance],
+      data: RDD[TreePoint],
       predictionAndError: RDD[(Double, Double)],
       treeWeight: Double,
       tree: DecisionTreeRegressionModel,
-      loss: OldLoss): RDD[(Double, Double)] = {
-    data.zip(predictionAndError).map {
-      case (Instance(label, _, features), (pred, _)) =>
-        val newPred = updatePrediction(features, pred, tree, treeWeight)
-        val newError = loss.computeError(newPred, label)
-        (newPred, newError)
+      loss: OldLoss,
+      bcSplits: Broadcast[Array[Array[Split]]]): RDD[(Double, Double)] = {
+    data.zip(predictionAndError).map { case (treePoint, (pred, _)) =>
+      val newPred = updatePrediction(treePoint, pred, tree, treeWeight, bcSplits.value)
+      val newError = loss.computeError(newPred, treePoint.label)
+      (newPred, newError)
     }
+  }
+
+  /**
+   * Add prediction from a new boosting iteration to an existing prediction.
+   *
+   * @param treePoint Binned vector of features representing a single data point.
+   * @param prediction The existing prediction.
+   * @param tree New Decision Tree model.
+   * @param weight Tree weight.
+   * @return Updated prediction.
+   */
+  def updatePrediction(
+      treePoint: TreePoint,
+      prediction: Double,
+      tree: DecisionTreeRegressionModel,
+      weight: Double,
+      splits: Array[Array[Split]]): Double = {
+    prediction +
+      tree.rootNode.predictBinned(treePoint.binnedFeatures, splits).prediction * weight
   }
 
   /**
@@ -187,16 +214,16 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to calculate error of the base learner for the gradient boosting calculation.
-   * @param data Training dataset: RDD of `Instance`.
+   * @param data Training dataset: RDD of `TreePoint`.
    * @param predError Prediction and error.
    * @return Measure of model error on data
    */
   def computeWeightedError(
-      data: RDD[Instance],
+      data: RDD[TreePoint],
       predError: RDD[(Double, Double)]): Double = {
     val (errSum, weightSum) = data.zip(predError).map {
-      case (Instance(_, weight, _), (_, err)) =>
-        (err * weight, weight)
+      case (treePoint, (_, err)) =>
+        (err * treePoint.weight, treePoint.weight)
     }.treeReduce { case ((err1, weight1), (err2, weight2)) =>
       (err1 + err2, weight1 + weight2)
     }
@@ -261,10 +288,14 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       validate: Boolean,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
+
+    val sc = input.sparkContext
 
     boostingStrategy.assertValid()
 
@@ -282,21 +313,13 @@ private[spark] object GradientBoostedTrees extends Logging {
     treeStrategy.impurity = OldVariance
     treeStrategy.assertValid()
 
-    // Cache input
-    val persistedInput = if (input.getStorageLevel == StorageLevel.NONE) {
-      input.persist(StorageLevel.MEMORY_AND_DISK)
-      true
-    } else {
-      false
-    }
-
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, input.sparkContext)
+      treeStrategy.getCheckpointInterval, sc)
     // Note: this is checkpointing the unweighted validation error
     val validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, input.sparkContext)
+      treeStrategy.getCheckpointInterval, sc)
 
     timer.stop("init")
 
@@ -306,28 +329,70 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val metadata = RandomForest.buildMetadata(input, treeStrategy,
+    val retaggedInput = input.retag(classOf[Instance])
+    timer.start("buildMetadata")
+    val metadata = DecisionTreeMetadata.buildMetadata(retaggedInput, treeStrategy,
       numTrees = 1, featureSubsetStrategy)
-    val firstTreeModel = RandomForest.run(input, treeStrategy, numTrees = 1,
-      featureSubsetStrategy, seed = seed, instr = None,
-      parentUID = None, precomputedMetadata = Some(metadata))
+    timer.stop("buildMetadata")
+
+    timer.start("findSplits")
+    val splits = RandomForest.findSplits(retaggedInput, metadata, seed)
+    timer.stop("findSplits")
+    val bcSplits = sc.broadcast(splits)
+
+    // Bin feature values (TreePoint representation).
+    // Cache input RDD for speedup during multiple passes.
+    val treePoints = TreePoint.convertToTreeRDD(
+      retaggedInput, splits, metadata)
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName("binned tree points")
+    val validationTreePoints = if (validate) {
+      TreePoint.convertToTreeRDD(
+        validationInput.retag(classOf[Instance]), splits, metadata)
+        .persist(StorageLevel.MEMORY_AND_DISK)
+    } else sc.emptyRDD[TreePoint]
+
+    val firstCounts = BaggedPoint
+      .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
+        withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed)
+      .map { bagged =>
+        require(bagged.subsampleCounts.length == 1)
+        require(bagged.sampleWeight == bagged.datum.weight)
+        bagged.subsampleCounts.head
+      }.persist(StorageLevel.MEMORY_AND_DISK)
+      .setName("firstCounts at iter=0")
+
+    val firstBagged = treePoints.zip(firstCounts)
+      .map { case (treePoint, count) =>
+        // according to current design, treePoint.weight == baggedPoint.sampleWeight
+        new BaggedPoint[TreePoint](treePoint, Array(count), treePoint.weight)
+    }
+
+    val firstTreeModel = RandomForest.runBagged(baggedInput = firstBagged,
+      metadata = metadata, splits = splits, strategy = treeStrategy, numTrees = 1,
+      featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = instr,
+      parentUID = None)
       .head.asInstanceOf[DecisionTreeRegressionModel]
+
+    firstCounts.unpersist()
+
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = firstTreeWeight
 
-    var predError = computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
+    var predError = computeInitialPredictionAndError(
+      treePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
     predErrorCheckpointer.update(predError)
-    logDebug("error of gbt = " + computeWeightedError(input, predError))
+    logDebug(s"error of gbt = ${computeWeightedError(treePoints, predError)}")
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
-    var validatePredError =
-      computeInitialPredictionAndError(validationInput, firstTreeWeight, firstTreeModel, loss)
+    var validatePredError = computeInitialPredictionAndError(
+      validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
     if (validate) validatePredErrorCheckpointer.update(validatePredError)
     var bestValidateError = if (validate) {
-      computeWeightedError(validationInput, validatePredError)
+      computeWeightedError(validationTreePoints, validatePredError)
     } else {
       0.0
     }
@@ -336,20 +401,40 @@ private[spark] object GradientBoostedTrees extends Logging {
     var m = 1
     var doneLearning = false
     while (m < numIterations && !doneLearning) {
-      // Update data with pseudo-residuals
-      val data = predError.zip(input).map { case ((pred, _), Instance(label, weight, features)) =>
-        Instance(-loss.gradient(pred, label), weight, features)
-      }
-
       timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
 
-      val model = RandomForest.run(data, treeStrategy, numTrees = 1,
-        featureSubsetStrategy, seed = seed + m, instr = None,
-        parentUID = None, precomputedMetadata = Some(metadata))
+      // (label: Double, count: Int)
+      val labelWithCounts = BaggedPoint
+        .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
+          withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed + m)
+        .zip(predError)
+        .map { case (bagged, (pred, _)) =>
+          require(bagged.subsampleCounts.length == 1)
+          require(bagged.sampleWeight == bagged.datum.weight)
+          // Update labels with pseudo-residuals
+          val newLabel = -loss.gradient(pred, bagged.datum.label)
+          (newLabel, bagged.subsampleCounts.head)
+        }.persist(StorageLevel.MEMORY_AND_DISK)
+        .setName(s"labelWithCounts at iter=$m")
+
+      val bagged = treePoints.zip(labelWithCounts)
+        .map { case (treePoint, (newLabel, count)) =>
+          val newTreePoint = new TreePoint(newLabel, treePoint.binnedFeatures, treePoint.weight)
+          // according to current design, treePoint.weight == baggedPoint.sampleWeight
+          new BaggedPoint[TreePoint](newTreePoint, Array(count), treePoint.weight)
+        }
+
+      val model = RandomForest.runBagged(baggedInput = bagged,
+        metadata = metadata, splits = splits, strategy = treeStrategy,
+        numTrees = 1, featureSubsetStrategy = featureSubsetStrategy,
+        seed = seed + m, instr = None, parentUID = None)
         .head.asInstanceOf[DecisionTreeRegressionModel]
+
+      labelWithCounts.unpersist()
+
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model
@@ -359,9 +444,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       baseLearnerWeights(m) = learningRate
 
       predError = updatePredictionError(
-        input, predError, baseLearnerWeights(m), baseLearners(m), loss)
+        treePoints, predError, baseLearnerWeights(m),
+        baseLearners(m), loss, bcSplits)
       predErrorCheckpointer.update(predError)
-      logDebug("error of gbt = " + computeWeightedError(input, predError))
+      logDebug(s"error of gbt = ${computeWeightedError(treePoints, predError)}")
 
       if (validate) {
         // Stop training early if
@@ -370,9 +456,10 @@ private[spark] object GradientBoostedTrees extends Logging {
         // We want the model returned corresponding to the best validation error.
 
         validatePredError = updatePredictionError(
-          validationInput, validatePredError, baseLearnerWeights(m), baseLearners(m), loss)
+          validationTreePoints, validatePredError, baseLearnerWeights(m),
+          baseLearners(m), loss, bcSplits)
         validatePredErrorCheckpointer.update(validatePredError)
-        val currentValidateError = computeWeightedError(validationInput, validatePredError)
+        val currentValidateError = computeWeightedError(validationTreePoints, validatePredError)
         if (bestValidateError - currentValidateError < validationTol * Math.max(
           currentValidateError, 0.01)) {
           doneLearning = true
@@ -393,7 +480,9 @@ private[spark] object GradientBoostedTrees extends Logging {
     predErrorCheckpointer.deleteAllCheckpoints()
     validatePredErrorCheckpointer.unpersistDataSet()
     validatePredErrorCheckpointer.deleteAllCheckpoints()
-    if (persistedInput) input.unpersist()
+    treePoints.unpersist()
+    if (validate) validationTreePoints.unpersist()
+    bcSplits.destroy()
 
     if (validate) {
       (baseLearners.slice(0, bestM), baseLearnerWeights.slice(0, bestM))

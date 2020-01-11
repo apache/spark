@@ -43,6 +43,10 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col, true) FROM VALUES (NULL), (5), (20) AS tab(col);
        5
   """,
+  note = """
+    The function is non-deterministic because its results depends on the order of the rows
+    which may be non-deterministic after a shuffle.
+  """,
   since = "2.0.0")
 case class First(child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {

@@ -178,7 +178,7 @@ class ArrowTests(ReusedSQLTestCase):
 
             self.assertFalse(pdf_ny.equals(pdf_la))
 
-            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
+            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
             pdf_la_corrected = pdf_la.copy()
             for field in self.schema:
                 if isinstance(field.dataType, TimestampType):
@@ -311,7 +311,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.equals(pdf_copy))
 
     def test_schema_conversion_roundtrip(self):
-        from pyspark.sql.types import from_arrow_schema, to_arrow_schema
+        from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEquals(self.schema, schema_rt)

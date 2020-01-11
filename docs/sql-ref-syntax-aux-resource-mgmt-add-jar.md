@@ -36,6 +36,9 @@ ADD JAR file_name
 ### Examples
 {% highlight sql %}
 ADD JAR /tmp/test.jar;
+ADD JAR "/path/to/some.jar";
+ADD JAR '/some/other.jar';
+ADD JAR "/path with space/abc.jar";
 {% endhighlight %}
 
 ### Related Statements

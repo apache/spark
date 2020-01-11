@@ -97,6 +97,7 @@ abstract class QueryStageExec extends LeafExecNode {
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
   override def executeCollect(): Array[InternalRow] = plan.executeCollect()
   override def executeTake(n: Int): Array[InternalRow] = plan.executeTake(n)
+  override def executeTail(n: Int): Array[InternalRow] = plan.executeTail(n)
   override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
 
   override def doPrepare(): Unit = plan.prepare()

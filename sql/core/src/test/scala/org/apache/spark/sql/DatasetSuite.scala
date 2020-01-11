@@ -196,6 +196,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
   }
 
+  test("as case class - tail") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
+  }
+
   test("as seq of case class - reorder fields by name") {
     val df = spark.range(3).select(array(struct($"id".cast("int").as("b"), lit("a").as("a"))))
     val ds = df.as[Seq[ClassData]]
@@ -1861,9 +1866,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("groupBy.as") {
-    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData( 3, "three")).toDS()
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
-    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
 
     val df3 = df1.groupBy("id").as[Int, DoubleData]
@@ -1879,6 +1884,17 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
+  }
+
+  test("tail with different numbers") {
+    Seq(0, 2, 5, 10, 50, 100, 1000).foreach { n =>
+      assert(spark.range(n).tail(6) === (math.max(n - 6, 0) until n))
+    }
+  }
+
+  test("tail should not accept minus value") {
+    val e = intercept[AnalysisException](spark.range(1).tail(-1))
+    e.getMessage.contains("tail expression must be equal to or greater than 0")
   }
 }
 

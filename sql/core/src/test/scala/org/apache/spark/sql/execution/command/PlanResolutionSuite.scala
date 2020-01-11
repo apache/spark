@@ -384,7 +384,7 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(desc.schema.isEmpty) // will be populated later when the table is actually created
       assert(desc.comment.contains("This is the staging page view table"))
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.provider.contains("parquet"))

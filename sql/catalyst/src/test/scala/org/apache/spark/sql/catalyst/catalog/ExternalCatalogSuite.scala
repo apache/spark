@@ -983,7 +983,6 @@ abstract class CatalogTestUtils {
     catalog.createDatabase(newDb("db3"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl2", "db2"), ignoreIfExists = false)
-    catalog.createTable(newView("view1", Some("db3")), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
     catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
@@ -1015,11 +1014,11 @@ abstract class CatalogTestUtils {
   }
 
   def newView(
+      db: String,
       name: String,
-      database: Option[String] = None): CatalogTable = {
-    val viewDefaultDatabase = database.getOrElse("default")
+      props: Map[String, String]): CatalogTable = {
     CatalogTable(
-      identifier = TableIdentifier(name, database),
+      identifier = TableIdentifier(name, Some(db)),
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = new StructType()
@@ -1028,7 +1027,7 @@ abstract class CatalogTestUtils {
         .add("a", "int")
         .add("b", "string"),
       viewText = Some("SELECT * FROM tbl1"),
-      properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase))
+      properties = props)
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
