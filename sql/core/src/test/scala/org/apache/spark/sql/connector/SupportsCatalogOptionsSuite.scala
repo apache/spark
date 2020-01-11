@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -196,8 +197,18 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(e.getMessage.contains("not support user specified schema"))
   }
 
+  test("DataFrameReader create v2Relation with identifiers") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val df = load("t1", Some(catalogName))
+    assert(df.logicalPlan.isInstanceOf[DataSourceV2Relation])
+    val v2Relation = df.logicalPlan.asInstanceOf[DataSourceV2Relation]
+    assert(v2Relation.identifiers.length == 1)
+    assert(v2Relation.identifiers.head.name() == "t1")
+    assert(v2Relation.catalogIdentifier.exists(_ == catalogName))
+  }
+
   private def load(name: String, catalogOpt: Option[String]): DataFrame = {
-    val dfr = spark.read.format(format).option("name", "t1")
+    val dfr = spark.read.format(format).option("name", name)
     catalogOpt.foreach(cName => dfr.option("catalog", cName))
     dfr.load()
   }
