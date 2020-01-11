@@ -995,31 +995,18 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove location") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
 
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
+      val exc = intercept[UnsupportedOperationException] {
+        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+      }
+      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+
     }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
-
-    catalog.dropNamespace(testNs)
-  }
-
-  test("alterNamespace: fail to remove comment") {
-    val catalog = newCatalog()
-
-    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
-
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
-    }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
-
     catalog.dropNamespace(testNs)
   }
 }

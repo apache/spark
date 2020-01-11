@@ -2779,9 +2779,13 @@ object SparkContext extends Logging {
       } else {
         executorCores.get
       }
+      // some cluster managers don't set the EXECUTOR_CORES config by default (standalone
+      // and mesos coarse grained), so we can't rely on that config for those.
+      val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
+        (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
 
       // Number of cores per executor must meet at least one task requirement.
-      if (execCores < taskCores) {
+      if (shouldCheckExecCores && execCores < taskCores) {
         throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
           s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
       }
@@ -2789,11 +2793,14 @@ object SparkContext extends Logging {
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
       val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-      val executorResourcesAndAmounts =
-        parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
+      val executorResourcesAndAmounts = parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
           .map(request => (request.id.resourceName, request.amount)).toMap
-      var numSlots = execCores / taskCores
-      var limitingResourceName = "CPU"
+
+      var (numSlots, limitingResourceName) = if (shouldCheckExecCores) {
+        (execCores / taskCores, "CPU")
+      } else {
+        (-1, "")
+      }
 
       taskResourceRequirements.foreach { taskReq =>
         // Make sure the executor resources were specified through config.
@@ -2818,12 +2825,28 @@ object SparkContext extends Logging {
         // multiple executor resources.
         val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
+          if (shouldCheckExecCores) {
+            throw new IllegalArgumentException("The number of slots on an executor has to be " +
+              "limited by the number of cores, otherwise you waste resources and " +
+              "dynamic allocation doesn't work properly. Your configuration has " +
+              s"core/task cpu slots = ${numSlots} and " +
+              s"${taskReq.resourceName} = ${resourceNumSlots}. " +
+              "Please adjust your configuration so that all resources require same number " +
+              "of executor slots.")
+          }
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
         }
       }
-      // There have been checks above to make sure the executor resources were specified and are
-      // large enough if any task resources were specified.
+      if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sc.conf)) {
+        // if we can't rely on the executor cores config throw a warning for user
+        logWarning("Please ensure that the number of slots available on your " +
+          "executors is limited by the number of cores to task cpus and not another " +
+          "custom resource. If cores is not the limiting resource then dynamic " +
+          "allocation will not work properly!")
+      }
+      // warn if we would waste any resources due to another resource limiting the number of
+      // slots on an executor
       taskResourceRequirements.foreach { taskReq =>
         val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
         if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
@@ -2832,7 +2855,7 @@ object SparkContext extends Logging {
           } else {
             s"${taskReq.amount}"
           }
-          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
+          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
             s"(exec = ${execAmount}, task = ${taskReqStr}, " +
             s"runnable tasks = ${resourceNumSlots}) will " +
