@@ -111,14 +111,14 @@ class Window(object):
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
         +---+--------+---+	
-        | id|category|sum|	
-        +---+--------+---+	
-        |  1|       b|  3|	
-        |  2|       b|  5|	
-        |  3|       b|  3|	
-        |  1|       a|  2|	
-        |  1|       a|  3|	
-        |  2|       a|  2|	
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       a|  2|
+        |  1|       a|  3|
+        |  1|       b|  3|
+        |  2|       a|  2|
+        |  2|       b|  5|
+        |  3|       b|  3|
         +---+--------+---+
 
         :param start: boundary start, inclusive.
