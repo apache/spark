@@ -92,7 +92,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -230,6 +230,21 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert("" === newInfo.details)
     assert(0 === newInfo.accumulables.size)
   }
+
+  test("StageInfo resourceProfileId") {
+    val info = makeStageInfo(1, 2, 3, 4L, 5L, 5)
+    val json = JsonProtocol.stageInfoToJson(info)
+
+    // Fields added after 1.0.0.
+    assert(info.details.nonEmpty)
+    assert(info.resourceProfileId === 5)
+
+    val newInfo = JsonProtocol.stageInfoFromJson(json)
+
+    assert(info.name === newInfo.name)
+    assert(5 === newInfo.resourceProfileId)
+  }
+
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
@@ -873,10 +888,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
     r
   }
 
-  private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
+  private def makeStageInfo(
+      a: Int,
+      b: Int,
+      c: Int,
+      d: Long,
+      e: Long,
+      rpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
     val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details",
-      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      resourceProfileId = rpId)
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -1013,7 +1034,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "ResourceProfileID" : 0
+      |    "Resource Profile Id" : 0
       |  },
       |  "Properties": {
       |    "France": "Paris",
@@ -1071,7 +1092,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "ResourceProfileID" : 0
+      |    "Resource Profile Id" : 0
       |  }
       |}
     """.stripMargin
@@ -1594,7 +1615,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "ResourceProfileID" : 0
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 2,
@@ -1655,7 +1676,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "ResourceProfileID" : 0
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 3,
@@ -1732,7 +1753,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "ResourceProfileID" : 0
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 4,
@@ -1825,7 +1846,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "ResourceProfileID" : 0
+      |      "Resource Profile Id" : 0
       |    }
       |  ],
       |  "Stage IDs": [
@@ -1972,7 +1993,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "name" : "gpu",
       |        "addresses" : [ "0", "1" ]
       |      }
-      |    }
+      |    },
+      |    "Resource Profile Id": 4
       |  }
       |}
     """.stripMargin

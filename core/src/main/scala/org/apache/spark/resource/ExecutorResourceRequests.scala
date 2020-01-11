@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
 
@@ -30,7 +31,7 @@ import org.apache.spark.resource.ResourceProfile._
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  */
-class ExecutorResourceRequests() extends Serializable {
+class ExecutorResourceRequests() extends Serializable with Logging {
 
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
@@ -46,8 +47,19 @@ class ExecutorResourceRequests() extends Serializable {
    */
   def memory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
+    if (amountMiB <= 0) {
+      throw new IllegalArgumentException("Memory size must be > 0")
+    }
     val req = new ExecutorResourceRequest(MEMORY, amountMiB)
     _executorResources.put(MEMORY, req)
+    this
+  }
+
+  /**
+   * Removes any heap memory requests.
+   */
+  def removeMemory(): this.type = {
+    _executorResources.remove(MEMORY)
     this
   }
 
@@ -59,8 +71,19 @@ class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
+    if (amountMiB <= 0) {
+      throw new IllegalArgumentException("Overhead memory size must be > 0")
+    }
     val req = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
     _executorResources.put(OVERHEAD_MEM, req)
+    this
+  }
+
+  /**
+   * Removes any overhead memory requests.
+   */
+  def removeMemoryOverhead(): this.type = {
+    _executorResources.remove(OVERHEAD_MEM)
     this
   }
 
@@ -72,8 +95,19 @@ class ExecutorResourceRequests() extends Serializable {
    */
   def pysparkMemory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
+    if (amountMiB <= 0) {
+      throw new IllegalArgumentException("Pyspark memory size must be > 0")
+    }
     val req = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
     _executorResources.put(PYSPARK_MEM, req)
+    this
+  }
+
+  /**
+   * Removes any pyspark memory requests.
+   */
+  def removePysparkMemory(): this.type = {
+    _executorResources.remove(PYSPARK_MEM)
     this
   }
 
@@ -83,8 +117,19 @@ class ExecutorResourceRequests() extends Serializable {
    * @param amount Number of cores to allocate per Executor.
    */
   def cores(amount: Int): this.type = {
+    if (amount <= 0) {
+      throw new IllegalArgumentException("Cores amount must be > 0")
+    }
     val req = new ExecutorResourceRequest(CORES, amount)
     _executorResources.put(CORES, req)
+    this
+  }
+
+  /**
+   * Removes any executor core requests.
+   */
+  def removeCores(): this.type = {
+    _executorResources.remove(CORES)
     this
   }
 
@@ -110,8 +155,23 @@ class ExecutorResourceRequests() extends Serializable {
       vendor: String = ""): this.type = {
     // a bit weird but for Java api use empty string as meaning None because empty
     // string is otherwise invalid for those paramters anyway
+    if (amount <= 0) {
+      throw new IllegalArgumentException(s"$resourceName amount must be > 0")
+    }
     val req = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
     _executorResources.put(resourceName, req)
+    this
+  }
+
+  /**
+   * Removes the specific custom resource requests.
+   *
+   * @param resourceName name of the resource to remove
+   */
+  def removeResource(resourceName: String): this.type = {
+    if (resourceName != null) {
+      _executorResources.remove(resourceName)
+    }
     this
   }
 

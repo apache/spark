@@ -39,8 +39,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("ApiHelper.COLUMN_TO_INDEX should match headers of the task table") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val resourceProfileManager = new ResourceProfileManager(conf)
-    val statusStore = AppStatusStore.createLiveStore(conf, resourceProfileManager)
+    val statusStore = AppStatusStore.createLiveStore(conf)
     try {
       val stageData = new StageData(
         status = StageStatus.ACTIVE,
@@ -93,7 +92,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         accumulatorUpdates = Seq(new UIAccumulableInfo(0L, "acc", None, "value")),
         tasks = None,
         executorSummary = None,
-        killedTasksSummary = Map.empty
+        killedTasksSummary = Map.empty,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       )
       val taskTable = new TaskPagedTable(
         stageData,
@@ -117,8 +117,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
    */
   private def renderStagePage(): Seq[Node] = {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val resourceProfileManager = new ResourceProfileManager(conf)
-    val statusStore = AppStatusStore.createLiveStore(conf, resourceProfileManager)
+    val statusStore = AppStatusStore.createLiveStore(conf)
     val listener = statusStore.listener.get
 
     try {

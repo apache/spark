@@ -19,9 +19,11 @@ package org.apache.spark.ui.env
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable
 import scala.xml.Node
 
 import org.apache.spark.SparkConf
+import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
@@ -38,6 +40,34 @@ private[ui] class EnvironmentPage(
       "Java Home" -> appEnv.runtime.javaHome,
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
+    def constructExecutorRequestString(ereqs: Map[String, ExecutorResourceRequest]): String = {
+      ereqs.map {
+        case (_, ereq) =>
+          val execStr = new mutable.StringBuilder()
+          execStr ++= s"${ereq.resourceName}: [amount: ${ereq.amount}"
+          if (ereq.discoveryScript.nonEmpty) execStr ++= s", discovery: ${ereq.discoveryScript}"
+          if (ereq.vendor.nonEmpty) execStr ++= s", vendor: ${ereq.vendor}"
+          execStr ++= "]"
+          execStr.toString()
+      }.mkString("; ")
+    }
+
+    def constructTaskRequestString(treqs: Map[String, TaskResourceRequest]): String = {
+      treqs.map {
+        case (_, ereq) => s"${ereq.resourceName}: [amount: ${ereq.amount}]\n"
+      }.mkString("; ")
+    }
+
+    val resourceProfileInfo = store.resourceProfileInfo().map { rinfo =>
+      val einfo = constructExecutorRequestString(rinfo.executorResources)
+      val tinfo = constructTaskRequestString(rinfo.taskResources)
+      val res = s"Executor Reqs: $einfo \n Task Reqs: $tinfo"
+      (rinfo.id.toString, res)
+    }.toMap
+
+    val resourceProfileInformationTable = UIUtils.listingTable(
+      resourceProfileHeader, jvmRow, resourceProfileInfo.toSeq.sorted, fixedWidth = true,
+      headerClasses = headerClasses)
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
       headerClasses = headerClasses)
@@ -55,6 +85,17 @@ private[ui] class EnvironmentPage(
       headerClasses = headerClasses)
     val content =
       <span>
+        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
+              onClick="collapseTable('collapse-aggregated-execResourceProfileInformation',
+            'aggregated-execResourceProfileInformation')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Resource Profiles</a>
+          </h4>
+        </span>
+        <div class="aggregated-execResourceProfileInformation collapsible-table">
+          {resourceProfileInformationTable}
+        </div>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
             onClick="collapseTable('collapse-aggregated-runtimeInformation',
             'aggregated-runtimeInformation')">
@@ -115,6 +156,7 @@ private[ui] class EnvironmentPage(
     UIUtils.headerSparkPage(request, "Environment", content, parent)
   }
 
+  private def resourceProfileHeader = Seq("Resource Profile ID", "Resource Profile Contents")
   private def propertyHeader = Seq("Name", "Value")
   private def classPathHeader = Seq("Resource", "Source")
   private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")

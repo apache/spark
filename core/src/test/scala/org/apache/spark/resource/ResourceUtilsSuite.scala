@@ -27,10 +27,13 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.util.Utils
 
 class ResourceUtilsSuite extends SparkFunSuite
     with LocalSparkContext {
+
+  val listenerBus = new LiveListenerBus(new SparkConf())
 
   test("ResourceID") {
     val componentName = "spark.test"
@@ -312,14 +315,14 @@ class ResourceUtilsSuite extends SparkFunSuite
 
   private def testWarningsClusterManagerWithCores(conf: SparkConf) = {
     // this should pass as default case with just 1 core
-    var rpmanager = new ResourceProfileManager(conf)
+    var rpmanager = new ResourceProfileManager(conf, listenerBus)
 
     ResourceProfile.clearDefaultProfile
     conf.set(EXECUTOR_CORES, 4)
     conf.set("spark.executor.resource.gpu.amount", "1")
     conf.set("spark.task.resource.gpu.amount", "1")
     var error = intercept[SparkException] {
-      rpmanager = new ResourceProfileManager(conf)
+      rpmanager = new ResourceProfileManager(conf, listenerBus)
     }.getMessage()
 
     assert(error.contains(
@@ -332,7 +335,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     error = intercept[SparkException] {
-      rpmanager = new ResourceProfileManager(conf)
+      rpmanager = new ResourceProfileManager(conf, listenerBus)
     }.getMessage()
 
     assert(error.contains(
@@ -345,7 +348,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     conf.set("spark.executor.resource.fpga.amount", "6")
     conf.set("spark.task.resource.fpga.amount", "1")
     error = intercept[SparkException] {
-      rpmanager = new ResourceProfileManager(conf)
+      rpmanager = new ResourceProfileManager(conf, listenerBus)
     }.getMessage()
 
     assert(error.contains(
@@ -370,7 +373,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf().setMaster("spark://testing")
     conf.set(RESOURCES_WARNING_TESTING, true)
     // this should pass as default case with just 1 core
-    var rpmanager = new ResourceProfileManager(conf)
+    var rpmanager = new ResourceProfileManager(conf, listenerBus)
     // cores only resource
     warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(4))
 
@@ -378,12 +381,12 @@ class ResourceUtilsSuite extends SparkFunSuite
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     // doesn't error because cores unknown
-    rpmanager = new ResourceProfileManager(conf)
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
 
     ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "1")
     conf.set("spark.task.resource.gpu.amount", "1")
-    rpmanager = new ResourceProfileManager(conf)
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
 
     var error = intercept[SparkException] {
       warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(4))
@@ -397,7 +400,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
-    rpmanager = new ResourceProfileManager(conf)
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
 
     error = intercept[SparkException] {
       warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(1))
@@ -413,7 +416,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     conf.set("spark.task.resource.gpu.amount", "1")
     // specify cores should work
     conf.set(EXECUTOR_CORES, 4)
-    rpmanager = new ResourceProfileManager(conf)
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
 
     ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "2")
@@ -422,7 +425,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     conf.set(EXECUTOR_CORES, 4)
 
     error = intercept[SparkException] {
-      rpmanager = new ResourceProfileManager(conf)
+      rpmanager = new ResourceProfileManager(conf, listenerBus)
     }.getMessage()
 
     assert(error.contains(

@@ -495,7 +495,7 @@ private[spark] class DAGScheduler(
       if (shouldMergeResourceProfiles) {
         // need to resolve conflicts if multiple
         var mergedProfile: ResourceProfile = stageResourceProfiles.head
-        for (profile <- stageResourceProfiles) {
+        for (profile <- stageResourceProfiles.drop(1)) {
           mergedProfile = mergeResourceProfiles(mergedProfile, profile)
         }
         mergedProfile

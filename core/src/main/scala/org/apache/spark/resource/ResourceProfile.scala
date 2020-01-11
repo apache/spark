@@ -180,6 +180,11 @@ class ResourceProfile(
     }
   }
 
+  // to be used only by history server for reconstruction from events
+  private[spark] def setResourceProfileId(id: Int): Unit = {
+    _id = id
+  }
+
   // testing only
   private[spark] def setToDefaultProfile(): Unit = {
     _id = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID

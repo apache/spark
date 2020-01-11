@@ -82,8 +82,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
   private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
-      val resourceProfileManager = new ResourceProfileManager(conf)
-      return AppStatusStore.createLiveStore(conf, resourceProfileManager)
+      return AppStatusStore.createLiveStore(conf)
     }
 
     val store: KVStore = if (disk) {

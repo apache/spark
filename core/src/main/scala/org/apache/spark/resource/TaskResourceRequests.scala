@@ -43,6 +43,9 @@ class TaskResourceRequests() extends Serializable {
    * @param amount Number of cpus to allocate per Task.
    */
   def cpus(amount: Int): this.type = {
+    if (amount <= 0) {
+      throw new IllegalArgumentException(s"Cpus amount must be > 0")
+    }
     val treq = new TaskResourceRequest(CPUS, amount)
     _taskResources.put(CPUS, treq)
     this
@@ -58,6 +61,9 @@ class TaskResourceRequests() extends Serializable {
    *               ie amount equals 0.5 translates into 2 tasks per resource address.
    */
   def resource(resourceName: String, amount: Double): this.type = {
+    if (amount <= 0) {
+      throw new IllegalArgumentException(s"$resourceName amount must be > 0")
+    }
     val treq = new TaskResourceRequest(resourceName, amount)
     _taskResources.put(resourceName, treq)
     this

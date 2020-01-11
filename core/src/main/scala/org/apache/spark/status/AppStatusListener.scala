@@ -28,7 +28,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
-import org.apache.spark.resource.ResourceProfileManager
+import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
@@ -46,13 +46,13 @@ private[spark] class AppStatusListener(
     kvstore: ElementTrackingStore,
     conf: SparkConf,
     live: Boolean,
-    resourceProfileManager: ResourceProfileManager,
     appStatusSource: Option[AppStatusSource] = None,
     lastUpdateTime: Option[Long] = None) extends SparkListener with Logging {
 
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
+  private var defaultCoresPerTask: Int = 1
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -77,6 +77,7 @@ private[spark] class AppStatusListener(
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
+  private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -146,6 +147,23 @@ private[spark] class AppStatusListener(
     }
   }
 
+  override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = {
+    val liveRP = new LiveResourceProfile(event.resourceProfile.id)
+    liveResourceProfiles(event.resourceProfile.id) = liveRP
+    liveRP.taskResources = event.resourceProfile.taskResources
+    liveRP.executorResources = event.resourceProfile.executorResources
+    val maxTasks = event.resourceProfile.maxTasksPerExecutor(conf)
+    liveRP.maxTasksPerExecutor = if (event.resourceProfile.isCoresLimitKnown) {
+      Some(maxTasks)
+    } else {
+      None
+    }
+    val rpInfo = new v1.ResourceProfileInfo(liveRP.resourceProfileId,
+      liveRP.executorResources, liveRP.taskResources)
+    logWarning("Resource Profile added id " + liveRP.resourceProfileId)
+    kvstore.write(new ResourceProfileWrapper(rpInfo))
+  }
+
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     val details = event.environmentDetails
 
@@ -161,6 +179,9 @@ private[spark] class AppStatusListener(
       details.getOrElse("Hadoop Properties", Nil),
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
+
+    defaultCoresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
+      .getOrElse(defaultCoresPerTask)
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
@@ -196,11 +217,15 @@ private[spark] class AppStatusListener(
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
-    val cpusPerTask = resourceProfileManager.taskCpusForProfileId(rpId)
-    exec.maxTasks = event.executorInfo.totalCores / cpusPerTask
+    val liveRP = liveResourceProfiles.get(rpId)
+    val cpusPerTask = liveRP.map(_.taskResources.get(CPUS)
+      .map(_.amount.toInt).getOrElse(defaultCoresPerTask)).getOrElse(defaultCoresPerTask)
+    val maxTasksPerExec = liveRP.flatMap(_.maxTasksPerExecutor)
+    exec.maxTasks = maxTasksPerExec.getOrElse(event.executorInfo.totalCores / cpusPerTask)
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo
     exec.attributes = event.executorInfo.attributes
+    exec.resourceProfileId = rpId
     liveUpdate(exec, System.nanoTime())
   }
 

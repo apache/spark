@@ -45,6 +45,13 @@ private[spark] class AppStatusStore(
     store.read(klass, klass.getName()).info
   }
 
+  def resourceProfileInfo(): Seq[v1.ResourceProfileInfo] = {
+    val klass = classOf[ResourceProfileWrapper]
+    // store.read(klass, 0).rpInfo
+    val it = store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo)
+    it.toSeq
+  }
+
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
     val it = store.view(classOf[JobDataWrapper]).reverse().asScala.map(_.info)
     if (statuses != null && !statuses.isEmpty()) {
@@ -480,7 +487,8 @@ private[spark] class AppStatusStore(
       accumulatorUpdates = stage.accumulatorUpdates,
       tasks = Some(tasks),
       executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
-      killedTasksSummary = stage.killedTasksSummary)
+      killedTasksSummary = stage.killedTasksSummary,
+      resourceProfileId = stage.resourceProfileId)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
@@ -554,11 +562,9 @@ private[spark] object AppStatusStore {
    */
   def createLiveStore(
       conf: SparkConf,
-      resourceProfileManager: ResourceProfileManager,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    val listener = new AppStatusListener(store, conf, true, resourceProfileManager,
-      appStatusSource)
+    val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
 }
