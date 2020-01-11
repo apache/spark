@@ -99,14 +99,17 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("environment")
-  def environmentInfo(): ApplicationEnvironmentInfo = withUI { ui =>
+  def environmentInfo(): ApplicationEnvironmentWithResourceProfileInfo = withUI { ui =>
     val envInfo = ui.store.environmentInfo()
-    new v1.ApplicationEnvironmentInfo(
+    // TODO - should we make separate endpoint for ResourceProfiles?
+    val resourceProfileInfo = ui.store.resourceProfileInfo()
+    new v1.ApplicationEnvironmentWithResourceProfileInfo(
       envInfo.runtime,
       Utils.redact(ui.conf, envInfo.sparkProperties),
       Utils.redact(ui.conf, envInfo.hadoopProperties),
       Utils.redact(ui.conf, envInfo.systemProperties),
-      envInfo.classpathEntries)
+      envInfo.classpathEntries,
+      resourceProfileInfo)
   }
 
   @GET
