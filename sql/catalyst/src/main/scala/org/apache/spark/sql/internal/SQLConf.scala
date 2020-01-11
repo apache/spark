@@ -202,8 +202,7 @@ object SQLConf {
         "The non-default behavior is considered as a bug, see SPARK-22395. " +
         "The config was deprecated since Spark 2.3."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
-        "It was deprecated since Spark 2.3. " +
-        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it.")
+        "The config was deprecated since Spark 2.3.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
