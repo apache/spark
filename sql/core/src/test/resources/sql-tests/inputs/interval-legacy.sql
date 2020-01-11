@@ -1,0 +1,2 @@
+--SET spark.sql.legacy.useLegacyIntervalType = true
+--IMPORT interval.sql

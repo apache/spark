@@ -11,9 +11,10 @@ select
   null > interval '-1 day',
   interval '1 year' > interval '11 month'
 -- !query 0 schema
-struct<(INTERVAL '1 days' > INTERVAL '23 hours'):boolean,(INTERVAL '-1 days' >= INTERVAL '-25 hours'):boolean,(INTERVAL '-1 days' > CAST(NULL AS INTERVAL DAY TO SECOND)):boolean,(INTERVAL '-1 days' > CAST(NULL AS INTERVAL DAY TO SECOND)):boolean,(CAST(NULL AS INTERVAL DAY TO SECOND) > INTERVAL '-1 days'):boolean,(INTERVAL '1 years' > INTERVAL '11 months'):boolean>
+struct<>
 -- !query 0 output
-true	true	NULL	NULL	NULL	true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1 days' > INTERVAL '23 hours')' due to data type mismatch: GreaterThan does not support ordering on type interval; line 2 pos 2
 
 
 -- !query 1
@@ -22,9 +23,10 @@ select
   interval '-1 day' <= interval '-23 hour',
   interval '1 year' < interval '13 month'
 -- !query 1 schema
-struct<(INTERVAL '1 minutes' < INTERVAL '1 hours'):boolean,(INTERVAL '-1 days' <= INTERVAL '-23 hours'):boolean,(INTERVAL '1 years' < INTERVAL '1 years 1 months'):boolean>
+struct<>
 -- !query 1 output
-true	true	true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1 minutes' < INTERVAL '1 hours')' due to data type mismatch: LessThan does not support ordering on type interval; line 2 pos 2
 
 
 -- !query 2
@@ -37,9 +39,10 @@ select
   interval '1 year' <=> null,
   null <=> interval '1 minutes'
 -- !query 2 schema
-struct<(INTERVAL '1 years 2 months' = INTERVAL '1 years 2 months'):boolean,(INTERVAL '1 days' = INTERVAL '24 hours'):boolean,(INTERVAL '1 minutes' = INTERVAL '1 minutes'):boolean,(INTERVAL '1 years' = CAST(NULL AS INTERVAL YEAR TO MONTH)):boolean,(CAST(NULL AS INTERVAL DAY TO SECOND) = INTERVAL '-1 days'):boolean,(INTERVAL '1 years' <=> CAST(NULL AS INTERVAL YEAR TO MONTH)):boolean,(CAST(NULL AS INTERVAL DAY TO SECOND) <=> INTERVAL '1 minutes'):boolean>
+struct<>
 -- !query 2 output
-true	true	true	NULL	NULL	false	false
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1 years 2 months' = INTERVAL '1 years 2 months')' due to data type mismatch: EqualTo does not support ordering on type interval; line 2 pos 2
 
 
 -- !query 3
@@ -48,7 +51,7 @@ select interval '1 year' = interval '360 days'
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1 years' = INTERVAL '360 days')' due to data type mismatch: differing types in '(INTERVAL '1 years' = INTERVAL '360 days')' (interval year to month and interval day to second).; line 1 pos 7
+cannot resolve '(INTERVAL '1 years' = INTERVAL '360 days')' due to data type mismatch: EqualTo does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 4
@@ -57,59 +60,61 @@ select interval '1 month' = interval '30 days'
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1 months' = INTERVAL '30 days')' due to data type mismatch: differing types in '(INTERVAL '1 months' = INTERVAL '30 days')' (interval year to month and interval day to second).; line 1 pos 7
+cannot resolve '(INTERVAL '1 months' = INTERVAL '30 days')' due to data type mismatch: EqualTo does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 5
 select v from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v) order by v
 -- !query 5 schema
-struct<v:interval day to second>
+struct<>
 -- !query 5 output
-1 seconds
-3 seconds
-4 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 't.`v` ASC NULLS FIRST' due to data type mismatch: cannot sort data type interval; line 1 pos 106
 
 
 -- !query 6
 select v from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v) order by v
 -- !query 6 schema
-struct<v:interval year to month>
+struct<>
 -- !query 6 output
-1 years
-1 years 6 months
-4 years
+org.apache.spark.sql.AnalysisException
+cannot resolve 't.`v` ASC NULLS FIRST' due to data type mismatch: cannot sort data type interval; line 1 pos 99
 
 
 -- !query 7
 select max(v) from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v)
 -- !query 7 schema
-struct<max(v):interval day to second>
+struct<>
 -- !query 7 output
-4 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'max(t.`v`)' due to data type mismatch: function max does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 8
 select max(v) from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v)
 -- !query 8 schema
-struct<max(v):interval year to month>
+struct<>
 -- !query 8 output
-4 years
+org.apache.spark.sql.AnalysisException
+cannot resolve 'max(t.`v`)' due to data type mismatch: function max does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 9
 select min(v) from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v)
 -- !query 9 schema
-struct<min(v):interval day to second>
+struct<>
 -- !query 9 output
-1 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'min(t.`v`)' due to data type mismatch: function min does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 10
 select min(v) from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v)
 -- !query 10 schema
-struct<min(v):interval year to month>
+struct<>
 -- !query 10 output
-1 years
+org.apache.spark.sql.AnalysisException
+cannot resolve 'min(t.`v`)' due to data type mismatch: function min does not support ordering on type interval; line 1 pos 7
 
 
 -- !query 11
@@ -123,17 +128,19 @@ struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.00100
 -- !query 12
 select interval 2 weeks 3 microseconds * 1.5
 -- !query 12 schema
-struct<multiply_interval(INTERVAL '14 days 0.000003 seconds', CAST(1.5 AS DOUBLE)):interval day to second>
+struct<>
 -- !query 12 output
-21 days 0.000005 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '14 days 0.000003 seconds' * 1.5BD)' due to data type mismatch: differing types in '(INTERVAL '14 days 0.000003 seconds' * 1.5BD)' (interval and decimal(2,1)).; line 1 pos 7
 
 
 -- !query 13
 select interval 2 year / 2
 -- !query 13 schema
-struct<divide_interval(INTERVAL '2 years', CAST(2 AS DOUBLE)):interval year to month>
+struct<>
 -- !query 13 output
-1 years
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2 years' / 2)' due to data type mismatch: differing types in '(INTERVAL '2 years' / 2)' (interval and int).; line 1 pos 7
 
 
 -- !query 14
@@ -149,38 +156,41 @@ select interval '2 seconds' / 0
 -- !query 15 schema
 struct<>
 -- !query 15 output
-java.lang.ArithmeticException
-divide by zero
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2 seconds' / 0)' due to data type mismatch: differing types in '(INTERVAL '2 seconds' / 0)' (interval and int).; line 1 pos 7
 
 
 -- !query 16
 select interval '2 seconds' / null
 -- !query 16 schema
-struct<divide_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval day to second>
+struct<>
 -- !query 16 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2 seconds' / NULL)' due to data type mismatch: differing types in '(INTERVAL '2 seconds' / NULL)' (interval and null).; line 1 pos 7
 
 
 -- !query 17
 select interval '2 seconds' * null
 -- !query 17 schema
-struct<multiply_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval day to second>
+struct<>
 -- !query 17 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2 seconds' * NULL)' due to data type mismatch: differing types in '(INTERVAL '2 seconds' * NULL)' (interval and null).; line 1 pos 7
 
 
 -- !query 18
 select null * interval '2 seconds'
 -- !query 18 schema
-struct<multiply_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval day to second>
+struct<>
 -- !query 18 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve '(NULL * INTERVAL '2 seconds')' due to data type mismatch: differing types in '(NULL * INTERVAL '2 seconds')' (null and interval).; line 1 pos 7
 
 
 -- !query 19
 select -interval '-1 month'
 -- !query 19 schema
-struct<(- INTERVAL '-1 months'):interval year to month>
+struct<(- INTERVAL '-1 months'):interval>
 -- !query 19 output
 1 months
 
@@ -188,7 +198,7 @@ struct<(- INTERVAL '-1 months'):interval year to month>
 -- !query 20
 select -interval 1 day -1 second
 -- !query 20 schema
-struct<(- INTERVAL '1 days -1 seconds'):interval day to second>
+struct<(- INTERVAL '1 days -1 seconds'):interval>
 -- !query 20 output
 -1 days 1 seconds
 
@@ -196,7 +206,7 @@ struct<(- INTERVAL '1 days -1 seconds'):interval day to second>
 -- !query 21
 select +interval '1 day -1 second'
 -- !query 21 schema
-struct<(+ INTERVAL '1 days -1 seconds'):interval day to second>
+struct<(+ INTERVAL '1 days -1 seconds'):interval>
 -- !query 21 output
 1 days -1 seconds
 
@@ -204,7 +214,7 @@ struct<(+ INTERVAL '1 days -1 seconds'):interval day to second>
 -- !query 22
 select +interval -1 month
 -- !query 22 schema
-struct<(+ INTERVAL '-1 months'):interval year to month>
+struct<(+ INTERVAL '-1 months'):interval>
 -- !query 22 output
 -1 months
 
@@ -340,7 +350,7 @@ NULL
 -- !query 39
 select interval 13.123456789 seconds, interval -13.123456789 second
 -- !query 39 schema
-struct<INTERVAL '13.123456 seconds':interval day to second,INTERVAL '-13.123456 seconds':interval day to second>
+struct<INTERVAL '13.123456 seconds':interval,INTERVAL '-13.123456 seconds':interval>
 -- !query 39 output
 13.123456 seconds	-13.123456 seconds
 
@@ -348,19 +358,17 @@ struct<INTERVAL '13.123456 seconds':interval day to second,INTERVAL '-13.123456 
 -- !query 40
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond
 -- !query 40 schema
-struct<>
+struct<INTERVAL '1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds':interval>
 -- !query 40 output
-java.lang.IllegalArgumentException
-Can not use year-month and day-time units together
+1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
 
 
 -- !query 41
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second
 -- !query 41 schema
-struct<>
+struct<INTERVAL '32 years 1 months -100 days 41 hours 24 minutes 59.889987 seconds':interval>
 -- !query 41 output
-java.lang.IllegalArgumentException
-Can not use year-month and day-time units together
+32 years 1 months -100 days 41 hours 24 minutes 59.889987 seconds
 
 
 -- !query 42
@@ -438,7 +446,7 @@ struct<INTERVAL '40 minutes 32 seconds':interval day to second>
 -- !query 51
 select interval 30 day day
 -- !query 51 schema
-struct<day:interval day to second>
+struct<day:interval>
 -- !query 51 output
 30 days
 
@@ -544,7 +552,7 @@ select interval 10 nanoseconds
 -- !query 59
 select map(1, interval 1 day, 2, interval 3 week)
 -- !query 59 schema
-struct<map(1, INTERVAL '1 days', 2, INTERVAL '21 days'):map<int,interval day to second>>
+struct<map(1, INTERVAL '1 days', 2, INTERVAL '21 days'):map<int,interval>>
 -- !query 59 output
 {1:1 days,2:21 days}
 
@@ -552,29 +560,17 @@ struct<map(1, INTERVAL '1 days', 2, INTERVAL '21 days'):map<int,interval day to 
 -- !query 60
 select interval 'interval 3 year 1 hour'
 -- !query 60 schema
-struct<>
+struct<INTERVAL '3 years 1 hours':interval>
 -- !query 60 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Can not use year-month and day-time units together(line 1, pos 7)
-
-== SQL ==
-select interval 'interval 3 year 1 hour'
--------^^^
+3 years 1 hours
 
 
 -- !query 61
 select interval '3 year 1 hour'
 -- !query 61 schema
-struct<>
+struct<INTERVAL '3 years 1 hours':interval>
 -- !query 61 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Can not use year-month and day-time units together(line 1, pos 7)
-
-== SQL ==
-select interval '3 year 1 hour'
--------^^^
+3 years 1 hours
 
 
 -- !query 62
@@ -780,41 +776,46 @@ select sum(cast(null as interval year to second))
 -- !query 77
 select sum(cast(v as interval day to second)) from VALUES (interval '1 seconds') t(v) where 1=0
 -- !query 77 schema
-struct<sum(CAST(v AS INTERVAL DAY TO SECOND)):interval day to second>
+struct<>
 -- !query 77 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(t.`v` AS INTERVAL DAY TO SECOND)' due to data type mismatch: cannot cast interval to interval day to second; line 1 pos 11
 
 
 -- !query 78
 select sum(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v)
 -- !query 78 schema
-struct<sum(v):interval day to second>
+struct<>
 -- !query 78 output
-3 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 79
 select sum(v) from VALUES (interval '-1 seconds'), (interval '2 seconds'), (null) t(v)
 -- !query 79 schema
-struct<sum(v):interval day to second>
+struct<>
 -- !query 79 output
-1 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 80
 select sum(v) from VALUES (interval '-1 seconds'), (interval '-2 seconds'), (null) t(v)
 -- !query 80 schema
-struct<sum(v):interval day to second>
+struct<>
 -- !query 80 output
--3 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 81
 select sum(v) from VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) t(v)
 -- !query 81 schema
-struct<sum(v):interval day to second>
+struct<>
 -- !query 81 output
--7 days 2 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 82
@@ -845,9 +846,10 @@ select
 from VALUES (1, interval '-1 weeks'), (2, interval '2 seconds'), (3, null), (1, interval '5 days') t(i, v)
 having sv is not null
 -- !query 83 schema
-struct<sv:interval day to second>
+struct<>
 -- !query 83 output
--2 days 2 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 2 pos 4
 
 
 -- !query 84
@@ -856,60 +858,64 @@ SELECT
     sum(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 FROM VALUES(1, interval '1 seconds'), (1, interval '2 seconds'), (2, NULL), (2, NULL) t(i,v)
 -- !query 84 schema
-struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):interval day to second>
+struct<>
 -- !query 84 output
-1	2 seconds
-1	3 seconds
-2	NULL
-2	NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sum(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 3 pos 4
 
 
 -- !query 85
 select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v) where v is null
 -- !query 85 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 85 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 86
 select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v) where 1=0
 -- !query 86 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 86 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 87
 select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v)
 -- !query 87 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 87 output
-1.5 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 88
 select avg(v) from VALUES (interval '-1 seconds'), (interval '2 seconds'), (null) t(v)
 -- !query 88 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 88 output
-0.5 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 89
 select avg(v) from VALUES (interval '-1 seconds'), (interval '-2 seconds'), (null) t(v)
 -- !query 89 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 89 output
--1.5 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 90
 select avg(v) from VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) t(v)
 -- !query 90 schema
-struct<avg(v):interval day to second>
+struct<>
 -- !query 90 output
--3 days -11 hours -59 minutes -59 seconds
+org.apache.spark.sql.AnalysisException
+cannot resolve 'avg(t.`v`)' due to data type mismatch: argument 1 requires (numeric or interval year to month or interval day to second) type, however, 't.`v`' is of interval type.; line 1 pos 7
 
 
 -- !query 91
@@ -1051,7 +1057,7 @@ struct<(INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' + INTERVAL '10 
 -- !query 101
 select interval '\t interval 1 day'
 -- !query 101 schema
-struct<INTERVAL '1 days':interval day to second>
+struct<INTERVAL '1 days':interval>
 -- !query 101 output
 1 days
 
@@ -1059,7 +1065,7 @@ struct<INTERVAL '1 days':interval day to second>
 -- !query 102
 select interval 'interval \t 1\tday'
 -- !query 102 schema
-struct<INTERVAL '1 days':interval day to second>
+struct<INTERVAL '1 days':interval>
 -- !query 102 output
 1 days
 
@@ -1067,7 +1073,7 @@ struct<INTERVAL '1 days':interval day to second>
 -- !query 103
 select interval 'interval\t1\tday'
 -- !query 103 schema
-struct<INTERVAL '1 days':interval day to second>
+struct<INTERVAL '1 days':interval>
 -- !query 103 output
 1 days
 
@@ -1075,7 +1081,7 @@ struct<INTERVAL '1 days':interval day to second>
 -- !query 104
 select interval '1\t' day
 -- !query 104 schema
-struct<INTERVAL '1 days':interval day to second>
+struct<INTERVAL '1 days':interval>
 -- !query 104 output
 1 days
 
@@ -1083,7 +1089,7 @@ struct<INTERVAL '1 days':interval day to second>
 -- !query 105
 select interval '1 ' day
 -- !query 105 schema
-struct<INTERVAL '1 days':interval day to second>
+struct<INTERVAL '1 days':interval>
 -- !query 105 output
 1 days
 
@@ -1091,7 +1097,7 @@ struct<INTERVAL '1 days':interval day to second>
 -- !query 106
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b)
 -- !query 106 schema
-struct<(- a):interval year to month>
+struct<(- a):interval>
 -- !query 106 output
 -178956970 years -8 months
 
@@ -1099,7 +1105,7 @@ struct<(- a):interval year to month>
 -- !query 107
 select a - b from values (interval '-2147483648 months', interval '2147483647 months') t(a, b)
 -- !query 107 schema
-struct<(a - b):interval year to month>
+struct<(a - b):interval>
 -- !query 107 output
 1 months
 
@@ -1107,7 +1113,7 @@ struct<(a - b):interval year to month>
 -- !query 108
 select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b)
 -- !query 108 schema
-struct<(b + INTERVAL '1 months'):interval year to month>
+struct<(b + INTERVAL '1 months'):interval>
 -- !query 108 output
 -178956970 years -8 months
 
@@ -1117,8 +1123,8 @@ select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 
 -- !query 109 schema
 struct<>
 -- !query 109 output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.sql.AnalysisException
+cannot resolve '(t.`a` * 1.1BD)' due to data type mismatch: differing types in '(t.`a` * 1.1BD)' (interval and decimal(2,1)).; line 1 pos 7
 
 
 -- !query 110
@@ -1126,5 +1132,5 @@ select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 
 -- !query 110 schema
 struct<>
 -- !query 110 output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.sql.AnalysisException
+cannot resolve '(t.`a` / 0.5BD)' due to data type mismatch: differing types in '(t.`a` / 0.5BD)' (interval and decimal(1,1)).; line 1 pos 7

@@ -33,7 +33,8 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private lazy val keyToIndex = keyType match {
     // Binary type data is `byte[]`, which can't use `==` to check equality.
-    case _: AtomicType | _: CalendarIntervalType if !keyType.isInstanceOf[BinaryType] =>
+    case _: AtomicType | _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType
+        if !keyType.isInstanceOf[BinaryType] =>
       new java.util.HashMap[Any, Int]()
     case _ =>
       // for complex types, use interpreted ordering to be able to compare unsafe data with safe

@@ -108,6 +108,11 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Array[Byte]](ordinal)
       case CalendarIntervalType =>
         to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
+      case YearMonthIntervalType =>
+        to += HiveResult.toHiveString(
+          (from.getAs[CalendarInterval](ordinal), YearMonthIntervalType))
+      case DayTimeIntervalType =>
+        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), DayTimeIntervalType))
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
         val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
@@ -380,7 +385,8 @@ object SparkExecuteStatementOperation {
     val schema = structType.map { field =>
       val attrTypeString = field.dataType match {
         case NullType => "void"
-        case CalendarIntervalType => StringType.catalogString
+        case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+          StringType.catalogString
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))

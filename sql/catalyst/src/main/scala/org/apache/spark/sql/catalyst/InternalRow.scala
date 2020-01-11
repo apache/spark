@@ -138,7 +138,8 @@ object InternalRow {
       case DoubleType => (input, ordinal) => input.getDouble(ordinal)
       case StringType => (input, ordinal) => input.getUTF8String(ordinal)
       case BinaryType => (input, ordinal) => input.getBinary(ordinal)
-      case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+        (input, ordinal) => input.getInterval(ordinal)
       case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
       case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
       case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
@@ -171,7 +172,7 @@ object InternalRow {
     case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
     case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
-    case CalendarIntervalType =>
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)

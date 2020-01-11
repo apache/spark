@@ -92,7 +92,7 @@ case class WindowSpecDefinition(
 
   private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
     case (DateType, IntegerType) => true
-    case (TimestampType, CalendarIntervalType) => true
+    case (TimestampType, CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) => true
     case (a, b) => a == b
   }
 }
@@ -134,7 +134,7 @@ case object RowFrame extends FrameType {
  * of the current row.
  */
 case object RangeFrame extends FrameType {
-  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
+  override def inputType: AbstractDataType = TypeCollection.NumericAndAllInterval
   override def sql: String = "RANGE"
 }
 
@@ -246,7 +246,8 @@ case class SpecifiedWindowFrame(
   // that the both expressions have the same data type.
   // Since CalendarIntervalType is not comparable, we only compare expressions that are AtomicType.
   private def isGreaterThan(l: Expression, r: Expression): Boolean = l.dataType match {
-    case _: AtomicType => GreaterThan(l, r).eval().asInstanceOf[Boolean]
+    case _: AtomicType | YearMonthIntervalType | DayTimeIntervalType =>
+      GreaterThan(l, r).eval().asInstanceOf[Boolean]
     case _ => false
   }
 

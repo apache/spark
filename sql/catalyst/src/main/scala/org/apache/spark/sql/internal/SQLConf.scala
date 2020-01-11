@@ -2145,6 +2145,15 @@ object SQLConf {
         "silently removed.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_USE_CALENDAR_INTERVAL_TYPE =
+    buildConf("spark.sql.legacy.useLegacyIntervalType")
+      .internal()
+      .doc("When true, interval literals can mix use year-month and day-time units together, " +
+        "e.g. `interval 1 year 2 month 3 day` is a CalendarIntervalType interval, otherwise " +
+        "it's illegal.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2647,6 +2656,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def useLegacyIntervalType: Boolean = getConf(SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE)
 
   /** ********************** SQLConf functionality methods ************ */
 

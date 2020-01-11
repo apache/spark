@@ -2383,7 +2383,10 @@ case class Sequence(
       startType.sameType(stop.dataType) &&
         (startType match {
           case TimestampType | DateType =>
-            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType)
+            stepOpt.isEmpty ||
+              stepType == CalendarIntervalType ||
+              stepType == YearMonthIntervalType ||
+              stepType == DayTimeIntervalType
           case _: IntegralType =>
             stepOpt.isEmpty || stepType.sameType(startType)
           case _ => false
@@ -2397,12 +2400,21 @@ case class Sequence(
     }
   }
 
-  def coercibleChildren: Seq[Expression] = children.filter(_.dataType != CalendarIntervalType)
+  def coercibleChildren: Seq[Expression] = children.filter { c =>
+    c.dataType != CalendarIntervalType ||
+      c.dataType != YearMonthIntervalType ||
+      c.dataType != DayTimeIntervalType
+  }
 
   def castChildrenTo(widerType: DataType): Expression = Sequence(
     Cast(start, widerType),
     Cast(stop, widerType),
-    stepOpt.map(step => if (step.dataType != CalendarIntervalType) Cast(step, widerType) else step),
+    stepOpt.map { step =>
+      step.dataType match {
+        case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => step
+        case _ => Cast(step, widerType)
+      }
+    },
     timeZoneId)
 
   @transient private lazy val impl: SequenceImpl = dataType.elementType match {

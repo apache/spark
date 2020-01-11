@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
@@ -114,6 +114,24 @@ object DeserializerBuildHelper {
       DateTimeUtils.getClass,
       ObjectType(classOf[java.sql.Timestamp]),
       "toJavaTimestamp",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForPeriod(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Period]),
+      "toPeriod",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForDuration(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Duration]),
+      "toDuration",
       path :: Nil,
       returnNullable = false)
   }

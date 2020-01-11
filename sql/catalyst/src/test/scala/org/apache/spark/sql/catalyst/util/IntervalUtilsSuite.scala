@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, DayTimeIntervalType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -32,17 +34,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
     assert(stringToInterval(UTF8String.fromString(input)) === expected)
     assert(safeStringToInterval(UTF8String.fromString(input)) === expected)
-  }
-
-  private def checkFromStringWithFunc(
-      input: String,
-      months: Int,
-      days: Int,
-      us: Long,
-      func: CalendarInterval => CalendarInterval): Unit = {
-    val expected = new CalendarInterval(months, days, us)
-    assert(func(stringToInterval(UTF8String.fromString(input))) === expected)
-    assert(func(safeStringToInterval(UTF8String.fromString(input))) === expected)
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
@@ -459,5 +450,41 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     intercept[ArithmeticException](multiplyExact(CalendarInterval.MAX_VALUE, 2))
     intercept[ArithmeticException](divideExact(CalendarInterval.MAX_VALUE, 0.5))
+  }
+
+  test("get interval type") {
+    def checkType(intervalStr: String,
+        typ: DataType = CalendarIntervalType,
+        legacy: Boolean = true): Unit = {
+      val interval = safeStringToInterval(UTF8String.fromString(intervalStr))
+      if (typ == null) {
+        intercept[IllegalArgumentException](getType(interval, legacy))
+      } else {
+        assert(getType(interval, legacy) === typ)
+      }
+    }
+    checkType("1 day")
+    checkType("1 year")
+    checkType("1 year 1 day")
+    checkType("1 day", DayTimeIntervalType, false)
+    checkType("1 year", YearMonthIntervalType, false)
+    checkType("1 year 1 day", null, false)
+    // corner cases
+    checkType("0 year 0 month", DayTimeIntervalType, false)
+    checkType("0 month 0 hour", DayTimeIntervalType, false)
+    checkType("0 month 1 hour", DayTimeIntervalType, false)
+    checkType("0 month 1 hour -60 minute", DayTimeIntervalType, false)
+  }
+
+  test("toPeriod") {
+    assert(toPeriod(CalendarInterval.ZERO) === Period.ZERO)
+    assert(toPeriod(new CalendarInterval(1, 0, 0)) === Period.ofMonths(1))
+    intercept[IllegalArgumentException](toPeriod(new CalendarInterval(1, 1, 0)))
+  }
+
+  test("toDuration") {
+    assert(toDuration(CalendarInterval.ZERO) === Duration.ZERO)
+    assert(toDuration(new CalendarInterval(0, 1, 0)) === Duration.ofDays(1))
+    intercept[IllegalArgumentException](toDuration(new CalendarInterval(1, 1, 0)))
   }
 }

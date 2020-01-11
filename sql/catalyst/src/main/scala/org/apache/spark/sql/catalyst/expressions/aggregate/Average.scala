@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
   examples = """
@@ -30,17 +31,18 @@ import org.apache.spark.sql.types._
        2.0
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
-      > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
+      > SELECT _FUNC_(col) FROM VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) tab(col);
        -3 days -11 hours -59 minutes -59 seconds
   """,
   since = "1.0.0")
+// scalastyle:on line.size.limit
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndNewInterval)
 
   override def nullable: Boolean = true
 
@@ -50,14 +52,14 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
-    case interval: CalendarIntervalType => interval
+    case ym: YearMonthIntervalType => ym
+    case dt: DayTimeIntervalType => dt
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
-    case interval: CalendarIntervalType => interval
-    case _ => DoubleType
+    case _ => resultType
   }
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
@@ -79,7 +81,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
-    case CalendarIntervalType =>
+    case YearMonthIntervalType | DayTimeIntervalType =>
       val newCount = If(EqualTo(count, Literal(0L)), Literal(null, LongType), count)
       DivideInterval(sum.cast(resultType), newCount.cast(DoubleType))
     case _ =>

@@ -145,4 +145,25 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
    */
   public static CalendarInterval MAX_VALUE =
     new CalendarInterval(Integer.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
+
+  /**
+   * A constant holding the zero value an {@code CalendarInterval}.
+   */
+  public static CalendarInterval ZERO = new CalendarInterval(0, 0, 0L);
+
+  public static CalendarInterval ofMonths(int months) {
+    if (months == 0) {
+      return ZERO;
+    } else {
+      return new CalendarInterval(months, 0, 0L);
+    }
+  }
+
+  public static CalendarInterval ofDayTime(int days, long microseconds) {
+    if (days == 0 && microseconds == 0) {
+      return ZERO;
+    } else {
+      return new CalendarInterval(0, days, microseconds);
+    }
+  }
 }

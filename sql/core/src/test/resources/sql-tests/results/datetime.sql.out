@@ -150,25 +150,28 @@ struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) - INTERVAL '2 seconds' AS DATE)
 -- !query 17
 select '2011-11-11' - interval '2' day
 -- !query 17 schema
-struct<CAST(CAST(2011-11-11 AS TIMESTAMP) - INTERVAL '2 days' AS STRING):string>
+struct<>
 -- !query 17 output
-2011-11-09 00:00:00
+org.apache.spark.sql.AnalysisException
+cannot resolve '('2011-11-11' - INTERVAL '2 days')' due to data type mismatch: differing types in '('2011-11-11' - INTERVAL '2 days')' (string and interval day to second).; line 1 pos 7
 
 
 -- !query 18
 select '2011-11-11 11:11:11' - interval '2' second
 -- !query 18 schema
-struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
+struct<>
 -- !query 18 output
-2011-11-11 11:11:09
+org.apache.spark.sql.AnalysisException
+cannot resolve '('2011-11-11 11:11:11' - INTERVAL '2 seconds')' due to data type mismatch: differing types in '('2011-11-11 11:11:11' - INTERVAL '2 seconds')' (string and interval day to second).; line 1 pos 7
 
 
 -- !query 19
 select '1' - interval '2' second
 -- !query 19 schema
-struct<CAST(CAST(1 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
+struct<>
 -- !query 19 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve '('1' - INTERVAL '2 seconds')' due to data type mismatch: differing types in '('1' - INTERVAL '2 seconds')' (string and interval day to second).; line 1 pos 7
 
 
 -- !query 20
@@ -177,13 +180,13 @@ select 1 - interval '2' second
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 - INTERVAL '2 seconds'' due to data type mismatch: argument 1 requires timestamp type, however, '1' is of int type.; line 1 pos 7
+cannot resolve '(1 - INTERVAL '2 seconds')' due to data type mismatch: differing types in '(1 - INTERVAL '2 seconds')' (int and interval day to second).; line 1 pos 7
 
 
 -- !query 21
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query 21 schema
-struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval>
+struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query 21 output
 2078 hours 48 minutes 47.654322 seconds
 
@@ -191,7 +194,7 @@ struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP '2019-
 -- !query 22
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query 22 schema
-struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(DATE '2020-01-01' AS TIMESTAMP)):interval>
+struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(DATE '2020-01-01' AS TIMESTAMP)):interval day to second>
 -- !query 22 output
 -2078 hours -48 minutes -47.654322 seconds
 
@@ -199,7 +202,7 @@ struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(DATE '202
 -- !query 23
 select timestamp'2019-10-06 10:11:12.345678' - null
 -- !query 23 schema
-struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(NULL AS TIMESTAMP)):interval>
+struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(NULL AS TIMESTAMP)):interval day to second>
 -- !query 23 output
 NULL
 
@@ -207,7 +210,7 @@ NULL
 -- !query 24
 select null - timestamp'2019-10-06 10:11:12.345678'
 -- !query 24 schema
-struct<subtracttimestamps(CAST(NULL AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval>
+struct<subtracttimestamps(CAST(NULL AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query 24 output
 NULL
 
@@ -380,7 +383,7 @@ NULL
 -- !query 45
 select null - date '2019-10-06'
 -- !query 45 schema
-struct<subtractdates(CAST(NULL AS DATE), DATE '2019-10-06'):interval>
+struct<subtractdates(CAST(NULL AS DATE), DATE '2019-10-06'):interval day to second>
 -- !query 45 output
 NULL
 
@@ -388,6 +391,6 @@ NULL
 -- !query 46
 select date '2001-10-01' - date '2001-09-28'
 -- !query 46 schema
-struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval>
+struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval day to second>
 -- !query 46 output
 3 days

@@ -57,7 +57,18 @@ public class DataTypes {
   /**
    * Gets the CalendarIntervalType object.
    */
+  @Deprecated
   public static final DataType CalendarIntervalType = CalendarIntervalType$.MODULE$;
+
+  /**
+   * Gets the YearMonthIntervalType object.
+   */
+  public static final DataType YearMonthIntervalType = YearMonthIntervalType$.MODULE$;
+
+  /**
+   * Gets the DayTimeIntervalType object.
+   */
+  public static final DataType DayTimeIntervalType = DayTimeIntervalType$.MODULE$;
 
   /**
    * Gets the DoubleType object.

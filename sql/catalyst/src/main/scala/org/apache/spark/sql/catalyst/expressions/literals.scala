@@ -78,7 +78,8 @@ object Literal {
       val dataType = ArrayType(elementType)
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       Literal(convert(a), dataType)
-    case i: CalendarInterval => Literal(i, CalendarIntervalType)
+    case i: CalendarInterval =>
+      Literal(i, IntervalUtils.getType(i, SQLConf.get.useLegacyIntervalType))
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
@@ -162,7 +163,9 @@ object Literal {
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
-    case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
+    case i: CalendarIntervalType => Literal(CalendarInterval.ZERO, i)
+    case y: YearMonthIntervalType => Literal(CalendarInterval.ZERO, y)
+    case d: DayTimeIntervalType => Literal(CalendarInterval.ZERO, d)
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
@@ -184,6 +187,14 @@ object Literal {
       case DoubleType => v.isInstanceOf[Double]
       case _: DecimalType => v.isInstanceOf[Decimal]
       case CalendarIntervalType => v.isInstanceOf[CalendarInterval]
+      case YearMonthIntervalType => v match {
+        case i: CalendarInterval => IntervalUtils.isValidYearMonthInterval(i)
+        case _ => false
+      }
+      case DayTimeIntervalType => v match {
+        case i: CalendarInterval => IntervalUtils.isValidDayTimeInterval(i)
+        case _ => false
+      }
       case BinaryType => v.isInstanceOf[Array[Byte]]
       case StringType => v.isInstanceOf[UTF8String]
       case st: StructType =>
@@ -284,7 +295,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 
   Literal.validateLiteralValue(value, dataType)
 
@@ -408,8 +419,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"TIMESTAMP '${formatter.format(v)}'"
-    case (i: CalendarInterval, CalendarIntervalType) =>
+    case (i: CalendarInterval, CalendarIntervalType | DayTimeIntervalType) =>
       s"INTERVAL '${IntervalUtils.toMultiUnitsString(i)}'"
+    case (i: CalendarInterval, YearMonthIntervalType) =>
+      s"INTERVAL '${IntervalUtils.toYearMonthString(i)}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

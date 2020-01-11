@@ -108,6 +108,10 @@ object RowEncoder {
         createSerializerForSqlDate(inputObject)
       }
 
+    case YearMonthIntervalType => createSerializerForYearMonthInterval(inputObject)
+
+    case DayTimeIntervalType => createSerializerForDayTimeInterval(inputObject)
+
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
         Decimal.getClass,
@@ -226,6 +230,8 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
+    case YearMonthIntervalType => ObjectType(classOf[java.time.Period])
+    case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -280,6 +286,10 @@ object RowEncoder {
       } else {
         createDeserializerForSqlDate(input)
       }
+
+    case YearMonthIntervalType => createDeserializerForPeriod(input)
+
+    case DayTimeIntervalType => createDeserializerForDuration(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 

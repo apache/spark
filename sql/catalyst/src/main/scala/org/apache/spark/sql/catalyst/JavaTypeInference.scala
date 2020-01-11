@@ -246,6 +246,10 @@ object JavaTypeInference {
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
 
+      case c if c == classOf[java.time.Period] => createDeserializerForPeriod(path)
+
+      case c if c == classOf[java.time.Duration] => createDeserializerForDuration(path)
+
       case c if c == classOf[java.lang.String] =>
         createDeserializerForString(path, returnNullable = true)
 

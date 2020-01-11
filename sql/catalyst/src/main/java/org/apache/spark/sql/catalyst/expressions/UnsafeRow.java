@@ -104,7 +104,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   public static boolean isMutable(DataType dt) {
     return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType;
+      dt instanceof CalendarIntervalType ||
+      dt instanceof YearMonthIntervalType ||
+      dt instanceof DayTimeIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////

@@ -254,7 +254,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           // If literal of type calendar interval, then explicitly convert to millis
           // Convert other number like literal to doubles representing millis (by x1000)
           val castedLit = lit.dataType match {
-            case CalendarIntervalType =>
+            case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
               if (calendarInterval.months != 0) {
                 invalid = true

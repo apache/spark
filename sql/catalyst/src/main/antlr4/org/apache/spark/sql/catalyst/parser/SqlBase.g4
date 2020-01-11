@@ -862,6 +862,8 @@ dataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
+    | INTERVAL YEAR TO MONTH                                    #yearMonthIntervalType
+    | INTERVAL DAY TO SECOND                                    #dayTimeIntervalType
     ;
 
 qualifiedColTypeWithPositionList

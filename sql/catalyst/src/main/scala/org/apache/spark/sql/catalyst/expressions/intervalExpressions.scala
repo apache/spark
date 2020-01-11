@@ -119,8 +119,9 @@ abstract class IntervalNumOperation(
   override def left: Expression = interval
   override def right: Expression = num
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
-  override def dataType: DataType = CalendarIntervalType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(YearMonthIntervalType, DayTimeIntervalType), DoubleType)
+  override def dataType: DataType = left.dataType
 
   override def nullable: Boolean = true
 

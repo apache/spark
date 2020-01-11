@@ -39,7 +39,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
     case NullType => true
     case _: AtomicType => true
-    case _: CalendarIntervalType => true
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => true
     case t: StructType => t.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
@@ -111,7 +111,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
-          case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
+          case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+            s"$rowWriter.write($index, (CalendarInterval) null);"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 

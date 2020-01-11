@@ -158,7 +158,7 @@ object InterpretedUnsafeProjection {
       case DecimalType.Fixed(precision, scale) =>
         (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
 
-      case CalendarIntervalType =>
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
         (v, i) => writer.write(i, v.getInterval(i))
 
       case BinaryType =>
@@ -295,8 +295,8 @@ object InterpretedUnsafeProjection {
    * underlying data type.
    */
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case NullType | StringType | BinaryType | CalendarIntervalType |
-         _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
+    case NullType | StringType | BinaryType | CalendarIntervalType | YearMonthIntervalType |
+         DayTimeIntervalType | _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case _ => dataType.defaultSize
   }
 

@@ -1,50 +1,50 @@
 -- test for intervals
 
 -- greater than or equal
-select interval '1 day' > interval '23 hour';
-select interval '-1 day' >= interval '-23 hour';
-select interval '-1 day' > null;
-select null > interval '-1 day';
+select
+  interval '1 day' > interval '23 hour',
+  interval '-1 day' >= interval '-25 hour',
+  interval '-1 day' > null,
+  interval '-1 day' > null,
+  null > interval '-1 day',
+  interval '1 year' > interval '11 month';
 
 -- less than or equal
-select interval '1 minutes' < interval '1 hour';
-select interval '-1 day' <= interval '-23 hour';
+select
+  interval '1 minutes' < interval '1 hour',
+  interval '-1 day' <= interval '-23 hour',
+  interval '1 year' < interval '13 month';
 
 -- equal
+select
+  interval '1 year 2 month' = interval '14 month',
+  interval '1 day' = interval '24 hours',
+  interval '1 minutes' = interval '60 seconds',
+  interval '1 year' = null,
+  null = interval '-1 day',
+  interval '1 year' <=> null,
+  null <=> interval '1 minutes';
+
+-- can not compare between different interval types
 select interval '1 year' = interval '360 days';
-select interval '1 year 2 month' = interval '420 days';
-select interval '1 year' = interval '365 days';
 select interval '1 month' = interval '30 days';
-select interval '1 minutes' = interval '1 hour';
-select interval '1 minutes' = null;
-select null = interval '-1 day';
-
--- null safe equal
-select interval '1 minutes' <=> null;
-select null <=> interval '1 minutes';
-
--- complex interval representation
-select INTERVAL '9 years 1 months -1 weeks -4 days -10 hours -46 minutes' > interval '1 minutes';
 
 -- ordering
-select cast(v as interval) i from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v) order by i;
-
--- unlimited days
-select interval '1 month 120 days' > interval '2 month';
-select interval '1 month 30 days' = interval '2 month';
-
--- unlimited microseconds
-select interval '1 month 29 days 40 hours' > interval '2 month';
+select v from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v) order by v;
+select v from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v) order by v;
 
 -- max
-select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
+select max(v) from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v);
+select max(v) from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v);
 
 -- min
-select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
+select min(v) from VALUES (interval '1 seconds'), (interval '4 seconds'), (interval '3 seconds') t(v);
+select min(v) from VALUES (interval '1 year'), (interval '4 year'), (interval '18 month') t(v);
 
 -- multiply and divide an interval by a number
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
-select interval 4 month 2 weeks 3 microseconds * 1.5;
+select interval 2 weeks 3 microseconds * 1.5;
+select interval 2 year / 2;
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;
 
 -- interval operation with null and zero case
@@ -54,10 +54,10 @@ select interval '2 seconds' * null;
 select null * interval '2 seconds';
 
 -- interval with a positive/negative sign
-select -interval '-1 month 1 day -1 second';
-select -interval -1 month 1 day -1 second;
-select +interval '-1 month 1 day -1 second';
-select +interval -1 month 1 day -1 second;
+select -interval '-1 month';
+select -interval 1 day -1 second;
+select +interval '1 day -1 second';
+select +interval -1 month;
 
 -- make intervals
 select make_interval(1);
@@ -69,13 +69,15 @@ select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
 
 -- cast string to intervals
-select cast('1 second' as interval);
-select cast('+1 second' as interval);
-select cast('-1 second' as interval);
-select cast('+     1 second' as interval);
-select cast('-     1 second' as interval);
-select cast('- -1 second' as interval);
-select cast('- +1 second' as interval);
+select cast('1 year' as interval year to month);
+select cast('1 year' as interval day to second);
+select cast('1 second' as interval day to second);
+select cast('+1 second' as interval day to second);
+select cast('-1 second' as interval day to second);
+select cast('+     1 second' as interval day to second);
+select cast('-     1 second' as interval day to second);
+select cast('- -1 second' as interval day to second);
+select cast('- +1 second' as interval day to second);
 
 -- interval literal
 select interval 13.123456789 seconds, interval -13.123456789 second;
@@ -128,66 +130,66 @@ select interval 30 day day day;
 
 -- sum interval values
 -- null
-select sum(cast(null as interval));
+select sum(cast(null as interval year to second));
 
 -- empty set
-select sum(cast(v as interval)) from VALUES ('1 seconds') t(v) where 1=0;
+select sum(cast(v as interval day to second)) from VALUES (interval '1 seconds') t(v) where 1=0;
 
 -- basic interval sum
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
+select sum(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v);
+select sum(v) from VALUES (interval '-1 seconds'), (interval '2 seconds'), (null) t(v);
+select sum(v) from VALUES (interval '-1 seconds'), (interval '-2 seconds'), (null) t(v);
+select sum(v) from VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) t(v);
 
 -- group by
 select
     i,
-    sum(cast(v as interval))
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
+    sum(v)
+from VALUES (interval 1, '-1 weeks'), (2, interval '2 seconds'), (3, null), (1, interval '5 days') t(i, v)
 group by i;
 
 -- having
 select
-    sum(cast(v as interval)) as sv
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
+    sum(v) as sv
+from VALUES (1, interval '-1 weeks'), (2, interval '2 seconds'), (3, null), (1, interval '5 days') t(i, v)
 having sv is not null;
 
 -- window
 SELECT
     i,
-    sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-FROM VALUES(1, '1 seconds'), (1, '2 seconds'), (2, NULL), (2, NULL) t(i,v);
+    sum(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM VALUES(1, interval '1 seconds'), (1, interval '2 seconds'), (2, NULL), (2, NULL) t(i,v);
 
 -- average with interval type
 -- null
-select avg(cast(v as interval)) from VALUES (null) t(v);
+select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v) where v is null;
 
 -- empty set
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
+select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v) where 1=0;
 
 -- basic interval avg
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
+select avg(v) from VALUES (interval '1 seconds'), (interval '2 seconds'), (null) t(v);
+select avg(v) from VALUES (interval '-1 seconds'), (interval '2 seconds'), (null) t(v);
+select avg(v) from VALUES (interval '-1 seconds'), (interval '-2 seconds'), (null) t(v);
+select avg(v) from VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) t(v);
 
 -- group by
 select
     i,
-    avg(cast(v as interval))
+    avg(v)
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
 group by i;
 
 -- having
 select
-    avg(cast(v as interval)) as sv
+    avg(v) as sv
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
 having sv is not null;
 
 -- window
 SELECT
     i,
-    avg(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+    avg(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 FROM VALUES (1,'1 seconds'), (1,'2 seconds'), (2,NULL), (2,NULL) t(i,v);
 
 -- Interval year-month arithmetic

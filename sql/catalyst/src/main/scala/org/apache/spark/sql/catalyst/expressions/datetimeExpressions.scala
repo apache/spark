@@ -1109,7 +1109,8 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType,
+    TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
@@ -1224,7 +1225,8 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def toString: String = s"$left - $right"
   override def sql: String = s"${left.sql} - ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType,
+    TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
@@ -2172,7 +2174,7 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
   override def left: Expression = endTimestamp
   override def right: Expression = startTimestamp
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType = DayTimeIntervalType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
     new CalendarInterval(0, 0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
@@ -2191,7 +2193,7 @@ case class SubtractDates(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType = DayTimeIntervalType
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
     DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])

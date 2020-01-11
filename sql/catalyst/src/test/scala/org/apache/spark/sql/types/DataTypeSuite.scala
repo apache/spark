@@ -248,6 +248,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
   checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
+  checkDataTypeFromJson(YearMonthIntervalType)
+  checkDataTypeFromDDL(YearMonthIntervalType)
+
+  checkDataTypeFromJson(DayTimeIntervalType)
+  checkDataTypeFromDDL(DayTimeIntervalType)
+
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
@@ -309,6 +315,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 24)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
   checkDefaultSize(structType, 20)
+  checkDefaultSize(YearMonthIntervalType, 4)
+  checkDefaultSize(DayTimeIntervalType, 12)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -421,6 +429,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkCatalogString(ArrayType(createStruct(40)))
   checkCatalogString(MapType(IntegerType, StringType))
   checkCatalogString(MapType(IntegerType, createStruct(40)))
+  checkCatalogString(YearMonthIntervalType)
+  checkCatalogString(DayTimeIntervalType)
 
   def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
     val testName = s"equalsStructurally: (from: $from, to: $to)"

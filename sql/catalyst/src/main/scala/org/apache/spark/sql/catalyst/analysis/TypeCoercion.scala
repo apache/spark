@@ -409,10 +409,14 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType =>
+          if right.dataType != CalendarIntervalType &&
+            right.dataType != YearMonthIntervalType &&
+            right.dataType != DayTimeIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType =>
+          if right.dataType != CalendarIntervalType &&
+            right.dataType != YearMonthIntervalType &&
+            right.dataType != DayTimeIntervalType =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp

@@ -605,7 +605,8 @@ class CodegenContext extends Logging {
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
-    case CalendarIntervalType => s"$c1.equals($c2)"
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
@@ -630,7 +631,8 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
-    case CalendarIntervalType => s"$c1.compareTo($c2)"
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1510,7 +1512,8 @@ object CodeGenerator extends Logging {
       case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
       case StringType => s"$input.getUTF8String($ordinal)"
       case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+        s"$input.getInterval($ordinal)"
       case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
       case _: ArrayType => s"$input.getArray($ordinal)"
       case _: MapType => s"$input.getMap($ordinal)"
@@ -1580,7 +1583,8 @@ object CodeGenerator extends Logging {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-      case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+        s"$row.setInterval($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
@@ -1604,10 +1608,12 @@ object CodeGenerator extends Logging {
       nullable: Boolean,
       isVectorized: Boolean = false): String = {
     if (nullable) {
-      // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
+      // Can't call setNullAt on DecimalType/IntervalTypes, because we need to keep the
       // offset
       if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
-        dataType.isInstanceOf[CalendarIntervalType])) {
+        dataType.isInstanceOf[CalendarIntervalType] ||
+        dataType.isInstanceOf[YearMonthIntervalType] ||
+        dataType.isInstanceOf[DayTimeIntervalType])) {
         s"""
            |if (!${ev.isNull}) {
            |  ${setColumn(row, dataType, ordinal, ev.value)};
@@ -1638,7 +1644,8 @@ object CodeGenerator extends Logging {
       case _ if isPrimitiveType(jt) =>
         s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
       case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
-      case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+        s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
@@ -1775,7 +1782,7 @@ object CodeGenerator extends Logging {
     case _: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
-    case CalendarIntervalType => "CalendarInterval"
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
@@ -1796,7 +1803,8 @@ object CodeGenerator extends Logging {
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

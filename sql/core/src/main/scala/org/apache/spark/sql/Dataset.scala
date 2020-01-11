@@ -270,7 +270,7 @@ class Dataset[T] private[sql](
 
   private[sql] def numericCalculationSupportedColumns: Seq[Expression] = {
     queryExecution.analyzed.output.filter { attr =>
-      TypeCollection.NumericAndInterval.acceptsType(attr.dataType)
+      TypeCollection.NumericAndNewInterval.acceptsType(attr.dataType)
     }
   }
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.time.Duration
+
 import scala.util.Random
 
 import org.scalatest.Matchers.the
@@ -956,34 +958,34 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("calendar interval agg support hash aggregate") {
     val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
+    val df2 = df1.select(avg($"b" cast DayTimeIntervalType))
+    checkAnswer(df2, Row(Duration.ofDays(2)) :: Nil)
     assert(df2.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
+    val df3 = df1.groupBy($"a").agg(avg($"b" cast DayTimeIntervalType))
     checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
+      Row(1, Duration.ofDays(1)) ::
+        Row(2, Duration.ofDays(2)) ::
+        Row(3, Duration.ofDays(3)) :: Nil)
     assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
   }
 
   test("Dataset agg functions support calendar intervals") {
     val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select($"a", $"b" cast CalendarIntervalType).groupBy($"a" % 2)
+    val df2 = df1.select($"a", $"b" cast DayTimeIntervalType).groupBy($"a" % 2)
     checkAnswer(df2.sum("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 4, 0)) :: Nil)
+      Row(0, Duration.ofDays(2)) ::
+        Row(1, Duration.ofDays(4)) :: Nil)
     checkAnswer(df2.avg("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
+      Row(0, Duration.ofDays(2)) ::
+        Row(1, Duration.ofDays(2)) :: Nil)
     checkAnswer(df2.mean("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
+      Row(0, Duration.ofDays(2)) ::
+        Row(1, Duration.ofDays(2)) :: Nil)
     checkAnswer(df2.max("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 3, 0)) :: Nil)
+      Row(0, Duration.ofDays(2)) ::
+        Row(1, Duration.ofDays(3)) :: Nil)
     checkAnswer(df2.min("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 1, 0)) :: Nil)
+      Row(0, Duration.ofDays(2)) ::
+        Row(1, Duration.ofDays(1)) :: Nil)
   }
 }

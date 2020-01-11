@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -79,6 +79,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(TimestampType, DateType)
 
     checkNullCast(StringType, CalendarIntervalType)
+    checkNullCast(StringType, YearMonthIntervalType)
+    checkNullCast(StringType, DayTimeIntervalType)
+    checkNullCast(YearMonthIntervalType, CalendarIntervalType)
+    checkNullCast(DayTimeIntervalType, CalendarIntervalType)
+
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
@@ -663,8 +668,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast between string and interval") {
-    import org.apache.spark.unsafe.types.CalendarInterval
-
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
     checkEvaluation(Cast(Literal("interval -3 month 1 day 7 hours"), CalendarIntervalType),
       new CalendarInterval(-3, 1, 7 * MICROS_PER_HOUR))
@@ -676,6 +679,43 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       new CalendarInterval(0, 0, 1000001))
     checkEvaluation(Cast(Literal("1 MONTH 1 Microsecond"), CalendarIntervalType),
       new CalendarInterval(1, 0, 1))
+  }
+
+  test("cast between string and year-month interval") {
+    checkEvaluation(Cast(Literal(""), YearMonthIntervalType), null)
+    checkEvaluation(Cast(Literal("dummy"), YearMonthIntervalType), null)
+    checkEvaluation(Cast(Literal("1 month 1 day"), YearMonthIntervalType), null)
+    checkEvaluation(Cast(Literal("1 day"), YearMonthIntervalType), null)
+    checkEvaluation(Cast(Literal("1 month 1 hour -60 minute"), YearMonthIntervalType),
+      CalendarInterval.ofMonths(1))
+    checkEvaluation(Cast(Literal.default(YearMonthIntervalType), StringType), "0 months")
+    checkEvaluation(Cast(Literal(CalendarInterval.ofMonths(14), YearMonthIntervalType),
+      StringType), "1 years 2 months")
+  }
+
+  test("cast between string and day-time interval") {
+    checkEvaluation(Cast(Literal(""), DayTimeIntervalType), null)
+    checkEvaluation(Cast(Literal("dummy"), DayTimeIntervalType), null)
+    checkEvaluation(Cast(Literal("1 month 1 day"), DayTimeIntervalType), null)
+    checkEvaluation(Cast(Literal("1 month"), DayTimeIntervalType), null)
+    checkEvaluation(Cast(Literal("0 month 1 day "), DayTimeIntervalType),
+      CalendarInterval.ofDayTime(1, 0))
+    checkEvaluation(Cast(Literal.default(DayTimeIntervalType), StringType), "0 seconds")
+    checkEvaluation(Cast(Literal(CalendarInterval.ofDayTime(1, MICROS_PER_HOUR),
+      DayTimeIntervalType), StringType), "1 days 1 hours")
+  }
+
+  test("new interval types to legacy interval") {
+    assert(!Cast.canCast(YearMonthIntervalType, DayTimeIntervalType))
+    assert(!Cast.canCast(DayTimeIntervalType, YearMonthIntervalType))
+    assert(!Cast.canCast(CalendarIntervalType, DayTimeIntervalType))
+    assert(!Cast.canCast(CalendarIntervalType, YearMonthIntervalType))
+    checkEvaluation(Cast(Literal(CalendarInterval.ofMonths(1), YearMonthIntervalType),
+      CalendarIntervalType), CalendarInterval.ofMonths(1))
+    checkEvaluation(Cast(Literal(CalendarInterval.ofDayTime(1, 1), DayTimeIntervalType),
+      CalendarIntervalType), CalendarInterval.ofDayTime(1, 1))
+    checkEvaluation(Cast(Literal(null, YearMonthIntervalType), CalendarIntervalType), null)
+    checkEvaluation(Cast(Literal(null, DayTimeIntervalType), CalendarIntervalType), null)
   }
 
   test("cast string to boolean") {

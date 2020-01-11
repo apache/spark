@@ -128,6 +128,7 @@ class RowBasedHashMapGenerator(
           s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
         case t: DataType =>
           if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
+            !t.isInstanceOf[YearMonthIntervalType] && !t.isInstanceOf[DayTimeIntervalType] &&
             !CodeGenerator.isPrimitiveType(t)) {
             throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
           }

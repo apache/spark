@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -49,6 +49,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
+    checkEvaluation(Literal.create(null, YearMonthIntervalType), null)
+    checkEvaluation(Literal.create(null, DayTimeIntervalType), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
@@ -75,7 +77,9 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
-    checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
+    checkEvaluation(Literal.default(CalendarIntervalType), CalendarInterval.ZERO)
+    checkEvaluation(Literal.default(YearMonthIntervalType), CalendarInterval.ZERO)
+    checkEvaluation(Literal.default(DayTimeIntervalType), CalendarInterval.ZERO)
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
@@ -314,6 +318,37 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val expected = "DATE '2019-03-21'"
       val literalStr = Literal.create(date).sql
       assert(literalStr === expected)
+    }
+  }
+
+  test("interval literals") {
+    intercept[RuntimeException](Literal.create(Period.ofMonths(1)))
+    intercept[RuntimeException](Literal.create(Duration.ofDays(1)))
+    intercept[IllegalArgumentException](Literal.create(CalendarInterval.MIN_VALUE))
+
+    // infer interval type
+    assert(Literal.create(CalendarInterval.ZERO).dataType === DayTimeIntervalType)
+    assert(Literal.create(CalendarInterval.ofDayTime(1, 1)).dataType === DayTimeIntervalType)
+    assert(Literal.create(CalendarInterval.ofMonths(1)).dataType === YearMonthIntervalType)
+
+    // explicit interval type
+    assert(Literal(CalendarInterval.ZERO, YearMonthIntervalType).sql === "INTERVAL '0 months'")
+    val e1 = intercept[IllegalArgumentException](
+      Literal(CalendarInterval.ofDayTime(1, 1), YearMonthIntervalType))
+    assert(e1.getMessage.contains("interval year to month"))
+    val e2 = intercept[IllegalArgumentException](
+      Literal(CalendarInterval.ofMonths(1), DayTimeIntervalType))
+    assert(e2.getMessage.contains("interval day to second"))
+    assert(Literal(CalendarInterval.ofMonths(1), YearMonthIntervalType).sql ===
+      "INTERVAL '1 months'")
+    assert(Literal(CalendarInterval.ofDayTime(1, 0), DayTimeIntervalType).sql ===
+      "INTERVAL '1 days'")
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      assert(Literal.create(CalendarInterval.ZERO).dataType === CalendarIntervalType)
+      assert(Literal.create(CalendarInterval.ofDayTime(1, 1)).dataType === CalendarIntervalType)
+      assert(Literal.create(CalendarInterval.ofMonths(1)).dataType === CalendarIntervalType)
+      assert(Literal.create(CalendarInterval.MAX_VALUE).dataType === CalendarIntervalType)
     }
   }
 }

@@ -255,6 +255,7 @@ class Analyzer(
   )
 
   /**
+   * TODO: comments
    * For [[Add]]:
    * 1. if both side are interval, stays the same;
    * 2. else if one side is interval, turns it to [[TimeAdd]];
@@ -281,16 +282,38 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, CalendarIntervalType) => a
-          case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
-          case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+          case (lt, rt) if lt == rt => a
+          case (CalendarIntervalType, YearMonthIntervalType | DayTimeIntervalType) =>
+            a.copy(right = Cast(r, CalendarIntervalType))
+          case (YearMonthIntervalType | DayTimeIntervalType, CalendarIntervalType) =>
+            a.copy(left = Cast(l, CalendarIntervalType))
+          case (YearMonthIntervalType | DayTimeIntervalType,
+              YearMonthIntervalType | DayTimeIntervalType) if conf.useLegacyIntervalType =>
+            a.copy(left = Cast(l, CalendarIntervalType), right = Cast(r, CalendarIntervalType))
+          case (DateType | TimestampType,
+              CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
+            Cast(TimeAdd(l, r), l.dataType)
+          case (CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType,
+              DateType | TimestampType) =>
+            Cast(TimeAdd(r, l), r.dataType)
           case (DateType, _) => DateAdd(l, r)
           case (_, DateType) => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (YearMonthIntervalType, YearMonthIntervalType) => s
+          case (DayTimeIntervalType, DayTimeIntervalType) => s
           case (CalendarIntervalType, CalendarIntervalType) => s
-          case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
+          case (CalendarIntervalType, YearMonthIntervalType | DayTimeIntervalType) =>
+            s.copy(right = Cast(r, CalendarIntervalType))
+          case (YearMonthIntervalType | DayTimeIntervalType, CalendarIntervalType) =>
+            s.copy(left = Cast(l, CalendarIntervalType))
+          case (YearMonthIntervalType | DayTimeIntervalType,
+              YearMonthIntervalType | DayTimeIntervalType) if conf.useLegacyIntervalType =>
+            s.copy(left = Cast(l, CalendarIntervalType), right = Cast(r, CalendarIntervalType))
+          case (DateType | TimestampType,
+              CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
+            Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
@@ -298,12 +321,12 @@ class Analyzer(
           case _ => s
         }
         case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => MultiplyInterval(l, r)
-          case (_, CalendarIntervalType) => MultiplyInterval(r, l)
+          case (YearMonthIntervalType | DayTimeIntervalType, _) => MultiplyInterval(l, r)
+          case (_, YearMonthIntervalType | DayTimeIntervalType) => MultiplyInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => DivideInterval(l, r)
+          case (YearMonthIntervalType | DayTimeIntervalType, _) => DivideInterval(l, r)
           case _ => d
         }
       }

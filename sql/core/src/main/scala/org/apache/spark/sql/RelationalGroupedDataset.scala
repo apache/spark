@@ -98,7 +98,7 @@ class RelationalGroupedDataset protected[sql](
       // Make sure all specified columns are numeric calculation supported columns.
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
-        if (!TypeCollection.NumericAndInterval.acceptsType(namedExpr.dataType)) {
+        if (!TypeCollection.NumericAndNewInterval.acceptsType(namedExpr.dataType)) {
           throw new AnalysisException(
             s""""$colName" is not a numeric or calendar interval column. """ +
             "Aggregation function can only be applied on a numeric or calendar interval column.")

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -229,6 +230,12 @@ object ScalaReflection extends ScalaReflection {
 
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
+
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        createDeserializerForPeriod(path)
+
+      case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
+        createDeserializerForDuration(path)
 
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
@@ -772,7 +779,9 @@ object ScalaReflection extends ScalaReflection {
     DateType -> classOf[DateType.InternalType],
     TimestampType -> classOf[TimestampType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
-    CalendarIntervalType -> classOf[CalendarInterval]
+    CalendarIntervalType -> classOf[CalendarInterval],
+    YearMonthIntervalType -> classOf[java.time.Period],
+    DayTimeIntervalType -> classOf[java.time.Duration]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
@@ -802,7 +811,8 @@ object ScalaReflection extends ScalaReflection {
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayType]
     case _: MapType => classOf[MapType]

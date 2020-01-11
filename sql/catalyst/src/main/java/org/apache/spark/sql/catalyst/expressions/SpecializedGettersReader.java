@@ -68,6 +68,12 @@ public final class SpecializedGettersReader {
     if (dataType instanceof CalendarIntervalType) {
       return obj.getInterval(ordinal);
     }
+    if (dataType instanceof YearMonthIntervalType) {
+      return obj.getInterval(ordinal);
+    }
+    if (dataType instanceof DayTimeIntervalType) {
+      return obj.getInterval(ordinal);
+    }
     if (dataType instanceof BinaryType) {
       return obj.getBinary(ordinal);
     }

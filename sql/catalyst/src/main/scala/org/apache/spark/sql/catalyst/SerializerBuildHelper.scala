@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions.{CheckOverflow, CreateNamedStruct, Expression, IsNull, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -97,6 +97,24 @@ object SerializerBuildHelper {
       DateTimeUtils.getClass,
       DateType,
       "fromJavaDate",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForYearMonthInterval(inputObject: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      YearMonthIntervalType,
+      "fromDuration",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForDayTimeInterval(inputObject: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      DayTimeIntervalType,
+      "fromDuration",
       inputObject :: Nil,
       returnNullable = false)
   }

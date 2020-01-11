@@ -81,6 +81,8 @@ object HiveResult {
         case ISO_8601 => toIso8601String(interval)
         case MULTI_UNITS => toMultiUnitsString(interval)
       }
+    case (interval: CalendarInterval, YearMonthIntervalType) => toYearMonthString(interval)
+    case (interval: CalendarInterval, DayTimeIntervalType) => toMultiUnitsString(interval)
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true)).mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>

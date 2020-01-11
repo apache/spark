@@ -1894,7 +1894,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(interval, CalendarIntervalType)
+          val legacyOn = SQLConf.get.useLegacyIntervalType
+          val dataType = IntervalUtils.getType(interval, legacyOn)
+          Literal(interval, dataType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2061,6 +2063,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
+    val legacyOn = SQLConf.get.useLegacyIntervalType
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
@@ -2068,7 +2071,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval), CalendarIntervalType)
+      val interval = visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
+      val dataType = IntervalUtils.getType(interval, legacyOn)
+      Literal(interval, dataType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
@@ -2077,7 +2082,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      Literal(visitUnitToUnitInterval(innerCtx.body), CalendarIntervalType)
+      visitUnitToUnitInterval(innerCtx.body)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)
     }
@@ -2112,9 +2117,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Creates a [[CalendarInterval]] with from-to unit, e.g. '2-1' YEAR TO MONTH.
+   * Creates an interval [[Literal]] with from-to unit, e.g. '2-1' YEAR TO MONTH.
    */
-  override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
+  override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): Literal = {
     withOrigin(ctx) {
       val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
         throw new ParseException("The value of from-to unit must be a string", ctx.intervalValue)
@@ -2124,19 +2129,32 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
         (from, to) match {
           case ("year", "month") =>
-            IntervalUtils.fromYearMonthString(value)
+            val interval = IntervalUtils.fromYearMonthString(value)
+            Literal(interval, YearMonthIntervalType)
           case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
+            Literal(interval, DayTimeIntervalType)
           case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
+            Literal(interval, DayTimeIntervalType)
           case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
+            Literal(interval, DayTimeIntervalType)
           case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
+            Literal(interval, DayTimeIntervalType)
           case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
+            Literal(interval, DayTimeIntervalType)
           case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+            val interval =
+              IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+            Literal(interval, DayTimeIntervalType)
           case _ =>
             throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
         }
@@ -2184,7 +2202,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         DecimalType(precision.getText.toInt, 0)
       case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw new ParseException(s"DataType $dtStr is not supported.", ctx)
@@ -2203,6 +2220,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.STRUCT =>
         StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
     }
+  }
+
+  override def visitYearMonthIntervalType(ctx: YearMonthIntervalTypeContext): DataType = {
+    withOrigin(ctx)(YearMonthIntervalType)
+  }
+
+  override def visitDayTimeIntervalType(ctx: DayTimeIntervalTypeContext): DataType = {
+    withOrigin(ctx)(DayTimeIntervalType)
   }
 
   /**

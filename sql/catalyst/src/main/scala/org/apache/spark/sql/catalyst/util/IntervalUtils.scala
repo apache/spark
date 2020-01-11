@@ -18,13 +18,15 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.math.BigDecimal
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, DayTimeIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object IntervalUtils {
@@ -500,6 +502,14 @@ object IntervalUtils {
   // `toString` implementation in CalendarInterval is the multi-units format currently.
   def toMultiUnitsString(interval: CalendarInterval): String = interval.toString
 
+  def toYearMonthString(interval: CalendarInterval): String = {
+    if (interval == CalendarInterval.ZERO) {
+      "0 months"
+    } else {
+      interval.toString
+    }
+  }
+
   def toSqlStandardString(interval: CalendarInterval): String = {
     val yearMonthPart = if (interval.months < 0) {
       val ma = math.abs(interval.months)
@@ -612,6 +622,40 @@ object IntervalUtils {
       stringToInterval(input)
     } catch {
       case _: IllegalArgumentException => null
+    }
+  }
+
+  /**
+   * Converting a string value to a year-month interval.
+   * TODO: Currently We will only do validating after the string is converted to an interval value
+   * We may optimize the `stringToInterval` for better validation support to avoid corner cases
+   * e.g. `1 year 1 hour -60 minute`
+   *
+   * @return a year-month interval, or null if the string has invalid part
+   */
+  def safeStringToYearMonthInterval(input: UTF8String): CalendarInterval = {
+    val interval = safeStringToInterval(input)
+    if (interval != null && (interval.days != 0 || interval.microseconds !=0)) {
+      null
+    } else {
+      interval
+    }
+  }
+
+  /**
+   * Converting a string value to a day-time interval.
+   * TODO: Currently We will only do validating after the string is converted to an interval value
+   * We may optimize the `stringToInterval` for better validation support to avoid corner cases
+   * e.g. `1 year -12 month 1 minute`
+   *
+   * @return a day-time interval, or null if the string has invalid part
+   */
+  def safeStringToDayTimeInterval(input: UTF8String): CalendarInterval = {
+    val interval = safeStringToInterval(input)
+    if (interval != null && interval.months != 0) {
+      null
+    } else {
+      interval
     }
   }
 
@@ -834,5 +878,69 @@ object IntervalUtils {
     micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
 
     new CalendarInterval(totalMonths, totalDays, micros)
+  }
+
+  /**
+   * infer the interval type from the [[CalendarInterval]]
+   *
+   * @return DataType
+   */
+  def getType(interval: CalendarInterval, legacyOn: Boolean): DataType = {
+    if (legacyOn) {
+      CalendarIntervalType
+    } else {
+      val isYearMonth = interval.months != 0
+      val isDayTime = interval.days != 0 || interval.microseconds != 0
+      if (isYearMonth && isDayTime) {
+        throw new IllegalArgumentException("Can not use year-month and day-time units together")
+      } else if (isYearMonth) {
+        YearMonthIntervalType
+      } else {
+        DayTimeIntervalType
+      }
+    }
+  }
+
+  def toPeriod(interval: CalendarInterval): Period = {
+    require(interval.days == 0 && interval.microseconds == 0L,
+      "Only year-month intervals support toPeriod")
+    Period.ofMonths(interval.months)
+  }
+
+  def fromPeriod(d: Period): CalendarInterval = {
+    require(d.getDays == 0, "Only year-month intervals support fromPeriod")
+    val months = Math.addExact(d.getMonths, Math.multiplyExact(d.getYears, MONTHS_PER_YEAR))
+    new CalendarInterval(months, 0, 0)
+  }
+
+  def toDuration(interval: CalendarInterval): Duration = {
+    require(interval.months == 0, "Only day-time intervals support toDuration")
+    Duration.of(interval.days * MICROS_PER_DAY + interval.microseconds, ChronoUnit.MICROS)
+  }
+
+  def fromDuration(d: Duration): CalendarInterval = {
+    val microseconds = Math.addExact(Math.multiplyExact(d.getSeconds, MICROS_PER_SECOND),
+      d.getNano / NANOS_PER_MICROS)
+    new CalendarInterval(0, 0, microseconds)
+  }
+
+  def isValidYearMonthInterval(interval: CalendarInterval): Boolean = {
+    if (interval == null) {
+      true
+    } else if (interval.days != 0 || interval.microseconds != 0) {
+      false
+    } else {
+      true
+    }
+  }
+
+  def isValidDayTimeInterval(interval: CalendarInterval): Boolean = {
+    if (interval == null) {
+      true
+    } else if (interval.months != 0) {
+      false
+    } else {
+      true
+    }
   }
 }
