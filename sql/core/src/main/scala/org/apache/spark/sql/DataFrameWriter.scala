@@ -561,12 +561,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        AppendData.byName(
-          DataSourceV2Relation.create(
-            table,
-            catalogManager.catalogIdentifier(catalog),
-            Seq(ident)),
-          df.logicalPlan, extraOptions.toMap)
+        val v2Relation =
+          DataSourceV2Relation.create(table, catalogManager.catalogIdentifier(catalog), Seq(ident))
+        AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(
