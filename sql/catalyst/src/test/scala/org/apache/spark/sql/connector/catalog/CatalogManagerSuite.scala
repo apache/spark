@@ -114,11 +114,15 @@ class CatalogManagerSuite extends SparkFunSuite {
   test("Catalog manager should be able to return the string identifier for registered catalog") {
     val conf = new SQLConf
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
+    conf.setConfString("spark.sql.catalog.dummy2", classOf[DummyCatalog].getName)
     conf.setConfString(s"spark.sql.catalog.${CatalogManager.SESSION_CATALOG_NAME}",
       classOf[DummyCatalog].getName)
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, createSessionCatalog(conf))
 
     assert(catalogManager.catalogIdentifier(catalogManager.catalog("dummy")) == Some("dummy"))
+    // Even though dummy and dummy2 use the same catalog implementation, we should still be able to
+    // resolve the name as the CatalogPlugin instance is different.
+    assert(catalogManager.catalogIdentifier(catalogManager.catalog("dummy2")) == Some("dummy2"))
     assert(catalogManager.catalogIdentifier(catalogManager.v2SessionCatalog) ==
       Some(CatalogManager.SESSION_CATALOG_NAME))
   }
