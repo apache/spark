@@ -110,7 +110,7 @@ class Window(object):
         >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
-        +---+--------+---+	
+        +---+--------+---+
         | id|category|sum|
         +---+--------+---+
         |  1|       a|  2|
