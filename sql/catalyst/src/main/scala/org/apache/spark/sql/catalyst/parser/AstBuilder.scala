@@ -2264,10 +2264,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     StructField(
-      colName.getText,
-      cleanedDataType,
-      nullable = true,
-      builder.build())
+      name = colName.getText,
+      dataType = cleanedDataType,
+      nullable = NULL == null,
+      metadata = builder.build())
   }
 
   /**
@@ -2290,7 +2290,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    val structField = StructField(
+      name = identifier.getText,
+      dataType = typedVisit(dataType()),
+      nullable = NULL == null)
     Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)
   }
 
@@ -2557,6 +2560,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case (PROP_COMMENT, _) =>
           throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
             s" the COMMENT clause to specify it.", ctx)
+        case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+          throw new ParseException(s"$ownership is a reserved namespace property , please use" +
+            " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
         case _ =>
       }
       properties
@@ -2883,10 +2889,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     QualifiedColType(
-      typedVisit[Seq[String]](ctx.name),
-      typedVisit[DataType](ctx.dataType),
-      Option(ctx.commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      name = typedVisit[Seq[String]](ctx.name),
+      dataType = typedVisit[DataType](ctx.dataType),
+      nullable = ctx.NULL == null,
+      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -2942,9 +2949,35 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
-      Option(ctx.dataType).map(typedVisit[DataType]),
-      Option(ctx.commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      dataType = Option(ctx.dataType).map(typedVisit[DataType]),
+      nullable = None,
+      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+  }
+
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column nullability.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
+   * }}}
+   */
+  override def visitAlterColumnNullability(ctx: AlterColumnNullabilityContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nullable = ctx.setOrDrop.getType match {
+        case SqlBaseParser.SET => false
+        case SqlBaseParser.DROP => true
+      }
+      AlterTableAlterColumnStatement(
+        visitMultipartIdentifier(ctx.table),
+        typedVisit[Seq[String]](ctx.column),
+        dataType = None,
+        nullable = Some(nullable),
+        comment = None,
+        position = None)
+    }
   }
 
   /**
@@ -2966,13 +2999,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new AnalysisException("Renaming column is not supported in Hive-style ALTER COLUMN, " +
         "please run RENAME COLUMN instead.")
     }
+    if (ctx.colType.NULL != null) {
+      throw new AnalysisException("NOT NULL is not supported in Hive-style ALTER COLUMN, " +
+        "please run ALTER COLUMN ... SET/DROP NOT NULL instead.")
+    }
 
     AlterTableAlterColumnStatement(
       typedVisit[Seq[String]](ctx.table),
       columnNameParts,
-      Option(ctx.colType().dataType()).map(typedVisit[DataType]),
-      Option(ctx.colType().commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
+      nullable = None,
+      comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -3552,4 +3590,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     CommentOnTable(UnresolvedTable(nameParts), comment)
   }
+
+  /**
+   * Create an [[AlterNamespaceSetOwner]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET OWNER (USER|ROLE|GROUP) identityName;
+   * }}}
+   */
+  override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+      AlterNamespaceSetOwner(
+        UnresolvedNamespace(nameParts),
+        ctx.identifier.getText,
+        ctx.ownerType.getText)
+    }
+  }
+
 }

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -126,11 +127,12 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
+            Some(field.copy(dataType = update.newDataType))
+          })
+
+        case update: UpdateColumnNullability =>
+          replace(schema, update.fieldNames, field => {
+            Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>
@@ -314,5 +316,15 @@ private[sql] object CatalogV2Util {
     val ident = tableName.asIdentifier
     val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
+  }
+
+  def getTableProviderCatalog(
+      provider: SupportsCatalogOptions,
+      catalogManager: CatalogManager,
+      options: CaseInsensitiveStringMap): TableCatalog = {
+    Option(provider.extractCatalog(options))
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.v2SessionCatalog)
+      .asTableCatalog
   }
 }
