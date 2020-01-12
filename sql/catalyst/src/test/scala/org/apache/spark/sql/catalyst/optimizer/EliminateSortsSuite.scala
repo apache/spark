@@ -309,7 +309,7 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("should not remove orderBy in sortBy clause") {
+  test("SPARK-30408 should not remove orderBy in sortBy clause") {
     val plan1 = testRelation.orderBy('a.asc).sortBy('b.desc)
     val optimized1 = Optimize.execute(plan1.analyze)
     val correctAnswer1 = testRelation.orderBy('a.asc).sortBy('b.desc).analyze
