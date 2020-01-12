@@ -2655,18 +2655,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(rawPredictionCol=value)
 
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    def setWeightCol(self, value):
-        """
-        Sets the value of :py:attr:`weightCol`.
-        """
-        return self._set(weightCol=value)
-
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
         self.models = models
