@@ -77,10 +77,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(BitwiseOr(Symbol("intField"), Symbol("booleanField")))
     assertErrorForDifferingTypes(BitwiseXor(Symbol("intField"), Symbol("booleanField")))
 
-    assertError(Add(Symbol("booleanField"), Symbol("booleanField")),
-      "requires (numeric or interval) type")
-    assertError(Subtract(Symbol("booleanField"), Symbol("booleanField")),
-      "requires (numeric or interval) type")
+    assertError(Add(Symbol("booleanField"), Symbol("booleanField")), "requires")
+    assertError(Subtract(Symbol("booleanField"), Symbol("booleanField")), "requires")
     assertError(Multiply(Symbol("booleanField"), Symbol("booleanField")), "requires numeric type")
     assertError(Divide(Symbol("booleanField"), Symbol("booleanField")),
       "requires (double or decimal) type")
@@ -158,8 +156,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
     assertError(Min(Symbol("mapField")), "min does not support ordering on type")
     assertError(Max(Symbol("mapField")), "max does not support ordering on type")
-    assertError(Sum(Symbol("booleanField")), "requires (numeric or interval) type")
-    assertError(Average(Symbol("booleanField")), "requires (numeric or interval) type")
+    assertError(Sum(Symbol("booleanField")), "requires")
+    assertError(Average(Symbol("booleanField")), "requires")
   }
 
   test("check types for others") {
