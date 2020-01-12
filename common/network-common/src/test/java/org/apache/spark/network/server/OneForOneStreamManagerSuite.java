@@ -135,5 +135,4 @@ public class OneForOneStreamManagerSuite {
       Assert.assertEquals(0, manager.numStreamStates());
     }
   }
-
 }
