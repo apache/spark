@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.log4j.{AppenderSkeleton, Level}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -38,14 +35,6 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
   lazy val df2 = df.selectExpr("id as b1", "id as b2")
   lazy val df3 = df.selectExpr("id as c1", "id as c2")
 
-  class MockAppender extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
-  }
-
   def msgNoHintRelationFound(relation: String, hint: String): String =
     s"Count not find relation '$relation' specified in hint '$hint'."
 
@@ -59,7 +48,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
       df: => DataFrame,
       expectedHints: Seq[JoinHint],
       warnings: Seq[String]): Unit = {
-    val logAppender = new MockAppender()
+    val logAppender = new LogAppender
     withLogAppender(logAppender) {
       verifyJoinHint(df, expectedHints)
     }
