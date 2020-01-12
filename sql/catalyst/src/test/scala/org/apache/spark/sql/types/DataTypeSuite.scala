@@ -315,8 +315,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 24)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
   checkDefaultSize(structType, 20)
-  checkDefaultSize(YearMonthIntervalType, 4)
-  checkDefaultSize(DayTimeIntervalType, 12)
+  checkDefaultSize(YearMonthIntervalType, 16)
+  checkDefaultSize(DayTimeIntervalType, 16)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,

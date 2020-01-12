@@ -84,7 +84,10 @@ class StructTypeSuite extends SparkFunSuite {
   }
 
   test("interval keyword in schema string") {
-    val interval = "`a` INTERVAL"
-    assert(fromDDL(interval).toDDL === interval)
+    val yearMonth = "`a` INTERVAL YEAR TO MONTH"
+    assert(fromDDL(yearMonth).toDDL === yearMonth)
+    val dayTime = "`a` INTERVAL DAY TO SECOND"
+    assert(fromDDL(dayTime).toDDL === dayTime)
+
   }
 }
