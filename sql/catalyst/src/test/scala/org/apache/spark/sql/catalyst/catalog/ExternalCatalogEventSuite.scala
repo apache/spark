@@ -211,14 +211,16 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
   }
 
   testWithCatalog("partition") { (catalog, checkEvents) =>
-    // CREATE
     val path1 = Files.createTempDirectory("db_")
+    val path2 = Files.createTempDirectory(path1, "tbl_")
     val uri1 = preparePath(path1)
+    val uri2 = preparePath(path2)
 
-    val dbDefinition = createDbDefinition()
+    // CREATE
+    val dbDefinition = createDbDefinition(uri1)
 
     val storage = CatalogStorageFormat.empty.copy(
-      locationUri = Option(uri1))
+      locationUri = Option(uri2))
 
     val tableDefinition = CatalogTable(
       identifier = TableIdentifier("tbl1", Some("db5")),
