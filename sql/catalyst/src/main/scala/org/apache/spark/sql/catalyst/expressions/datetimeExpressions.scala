@@ -2146,13 +2146,19 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
         val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
           s"for the ${source.dataType.catalogString} type."
-        if (source.dataType == CalendarIntervalType) {
-          ExtractIntervalPart.parseExtractField(
-            fieldStr,
-            source,
-            throw new AnalysisException(errMsg))
-        } else {
-          DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        source.dataType match {
+          case CalendarIntervalType =>
+            ExtractIntervalPart.parseExtractField(
+              fieldStr,
+              source,
+              throw new AnalysisException(errMsg))
+          case YearMonthIntervalType | DayTimeIntervalType =>
+            ExtractIntervalPart.parseExtractField(
+              fieldStr,
+              Cast(source, CalendarIntervalType),
+              throw new AnalysisException(errMsg))
+          case _ =>
+            DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
         }
       }
     })

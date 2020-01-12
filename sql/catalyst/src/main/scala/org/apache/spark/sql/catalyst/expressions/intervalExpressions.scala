@@ -32,7 +32,8 @@ abstract class ExtractIntervalPart(
     funcName: String)
   extends UnaryExpression with ExpectsInputTypes with Serializable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType))
 
   override protected def nullSafeEval(interval: Any): Any = {
     func(interval.asInstanceOf[CalendarInterval])

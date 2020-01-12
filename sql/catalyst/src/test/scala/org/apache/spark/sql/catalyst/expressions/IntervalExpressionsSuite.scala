@@ -39,7 +39,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalMillenniums("1000 years"), 1)
     checkEvaluation(ExtractIntervalMillenniums("-2000 years"), -2)
     // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalMillenniums("999 years 400 days"), 0)
+    checkEvaluation(ExtractIntervalMillenniums("999 years 11 months"), 0)
     // Millennium must be taken from years and months
     checkEvaluation(ExtractIntervalMillenniums("999 years 12 months"), 1)
     checkEvaluation(ExtractIntervalMillenniums("1000 years -1 months"), 0)
@@ -51,7 +51,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalCenturies("1000 years"), 10)
     checkEvaluation(ExtractIntervalCenturies("-2000 years"), -20)
     // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalCenturies("99 years 400 days"), 0)
+    checkEvaluation(ExtractIntervalCenturies("99 years 11 months"), 0)
     // Century must be taken from years and months
     checkEvaluation(ExtractIntervalCenturies("99 years 12 months"), 1)
     checkEvaluation(ExtractIntervalCenturies("100 years -1 months"), 0)
@@ -63,7 +63,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalDecades("1000 years"), 100)
     checkEvaluation(ExtractIntervalDecades("-2000 years"), -200)
     // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalDecades("9 years 400 days"), 0)
+    checkEvaluation(ExtractIntervalDecades("9 years 11 months"), 0)
     // Decade must be taken from years and months
     checkEvaluation(ExtractIntervalDecades("9 years 12 months"), 1)
     checkEvaluation(ExtractIntervalDecades("10 years -1 months"), 0)
@@ -75,7 +75,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalYears("1000 years"), 1000)
     checkEvaluation(ExtractIntervalYears("-2000 years"), -2000)
     // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalYears("9 years 400 days"), 9)
+    checkEvaluation(ExtractIntervalYears("9 years 11 months"), 9)
     // Year must be taken from years and months
     checkEvaluation(ExtractIntervalYears("9 years 12 months"), 10)
     checkEvaluation(ExtractIntervalYears("10 years -1 months"), 9)
@@ -113,9 +113,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalDays("-1 days -100 seconds"), -1)
     checkEvaluation(ExtractIntervalDays("-365 days"), -365)
     checkEvaluation(ExtractIntervalDays("365 days"), 365)
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
-    checkEvaluation(ExtractIntervalDays(largeInterval), 31)
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years and months must not be taken into account
+      checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
+      checkEvaluation(ExtractIntervalDays(largeInterval), 31)
+    }
   }
 
   test("hours") {
@@ -124,11 +127,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalHours("-1 hour"), -1L)
     checkEvaluation(ExtractIntervalHours("23 hours"), 23L)
     checkEvaluation(ExtractIntervalHours("-23 hours"), -23L)
-    // Years, months and days must not be taken into account
-    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10L)
+
     // Minutes should be taken into account
     checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
-    checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years, months and days must not be taken into account
+      checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10L)
+      checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
+    }
   }
 
   test("minutes") {
@@ -137,9 +143,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalMinutes("-1 minute"), -1.toByte)
     checkEvaluation(ExtractIntervalMinutes("59 minute"), 59.toByte)
     checkEvaluation(ExtractIntervalMinutes("-59 minute"), -59.toByte)
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalMinutes("100 year 10 months 10 minutes"), 10.toByte)
-    checkEvaluation(ExtractIntervalMinutes(largeInterval), 59.toByte)
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years and months must not be taken into account
+      checkEvaluation(ExtractIntervalMinutes("100 year 10 months 10 minutes"), 10.toByte)
+      checkEvaluation(ExtractIntervalMinutes(largeInterval), 59.toByte)
+    }
   }
 
   test("seconds") {
@@ -148,9 +157,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalSeconds("-1 second"), Decimal(-1.0, 8, 6))
     checkEvaluation(ExtractIntervalSeconds("1 minute 59 second"), Decimal(59.0, 8, 6))
     checkEvaluation(ExtractIntervalSeconds("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalSeconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds(largeInterval), Decimal(59.999999, 8, 6))
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years and months must not be taken into account
+      checkEvaluation(ExtractIntervalSeconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
+      checkEvaluation(ExtractIntervalSeconds(largeInterval), Decimal(59.999999, 8, 6))
+    }
     checkEvaluation(
       ExtractIntervalSeconds("10 seconds 1 milliseconds 1 microseconds"),
       Decimal(10001001, 8, 6))
@@ -170,9 +182,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       ExtractIntervalMilliseconds("-1 second -999 milliseconds"),
       Decimal(-1999.0, 8, 3))
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalMilliseconds("100 year 1 millisecond"), Decimal(1.0, 8, 3))
-    checkEvaluation(ExtractIntervalMilliseconds(largeInterval), Decimal(59999.999, 8, 3))
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years and months must not be taken into account
+      checkEvaluation(ExtractIntervalMilliseconds("100 year 1 millisecond"), Decimal(1.0, 8, 3))
+      checkEvaluation(ExtractIntervalMilliseconds(largeInterval), Decimal(59999.999, 8, 3))
+    }
   }
 
   test("microseconds") {
@@ -182,9 +197,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalMicroseconds("1 second 999 microseconds"), 1000999L)
     checkEvaluation(ExtractIntervalMicroseconds("999 milliseconds 1 microseconds"), 999001L)
     checkEvaluation(ExtractIntervalMicroseconds("-1 second -999 microseconds"), -1000999L)
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalMicroseconds("11 year 1 microseconds"), 1L)
-    checkEvaluation(ExtractIntervalMicroseconds(largeInterval), 59999999L)
+
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      // Years and months must not be taken into account
+      checkEvaluation(ExtractIntervalMicroseconds("11 year 1 microseconds"), 1L)
+      checkEvaluation(ExtractIntervalMicroseconds(largeInterval), 59999999L)
+    }
   }
 
   test("epoch") {
@@ -214,12 +232,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     check("0 seconds", 10, "0 seconds")
     check("10 hours", 0, "0 hours")
-    check("12 months 1 microseconds", 2, "2 years 2 microseconds")
-    check("-5 year 3 seconds", 3, "-15 years 9 seconds")
-    check("1 year 1 second", 0.5, "6 months 500 milliseconds")
-    check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
-    check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
-    check("1 month 2 microseconds", 1.5, "1 months 15 days 3 microseconds")
+    check("12 days 1 microseconds", 2, "24 days 2 microseconds")
+    check("-5 year 3 months", 3, "-15 years 9 months")
+    check("1 day 1 second", 0.5, "12 hours 500 milliseconds")
+    check("-100 hours -1 millisecond", 0.5, "-50 hours -500 microseconds")
+    check("2 months", -0.5, "-1 months")
+    check("1 days 2 microseconds", 1.5, "1 days 12 hours 3 microseconds")
     check("2 months", Int.MaxValue, "integer overflow")
   }
 
@@ -239,12 +257,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     check("0 seconds", 10, "0 seconds")
-    check("12 months 3 milliseconds", 2, "6 months 0.0015 seconds")
-    check("-5 year 3 seconds", 3, "-1 years -8 months 1 seconds")
-    check("6 years -7 seconds", 3, "2 years -2.333333 seconds")
-    check("2 years -8 seconds", 0.5, "4 years -16 seconds")
-    check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
-    check("1 month 3 microsecond", 1.5, "20 days 2 microseconds")
+    check("12 days 3 milliseconds", 2, "6 days 0.0015 seconds")
+    check("-5 year 3 month", 3, "-1 years -7 months")
+    check("6 days -7 seconds", 3, "2 days -2.333333 seconds")
+    check("2 days -8 seconds", 0.5, "4 days -16 seconds")
+    check("-1 hours 2 microseconds", -0.25, "4 hours -8 microseconds")
+    check("1 minutes 3 microsecond", 1.5, "40 seconds 2 microseconds")
     check("1 second", 0, "divide by zero")
     check(s"${Int.MaxValue} months", 0.9, "integer overflow")
   }
