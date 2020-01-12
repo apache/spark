@@ -2401,8 +2401,8 @@ case class Sequence(
   }
 
   def coercibleChildren: Seq[Expression] = children.filter { c =>
-    c.dataType != CalendarIntervalType ||
-      c.dataType != YearMonthIntervalType ||
+    c.dataType != CalendarIntervalType &&
+      c.dataType != YearMonthIntervalType &&
       c.dataType != DayTimeIntervalType
   }
 
