@@ -108,10 +108,6 @@ object RowEncoder {
         createSerializerForSqlDate(inputObject)
       }
 
-    case YearMonthIntervalType => createSerializerForYearMonthInterval(inputObject)
-
-    case DayTimeIntervalType => createSerializerForDayTimeInterval(inputObject)
-
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
         Decimal.getClass,
@@ -286,10 +282,6 @@ object RowEncoder {
       } else {
         createDeserializerForSqlDate(input)
       }
-
-    case YearMonthIntervalType => createDeserializerForPeriod(input)
-
-    case DayTimeIntervalType => createDeserializerForDuration(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 

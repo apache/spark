@@ -231,12 +231,6 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
 
-      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
-        createDeserializerForPeriod(path)
-
-      case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
-        createDeserializerForDuration(path)
-
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
 
@@ -780,8 +774,8 @@ object ScalaReflection extends ScalaReflection {
     TimestampType -> classOf[TimestampType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval],
-    YearMonthIntervalType -> classOf[java.time.Period],
-    DayTimeIntervalType -> classOf[java.time.Duration]
+    YearMonthIntervalType -> classOf[CalendarInterval],
+    DayTimeIntervalType -> classOf[CalendarInterval]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](

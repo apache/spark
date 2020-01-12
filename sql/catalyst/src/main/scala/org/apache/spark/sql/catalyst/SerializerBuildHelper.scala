@@ -101,24 +101,6 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForYearMonthInterval(inputObject: Expression): Expression = {
-    StaticInvoke(
-      IntervalUtils.getClass,
-      YearMonthIntervalType,
-      "fromDuration",
-      inputObject :: Nil,
-      returnNullable = false)
-  }
-
-  def createSerializerForDayTimeInterval(inputObject: Expression): Expression = {
-    StaticInvoke(
-      IntervalUtils.getClass,
-      DayTimeIntervalType,
-      "fromDuration",
-      inputObject :: Nil,
-      returnNullable = false)
-  }
-
   def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,

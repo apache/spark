@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.math.BigDecimal
-import java.time.{Duration, Period}
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -899,29 +897,6 @@ object IntervalUtils {
         DayTimeIntervalType
       }
     }
-  }
-
-  def toPeriod(interval: CalendarInterval): Period = {
-    require(interval.days == 0 && interval.microseconds == 0L,
-      "Only year-month intervals support toPeriod")
-    Period.ofMonths(interval.months)
-  }
-
-  def fromPeriod(d: Period): CalendarInterval = {
-    require(d.getDays == 0, "Only year-month intervals support fromPeriod")
-    val months = Math.addExact(d.getMonths, Math.multiplyExact(d.getYears, MONTHS_PER_YEAR))
-    new CalendarInterval(months, 0, 0)
-  }
-
-  def toDuration(interval: CalendarInterval): Duration = {
-    require(interval.months == 0, "Only day-time intervals support toDuration")
-    Duration.of(interval.days * MICROS_PER_DAY + interval.microseconds, ChronoUnit.MICROS)
-  }
-
-  def fromDuration(d: Duration): CalendarInterval = {
-    val microseconds = Math.addExact(Math.multiplyExact(d.getSeconds, MICROS_PER_SECOND),
-      d.getNano / NANOS_PER_MICROS)
-    CalendarInterval.ofDayTime((microseconds / MICROS_PER_DAY).toInt, microseconds % MICROS_PER_DAY)
   }
 
   def isValidYearMonthInterval(interval: CalendarInterval): Boolean = {

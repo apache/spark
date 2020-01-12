@@ -475,16 +475,4 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkType("0 month 1 hour", DayTimeIntervalType, false)
     checkType("0 month 1 hour -60 minute", DayTimeIntervalType, false)
   }
-
-  test("toPeriod") {
-    assert(toPeriod(CalendarInterval.ZERO) === Period.ZERO)
-    assert(toPeriod(new CalendarInterval(1, 0, 0)) === Period.ofMonths(1))
-    intercept[IllegalArgumentException](toPeriod(new CalendarInterval(1, 1, 0)))
-  }
-
-  test("toDuration") {
-    assert(toDuration(CalendarInterval.ZERO) === Duration.ZERO)
-    assert(toDuration(new CalendarInterval(0, 1, 0)) === Duration.ofDays(1))
-    intercept[IllegalArgumentException](toDuration(new CalendarInterval(1, 1, 0)))
-  }
 }

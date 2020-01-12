@@ -118,24 +118,6 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
-  def createDeserializerForPeriod(path: Expression): Expression = {
-    StaticInvoke(
-      IntervalUtils.getClass,
-      ObjectType(classOf[java.time.Period]),
-      "toPeriod",
-      path :: Nil,
-      returnNullable = false)
-  }
-
-  def createDeserializerForDuration(path: Expression): Expression = {
-    StaticInvoke(
-      IntervalUtils.getClass,
-      ObjectType(classOf[java.time.Duration]),
-      "toDuration",
-      path :: Nil,
-      returnNullable = false)
-  }
-
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {
