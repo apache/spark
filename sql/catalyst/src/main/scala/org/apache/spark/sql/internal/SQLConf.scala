@@ -171,43 +171,6 @@ object SQLConf {
     }
   }
 
-  /**
-   * Holds information about keys that have been removed.
-   *
-   * @param key The removed config key.
-   * @param version Version of Spark where key was removed.
-   * @param defaultValue The default config value. It can be used to notice
-   *                     users that they set non-default value to an already removed config.
-   * @param comment Additional info regarding to the removed config.
-   */
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
-
-  /**
-   * The map contains info about removed SQL configs. Keys are SQL config names,
-   * map values contain extra information like the version in which the config was removed,
-   * config's default value and a comment.
-   */
-  val removedSQLConfigs: Map[String, RemovedConfig] = {
-    val configs = Seq(
-      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
-        "It was removed to prevent errors like SPARK-23173 for non-default value."),
-      RemovedConfig(
-        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
-        "It was removed to prevent loosing of users data for non-default value."),
-      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
-        "It was removed to prevent errors like SPARK-23549 for non-default value."),
-      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
-        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
-      RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
-        "The non-default behavior is considered as a bug, see SPARK-22395. " +
-        "The config was deprecated since Spark 2.3."),
-      RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
-        "The config was deprecated since Spark 2.3.")
-    )
-
-    Map(configs.map { cfg => cfg.key -> cfg } : _*)
-  }
-
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -2164,6 +2127,44 @@ object SQLConf {
         s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
+
+  /**
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
+   */
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+
+  /**
+   * The map contains info about removed SQL configs. Keys are SQL config names,
+   * map values contain extra information like the version in which the config was removed,
+   * config's default value and a comment.
+   */
+  val removedSQLConfigs: Map[String, RemovedConfig] = {
+    val configs = Seq(
+      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23173 for non-default value."),
+      RemovedConfig(
+        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
+        "It was removed to prevent loosing of users data for non-default value."),
+      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23549 for non-default value."),
+      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
+        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
+      RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
+        "The non-default behavior is considered as a bug, see SPARK-22395. " +
+          "The config was deprecated since Spark 2.3."),
+      RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
+        "The config was deprecated since Spark 2.3." +
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
