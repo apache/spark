@@ -189,10 +189,15 @@ abstract class SparkFunSuite
     }
   }
 
-  class LogAppender extends AppenderSkeleton {
+  class LogAppender(maxEvents: Int = 100) extends AppenderSkeleton {
     val loggingEvents = new ArrayBuffer[LoggingEvent]()
 
-    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
+    override def append(loggingEvent: LoggingEvent): Unit = {
+      if (loggingEvents.size > maxEvents) {
+        throw new IllegalStateException(s"Number of logging event reached the limit: $maxEvents")
+      }
+      loggingEvents.append(loggingEvent)
+    }
     override def close(): Unit = {}
     override def requiresLayout(): Boolean = false
   }
