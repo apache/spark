@@ -32,6 +32,8 @@ import com.univocity.parsers.common.TextParsingException
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.log4j.{AppenderSkeleton, LogManager}
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -1761,17 +1763,24 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
-    val testAppender1 = new LogAppender
+    class TestAppender extends AppenderSkeleton {
+      var events = new java.util.ArrayList[LoggingEvent]
+      override def close(): Unit = {}
+      override def requiresLayout: Boolean = false
+      protected def append(event: LoggingEvent): Unit = events.add(event)
+    }
+
+    val testAppender1 = new TestAppender
     withLogAppender(testAppender1) {
       val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
       val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
 
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
     }
-    assert(testAppender1.loggingEvents
+    assert(testAppender1.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
 
-    val testAppender2 = new LogAppender
+    val testAppender2 = new TestAppender
     withLogAppender(testAppender2) {
       withTempPath { path =>
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
@@ -1786,7 +1795,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
           .collect()
       }
     }
-    assert(testAppender2.loggingEvents
+    assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 

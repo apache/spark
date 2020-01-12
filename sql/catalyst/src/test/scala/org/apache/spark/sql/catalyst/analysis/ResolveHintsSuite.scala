@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.log4j.Level
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.log4j.{AppenderSkeleton, Level}
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -29,6 +32,14 @@ import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  class MockAppender extends AppenderSkeleton {
+    val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
+    override def close(): Unit = {}
+    override def requiresLayout(): Boolean = false
+  }
 
   test("invalid hints should be ignored") {
     checkAnalysis(
@@ -223,7 +234,7 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("log warnings for invalid hints") {
-    val logAppender = new LogAppender
+    val logAppender = new MockAppender()
     withLogAppender(logAppender) {
       checkAnalysis(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),
