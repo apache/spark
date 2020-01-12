@@ -176,39 +176,47 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
         withTempDir { dir =>
           try {
-            sql("USE default")
-            sql(
-              """
-                |CREATE EXTERNAL TABLE hive_orc(
-                |  C1 INT,
-                |  C2 INT,
-                |  C3 STRING)
-                |STORED AS orc
-                |LOCATION '${new File(s"${dir.getCanonicalPath}").toURI}'""".stripMargin)
+            val orcTblStatement1 =
+              s"""
+                 |CREATE EXTERNAL TABLE orc_tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS orc
+                 |LOCATION '${s"${dir.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(orcTblStatement1)
 
-            // Hive throws an exception if I assign the location in the create table statement.
-            sql(s"ALTER TABLE hive_orc SET LOCATION " +
-                s"'${new File(s"${dir.getCanonicalPath}/l1/").toURI}'")
-            hiveClient.runSqlHive(
-              """
-                |INSERT INTO TABLE hive_orc
-                |VALUES (1, 1, 'orc1'), (2, 2, 'orc2')""".stripMargin)
+            val orcTblInsertL1 =
+              s"INSERT INTO TABLE orc_tbl1 VALUES (1, 1, 'orc1'), (2, 2, 'orc2')".stripMargin
+            sql(orcTblInsertL1)
 
-            sql(
-              s"ALTER TABLE hive_orc SET LOCATION " +
-                s"'${new File(s"${dir.getCanonicalPath}/l1/l2/").toURI}'")
-            hiveClient.runSqlHive(
-              """
-                |INSERT INTO TABLE hive_orc
-                |VALUES (3, 3, 'orc3'), (4, 4, 'orc4')""".stripMargin)
+            val orcTblStatement2 =
+            s"""
+               |CREATE EXTERNAL TABLE orc_tbl2(
+               |  c1 int,
+               |  c2 int,
+               |  c3 string)
+               |STORED AS orc
+               |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(orcTblStatement2)
 
-            sql(
-              s"ALTER TABLE hive_orc SET LOCATION " +
-                s"'${new File(s"${dir.getCanonicalPath}/l1/l2/l3/").toURI}'")
-            hiveClient.runSqlHive(
-              """
-                |INSERT INTO TABLE hive_orc
-                |VALUES (5, 5, 'orc5'), (6, 6, 'orc6')""".stripMargin)
+            val orcTblInsertL2 =
+              s"INSERT INTO TABLE orc_tbl2 VALUES (3, 3, 'orc3'), (4, 4, 'orc4')".stripMargin
+            sql(orcTblInsertL2)
+
+            val orcTblStatement3 =
+            s"""
+               |CREATE EXTERNAL TABLE orc_tbl3(
+               |  c1 int,
+               |  c2 int,
+               |  c3 string)
+               |STORED AS orc
+               |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/l3/"}'""".stripMargin
+            sql(orcTblStatement3)
+
+            val orcTblInsertL3 =
+              s"INSERT INTO TABLE orc_tbl3 VALUES (5, 5, 'orc5'), (6, 6, 'orc6')".stripMargin
+            sql(orcTblInsertL3)
 
             withTable("tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
               val topDirStatement =
@@ -316,7 +324,9 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               }
             }
           } finally {
-            hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+            sql("DROP TABLE IF EXISTS orc_tbl1")
+            sql("DROP TABLE IF EXISTS orc_tbl2")
+            sql("DROP TABLE IF EXISTS orc_tbl3")
           }
         }
       }
