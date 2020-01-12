@@ -2125,7 +2125,7 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+      > SELECT _FUNC_('days', interval 5 days 6 hours);
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001

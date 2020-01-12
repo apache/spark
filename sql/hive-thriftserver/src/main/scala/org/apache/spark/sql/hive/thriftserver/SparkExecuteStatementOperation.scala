@@ -110,9 +110,10 @@ private[hive] class SparkExecuteStatementOperation(
         to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
       case YearMonthIntervalType =>
         to += HiveResult.toHiveString(
-          (from.getAs[CalendarInterval](ordinal), YearMonthIntervalType))
+          (from.getAs[java.time.Period](ordinal), YearMonthIntervalType))
       case DayTimeIntervalType =>
-        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), DayTimeIntervalType))
+        to += HiveResult.toHiveString(
+          (from.getAs[java.time.Duration](ordinal), DayTimeIntervalType))
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
         val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString

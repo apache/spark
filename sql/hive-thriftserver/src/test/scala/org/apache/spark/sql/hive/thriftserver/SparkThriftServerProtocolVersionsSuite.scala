@@ -262,9 +262,11 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
     }
 
     test(s"$version get interval type") {
-      testExecuteStatementWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT interval '1' year, interval '2' day") { rs =>
         assert(rs.next())
-        assert(rs.getString(1) === "1 years 2 days")
+        assert(rs.getString(1) === "1 years")
+        assert(rs.getString(2) === "48 hours")
       }
     }
 
