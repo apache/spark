@@ -46,6 +46,9 @@ class PandasGroupedOpsMixin(object):
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 
+        .. note:: It is preferred to use :meth:`pyspark.sql.GroupedData.applyInPandas` over this
+            API. This API will be deprecated in the future releases.
+
         :param udf: a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.
 
@@ -96,8 +99,6 @@ class PandasGroupedOpsMixin(object):
         :param schema: the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
-
         .. note:: Experimental
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -118,6 +119,8 @@ class PandasGroupedOpsMixin(object):
         |  2|-0.2773500981126146|
         |  2| 1.1094003924504583|
         +---+-------------------+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
         from pyspark.sql.functions import pandas_udf, PandasUDFType

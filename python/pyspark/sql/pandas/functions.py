@@ -425,7 +425,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                          None]:  # None means it should infer the type from type hints.
 
-        raise ValueError("Invalid functionType: "
+        raise ValueError("Invalid function type: "
                          "functionType must be one the values from PandasUDFType")
 
     if is_decorator:

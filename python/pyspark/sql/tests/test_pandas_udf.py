@@ -120,7 +120,7 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf(functionType=PandasUDFType.SCALAR)
                 def foo(x):
                     return x
-            with self.assertRaisesRegexp(ValueError, 'Invalid functionType'):
+            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
                 @pandas_udf('double', 100)
                 def foo(x):
                     return x
