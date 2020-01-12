@@ -757,7 +757,7 @@ private[columnar] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case i: CalendarIntervalType => CALENDAR_INTERVAL
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)
       case arr: ArrayType => ARRAY(arr)

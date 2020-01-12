@@ -109,6 +109,14 @@ private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer, dataType: Cal
   extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
   with NullableColumnAccessor
 
+private[columnar] class YearMonthColumnAccessor(buffer: ByteBuffer, dataType: YearMonthIntervalType)
+  extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
+    with NullableColumnAccessor
+
+private[columnar] class DayTimeColumnAccessor(buffer: ByteBuffer, dataType: DayTimeIntervalType)
+  extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
+    with NullableColumnAccessor
+
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 

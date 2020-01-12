@@ -87,6 +87,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case StringType => classOf[StringColumnAccessor].getName
         case BinaryType => classOf[BinaryColumnAccessor].getName
         case CalendarIntervalType => classOf[IntervalColumnAccessor].getName
+        case YearMonthIntervalType => classOf[YearMonthColumnAccessor].getName
+        case DayTimeIntervalType => classOf[DayTimeColumnAccessor].getName
         case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
           classOf[CompactDecimalColumnAccessor].getName
         case dt: DecimalType => classOf[DecimalColumnAccessor].getName

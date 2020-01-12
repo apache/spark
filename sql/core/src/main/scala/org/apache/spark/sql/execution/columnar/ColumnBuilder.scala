@@ -179,7 +179,8 @@ private[columnar] object ColumnBuilder {
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
-      case CalendarIntervalType => new IntervalColumnBuilder
+      case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+        new IntervalColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)

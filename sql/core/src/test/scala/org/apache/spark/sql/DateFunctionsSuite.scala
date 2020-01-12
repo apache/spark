@@ -290,7 +290,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
     val d1 = Date.valueOf("2015-07-31")
     val d2 = Date.valueOf("2015-12-31")
-    val i = new CalendarInterval(2, 2, 2000000L)
+    val i = new CalendarInterval(0, 62, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.selectExpr(s"d + INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),
@@ -306,7 +306,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
     val d1 = Date.valueOf("2015-09-30")
     val d2 = Date.valueOf("2016-02-29")
-    val i = new CalendarInterval(2, 2, 2000000L)
+    val i = new CalendarInterval(0, 62, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.selectExpr(s"d - INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),

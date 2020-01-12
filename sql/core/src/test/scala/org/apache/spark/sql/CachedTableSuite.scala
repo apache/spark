@@ -1110,10 +1110,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     withTable("interval_cache") {
       Seq((1, "1 second"), (2, "2 seconds"), (2, null))
         .toDF("k", "v").write.saveAsTable("interval_cache")
-      sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
+      sql("CACHE TABLE t1 AS SELECT k, cast(v as interval day to second) FROM interval_cache")
       assert(spark.catalog.isCached("t1"))
       checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
-        Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
+        Row(1, java.time.Duration.ofSeconds(1)))
       sql("UNCACHE TABLE t1")
       assert(!spark.catalog.isCached("t1"))
     }
