@@ -24,8 +24,8 @@ import scala.util.control.NonFatal
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING, TASKSET_MANAGER_SPECULATION_TESTING}
