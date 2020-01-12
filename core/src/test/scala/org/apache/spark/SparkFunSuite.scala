@@ -193,7 +193,7 @@ abstract class SparkFunSuite
     val loggingEvents = new ArrayBuffer[LoggingEvent]()
 
     override def append(loggingEvent: LoggingEvent): Unit = {
-      if (loggingEvents.size > maxEvents) {
+      if (loggingEvents.size >= maxEvents) {
         throw new IllegalStateException(s"Number of logging event reached the limit: $maxEvents")
       }
       loggingEvents.append(loggingEvent)
