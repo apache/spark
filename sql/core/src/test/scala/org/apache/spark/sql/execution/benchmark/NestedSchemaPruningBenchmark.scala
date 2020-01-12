@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -48,11 +47,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
   private def addCase(benchmark: Benchmark, name: String, sql: String): Unit = {
     benchmark.addCase(name) { _ =>
-      spark.sql(sql)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+      spark.sql(sql).noop()
     }
   }
 
