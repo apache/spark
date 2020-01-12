@@ -450,13 +450,16 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
-    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
-    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
+    val yearMonth = Literal(IntervalUtils.stringToInterval("interval 1 year 3 month"))
+    assertEqual("InterVal 'interval 1 year 3 month'", yearMonth)
+    assertEqual("INTERVAL 'interval 1 year 3 month'", yearMonth)
+    val dayTime = Literal(IntervalUtils.stringToInterval("interval 1 day 2 hour"))
+    assertEqual("InterVal '1 day 2 hour'", dayTime)
+
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
     assertEqual(
-      "-interval '3 month 1 hour'",
-      UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
+      "-interval '3 day 1 hour'",
+      UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 day 1 hour"))))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -721,9 +724,10 @@ class ExpressionParserSuite extends AnalysisTest {
       "Intervals FROM month TO second are not supported.")
 
     // Composed intervals.
-    checkIntervals(
-      "3 months 4 days 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 4, 22001000L)))
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      checkIntervals("3 months 4 days 22 seconds 1 millisecond",
+        Literal(new CalendarInterval(3, 4, 22001000L)))
+    }
   }
 
   test("composed expressions") {
