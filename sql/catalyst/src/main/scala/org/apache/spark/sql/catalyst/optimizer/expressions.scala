@@ -406,19 +406,40 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyBinaryComparison
+  extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
+
+  private def canSimplifyComparison(
+      plan: LogicalPlan, left: Expression, right: Expression): Boolean = {
+    if (left.semanticEquals(right)) {
+      if (!left.nullable && !right.nullable) {
+        true
+      } else {
+        // We do more checks for non-nullable cases
+        plan match {
+          case Filter(fc, _) =>
+            splitConjunctivePredicates(fc).exists { condition =>
+              condition.semanticEquals(IsNotNull(left))
+            }
+          case _ => false
+        }
+      }
+    } else {
+      false
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+    case l: LogicalPlan => l transformExpressionsUp {
       // True with equality
       case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-      case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
-      case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
-        TrueLiteral
-      case a LessThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
+      case a EqualTo b if canSimplifyComparison(l, a, b) => TrueLiteral
+      case a GreaterThanOrEqual b if canSimplifyComparison(l, a, b) => TrueLiteral
+      case a LessThanOrEqual b if canSimplifyComparison(l, a, b) => TrueLiteral
 
       // False with inequality
-      case a GreaterThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
-      case a LessThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
+      case a GreaterThan b if canSimplifyComparison(l, a, b) => FalseLiteral
+      case a LessThan b if canSimplifyComparison(l, a, b) => FalseLiteral
     }
   }
 }
