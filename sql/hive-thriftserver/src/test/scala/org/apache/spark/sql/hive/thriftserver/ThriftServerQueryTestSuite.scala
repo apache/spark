@@ -65,6 +65,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    "interval-legacy.sql",
+    "interval-display-sql_standard.sql",
+    "interval-display-iso_8601.sql",
+    "interval-display.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",

@@ -22,9 +22,9 @@ SELECT
   interval '-1 day -1 hours',
   interval '-1 day 1 hours',
   interval '-1 days +1 hours',
-  interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
-  - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds'
+  interval '-3 days 4 hours 5 minutes 6.789 seconds',
+  - interval '-3 days 4 hours 5 minutes 6.789 seconds'
 -- !query 1 schema
-struct<CAST(NULL AS INTERVAL YEAR TO MONTH):interval year to month,CAST(NULL AS INTERVAL DAY TO SECOND):interval day to second,INTERVAL '0 seconds':interval,INTERVAL '1 years':interval,INTERVAL '1 months':interval,INTERVAL '1 years 2 months':interval,INTERVAL '1 days -1 hours':interval,INTERVAL '-1 days -1 hours':interval,INTERVAL '-1 days 1 hours':interval,INTERVAL '-1 days 1 hours':interval,INTERVAL '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds':interval,(- INTERVAL '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds'):interval>
+struct<CAST(NULL AS INTERVAL YEAR TO MONTH):interval year to month,CAST(NULL AS INTERVAL DAY TO SECOND):interval day to second,INTERVAL '0 seconds':interval,INTERVAL '1 years':interval,INTERVAL '1 months':interval,INTERVAL '1 years 2 months':interval,INTERVAL '1 days -1 hours':interval,INTERVAL '-1 days -1 hours':interval,INTERVAL '-1 days 1 hours':interval,INTERVAL '-1 days 1 hours':interval,INTERVAL '-3 days 4 hours 5 minutes 6.789 seconds':interval,(- INTERVAL '-3 days 4 hours 5 minutes 6.789 seconds'):interval>
 -- !query 1 output
-NULL	NULL	PT0S	P1Y	P1M	P1Y2M	P1DT-1H	P-1DT-1H	P-1DT1H	P-1DT1H	P1Y2M-3DT4H5M6.789S	P-1Y-2M3DT-4H-5M-6.789S
+NULL	NULL	PT0S	P1Y	P1M	P1Y2M	P1DT-1H	P-1DT-1H	P-1DT1H	P-1DT1H	P-3DT4H5M6.789S	P3DT-4H-5M-6.789S

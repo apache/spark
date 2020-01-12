@@ -274,19 +274,19 @@ Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
 
 
 -- !query 33
-SELECT CAST('interval 3 month 1 hour' AS interval)
+SELECT CAST('interval 3 month 1 year' AS interval year to month), CAST('interval 3 day 1 second' AS interval day to second)
 -- !query 33 schema
-struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+struct<CAST(interval 3 month 1 year AS INTERVAL YEAR TO MONTH):interval year to month,CAST(interval 3 day 1 second AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query 33 output
-3 months 1 hours
+1 years 3 months	3 days 1 seconds
 
 
 -- !query 34
-SELECT CAST(interval 3 month 1 hour AS string)
+SELECT CAST(interval 3 month AS string), CAST(interval 1 hour AS string)
 -- !query 34 schema
-struct<CAST(INTERVAL '3 months 1 hours' AS STRING):string>
+struct<CAST(INTERVAL '3 months' AS STRING):string,CAST(INTERVAL '1 hours' AS STRING):string>
 -- !query 34 output
-3 months 1 hours
+3 months	1 hours
 
 
 -- !query 35

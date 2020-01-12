@@ -58,8 +58,8 @@ DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
 
 -- cast string to interval and interval to string
-SELECT CAST('interval 3 month 1 hour' AS interval);
-SELECT CAST(interval 3 month 1 hour AS string);
+SELECT CAST('interval 3 month 1 year' AS interval year to month), CAST('interval 3 day 1 second' AS interval day to second);
+SELECT CAST(interval 3 month AS string), CAST(interval 1 hour AS string);
 
 -- trim string before cast to numeric
 select cast(' 1' as tinyint);

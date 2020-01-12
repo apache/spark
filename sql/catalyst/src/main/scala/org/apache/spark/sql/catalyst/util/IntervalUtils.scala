@@ -921,7 +921,7 @@ object IntervalUtils {
   def fromDuration(d: Duration): CalendarInterval = {
     val microseconds = Math.addExact(Math.multiplyExact(d.getSeconds, MICROS_PER_SECOND),
       d.getNano / NANOS_PER_MICROS)
-    new CalendarInterval(0, 0, microseconds)
+    CalendarInterval.ofDayTime((microseconds / MICROS_PER_DAY).toInt, microseconds % MICROS_PER_DAY)
   }
 
   def isValidYearMonthInterval(interval: CalendarInterval): Boolean = {

@@ -138,7 +138,8 @@ object ScalaReflection extends ScalaReflection {
    */
   def isNativeType(dt: DataType): Boolean = dt match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => true
+         FloatType | DoubleType | BinaryType | CalendarIntervalType | YearMonthIntervalType |
+         DayTimeIntervalType => true
     case _ => false
   }
 
