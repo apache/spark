@@ -2637,13 +2637,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     .. versionadded:: 2.0.0
     """
 
-    @since("2.0.0")
-    def setClassifier(self, value):
-        """
-        Sets the value of :py:attr:`classifier`.
-        """
-        return self._set(classifier=value)
-
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
