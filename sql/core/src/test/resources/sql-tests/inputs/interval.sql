@@ -130,7 +130,7 @@ select interval 30 day day day;
 
 -- sum interval values
 -- null
-select sum(cast(null as interval year to second));
+select sum(cast(null as interval year to month));
 
 -- empty set
 select sum(cast(v as interval day to second)) from VALUES (interval '1 seconds') t(v) where 1=0;

@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.parallel.immutable.ParVector
@@ -28,7 +30,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, StringUtils}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1556,10 +1558,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-8753: add interval type") {
-    import org.apache.spark.unsafe.types.CalendarInterval
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+      withTempPath(f => {
+        // Currently we don't yet support saving out values of interval data type.
+        val e = intercept[AnalysisException] {
+          df.write.json(f.getCanonicalPath)
+        }
+        e.message.contains("Cannot save interval data type into external storage")
+      })
+    }
+  }
 
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123 )))
+  test("add year-month and day-time interval types") {
+
+    val df = sql("select interval 3 years -3 month, interval 7 week 123 microseconds")
+    checkAnswer(df,
+      Row(
+        Period.ofMonths(33),
+        Duration.of(49 * DateTimeConstants.MICROS_PER_DAY + 123, ChronoUnit.MICROS)))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -1567,21 +1585,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
+
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+    withSQLConf((SQLConf.LEGACY_USE_CALENDAR_INTERVAL_TYPE.key, "true")) {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
-    checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
+      checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
+      checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
 
-    // unary minus
-    checkAnswer(df.select(-df("i")),
-      Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+      // unary minus
+      checkAnswer(df.select(-df("i")), Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+    }
   }
 
   test("aggregation with codegen updates peak execution memory") {
