@@ -34,6 +34,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.TASKSET_MANAGER_SPECULATION_TESTING
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -213,7 +214,6 @@ class TaskSetManagerSuite
     }
     super.afterEach()
   }
-
 
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
@@ -840,10 +840,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-      "exec1" -> "host1",
-      "exec1" -> "host1",
-      "exec3" -> "host3",
-      "exec2" -> "host2")) {
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec3" -> "host3",
+        "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1484,10 +1484,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec3" -> "host3",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec3" -> "host3",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1795,12 +1795,12 @@ class TaskSetManagerSuite
       numTasks: Int,
       numExecutorCores: Int,
       numCoresPerTask: Int): (TaskSetManager, ManualClock) = {
-    sc = new SparkContext("local", "test")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    val conf = new SparkConf()
+    conf.set(config.SPECULATION_ENABLED, true)
+    conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
-    sc.conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
-    sc.conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
+    conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
+    conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
     if (speculationThresholdOpt.isDefined) {
       conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
@@ -1893,15 +1893,28 @@ class TaskSetManagerSuite
 
   test("SPARK-30417 when spark.task.cpus is greater than spark.executor.cores due to " +
     "standalone settings, speculate if there is only one task in the stage") {
-    val (manager, clock) = testSpeculationDurationSetup(
-      Some("60min"),
-      // Set the quantile to be 1.0 so that regular speculation would not be triggered
-      speculationQuantile = 1.0,
-      numTasks = 1,
-      numExecutorCores = 1,
-      numCoresPerTask = 2
-    )
+    val numTasks = 1
+    val numCoresPerTask = 2
+    val conf = new SparkConf()
+    // skip throwing exception when cores per task > cores per executor to emulate standalone mode
+    conf.set(TASKSET_MANAGER_SPECULATION_TESTING, true)
+    conf.set(config.SPECULATION_ENABLED, true)
+    conf.set(config.SPECULATION_QUANTILE.key, "1.0")
+    // Skip setting cores per executor to emulate standalone default mode
+    conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
+    conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // Create a task set with the given number of tasks
+    val taskSet = FakeTask.createTaskSet(numTasks)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    manager.isZombie = false
 
+    // Offer resources for the task to start
+    for (i <- 1 to numTasks) {
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, numCoresPerTask)
+    }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.size == 0)

@@ -131,7 +131,7 @@ class ResourceProfile(
       .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
     if (shouldCheckExecCores) {
       _coresLimitKnown = true
-      ResourceUtils.validateTaskCpusLargeEnough(coresPerExecutor, cpusPerTask)
+      ResourceUtils.validateTaskCpusLargeEnough(sparkConf, coresPerExecutor, cpusPerTask)
     }
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
     val numPartsMap = new mutable.HashMap[String, Int]
