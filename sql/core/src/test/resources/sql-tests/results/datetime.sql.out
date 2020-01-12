@@ -150,28 +150,25 @@ struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) - INTERVAL '2 seconds' AS DATE)
 -- !query 17
 select '2011-11-11' - interval '2' day
 -- !query 17 schema
-struct<>
+struct<CAST(CAST(2011-11-11 AS TIMESTAMP) - INTERVAL '2 days' AS STRING):string>
 -- !query 17 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('2011-11-11' - INTERVAL '2 days')' due to data type mismatch: differing types in '('2011-11-11' - INTERVAL '2 days')' (string and interval day to second).; line 1 pos 7
+2011-11-09 00:00:00
 
 
 -- !query 18
 select '2011-11-11 11:11:11' - interval '2' second
 -- !query 18 schema
-struct<>
+struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
 -- !query 18 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('2011-11-11 11:11:11' - INTERVAL '2 seconds')' due to data type mismatch: differing types in '('2011-11-11 11:11:11' - INTERVAL '2 seconds')' (string and interval day to second).; line 1 pos 7
+2011-11-11 11:11:09
 
 
 -- !query 19
 select '1' - interval '2' second
 -- !query 19 schema
-struct<>
+struct<CAST(CAST(1 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
 -- !query 19 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' - INTERVAL '2 seconds')' due to data type mismatch: differing types in '('1' - INTERVAL '2 seconds')' (string and interval day to second).; line 1 pos 7
+NULL
 
 
 -- !query 20
@@ -180,7 +177,7 @@ select 1 - interval '2' second
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(1 - INTERVAL '2 seconds')' due to data type mismatch: differing types in '(1 - INTERVAL '2 seconds')' (int and interval day to second).; line 1 pos 7
+cannot resolve '1 - INTERVAL '2 seconds'' due to data type mismatch: argument 1 requires timestamp type, however, '1' is of int type.; line 1 pos 7
 
 
 -- !query 21

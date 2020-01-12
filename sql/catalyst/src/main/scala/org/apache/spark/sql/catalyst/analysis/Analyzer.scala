@@ -290,11 +290,9 @@ class Analyzer(
           case (YearMonthIntervalType | DayTimeIntervalType,
               YearMonthIntervalType | DayTimeIntervalType) if conf.useLegacyIntervalType =>
             a.copy(left = Cast(l, CalendarIntervalType), right = Cast(r, CalendarIntervalType))
-          case (DateType | TimestampType,
-              CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
+          case (_, CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
             Cast(TimeAdd(l, r), l.dataType)
-          case (CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType,
-              DateType | TimestampType) =>
+          case (CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType, _) =>
             Cast(TimeAdd(r, l), r.dataType)
           case (DateType, _) => DateAdd(l, r)
           case (_, DateType) => DateAdd(r, l)
@@ -311,8 +309,7 @@ class Analyzer(
           case (YearMonthIntervalType | DayTimeIntervalType,
               YearMonthIntervalType | DayTimeIntervalType) if conf.useLegacyIntervalType =>
             s.copy(left = Cast(l, CalendarIntervalType), right = Cast(r, CalendarIntervalType))
-          case (DateType | TimestampType,
-              CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
+          case (_, CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType) =>
             Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
