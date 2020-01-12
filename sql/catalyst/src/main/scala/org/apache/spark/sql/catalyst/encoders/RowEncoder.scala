@@ -226,8 +226,6 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
-    case YearMonthIntervalType => ObjectType(classOf[java.time.Period])
-    case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
