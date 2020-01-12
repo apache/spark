@@ -780,17 +780,11 @@ select interval 30 day day day
 
 
 -- !query 76
-select sum(cast(null as interval year to second))
+select sum(cast(null as interval year to month))
 -- !query 76 schema
-struct<>
+struct<sum(CAST(NULL AS INTERVAL YEAR TO MONTH)):interval year to month>
 -- !query 76 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-mismatched input 'second' expecting 'MONTH'(line 1, pos 41)
-
-== SQL ==
-select sum(cast(null as interval year to second))
------------------------------------------^^^
+NULL
 
 
 -- !query 77
