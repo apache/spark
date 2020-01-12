@@ -39,7 +39,7 @@ select typeof(date '1986-05-23'),  typeof(timestamp '1986-05-23'), typeof(interv
 -- !query 4 schema
 struct<typeof(DATE '1986-05-23'):string,typeof(TIMESTAMP '1986-05-23 00:00:00'):string,typeof(INTERVAL '23 days'):string>
 -- !query 4 output
-date	timestamp	interval
+date	timestamp	interval day to second
 
 
 -- !query 5
