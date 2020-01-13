@@ -39,14 +39,11 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     val partitionColumns =
       relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
     val partitionSet = AttributeSet(partitionColumns)
-    val partitionKeyFilters = ExpressionSet(normalizedFilters.filter { f =>
+    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
-    })
+    )
 
-    val dataFilters =
-      normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
-
-    (partitionKeyFilters, dataFilters)
+    (ExpressionSet(partitionFilters), dataFilters)
   }
 
   private def rebuildPhysicalOperation(
