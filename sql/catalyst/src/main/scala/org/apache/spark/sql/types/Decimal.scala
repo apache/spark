@@ -141,6 +141,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     } else if (decimal.scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
       this._precision = decimal.precision - decimal.scale
       this._scale = 0
+      // set scale to 0 to correct unscaled value
       this.decimalVal = decimal.setScale(0)
     } else {
       this._precision = decimal.precision
