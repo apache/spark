@@ -234,6 +234,12 @@ Data source options of Avro can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>pathGlobFilter</code></td>
+    <td>""</td>
+    <td>The option specifies an optional glob pattern to only include files with paths matching the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>. It does not change the behavior of partition discovery.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>compression</code></td>
     <td>snappy</td>
     <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
