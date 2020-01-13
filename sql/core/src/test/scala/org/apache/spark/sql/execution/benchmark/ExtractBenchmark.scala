@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.time.Instant
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,10 +42,7 @@ object ExtractBenchmark extends SqlBasedBenchmark {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .noop()
     }
   }
 
