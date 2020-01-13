@@ -78,17 +78,18 @@ class CSVFilters(
       for (filter <- filters) {
         val expr = CSVFilters.filterToExpression(filter, toRef)
         val refs = filter.references
-        if (refs.isEmpty) {
+        val index = if (refs.isEmpty) {
           // For example, AlwaysTrue and AlwaysFalse doesn't have any references
-          for (i <- 0 until len) {
-            groupedExprs(i) ++= expr
-          }
+          // Filters w/o refs always return the same result. Taking into account
+          // that predicates are combined via And, we can apply such filters only
+          // once at the position 0.
+          0
         } else {
           // readSchema must contain attributes of all filters.
           // Accordingly, fieldIndex() returns a valid index always.
-          val index = refs.map(readSchema.fieldIndex).max
-          groupedExprs(index) ++= expr
+          refs.map(readSchema.fieldIndex).max
         }
+        groupedExprs(index) ++= expr
       }
       for (i <- 0 until len) {
         if (!groupedExprs(i).isEmpty) {

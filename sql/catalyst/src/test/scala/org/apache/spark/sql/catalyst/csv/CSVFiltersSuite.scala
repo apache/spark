@@ -117,6 +117,12 @@ class CSVFiltersSuite extends SparkFunSuite {
     check(filters = Seq(AlwaysTrue), row = InternalRow(1), pos = 0, skip = false)
     check(filters = Seq(AlwaysFalse), row = InternalRow(1), pos = 0, skip = true)
     check(
+      filters = Seq(sources.LessThan("d", 10), sources.AlwaysFalse),
+      requiredSchema = "i INTEGER, d DOUBLE",
+      row = InternalRow(1, 3.14),
+      pos = 0,
+      skip = true)
+    check(
       filters = Seq(sources.EqualTo("i", 10)),
       row = InternalRow(10, 3.14),
       pos = 0,
