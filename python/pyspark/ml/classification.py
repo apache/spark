@@ -2637,13 +2637,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     .. versionadded:: 2.0.0
     """
 
-    @since("2.0.0")
-    def setClassifier(self, value):
-        """
-        Sets the value of :py:attr:`classifier`.
-        """
-        return self._set(classifier=value)
-
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
@@ -2661,18 +2654,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`rawPredictionCol`.
         """
         return self._set(rawPredictionCol=value)
-
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    def setWeightCol(self, value):
-        """
-        Sets the value of :py:attr:`weightCol`.
-        """
-        return self._set(weightCol=value)
 
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
@@ -2773,8 +2754,9 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         models = [JavaParams._from_java(model) for model in java_stage.models()]
-        py_stage = cls(models=models).setPredictionCol(predictionCol).setLabelCol(labelCol)\
+        py_stage = cls(models=models).setPredictionCol(predictionCol)\
             .setFeaturesCol(featuresCol)
+        py_stage._set(labelCol=labelCol)
         py_stage._set(classifier=classifier)
         py_stage._resetUid(java_stage.uid())
         return py_stage
