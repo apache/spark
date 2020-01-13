@@ -39,9 +39,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     val partitionColumns =
       relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
     val partitionSet = AttributeSet(partitionColumns)
-    ExpressionSet(normalizedFilters.filter { f =>
-      f.references.subsetOf(partitionSet)
-    })
+
+    ExpressionSet(filterPartitioningPredicate(normalizedFilters.reduceLeft(And), partitionSet))
   }
 
   private def rebuildPhysicalOperation(
@@ -109,18 +108,20 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   /**
     * Split predicate ,Filter partitioning predicate
     */
-  def splitPredicates(condition: Expression,partitionSet :AttributeSet): Seq[Expression] = {
+  private def filterPartitioningPredicate(condition: Expression,
+                                  partitionSet: AttributeSet): Seq[Expression] =
     condition match {
       case And(cond1, cond2) =>
-        splitPredicates(cond1,partitionSet) ++ splitPredicates(cond2,partitionSet)
-      case Or(cond1, cond2)=>
-        val leftSeq = splitPredicates(cond1,partitionSet)
-        val rightSeq = splitPredicates(cond2,partitionSet)
-        if(leftSeq.nonEmpty && rightSeq.nonEmpty)
-          Or(leftSeq.reduceLeft(And),rightSeq.reduceLeft(And)) :: Nil
-        else Nil
-      case other  => if (other.references.subsetOf(partitionSet)) other :: Nil else Nil
+        filterPartitioningPredicate(cond1, partitionSet) ++
+          filterPartitioningPredicate(cond2, partitionSet)
+      case Or(cond1, cond2) =>
+        val leftSeq = filterPartitioningPredicate(cond1, partitionSet)
+        val rightSeq = filterPartitioningPredicate(cond2, partitionSet)
+        if (leftSeq.nonEmpty && rightSeq.nonEmpty) {
+          Or(leftSeq.reduceLeft(And), rightSeq.reduceLeft(And)) :: Nil
+        } else Nil
+      case other => if (other.references.subsetOf(partitionSet)) { other :: Nil } else Nil
     }
-  }
+
 
 }
