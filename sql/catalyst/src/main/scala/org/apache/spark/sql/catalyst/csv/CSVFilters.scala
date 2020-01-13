@@ -74,9 +74,8 @@ class CSVFilters(
     val len = readSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
     if (SQLConf.get.csvFilterPushDown) {
-      val groupedExprs = Array.fill(len)(Seq.empty[Expression])
+      val groupedFilters = Array.fill(len)(Seq.empty[sources.Filter])
       for (filter <- filters) {
-        val expr = CSVFilters.filterToExpression(filter, toRef)
         val refs = filter.references
         val index = if (refs.isEmpty) {
           // For example, AlwaysTrue and AlwaysFalse doesn't have any references
@@ -89,11 +88,19 @@ class CSVFilters(
           // Accordingly, fieldIndex() returns a valid index always.
           refs.map(readSchema.fieldIndex).max
         }
-        groupedExprs(index) ++= expr
+        groupedFilters(index) :+= filter
+      }
+      if (len > 0 && !groupedFilters(0).isEmpty) {
+        // We assume that filters w/o refs like AlwaysTrue and AlwaysFalse
+        // can be evaluated faster that others. We put them in front of others.
+        val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
+        groupedFilters(0) = literals ++ others
       }
       for (i <- 0 until len) {
-        if (!groupedExprs(i).isEmpty) {
-          val reducedExpr = groupedExprs(i).reduce(And)
+        if (!groupedFilters(i).isEmpty) {
+          val reducedExpr = groupedFilters(i)
+            .flatMap(CSVFilters.filterToExpression(_, toRef))
+            .reduce(And)
           groupedPredicates(i) = Predicate.create(reducedExpr)
         }
       }
