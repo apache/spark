@@ -1576,8 +1576,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     val df = sql("select interval 3 years -3 month, interval 7 week 123 microseconds")
     checkAnswer(df,
       Row(
-        Period.ofMonths(33),
-        Duration.of(49 * DateTimeConstants.MICROS_PER_DAY + 123, ChronoUnit.MICROS)))
+        CalendarInterval.ofMonths(33),
+        CalendarInterval.ofDayTime(49, 123)))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {

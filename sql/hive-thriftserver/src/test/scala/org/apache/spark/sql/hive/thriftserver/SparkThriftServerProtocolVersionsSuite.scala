@@ -266,7 +266,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         "SELECT interval '1' year, interval '2' day") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "1 years")
-        assert(rs.getString(2) === "48 hours")
+        assert(rs.getString(2) === "2 days")
       }
     }
 
