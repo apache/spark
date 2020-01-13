@@ -108,9 +108,16 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog)
 
     if (viewType == LocalTempView) {
+      if (replace && catalog.getTempView(name.table).isDefined) {
+        sparkSession.catalog.uncacheTable(name.quotedString)
+      }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
+      if (replace && catalog.getGlobalTempView(name.table).isDefined) {
+        sparkSession.catalog.uncacheTable(
+          TableIdentifier(name.table, Option(catalog.getGlobalTempViewDatabase)).quotedString)
+      }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -124,6 +131,9 @@ case class CreateViewCommand(
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
+        // uncache the cached data before replacing an exists view
+        sparkSession.catalog.uncacheTable(viewIdent.quotedString)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one

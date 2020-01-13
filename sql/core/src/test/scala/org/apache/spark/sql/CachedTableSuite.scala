@@ -1118,4 +1118,47 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       assert(!spark.catalog.isCached("t1"))
     }
   }
+
+  test("SPARK-30494 avoid duplicated cached RDD when create or replace an existing view") {
+    withTempView("tempView") {
+      spark.catalog.clearCache()
+      sql("create or replace temporary view tempView as select 1")
+      sql("cache table tempView")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isDefined)
+      sql("create or replace temporary view tempView as select 1, 2")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
+      sql("cache table tempView")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1, 2")).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
+    }
+
+    withGlobalTempView("tempGlobalTempView") {
+      spark.catalog.clearCache()
+      sql("create or replace global temporary view tempGlobalTempView as select 1")
+      sql("cache table global_temp.tempGlobalTempView")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isDefined)
+      sql("create or replace global temporary view tempGlobalTempView as select 1, 2")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
+      sql("cache table global_temp.tempGlobalTempView")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1, 2")).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
+    }
+
+    withView("view1") {
+      spark.catalog.clearCache()
+      sql("create or replace view view1 as select 1")
+      sql("cache table view1")
+      sql("create or replace view view1 as select 1, 2")
+      sql("cache table view1")
+      // the cached plan of persisted view likes below,
+      // so we cannot use the same assertion of temp view.
+      // SubqueryAlias
+      //    |
+      //    + View
+      //        |
+      //        + Project[1 AS 1]
+      spark.sharedState.cacheManager.uncacheQuery(spark.table("view1"), cascade = false)
+      assert(spark.sharedState.cacheManager.isEmpty)
+    }
+  }
 }
