@@ -291,7 +291,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       addJaasConfig: Boolean,
       jaasConfig: Option[String] = None): ju.Map[String, Object] = {
     var params = Map[String, Object](
-      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
     )
     if (addJaasConfig) {
       params ++= Map[String, Object](
