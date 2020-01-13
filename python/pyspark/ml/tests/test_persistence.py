@@ -273,17 +273,24 @@ class PersistenceTest(SparkSessionTestCase):
                                          (1.0, 0.5, Vectors.sparse(2, [], [])),
                                          (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
                                         ["label", "wt", "features"])
+
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr).setWeightCol("wt")
-        model = ovr.fit(df)
-        ovrPath = temp_path + "/ovr"
-        ovr.save(ovrPath)
-        loadedOvr = OneVsRest.load(ovrPath)
-        self._compare_pipelines(ovr, loadedOvr)
-        modelPath = temp_path + "/ovrModel"
-        model.save(modelPath)
-        loadedModel = OneVsRestModel.load(modelPath)
-        self._compare_pipelines(model, loadedModel)
+        ovr = OneVsRest(classifier=lr)
+
+        def reload_and_compare(ovr, suffix):
+            model = ovr.fit(df)
+            ovrPath = temp_path + "/{}".format(suffix)
+            ovr.save(ovrPath)
+            loadedOvr = OneVsRest.load(ovrPath)
+            self._compare_pipelines(ovr, loadedOvr)
+            modelPath = temp_path + "/{}Model".format(suffix)
+            model.save(modelPath)
+            loadedModel = OneVsRestModel.load(modelPath)
+            self._compare_pipelines(model, loadedModel)
+
+        reload_and_compare(OneVsRest(classifier=lr), "ovr")
+        reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
+
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
