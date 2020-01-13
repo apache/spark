@@ -160,6 +160,32 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(expected, pdf)
         assert_frame_equal(expected, pdf_arrow)
 
+    def test_toPandas_respect_session_timezone(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        timezone = "America/New_York"
+        with self.sql_conf({
+                "spark.sql.execution.pandas.respectSessionTimeZone": False,
+                "spark.sql.session.timeZone": timezone}):
+            pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow_la, pdf_la)
+
+        with self.sql_conf({
+                "spark.sql.execution.pandas.respectSessionTimeZone": True,
+                "spark.sql.session.timeZone": timezone}):
+            pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow_ny, pdf_ny)
+
+            self.assertFalse(pdf_ny.equals(pdf_la))
+
+            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
+            pdf_la_corrected = pdf_la.copy()
+            for field in self.schema:
+                if isinstance(field.dataType, TimestampType):
+                    pdf_la_corrected[field.name] = _check_series_convert_timestamps_local_tz(
+                        pdf_la_corrected[field.name], timezone)
+            assert_frame_equal(pdf_ny, pdf_la_corrected)
+
     def test_pandas_round_trip(self):
         pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
@@ -204,6 +230,34 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = self.create_pandas_data_frame()
         df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf, schema=self.schema)
         self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
+
+    def test_createDataFrame_respect_session_timezone(self):
+        from datetime import timedelta
+        pdf = self.create_pandas_data_frame()
+        timezone = "America/New_York"
+        with self.sql_conf({
+                "spark.sql.execution.pandas.respectSessionTimeZone": False,
+                "spark.sql.session.timeZone": timezone}):
+            df_no_arrow_la, df_arrow_la = self._createDataFrame_toggle(pdf, schema=self.schema)
+            result_la = df_no_arrow_la.collect()
+            result_arrow_la = df_arrow_la.collect()
+            self.assertEqual(result_la, result_arrow_la)
+
+        with self.sql_conf({
+                "spark.sql.execution.pandas.respectSessionTimeZone": True,
+                "spark.sql.session.timeZone": timezone}):
+            df_no_arrow_ny, df_arrow_ny = self._createDataFrame_toggle(pdf, schema=self.schema)
+            result_ny = df_no_arrow_ny.collect()
+            result_arrow_ny = df_arrow_ny.collect()
+            self.assertEqual(result_ny, result_arrow_ny)
+
+            self.assertNotEqual(result_ny, result_la)
+
+            # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
+            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '8_timestamp_t' else v
+                                          for k, v in row.asDict().items()})
+                                   for row in result_la]
+            self.assertEqual(result_ny, result_la_corrected)
 
     def test_createDataFrame_with_schema(self):
         pdf = self.create_pandas_data_frame()

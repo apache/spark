@@ -724,6 +724,49 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 for (r,) in result:
                     self.assertTrue(r <= 3)
 
+    def test_vectorized_udf_timestamps_respect_session_timezone(self):
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
+                (2, datetime(2012, 2, 2, 2, 2, 2)),
+                (3, None),
+                (4, datetime(2100, 3, 3, 3, 3, 3))]
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        scalar_internal_value = pandas_udf(
+            lambda ts: ts.apply(lambda ts: ts.value if ts is not pd.NaT else None), LongType())
+
+        @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
+        def iter_internal_value(it):
+            for ts in it:
+                yield ts.apply(lambda ts: ts.value if ts is not pd.NaT else None)
+
+        for internal_value, udf_type in [(scalar_internal_value, PandasUDFType.SCALAR),
+                                         (iter_internal_value, PandasUDFType.SCALAR_ITER)]:
+            f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType(), udf_type)
+            timezone = "America/New_York"
+            with self.sql_conf({
+                    "spark.sql.execution.pandas.respectSessionTimeZone": False,
+                    "spark.sql.session.timeZone": timezone}):
+                df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                    .withColumn("internal_value", internal_value(col("timestamp")))
+                result_la = df_la.select(col("idx"), col("internal_value")).collect()
+                # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
+                diff = 3 * 60 * 60 * 1000 * 1000 * 1000
+                result_la_corrected = \
+                    df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
+
+            with self.sql_conf({
+                    "spark.sql.execution.pandas.respectSessionTimeZone": True,
+                    "spark.sql.session.timeZone": timezone}):
+                df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                    .withColumn("internal_value", internal_value(col("timestamp")))
+                result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
+
+                self.assertNotEqual(result_ny, result_la)
+                self.assertEqual(result_ny, result_la_corrected)
+
     def test_nondeterministic_vectorized_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         @pandas_udf('double')
