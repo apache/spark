@@ -269,12 +269,12 @@ class PersistenceTest(SparkSessionTestCase):
 
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
-        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
-                                         (1.0, Vectors.sparse(2, [], [])),
-                                         (2.0, Vectors.dense(0.5, 0.5))] * 10,
-                                        ["label", "features"])
+        df = self.spark.createDataFrame([(0.0, 0.5, Vectors.dense(1.0, 0.8)),
+                                         (1.0, 0.5, Vectors.sparse(2, [], [])),
+                                         (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
+                                        ["label", "wt", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        ovr = OneVsRest(classifier=lr).setWeightCol("wt")
         model = ovr.fit(df)
         ovrPath = temp_path + "/ovr"
         ovr.save(ovrPath)

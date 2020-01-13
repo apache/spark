@@ -2558,11 +2558,12 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         rawPredictionCol = java_stage.getRawPredictionCol()
+        weightCol = java_stage.getWeightCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       rawPredictionCol=rawPredictionCol, classifier=classifier,
-                       parallelism=parallelism)
+                       rawPredictionCol=rawPredictionCol, weightCol=weightCol,
+                       classifier=classifier, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -2579,6 +2580,7 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
+        _java_obj.setWeightCol(self.getWeightCol())
         _java_obj.setRawPredictionCol(self.getRawPredictionCol())
         return _java_obj
 
@@ -2752,11 +2754,13 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         featuresCol = java_stage.getFeaturesCol()
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
+        weightCol = java_stage.getWeightCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         models = [JavaParams._from_java(model) for model in java_stage.models()]
         py_stage = cls(models=models).setPredictionCol(predictionCol)\
             .setFeaturesCol(featuresCol)
         py_stage._set(labelCol=labelCol)
+        py_stage._set(weightCol=weightCol)
         py_stage._set(classifier=classifier)
         py_stage._resetUid(java_stage.uid())
         return py_stage
@@ -2778,6 +2782,7 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         _java_obj.set("featuresCol", self.getFeaturesCol())
         _java_obj.set("labelCol", self.getLabelCol())
         _java_obj.set("predictionCol", self.getPredictionCol())
+        _java_obj.set("weightCol", self.getWeightCol())
         return _java_obj
 
 
