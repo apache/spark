@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -214,23 +214,13 @@ class ResolveSessionCatalog(
     case RenameTableStatement(SessionCatalogAndTable(_, oldName), newNameParts, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
 
-    case DescribeTableStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-      }.getOrElse {
-        // The v1 `DescribeTableCommand` can describe view as well.
-        if (isView(tbl)) {
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-        } else {
-          if (partitionSpec.nonEmpty) {
-            throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
-          }
-          val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-          DescribeTable(r, isExtended)
-        }
-      }
+    case DescribeRelation(ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+
+    // Use v1 command to describe temp view, as v2 catalog doesn't support view yet.
+    case DescribeRelation(SubqueryAlias(name, _), partitionSpec, isExtended) =>
+      val ident = TableIdentifier(name.identifier, name.database)
+      DescribeTableCommand(ident, partitionSpec, isExtended)
 
     case DescribeColumnStatement(
         SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>

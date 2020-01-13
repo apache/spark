@@ -759,6 +759,8 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
+      case u @ UnresolvedTableOrView(ident) =>
+        lookupTempView(ident).getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -803,15 +805,15 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .getOrElse(u)
+
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
-
-      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => desc.copy(table = rel))
-            .getOrElse(desc)
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
@@ -889,12 +891,24 @@ class Analyzer(
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier: Seq[String]) =>
+      case u @ UnresolvedTable(identifier) =>
         expandRelationName(identifier) match {
           case SessionCatalogAndIdentifier(catalog, ident) =>
             CatalogV2Util.loadTable(catalog, ident) match {
               case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
                 u.failAnalysis(s"$ident is a view not table.")
+              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
+              case None => u
+            }
+          case _ => u
+        }
+
+      case u @ UnresolvedTableOrView(identifier) =>
+        expandRelationName(identifier) match {
+          case SessionCatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              // We don't support view in v2 catalog yet. Here we treat v1 view as table and use
+              // `ResolvedTable` to carry it.
               case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
               case None => u
             }
