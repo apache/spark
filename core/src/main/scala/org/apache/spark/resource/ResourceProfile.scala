@@ -31,11 +31,10 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 
 /**
- * Resource profile to associate with an RDD.
- * A ResourceProfile allows the user to specify executor and task requirements for an RDD
- * that will get applied during a stage. This allows the user to change the resource
- * requirements between stages.
- * This is meant to be immutable so user can't change it after buliding.
+ * Resource profile to associate with an RDD. A ResourceProfile allows the user to
+ * specify executor and task requirements for an RDD that will get applied during a
+ * stage. This allows the user to change the resource requirements between stages.
+ * This is meant to be immutable so user can't change it after building.
  */
 @Evolving
 class ResourceProfile(
@@ -72,7 +71,7 @@ class ResourceProfile(
 
   // Note that some cluster managers don't set the executor cores explicitly so
   // be sure to check the Option as required
- private[spark] def getExecutorCores: Option[Int] = {
+  private[spark] def getExecutorCores: Option[Int] = {
     executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
   }
 

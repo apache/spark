@@ -44,30 +44,30 @@ private[ui] class EnvironmentPage(
       ereqs.map {
         case (_, ereq) =>
           val execStr = new mutable.StringBuilder()
-          execStr ++= s"${ereq.resourceName}: [amount: ${ereq.amount}"
+          execStr ++= s"\t${ereq.resourceName}: [amount: ${ereq.amount}"
           if (ereq.discoveryScript.nonEmpty) execStr ++= s", discovery: ${ereq.discoveryScript}"
           if (ereq.vendor.nonEmpty) execStr ++= s", vendor: ${ereq.vendor}"
           execStr ++= "]"
           execStr.toString()
-      }.mkString("; ")
+      }.mkString("\n")
     }
 
     def constructTaskRequestString(treqs: Map[String, TaskResourceRequest]): String = {
       treqs.map {
-        case (_, ereq) => s"${ereq.resourceName}: [amount: ${ereq.amount}]\n"
-      }.mkString("; ")
+        case (_, ereq) => s"\t${ereq.resourceName}: [amount: ${ereq.amount}]"
+      }.mkString("\n")
     }
 
     val resourceProfileInfo = store.resourceProfileInfo().map { rinfo =>
       val einfo = constructExecutorRequestString(rinfo.executorResources)
       val tinfo = constructTaskRequestString(rinfo.taskResources)
-      val res = s"Executor Reqs: $einfo \n Task Reqs: $tinfo"
+      val res = s"Executor Reqs:\n$einfo\nTask Reqs:\n$tinfo"
       (rinfo.id.toString, res)
     }.toMap
 
     val resourceProfileInformationTable = UIUtils.listingTable(
-      resourceProfileHeader, jvmRow, resourceProfileInfo.toSeq.sorted, fixedWidth = true,
-      headerClasses = headerClasses)
+      resourceProfileHeader, jvmRowDataPre, resourceProfileInfo.toSeq.sorted, fixedWidth = true,
+      headerClasses = headerClassesNoSortValues)
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
       headerClasses = headerClasses)
@@ -160,7 +160,10 @@ private[ui] class EnvironmentPage(
   private def propertyHeader = Seq("Name", "Value")
   private def classPathHeader = Seq("Resource", "Source")
   private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
+  private def headerClassesNoSortValues = Seq("sorttable_alpha", "sorttable_nosort")
 
+  private def jvmRowDataPre(kv: (String, String)) =
+    <tr><td>{kv._1}</td><td><pre>{kv._2}</pre></td></tr>
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
