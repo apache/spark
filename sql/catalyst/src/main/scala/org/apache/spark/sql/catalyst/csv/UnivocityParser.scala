@@ -301,7 +301,6 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
-            requiredSingleRow.setNullAt(i)
         }
         i += 1
       }
