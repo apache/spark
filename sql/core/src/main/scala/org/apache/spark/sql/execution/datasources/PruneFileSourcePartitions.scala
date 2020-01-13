@@ -120,5 +120,4 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       case other => if (other.references.subsetOf(partitionSet)) { other :: Nil } else Nil
     }
 
-
 }
