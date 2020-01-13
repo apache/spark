@@ -2161,6 +2161,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
+      .internal()
+      .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2416,6 +2423,9 @@ class SQLConf extends Serializable with Logging {
   def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
   def addDirectoryRecursiveEnabled: Boolean = getConf(LEGACY_ADD_DIRECTORY_USING_RECURSIVE)
+
+  def legacyMsSqlServerNumericMappingEnabled: Boolean =
+    getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
