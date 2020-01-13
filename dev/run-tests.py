@@ -618,38 +618,42 @@ def main():
     test_modules = determine_modules_to_test(changed_modules)
 
     # license checks
-    run_apache_rat_checks()
+    # run_apache_rat_checks()
 
     # style checks
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        run_scala_style_checks(extra_profiles)
+        # run_scala_style_checks(extra_profiles)
+        pass
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
         # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-        should_run_java_style_checks = True
+        # should_run_java_style_checks = True
+        pass
     if not changed_files or any(f.endswith("lint-python")
                                 or f.endswith("tox.ini")
                                 or f.endswith(".py")
                                 for f in changed_files):
-        run_python_style_checks()
+        # run_python_style_checks()
+        pass
     if not changed_files or any(f.endswith(".R")
                                 or f.endswith("lint-r")
                                 or f.endswith(".lintr")
                                 for f in changed_files):
-        run_sparkr_style_checks()
+        # run_sparkr_style_checks()
+        pass
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules):
-        run_build_tests()
+    # if any(m.should_run_build_tests for m in test_modules):
+    #     run_build_tests()
 
     # spark build
     build_apache_spark(build_tool, extra_profiles)
@@ -663,7 +667,7 @@ def main():
         build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags)
+    # run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
@@ -672,9 +676,9 @@ def main():
         is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
         run_python_tests(
             modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
-        run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules):
-        run_sparkr_tests()
+        # run_python_packaging_tests()
+    # if any(m.should_run_r_tests for m in test_modules):
+    #     run_sparkr_tests()
 
 
 def _test():
