@@ -283,15 +283,15 @@ class UnivocityParser(
         i += 1
       }
 
-      var skipValueConversion = false
+      var skipRow = false
       var badRecordException: Option[Throwable] = None
       i = 0
-      while (!skipValueConversion && i < parsedSchema.length) {
+      while (!skipRow && i < parsedSchema.length) {
         try {
           val convertedValue = valueConverters(i).apply(getToken(tokens, i))
           parsedRow(i) = convertedValue
           if (csvFilters.skipRow(parsedRow, i)) {
-            skipValueConversion = true
+            skipRow = true
           } else {
             val requiredIndex = parsedToRequiredIndex(i)
             if (requiredIndex != -1) {
@@ -300,20 +300,20 @@ class UnivocityParser(
           }
         } catch {
           case NonFatal(e) =>
-            badRecordException = Some(e)
-            skipValueConversion = true
+            badRecordException = badRecordException.orElse(Some(e))
+            requiredSingleRow.setNullAt(i)
         }
         i += 1
       }
-      if (skipValueConversion) {
+      if (skipRow) {
+        noRows
+      } else {
         if (badRecordException.isDefined) {
           throw BadRecordException(
             () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
         } else {
-          noRows
+          requiredRow
         }
-      } else {
-        requiredRow
       }
     }
   }
