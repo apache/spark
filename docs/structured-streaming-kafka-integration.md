@@ -810,6 +810,9 @@ The caching key is built up from the following information:
 
 * Kafka producer configuration
 
+This includes configuration for authorization, which Spark will automatically include when delegation token is being used. Even we take authorization into account, you can expect same Kafka producer instance will be used among same Kafka producer configuration.
+It will use different Kafka producer when delegation token is renewed; Kafka producer instance for old delegation token will be evicted according to the cache policy.
+
 The following properties are available to configure the producer pool:
 
 <table class="table">
