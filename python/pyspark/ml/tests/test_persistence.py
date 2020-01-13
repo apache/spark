@@ -291,7 +291,6 @@ class PersistenceTest(SparkSessionTestCase):
         reload_and_compare(OneVsRest(classifier=lr), "ovr")
         reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
 
-
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
         path = tempfile.mkdtemp()
