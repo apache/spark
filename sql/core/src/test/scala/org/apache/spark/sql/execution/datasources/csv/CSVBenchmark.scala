@@ -317,12 +317,12 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"w/o filters", numIters) { _ =>
-        toNoop(readback)
+        readback.noop()
       }
 
       def withFilter(configEnabled: Boolean): Unit = {
         withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
-          toNoop(readback.filter($"key" === 0))
+          readback.filter($"key" === 0).noop()
         }
       }
 
