@@ -127,7 +127,7 @@ class ColumnStatsSuite extends SparkFunSuite {
       rows.foreach(columnStats.gatherStats(_, 0))
 
       val values = rows.take(10).map(_.get(0, columnType.dataType))
-      val ordering = CalendarIntervalType.ordering.asInstanceOf[Ordering[Any]]
+      val ordering = Ordering[CalendarInterval].asInstanceOf[Ordering[Any]]
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
