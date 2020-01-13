@@ -1584,6 +1584,13 @@ object SQLConf {
         "permission and ACLs when re-creating the table/partition paths.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
+     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
+       .internal()
+       .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
+       .booleanConf
+       .createWithDefault(false)
 }
 
 /**
@@ -1993,6 +2000,9 @@ class SQLConf extends Serializable with Logging {
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
+
+  def legacyMsSqlServerNumericMappingEnabled: Boolean =
+    getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
