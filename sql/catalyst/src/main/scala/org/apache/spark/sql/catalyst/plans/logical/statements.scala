@@ -145,6 +145,7 @@ case class ReplaceTableAsSelectStatement(
 case class QualifiedColType(
     name: Seq[String],
     dataType: DataType,
+    nullable: Boolean,
     comment: Option[String],
     position: Option[ColumnPosition])
 
@@ -162,6 +163,7 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
+    nullable: Option[Boolean],
     comment: Option[String],
     position: Option[ColumnPosition]) extends ParsedStatement
 
@@ -299,15 +301,6 @@ case class DescribeTableStatement(
     isExtended: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE NAMESPACE statement, as parsed from SQL.
- */
-case class DescribeNamespaceStatement(
-    namespace: LogicalPlan,
-    extended: Boolean) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
@@ -346,15 +339,6 @@ case class InsertIntoStatement(
 }
 
 /**
- * A SHOW TABLES statement, as parsed from SQL.
- */
-case class ShowTablesStatement(
-    namespace: LogicalPlan,
-    pattern: Option[String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
  * A SHOW TABLE EXTENDED statement, as parsed from SQL.
  */
 case class ShowTableStatement(
@@ -370,43 +354,6 @@ case class CreateNamespaceStatement(
     namespace: Seq[String],
     ifNotExists: Boolean,
     properties: Map[String, String]) extends ParsedStatement
-
-/**
- * A DROP NAMESPACE statement, as parsed from SQL.
- */
-case class DropNamespaceStatement(
-    namespace: LogicalPlan,
-    ifExists: Boolean,
-    cascade: Boolean) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
- * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
- */
-case class AlterNamespaceSetPropertiesStatement(
-    namespace: LogicalPlan,
-    properties: Map[String, String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
- * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
- */
-case class AlterNamespaceSetLocationStatement(
-    namespace: LogicalPlan,
-    location: String) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
-
-/**
- * A SHOW NAMESPACES statement, as parsed from SQL.
- */
-case class ShowNamespacesStatement(
-    namespace: LogicalPlan,
-    pattern: Option[String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
 
 /**
  * A USE statement, as parsed from SQL.

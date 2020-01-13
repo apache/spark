@@ -38,29 +38,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         TableChange.addColumn(
           col.name.toArray,
           col.dataType,
-          true,
+          col.nullable,
           col.comment.orNull,
           col.position.orNull)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
-      val colNameArray = colName.toArray
-      val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colNameArray, newDataType, true)
+    case a @ AlterTableAlterColumnStatement(
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
+      val colName = a.column.toArray
+      val typeChange = a.dataType.map { newDataType =>
+        TableChange.updateColumnType(colName, newDataType)
       }
-      val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colNameArray, newComment)
+      val nullabilityChange = a.nullable.map { nullable =>
+        TableChange.updateColumnNullability(colName, nullable)
       }
-      val positionChange = pos.map { newPosition =>
-        TableChange.updateColumnPosition(colNameArray, newPosition)
+      val commentChange = a.comment.map { newComment =>
+        TableChange.updateColumnComment(colName, newComment)
+      }
+      val positionChange = a.position.map { newPosition =>
+        TableChange.updateColumnPosition(colName, newPosition)
       }
       createAlterTable(
         nameParts,
         catalog,
         tbl,
-        typeChange.toSeq ++ commentChange ++ positionChange)
+        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
 
     case AlterTableRenameColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
@@ -105,15 +108,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
           s"because view support in catalog has not been implemented yet")
-
-    case AlterNamespaceSetPropertiesStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetProperties(catalog, ns, properties)
-
-    case AlterNamespaceSetLocationStatement(
-        NonSessionCatalogAndNamespace(catalog, ns), location) =>
-      AlterNamespaceSetProperties(catalog, ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> location))
 
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
@@ -194,18 +188,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if !isSessionCatalog(catalog) =>
       CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
 
-    case DropNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), ifExists, cascade) =>
-      DropNamespace(catalog, ns, ifExists, cascade)
-
-    case DescribeNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), extended) =>
-      DescribeNamespace(catalog, ns, extended)
-
-    case ShowNamespacesStatement(NonSessionCatalogAndNamespace(catalog, ns), pattern) =>
-      ShowNamespaces(catalog, ns, pattern)
-
-    case ShowTablesStatement(NonSessionCatalogAndNamespace(catalog, ns), pattern) =>
-      ShowTables(catalog.asTableCatalog, ns, pattern)
-
     case UseStatement(isNamespaceSet, nameParts) =>
       if (isNamespaceSet) {
         SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
@@ -230,14 +212,5 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
-  }
-
-  object NonSessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
-      if (!isSessionCatalog(resolved.catalog)) {
-        Some(resolved.catalog -> resolved.namespace)
-      } else {
-        None
-      }
   }
 }

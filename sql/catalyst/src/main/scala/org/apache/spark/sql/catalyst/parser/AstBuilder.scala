@@ -2239,10 +2239,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     StructField(
-      colName.getText,
-      cleanedDataType,
-      nullable = true,
-      builder.build())
+      name = colName.getText,
+      dataType = cleanedDataType,
+      nullable = NULL == null,
+      metadata = builder.build())
   }
 
   /**
@@ -2265,7 +2265,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    val structField = StructField(
+      name = identifier.getText,
+      dataType = typedVisit(dataType()),
+      nullable = NULL == null)
     Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)
   }
 
@@ -2520,6 +2523,29 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def cleanNamespaceProperties(
+      properties: Map[String, String],
+      ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
+    import SupportsNamespaces._
+    if (!conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)) {
+      properties.foreach {
+        case (PROP_LOCATION, _) =>
+          throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
+            s" the LOCATION clause to specify it.", ctx)
+        case (PROP_COMMENT, _) =>
+          throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
+            s" the COMMENT clause to specify it.", ctx)
+        case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+          throw new ParseException(s"$ownership is a reserved namespace property , please use" +
+            " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
+        case _ =>
+      }
+      properties
+    } else {
+      properties -- RESERVED_PROPERTIES.asScala
+    }
+  }
+
   /**
    * Create a [[CreateNamespaceStatement]] command.
    *
@@ -2535,6 +2561,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    import SupportsNamespaces._
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
@@ -2548,12 +2575,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
+    properties = cleanNamespaceProperties(properties, ctx)
+
     visitCommentSpecList(ctx.commentSpec()).foreach {
-      properties += SupportsNamespaces.PROP_COMMENT -> _
+      properties += PROP_COMMENT -> _
     }
 
     visitLocationSpecList(ctx.locationSpec()).foreach {
-      properties += SupportsNamespaces.PROP_LOCATION -> _
+      properties += PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(
@@ -2563,7 +2592,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropNamespaceStatement]] command.
+   * Create a [[DropNamespace]] command.
    *
    * For example:
    * {{{
@@ -2571,14 +2600,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    DropNamespaceStatement(
+    DropNamespace(
       UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
       ctx.EXISTS != null,
       ctx.CASCADE != null)
   }
 
   /**
-   * Create an [[AlterNamespaceSetPropertiesStatement]] logical plan.
+   * Create an [[AlterNamespaceSetProperties]] logical plan.
    *
    * For example:
    * {{{
@@ -2588,14 +2617,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetPropertiesStatement(
+      val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
+      AlterNamespaceSetProperties(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
-        visitPropertyKeyValues(ctx.tablePropertyList))
+        properties)
     }
   }
 
   /**
-   * Create an [[AlterNamespaceSetLocationStatement]] logical plan.
+   * Create an [[AlterNamespaceSetLocation]] logical plan.
    *
    * For example:
    * {{{
@@ -2604,14 +2634,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetLocationStatement(
+      AlterNamespaceSetLocation(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitLocationSpec(ctx.locationSpec))
     }
   }
 
   /**
-   * Create a [[ShowNamespacesStatement]] command.
+   * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
@@ -2619,13 +2649,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowNamespacesStatement(
+    ShowNamespaces(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
 
   /**
-   * Create a [[DescribeNamespaceStatement]].
+   * Create a [[DescribeNamespace]].
    *
    * For example:
    * {{{
@@ -2634,7 +2664,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
-      DescribeNamespaceStatement(
+      DescribeNamespace(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier())),
         ctx.EXTENDED != null)
     }
@@ -2802,11 +2832,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowTablesStatement]] command.
+   * Create a [[ShowTables]] command.
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowTablesStatement(
+    ShowTables(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
@@ -2834,10 +2864,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     QualifiedColType(
-      typedVisit[Seq[String]](ctx.name),
-      typedVisit[DataType](ctx.dataType),
-      Option(ctx.commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      name = typedVisit[Seq[String]](ctx.name),
+      dataType = typedVisit[DataType](ctx.dataType),
+      nullable = ctx.NULL == null,
+      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -2893,9 +2924,35 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
-      Option(ctx.dataType).map(typedVisit[DataType]),
-      Option(ctx.commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      dataType = Option(ctx.dataType).map(typedVisit[DataType]),
+      nullable = None,
+      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+  }
+
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column nullability.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
+   * }}}
+   */
+  override def visitAlterColumnNullability(ctx: AlterColumnNullabilityContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nullable = ctx.setOrDrop.getType match {
+        case SqlBaseParser.SET => false
+        case SqlBaseParser.DROP => true
+      }
+      AlterTableAlterColumnStatement(
+        visitMultipartIdentifier(ctx.table),
+        typedVisit[Seq[String]](ctx.column),
+        dataType = None,
+        nullable = Some(nullable),
+        comment = None,
+        position = None)
+    }
   }
 
   /**
@@ -2917,13 +2974,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new AnalysisException("Renaming column is not supported in Hive-style ALTER COLUMN, " +
         "please run RENAME COLUMN instead.")
     }
+    if (ctx.colType.NULL != null) {
+      throw new AnalysisException("NOT NULL is not supported in Hive-style ALTER COLUMN, " +
+        "please run ALTER COLUMN ... SET/DROP NOT NULL instead.")
+    }
 
     AlterTableAlterColumnStatement(
       typedVisit[Seq[String]](ctx.table),
       columnNameParts,
-      Option(ctx.colType().dataType()).map(typedVisit[DataType]),
-      Option(ctx.colType().commentSpec()).map(visitCommentSpec),
-      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
+      nullable = None,
+      comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
+      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -3503,4 +3565,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     CommentOnTable(UnresolvedTable(nameParts), comment)
   }
+
+  /**
+   * Create an [[AlterNamespaceSetOwner]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET OWNER (USER|ROLE|GROUP) identityName;
+   * }}}
+   */
+  override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+      AlterNamespaceSetOwner(
+        UnresolvedNamespace(nameParts),
+        ctx.identifier.getText,
+        ctx.ownerType.getText)
+    }
+  }
+
 }

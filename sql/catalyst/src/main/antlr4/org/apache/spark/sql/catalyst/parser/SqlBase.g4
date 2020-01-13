@@ -103,6 +103,8 @@ statement
         SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
     | ALTER namespace multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
+    | ALTER namespace multipartIdentifier
+        SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
@@ -161,6 +163,9 @@ statement
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
+    | ALTER TABLE table=multipartIdentifier
+        ALTER COLUMN? column=multipartIdentifier
+        setOrDrop=(SET | DROP) NOT NULL                                #alterColumnNullability
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -869,7 +874,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType commentSpec? colPosition?
+    : name=multipartIdentifier dataType (NOT NULL)? commentSpec? colPosition?
     ;
 
 colTypeList
@@ -877,7 +882,7 @@ colTypeList
     ;
 
 colType
-    : colName=errorCapturingIdentifier dataType commentSpec?
+    : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
     ;
 
 complexColTypeList
@@ -885,7 +890,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType commentSpec?
+    : identifier ':' dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -1095,6 +1100,7 @@ ansiNonReserved
     | OVER
     | OVERLAY
     | OVERWRITE
+    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1347,6 +1353,7 @@ nonReserved
     | OVERLAPS
     | OVERLAY
     | OVERWRITE
+    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1605,6 +1612,7 @@ OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
 OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
+OWNER: 'OWNER';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';

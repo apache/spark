@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetLocation, AlterNamespaceSetOwner, AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
@@ -194,8 +194,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case desc @ DescribeNamespace(catalog, namespace, extended) =>
-      DescribeNamespaceExec(desc.output, catalog, namespace, extended) :: Nil
+    case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
+      DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
 
     case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
       DescribeTableExec(desc.output, table, isExtended) :: Nil
@@ -209,13 +209,19 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case RenameTable(catalog, oldIdent, newIdent) =>
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil
 
-    case AlterNamespaceSetProperties(catalog, namespace, properties) =>
-      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
+    case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
+      AlterNamespaceSetPropertiesExec(catalog, ns, properties) :: Nil
 
-    case CommentOnNamespace(ResolvedNamespace(catalog, namespace), comment) =>
+    case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
       AlterNamespaceSetPropertiesExec(
         catalog,
-        namespace,
+        ns,
+        Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
+
+    case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
+      AlterNamespaceSetPropertiesExec(
+        catalog,
+        ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
     case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
@@ -225,23 +231,28 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
 
-    case DropNamespace(catalog, namespace, ifExists, cascade) =>
-      DropNamespaceExec(catalog, namespace, ifExists, cascade) :: Nil
+    case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
+      DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
-    case r: ShowNamespaces =>
-      ShowNamespacesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
+    case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
+      ShowNamespacesExec(r.output, catalog, ns, pattern) :: Nil
 
-    case r : ShowTables =>
-      ShowTablesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
+    case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
+      ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
 
-    case SetCatalogAndNamespace(catalogManager, catalogName, namespace) =>
-      SetCatalogAndNamespaceExec(catalogManager, catalogName, namespace) :: Nil
+    case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>
+      SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil
 
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
     case r @ ShowTableProperties(DataSourceV2Relation(table, _, _), propertyKey) =>
       ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
+
+    case AlterNamespaceSetOwner(ResolvedNamespace(catalog, namespace), name, typ) =>
+      val properties =
+        Map(SupportsNamespaces.PROP_OWNER_NAME -> name, SupportsNamespaces.PROP_OWNER_TYPE -> typ)
+      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
 
     case _ => Nil
   }
