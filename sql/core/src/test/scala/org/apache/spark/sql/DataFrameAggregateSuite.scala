@@ -22,6 +22,7 @@ import scala.util.Random
 import org.scalatest.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
@@ -34,7 +35,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
+class DataFrameAggregateSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   val absTol = 1e-8
@@ -612,7 +615,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
          Seq((true, true), (true, false), (false, true), (false, false))) {
       withSQLConf(
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
-        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString),
+        (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")) {
+        // When enable AQE, the WholeStageCodegenExec is added during QueryStageExec.
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
@@ -678,17 +683,17 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
         .groupBy("a").agg(collect_list("f").as("g"))
       val aggPlan = objHashAggDF.queryExecution.executedPlan
 
-      val sortAggPlans = aggPlan.collect {
+      val sortAggPlans = collect(aggPlan) {
         case sortAgg: SortAggregateExec => sortAgg
       }
       assert(sortAggPlans.isEmpty)
 
-      val objHashAggPlans = aggPlan.collect {
+      val objHashAggPlans = collect(aggPlan) {
         case objHashAgg: ObjectHashAggregateExec => objHashAgg
       }
       assert(objHashAggPlans.nonEmpty)
 
-      val exchangePlans = aggPlan.collect {
+      val exchangePlans = collect(aggPlan) {
         case shuffle: ShuffleExchangeExec => shuffle
       }
       assert(exchangePlans.length == 1)
@@ -958,13 +963,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
     val df2 = df1.select(avg($"b" cast CalendarIntervalType))
     checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(df2.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(find(df2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
     checkAnswer(df3,
       Row(1, new CalendarInterval(0, 1, 0)) ::
         Row(2, new CalendarInterval(0, 2, 0)) ::
         Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(find(df3.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
   }
 
   test("Dataset agg functions support calendar intervals") {

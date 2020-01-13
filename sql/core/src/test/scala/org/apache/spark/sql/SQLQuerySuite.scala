@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
@@ -44,7 +45,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -191,7 +192,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
                 val actual = unindentAndTrim(
                   hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
                 val expected = unindentAndTrim(output)
-                assert(actual === expected)
+                assert(actual.sorted === expected.sorted)
               case _ =>
             })
           }
@@ -3278,7 +3279,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
              |on leftside.a = rightside.a
            """.stripMargin)
 
-        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+        val inMemoryTableScan = collect(queryDf.queryExecution.executedPlan) {
           case i: InMemoryTableScanExec => i
         }
         assert(inMemoryTableScan.size == 2)

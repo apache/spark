@@ -21,6 +21,7 @@ import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
@@ -31,7 +32,9 @@ import org.apache.spark.sql.types._
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameWindowFunctionsSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper{
 
   import testImplicits._
 
@@ -716,7 +719,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
           .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
 
         val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
-        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+        val actualNumExchanges = stripAQEPlan(select.queryExecution.executedPlan).collect {
           case e: Exchange => e
         }.length
         assert(actualNumExchanges == expectedNumExchanges)
