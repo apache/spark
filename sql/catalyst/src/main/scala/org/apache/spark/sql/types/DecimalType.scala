@@ -158,7 +158,9 @@ object DecimalType extends AbstractDataType {
 
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
-      throw new AnalysisException(s"Negative scale is not allowed under ansi mode: $scale")
+      throw new AnalysisException(s"Negative scale is not allowed: $scale. " +
+        s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal.enabled=true " +
+        s"to enable legacy mode to allow it.")
     }
   }
 
