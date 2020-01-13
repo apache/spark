@@ -233,8 +233,27 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(jaasParams.contains(tokenPassword1))
   }
 
-  test("isConnectorUsingCurrentToken without security should return true") {
-    val kafkaParams = Map[String, Object]().asJava
+  test("isConnectorUsingCurrentToken without security credentials enabled should return true") {
+    setSparkEnv(
+      Map(
+        s"spark.security.credentials.kafka.enabled" -> "false"
+      )
+    )
+    val kafkaParams = getKafkaParams(true, Some("custom_jaas_config"))
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+  }
+
+  test("isConnectorUsingCurrentToken without cluster config should return true") {
+    setSparkEnv(Map.empty)
+    val kafkaParams = getKafkaParams(true, Some("custom_jaas_config"))
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+  }
+
+  test("isConnectorUsingCurrentToken without jaas config should return true") {
+    setSparkEnv(Map.empty)
+    val kafkaParams = getKafkaParams(false)
 
     assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
   }
@@ -246,7 +265,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       )
     )
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams()
+    val kafkaParams = getKafkaParams(true)
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
@@ -260,7 +279,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       )
     )
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams()
+    val kafkaParams = getKafkaParams(true)
     addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
@@ -268,11 +287,20 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
   }
 
-  private def getKafkaParams(): ju.Map[String, Object] = {
-    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
-    Map[String, Object](
+  private def getKafkaParams(
+      addJaasConfig: Boolean,
+      jaasConfig: Option[String] = None): ju.Map[String, Object] = {
+    var params = Map[String, Object](
       CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
-      SaslConfigs.SASL_JAAS_CONFIG -> KafkaTokenUtil.getTokenJaasParams(clusterConf)
-    ).asJava
+    )
+    if (addJaasConfig) {
+      params ++= Map[String, Object](
+        SaslConfigs.SASL_JAAS_CONFIG -> jaasConfig.getOrElse {
+          val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
+          KafkaTokenUtil.getTokenJaasParams(clusterConf)
+        }
+      )
+    }
+    params.asJava
   }
 }
