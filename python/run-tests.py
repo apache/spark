@@ -267,8 +267,8 @@ def main():
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
-        LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
-        LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
+        LOGGER.info("%s python_implementation is %s", python_exec, python_implementation)
+        LOGGER.info("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:
