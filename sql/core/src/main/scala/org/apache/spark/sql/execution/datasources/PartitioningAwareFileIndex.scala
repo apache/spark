@@ -66,6 +66,14 @@ abstract class PartitioningAwareFileIndex(
     parameters.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
+  def listPartitions(partitionFilters: Seq[Expression]): Option[Seq[PartitionPath]] = {
+    if (partitionSpec().partitionColumns.nonEmpty) {
+      Some(prunePartitions(partitionFilters, partitionSpec()))
+    } else {
+      None
+    }
+  }
+
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
