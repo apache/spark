@@ -36,21 +36,21 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.executorResources.size === 2,
       "Executor resources should contain cores and memory by default")
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
-      s"Executor resources should have 1 core")
+      "Executor resources should have 1 core")
     assert(rprof.getExecutorCores.get === 1,
-      s"Executor resources should have 1 core")
+      "Executor resources should have 1 core")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
-      s"Executor resources should have 1024 memory")
+      "Executor resources should have 1024 memory")
     assert(rprof.executorResources.get(ResourceProfile.PYSPARK_MEM) == None,
-      s"pyspark memory empty if not specified")
+      "pyspark memory empty if not specified")
     assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
-      s"overhead memory empty if not specified")
+      "overhead memory empty if not specified")
     assert(rprof.taskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
-      s"Task resources should have 1 cpu")
+      "Task resources should have 1 cpu")
     assert(rprof.getTaskCpus.get === 1,
-      s"Task resources should have 1 cpu")
+      "Task resources should have 1 cpu")
   }
 
   test("Default ResourceProfile with app level resources specified") {
@@ -69,15 +69,14 @@ class ResourceProfileSuite extends SparkFunSuite {
       "Executor resources should contain cores, memory, and gpu " + execResources)
     assert(execResources.contains("gpu"), "Executor resources should have gpu")
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 4,
-      s"Executor resources should have 4 core")
-    assert(rprof.getExecutorCores.get === 4,
-      s"Executor resources should have 4 core")
+      "Executor resources should have 4 core")
+    assert(rprof.getExecutorCores.get === 4, "Executor resources should have 4 core")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
-      s"Executor resources should have 1024 memory")
+      "Executor resources should have 1024 memory")
     assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount == 2048,
-      s"pyspark memory empty if not specified")
+      "pyspark memory empty if not specified")
     assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount == 1024,
-      s"overhead memory empty if not specified")
+      "overhead memory empty if not specified")
     assert(rprof.taskResources.size === 2,
       "Task resources should just contain cpus and gpu")
     assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
@@ -123,13 +122,13 @@ class ResourceProfileSuite extends SparkFunSuite {
 
     assert(rprof.executorResources.size === 5)
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 2,
-      s"Executor resources should have 2 cores")
+      "Executor resources should have 2 cores")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
-      s"Executor resources should have 4096 memory")
+      "Executor resources should have 4096 memory")
     assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2048,
-      s"Executor resources should have 2048 overhead memory")
+      "Executor resources should have 2048 overhead memory")
     assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 1024,
-      s"Executor resources should have 1024 pyspark memory")
+      "Executor resources should have 1024 pyspark memory")
 
     assert(rprof.taskResources.size === 2)
     assert(rprof.taskResources("cpus").amount === 1, "Task resources should have cpu")
@@ -143,11 +142,11 @@ class ResourceProfileSuite extends SparkFunSuite {
     rprof.require(ereqs)
 
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
-      s"Executor resources should have 4096 memory")
+      "Executor resources should have 4096 memory")
     assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2000,
-      s"Executor resources should have 2000 overhead memory")
+      "Executor resources should have 2000 overhead memory")
     assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 500,
-      s"Executor resources should have 512 pyspark memory")
+      "Executor resources should have 512 pyspark memory")
   }
 
   test("Test TaskResourceRequest fractional") {
