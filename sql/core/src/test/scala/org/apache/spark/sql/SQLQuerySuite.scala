@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.parallel.immutable.ParVector
@@ -30,7 +28,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, StringUtils}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1585,7 +1583,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
-
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {

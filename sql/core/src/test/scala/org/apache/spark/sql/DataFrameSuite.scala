@@ -2280,16 +2280,6 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     }
     assert(err.getMessage.contains("cannot resolve '`d`'"))
   }
-
-  test("a") {
-    val df = spark.sql(
-      "select avg(v) from VALUES (interval '-1 weeks'), (interval '2 seconds'), (null) t(v)")
-      .collect()
-    val head = df.head
-    val value1 = head.get(0)
-    value1.getClass
-
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
