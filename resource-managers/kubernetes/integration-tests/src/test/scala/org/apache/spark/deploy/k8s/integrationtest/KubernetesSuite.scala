@@ -326,7 +326,7 @@ class KubernetesSuite extends SparkFunSuite
                 }
                 // Sleep a small interval to allow execution of job
                 logDebug("Sleeping before killing pod.")
-                Thread.sleep(5000)
+                Thread.sleep(2000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
