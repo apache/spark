@@ -94,7 +94,7 @@ select 12345678901234567890.0 * 12345678901234567890.0
 struct<>
 -- !query 10 output
 java.lang.ArithmeticException
-Decimal(expanded,1.5241578753238836750190519987501905210E+38,39,0}) cannot be represented as Decimal(38, 2).
+Decimal(expanded,152415787532388367501905199875019052100,39,0}) cannot be represented as Decimal(38, 2).
 
 
 -- !query 11
