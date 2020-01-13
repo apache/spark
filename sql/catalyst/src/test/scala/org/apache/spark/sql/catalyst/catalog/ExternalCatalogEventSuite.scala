@@ -228,7 +228,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       storage = storage,
       schema = new StructType().add("id", "long"))
 
-    val partition = CatalogTablePartition(spec = CatalogTypes.emptyTablePartitionSpec,
+    val partition = CatalogTablePartition(spec = Map("key" -> "0"),
       storage = CatalogStorageFormat.empty)
 
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
