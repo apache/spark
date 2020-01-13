@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.4.0")
 class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
+  extends Regressor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestRegressorParams with DefaultParamsWritable {
 
   @Since("1.4.0")
@@ -170,7 +170,7 @@ class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     override val numFeatures: Int)
-  extends PredictionModel[Vector, RandomForestRegressionModel]
+  extends RegressionModel[Vector, RandomForestRegressionModel]
   with RandomForestRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
