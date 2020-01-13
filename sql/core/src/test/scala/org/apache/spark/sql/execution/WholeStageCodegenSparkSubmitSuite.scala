@@ -48,6 +48,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedOops",
       "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
+      "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
     SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
   }

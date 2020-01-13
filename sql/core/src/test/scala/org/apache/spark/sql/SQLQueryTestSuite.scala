@@ -419,9 +419,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           s"Schema did not match for query #$i\n${expected.sql}: $output") {
           output.schema
         }
-        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-          output.output
-        }
+        assertResult(expected.output.sorted, s"Result did not match" +
+          s" for query #$i\n${expected.sql}") { output.output.sorted }
       }
     }
   }

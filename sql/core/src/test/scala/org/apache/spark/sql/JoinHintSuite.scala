@@ -26,11 +26,12 @@ import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class JoinHintSuite extends PlanTest with SharedSparkSession {
+class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   lazy val df = spark.range(10)
@@ -352,7 +353,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertBroadcastHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val broadcastHashJoins = executedPlan.collect {
+    val broadcastHashJoins = collect(executedPlan) {
       case b: BroadcastHashJoinExec => b
     }
     assert(broadcastHashJoins.size == 1)
@@ -361,7 +362,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertBroadcastNLJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val broadcastNLJoins = executedPlan.collect {
+    val broadcastNLJoins = collect(executedPlan) {
       case b: BroadcastNestedLoopJoinExec => b
     }
     assert(broadcastNLJoins.size == 1)
@@ -370,7 +371,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleHashJoins = executedPlan.collect {
+    val shuffleHashJoins = collect(executedPlan) {
       case s: ShuffledHashJoinExec => s
     }
     assert(shuffleHashJoins.size == 1)
@@ -379,7 +380,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleMergeJoin(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleMergeJoins = executedPlan.collect {
+    val shuffleMergeJoins = collect(executedPlan) {
       case s: SortMergeJoinExec => s
     }
     assert(shuffleMergeJoins.size == 1)
@@ -387,7 +388,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleReplicateNLJoin(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleReplicateNLJoins = executedPlan.collect {
+    val shuffleReplicateNLJoins = collect(executedPlan) {
       case c: CartesianProductExec => c
     }
     assert(shuffleReplicateNLJoins.size == 1)
