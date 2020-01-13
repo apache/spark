@@ -21,6 +21,7 @@ import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
@@ -167,10 +168,11 @@ class HadoopMapReduceCommitProtocol(
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     committer.commitJob(jobContext)
-
     if (hasValidPath) {
-      val (allAbsPathFiles, allPartitionPaths, successAttemptIDs) =
-        taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String], String)]).unzip3
+      implicit def asPair(x: (Map[String, String], Set[String], String))
+        : (Map[String, String], (Set[String], String)) = (x._1, (x._2, x._3))
+      val (allAbsPathFiles, partitionPathsAttemptIDPair) =
+        taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String], String)]).unzip
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
@@ -185,8 +187,8 @@ class HadoopMapReduceCommitProtocol(
       }
 
       if (dynamicPartitionOverwrite) {
-        allPartitionPaths.zip(successAttemptIDs).foreach {
-          case (allPartitionPath, successAttempID) =>
+        val allPartitionPaths = partitionPathsAttemptIDPair.map {
+          case (allPartitionPath, successAttemptID) =>
             allPartitionPath.foreach(part => {
               val finalPartPath = new Path(path, part)
               if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
@@ -201,9 +203,14 @@ class HadoopMapReduceCommitProtocol(
                 // on the rename.
                 fs.mkdirs(finalPartPath.getParent)
               }
-              fs.rename(new Path(stagingDir, s"$successAttempID/$part"), finalPartPath)
+              fs.rename(new Path(s"$stagingDir/$successAttemptID", part), finalPartPath)
             })
-          case _ =>
+            allPartitionPath
+          case _ => Set.empty
+        }
+        if (log.isDebugEnabled) {
+          val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
+          logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         }
       }
 
