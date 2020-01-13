@@ -183,12 +183,12 @@ class WorkerReuseTest(PySparkTestCase):
 
 
 @unittest.skipIf(
-    not has_resource_module or "pypy" in platform.python_implementation().lower(),
-    resource_requirement_message or "This test does not pass on pypy. See SPARK-30480")
+    not has_resource_module,
+    resource_requirement_message)
 class WorkerMemoryTest(PySparkTestCase):
 
     def test_memory_limit(self):
-        self.sc._conf.set("spark.executor.pyspark.memory", "1m")
+        self.sc._conf.set("spark.executor.pyspark.memory", "1g")
         rdd = self.sc.parallelize(xrange(1), 1)
 
         def getrlimit():
@@ -199,8 +199,8 @@ class WorkerMemoryTest(PySparkTestCase):
         self.assertTrue(len(actual) == 1)
         self.assertTrue(len(actual[0]) == 2)
         [(soft_limit, hard_limit)] = actual
-        self.assertEqual(soft_limit, 1024 * 1024)
-        self.assertEqual(hard_limit, 1024 * 1024)
+        self.assertEqual(soft_limit, 1024 * 1024 * 1024)
+        self.assertEqual(hard_limit, 1024 * 1024 * 1024)
 
 
 if __name__ == "__main__":
