@@ -24,6 +24,14 @@ import org.apache.spark.scheduler.LiveListenerBus
 
 class ResourceProfileManagerSuite extends SparkFunSuite {
 
+  override def beforeAll() {
+    try {
+      ResourceProfile.clearDefaultProfile
+    } finally {
+      super.beforeAll()
+    }
+  }
+
   override def afterEach() {
     try {
       ResourceProfile.clearDefaultProfile
@@ -42,7 +50,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(defaultProf.executorResources.size === 2,
       "Executor resources should contain cores and memory by default")
     assert(defaultProf.executorResources(ResourceProfile.CORES).amount === 4,
-      s"Executor resources should have 1 core")
+      s"Executor resources should have 4 cores")
   }
 
   test("isSupported yarn no dynamic allocation") {
