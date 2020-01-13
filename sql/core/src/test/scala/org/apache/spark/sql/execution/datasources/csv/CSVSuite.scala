@@ -2206,10 +2206,10 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("filters push down") {
-    Seq(true, false).foreach { multiLine =>
+    Seq(true, false).foreach { filterPushdown =>
       Seq(true, false).foreach { columnPruning =>
         withSQLConf(
-          SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true",
+          SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString,
           SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> columnPruning.toString) {
 
           withTempPath { path =>
@@ -2220,18 +2220,23 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
               s"def,2,$t").toDF("data")
               .repartition(1)
               .write.text(path.getAbsolutePath)
-            val readback = spark.read
-              .option("header", true)
-              .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
-              .option("multiLine", multiLine)
-              .schema("c0 string, c1 integer, c2 timestamp")
-              .csv(path.getAbsolutePath)
-              .where($"c1" === 2)
-              .select($"c2")
-            // count() pushes empty schema. This checks handling of a filter
-            // which refers to not existed field.
-            assert(readback.count() === 1)
-            checkAnswer(readback, Row(Timestamp.valueOf(t)))
+            Seq(true, false).foreach { multiLine =>
+              Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
+                val readback = spark.read
+                  .option("mode", mode)
+                  .option("header", true)
+                  .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+                  .option("multiLine", multiLine)
+                  .schema("c0 string, c1 integer, c2 timestamp")
+                  .csv(path.getAbsolutePath)
+                  .where($"c1" === 2)
+                  .select($"c2")
+                // count() pushes empty schema. This checks handling of a filter
+                // which refers to not existed field.
+                assert(readback.count() === 1)
+                checkAnswer(readback, Row(Timestamp.valueOf(t)))
+              }
+            }
           }
         }
       }
