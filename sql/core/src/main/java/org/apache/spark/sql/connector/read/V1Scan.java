@@ -35,7 +35,7 @@ import org.apache.spark.sql.sources.TableScan;
 public interface V1Scan extends Scan {
 
   /**
-   * Creates an `BaseRelation` with `TableScan` that can scan data from DataSource v1 to RDD[Row].
+   * Create an `BaseRelation` with `TableScan` that can scan data from DataSource v1 to RDD[Row].
    *
    * @since 3.0.0
    */
