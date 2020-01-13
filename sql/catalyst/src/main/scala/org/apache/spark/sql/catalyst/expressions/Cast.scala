@@ -293,15 +293,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case CalendarIntervalType =>
-      SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD =>
-          buildCast[CalendarInterval](_, i => UTF8String.fromString(toSqlStandardString(i)))
-        case ISO_8601 =>
-          buildCast[CalendarInterval](_, i => UTF8String.fromString(toIso8601String(i)))
-        case MULTI_UNITS =>
-          buildCast[CalendarInterval](_, i => UTF8String.fromString(toMultiUnitsString(i)))
-      }
+    case CalendarIntervalType => SQLConf.get.intervalOutputStyle match {
+      case SQL_STANDARD =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toSqlStandardString(i)))
+      case ISO_8601 =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toIso8601String(i)))
+      case MULTI_UNITS =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toMultiUnitsString(i)))
+    }
     case YearMonthIntervalType => buildCast[CalendarInterval](_, i =>
       UTF8String.fromString(toYearMonthString(i)))
     case DayTimeIntervalType => buildCast[CalendarInterval](_, i =>
