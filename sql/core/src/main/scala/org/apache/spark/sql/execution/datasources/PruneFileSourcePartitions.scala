@@ -105,9 +105,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       }
   }
 
-  /**
-    * Split predicate ,Filter partitioning predicate
-    */
   private def filterPartitioningPredicate(condition: Expression,
                                   partitionSet: AttributeSet): Seq[Expression] =
     condition match {
