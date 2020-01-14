@@ -117,7 +117,7 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
-    boolean failedToReleaseBuffers = false;
+    RuntimeException failedToReleaseBufferException = null;
 
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
@@ -134,14 +134,17 @@ public class OneForOneStreamManager extends StreamManager {
             }
           }
         } catch (RuntimeException e) {
-          failedToReleaseBuffers = true;
-          logger.error("Exception trying to release remaining StreamState buffers", e);
+          if (failedToReleaseBufferException == null) {
+            failedToReleaseBufferException = e;
+          } else {
+            logger.error("Exception trying to release remaining StreamState buffers", e);
+          }
         }
       }
     }
 
-    if (failedToReleaseBuffers) {
-      throw new RuntimeException("Failed to release one or more StreamState buffers");
+    if (failedToReleaseBufferException != null) {
+      throw failedToReleaseBufferException;
     }
   }
 
