@@ -40,7 +40,9 @@ class CSVFilters(
     dataSchema: StructType,
     requiredSchema: StructType,
     columnPruning: Boolean) {
-  require(checkFilters(), "All filters must be applicable to the data schema.")
+
+  require(filters.forall(CSVFilters.checkFilterRefs(_, dataSchema)),
+    "All filters must be applicable to the data schema.")
 
   /**
    * The schema to read from the underlying CSV parser.
@@ -128,11 +130,6 @@ class CSVFilters(
       val field = readSchema(index)
       BoundReference(readSchema.fieldIndex(attr), field.dataType, field.nullable)
     }
-  }
-
-  // Checks that all filters refer to an field in the data schema
-  private def checkFilters(): Boolean = {
-    filters.forall(CSVFilters.checkFilterRefs(_, dataSchema))
   }
 }
 
