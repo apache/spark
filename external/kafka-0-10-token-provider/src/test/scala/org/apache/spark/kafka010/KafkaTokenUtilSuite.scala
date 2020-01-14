@@ -234,57 +234,44 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("isConnectorUsingCurrentToken without security credentials enabled should return true") {
-    setSparkEnv(
-      Map(
-        s"spark.security.credentials.kafka.enabled" -> "false"
-      )
-    )
+    sparkConf.set(s"spark.security.credentials.kafka.enabled", "false")
     val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(sparkConf, kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken without cluster config should return true") {
-    setSparkEnv(Map.empty)
     val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(sparkConf, kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken without jaas config should return true") {
     setSparkEnv(Map.empty)
     val kafkaParams = getKafkaParams(addJaasConfig = false)
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(SparkEnv.get.conf, kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken with same token should return true") {
-    setSparkEnv(
-      Map(
-        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
-      )
-    )
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val kafkaParams = getKafkaParams(addJaasConfig = true)
-    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(sparkConf, kafkaParams, clusterConfig))
   }
 
   test("isConnectorUsingCurrentToken with different token should return false") {
-    setSparkEnv(
-      Map(
-        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
-      )
-    )
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val kafkaParams = getKafkaParams(addJaasConfig = true)
     addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
-    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(sparkConf, kafkaParams, clusterConfig))
   }
 
   private def getKafkaParams(
