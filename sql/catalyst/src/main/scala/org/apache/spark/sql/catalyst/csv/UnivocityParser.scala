@@ -65,7 +65,7 @@ class UnivocityParser(
     requiredSchema,
     options.columnPruning)
 
-  private[sql] val parsedSchema = csvFilters.readSchema
+  val parsedSchema = csvFilters.readSchema
 
   // Mapping of field indexes of `parsedSchema` to indexes of `requiredSchema`.
   // It returns -1 if `requiredSchema` doesn't contain a field from `parsedSchema`.
