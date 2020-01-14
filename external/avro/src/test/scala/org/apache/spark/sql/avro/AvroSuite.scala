@@ -1497,6 +1497,32 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       |}
     """.stripMargin)
   }
+
+  test("log a warning of ignoreExtension deprecation") {
+    val logAppender = new LogAppender
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1), ("d", 2, 1))
+        .toDF("value", "p1", "p2")
+        .repartition(2)
+        .write
+        .format("avro")
+        .option("header", true)
+        .save(dir.getCanonicalPath)
+      withLogAppender(logAppender) {
+        spark
+          .read
+          .format("avro")
+          .option(AvroOptions.ignoreExtensionKey, false)
+          .option("header", true)
+          .load(dir.getCanonicalPath)
+          .count()
+      }
+      val deprecatedEvents = logAppender.loggingEvents
+        .filter(_.getRenderedMessage.contains(
+          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+      assert(deprecatedEvents.size === 1)
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
