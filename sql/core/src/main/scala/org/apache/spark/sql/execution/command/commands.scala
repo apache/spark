@@ -26,11 +26,11 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
 import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
-import org.apache.spark.sql.sources.ExternalCommandRunnableProvider
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
@@ -191,7 +191,7 @@ case class StreamingExplainCommand(
  */
 case class ExternalCommandExecutor(
     command: String,
-    parameters: Map[String, String],
+    parameters: java.util.Map[String, String],
     provider: ExternalCommandRunnableProvider) extends RunnableCommand {
 
   override def output: Seq[Attribute] =

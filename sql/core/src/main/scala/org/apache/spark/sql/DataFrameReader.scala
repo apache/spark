@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, Univocit
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.{DDLUtils, ExternalCommandExecutor}
@@ -40,7 +41,6 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
-import org.apache.spark.sql.sources.ExternalCommandRunnableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -176,7 +176,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     DataSource.lookupDataSource(source, sparkSession.sessionState.conf) match {
       case provider if classOf[ExternalCommandRunnableProvider].isAssignableFrom(provider) =>
         Dataset.ofRows(sparkSession,
-          ExternalCommandExecutor(command, extraOptions.toMap,
+          ExternalCommandExecutor(command, extraOptions.asJava,
             provider.newInstance().asInstanceOf[ExternalCommandRunnableProvider]))
 
       case _ =>

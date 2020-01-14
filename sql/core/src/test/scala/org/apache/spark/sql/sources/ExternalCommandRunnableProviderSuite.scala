@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.sources
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
 
   test("execute command") {
     System.setProperty("command", "hello")
-    val parameters = Map("one" -> "1", "two" -> "2")
+    val parameters = Map("one" -> "1", "two" -> "2").asJava
     assert(System.getProperty("command") === "hello")
     val df = spark.read.format("cmdSource")
       .options(parameters)
@@ -39,7 +42,7 @@ class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
 class CommandRunnableDataSource extends DataSourceRegister with ExternalCommandRunnableProvider {
   override def shortName(): String = "cmdSource"
 
-  override def executeCommand(command: String, parameters: Map[String, String])
+  override def executeCommand(command: String, parameters: java.util.Map[String, String])
     : Array[String] = {
     System.setProperty("command", "world")
     Array(command.reverse, parameters.toString())
