@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -39,34 +36,8 @@ class OptimizerLoggingSuite extends PlanTest {
         ColumnPruning) :: Nil
   }
 
-  class MockAppender extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-    override def append(loggingEvent: LoggingEvent): Unit = {
-      if (loggingEvent.getRenderedMessage().contains("Applying Rule") ||
-        loggingEvent.getRenderedMessage().contains("Result of Batch") ||
-        loggingEvent.getRenderedMessage().contains("has no effect")) {
-        loggingEvents.append(loggingEvent)
-      }
-    }
-
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
-  }
-
-  private def withLogLevelAndAppender(level: Level, appender: Appender)(f: => Unit): Unit = {
-    val logger = Logger.getLogger(Optimize.getClass.getName.dropRight(1))
-    val restoreLevel = logger.getLevel
-    logger.setLevel(level)
-    logger.addAppender(appender)
-    try f finally {
-      logger.setLevel(restoreLevel)
-      logger.removeAppender(appender)
-    }
-  }
-
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
-    val logAppender = new MockAppender()
+    val logAppender = new LogAppender
     withLogAppender(logAppender,
         loggerName = Some(Optimize.getClass.getName.dropRight(1)), level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
@@ -74,10 +45,16 @@ class OptimizerLoggingSuite extends PlanTest {
       val expected = input.where('a > 1).select('a).analyze
       comparePlans(Optimize.execute(query), expected)
     }
-    val logMessages = logAppender.loggingEvents.map(_.getRenderedMessage)
+    val events = logAppender.loggingEvents.filter {
+      case event => Seq(
+        "Applying Rule",
+        "Result of Batch",
+        "has no effect").exists(event.getRenderedMessage().contains)
+    }
+    val logMessages = events.map(_.getRenderedMessage)
     assert(expectedRulesOrBatches.forall
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
-    assert(logAppender.loggingEvents.forall(_.getLevel == expectedLevel))
+    assert(events.forall(_.getLevel == expectedLevel))
   }
 
   test("test log level") {
