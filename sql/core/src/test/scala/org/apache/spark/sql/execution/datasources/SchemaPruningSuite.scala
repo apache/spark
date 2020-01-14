@@ -270,10 +270,15 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("select explode of nested field of array of struct") {
-    val query = spark.table("contacts")
+    val query1 = spark.table("contacts")
       .select(explode(col("friends.first")))
-    checkScan(query, "struct<friends:array<struct<first:string>>>")
-    checkAnswer(query, Row("Susan") :: Nil)
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    val query2 = spark.table("contacts")
+      .select(explode(col("friends.first")), col("friends.middle"))
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row("Susan", Array("Z.")) :: Nil)
   }
 
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {

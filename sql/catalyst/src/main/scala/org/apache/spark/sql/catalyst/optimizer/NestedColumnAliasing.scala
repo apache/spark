@@ -163,21 +163,14 @@ object NestedColumnAliasing {
  */
 object GeneratorNestedColumnAliasing {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-    case Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
-        canPruneGenerator(g.generator) =>
+    case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
+        SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
       NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
         case (nestedFieldToAlias, attrToAliases) =>
           val newChild = pruneGenerate(g, nestedFieldToAlias, attrToAliases)
           Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
-      }
-
-    case Project(projectList, g: Generate) if SQLConf.get.nestedSchemaPruningEnabled &&
-        canPruneGenerator(g.generator) =>
-      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
-        case (nestedFieldToAlias, attrToAliases) =>
-          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
       }
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
