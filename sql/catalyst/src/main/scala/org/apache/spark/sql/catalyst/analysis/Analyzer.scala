@@ -546,26 +546,7 @@ class Analyzer(
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
-      // If necessary, removes duplicate grouping sets
-      val hasDuplicateGroups = selectedGroupByExprs.size !=
-        selectedGroupByExprs.map(_.map(_.canonicalized).toSet).distinct.size
-      val distinctGroupingSets = if (hasDuplicateGroups) {
-        val groupHashSet = mutable.Set[Set[Expression]]()
-        val initSet = mutable.ArrayBuffer[Seq[Expression]]()
-        selectedGroupByExprs.foldLeft(initSet) { case (b, gs) =>
-          val groupHash = gs.map(_.canonicalized).toSet
-          if (!groupHashSet.contains(groupHash)) {
-            groupHashSet += groupHash
-            b += gs
-          } else {
-            b
-          }
-        }
-      } else {
-        selectedGroupByExprs
-      }
-
-      val expand = constructExpand(distinctGroupingSets, child, groupByAliases, gid)
+      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
