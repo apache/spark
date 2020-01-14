@@ -2558,17 +2558,13 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         rawPredictionCol = java_stage.getRawPredictionCol()
-        weightCol = (
-            java_stage.getWeightCol() if
-            java_stage.isDefined(java_stage.getParam("weightCol"))
-            else None)
         classifier = JavaParams._from_java(java_stage.getClassifier())
         parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       rawPredictionCol=rawPredictionCol,
-                       classifier=classifier, parallelism=parallelism)
-        if weightCol:
-            py_stage.setWeightCol(weightCol)
+                       rawPredictionCol=rawPredictionCol, classifier=classifier,
+                       parallelism=parallelism)
+        if java_stage.isDefined(java_stage.getParam("weightCol")):
+            py_stage.setWeightCol(java_stage.getWeightCol())
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
