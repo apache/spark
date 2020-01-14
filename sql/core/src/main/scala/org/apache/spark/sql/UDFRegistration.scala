@@ -73,7 +73,11 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @return the registered UDAF.
    *
    * @since 1.5.0
+   * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
+   * Aggregator[IN, BUF, OUT] should now be registered as a UDF via the functions.udaf(agg) method.
    */
+  @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+    " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
     functionRegistry.createOrReplaceTempFunction(name, builder)
