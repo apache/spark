@@ -166,8 +166,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * especially for JDBC data source. This could be useful when user has some custom commands
    * which Spark doesn't support, need to be executed. Please note that this is not appropriate
    * for query which returns lots of data.
-   * Data source should implement [[ExternalCommandRunnableProvider]] to enable `executeCommand`
-   * and perform its own execute command logic.
+   *
+   * Datasource should implement <code>ExternalCommandRunnableProvider</code> to perform its
+   * own logic of command execution.
    *
    * @since 3.0.0
    */
