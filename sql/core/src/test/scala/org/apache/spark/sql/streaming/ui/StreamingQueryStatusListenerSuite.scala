@@ -32,7 +32,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // hanlde query started event
     val id = UUID.randomUUID()
     val runId = UUID.randomUUID()
-    val startEvent = new StreamingQueryListener.QueryStartedEvent(id, runId, "test")
+    val startEvent = new StreamingQueryListener.QueryStartedEvent(id, runId, "test", 1L)
     listener.onQueryStarted(startEvent)
 
     // result checking
@@ -78,7 +78,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // handle first time start
     val id = UUID.randomUUID()
     val runId0 = UUID.randomUUID()
-    val startEvent0 = new StreamingQueryListener.QueryStartedEvent(id, runId0, "test")
+    val startEvent0 = new StreamingQueryListener.QueryStartedEvent(id, runId0, "test", 1L)
     listener.onQueryStarted(startEvent0)
 
     // handle terminate event
@@ -87,7 +87,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
     // handle second time start
     val runId1 = UUID.randomUUID()
-    val startEvent1 = new StreamingQueryListener.QueryStartedEvent(id, runId1, "test")
+    val startEvent1 = new StreamingQueryListener.QueryStartedEvent(id, runId1, "test", 1L)
     listener.onQueryStarted(startEvent1)
 
     // result checking

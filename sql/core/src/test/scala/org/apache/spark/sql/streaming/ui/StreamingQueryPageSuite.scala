@@ -110,7 +110,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
       request: HttpServletRequest,
       tab: StreamingQueryTab,
       listener: StreamingQueryStatusListener): Seq[Node] = {
-    val page = new StreamingQueryPage(tab, listener)
+    val page = new StreamingQueryPage(tab)
     page.render(request)
   }
 
@@ -118,7 +118,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
       request: HttpServletRequest,
       tab: StreamingQueryTab,
       listener: StreamingQueryStatusListener): Seq[Node] = {
-    val page = new StreamingQueryStatisticsPage(tab, listener)
+    val page = new StreamingQueryStatisticsPage(tab)
     page.render(request)
   }
 }

@@ -252,8 +252,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(newEvent.name === event.name)
     }
 
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name"))
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name", 1L))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null, 1L))
   }
 
   test("QueryProgressEvent serialization") {
