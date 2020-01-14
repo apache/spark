@@ -930,7 +930,6 @@ class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLW
         """
         return self._set(checkpointInterval=value)
 
-    @since("1.6.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
