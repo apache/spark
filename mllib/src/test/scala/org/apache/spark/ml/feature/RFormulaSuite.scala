@@ -554,6 +554,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val rFormula = new RFormula().setFormula("id ~ a:b")
     val expectedModel = rFormula.fit(dataset)
 
+    // evalExprs is empty for models prior to Spark 3.0
     assert(loadedModel.resolvedFormula.label === expectedModel.resolvedFormula.label)
     assert(loadedModel.resolvedFormula.terms === expectedModel.resolvedFormula.terms)
     assert(loadedModel.resolvedFormula.hasIntercept === expectedModel.resolvedFormula.hasIntercept)
