@@ -1119,7 +1119,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     }
   }
 
-  test("SPARK-30494 avoid duplicated cached RDD when create or replace an existing view") {
+  test("SPARK-30494 avoid duplicated cached RDD when replace an existing view") {
     withTempView("tempView") {
       spark.catalog.clearCache()
       sql("create or replace temporary view tempView as select 1")

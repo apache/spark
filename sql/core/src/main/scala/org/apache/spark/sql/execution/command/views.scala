@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -109,14 +110,17 @@ case class CreateViewCommand(
 
     if (viewType == LocalTempView) {
       if (replace && catalog.getTempView(name.table).isDefined) {
+        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         sparkSession.catalog.uncacheTable(name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       if (replace && catalog.getGlobalTempView(name.table).isDefined) {
-        sparkSession.catalog.uncacheTable(
-          TableIdentifier(name.table, Option(catalog.getGlobalTempViewDatabase)).quotedString)
+        val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+        val globalTempView = TableIdentifier(name.table, Option(db))
+        logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
+        sparkSession.catalog.uncacheTable(globalTempView.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
@@ -133,6 +137,7 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // uncache the cached data before replacing an exists view
+        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         sparkSession.catalog.uncacheTable(viewIdent.quotedString)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`

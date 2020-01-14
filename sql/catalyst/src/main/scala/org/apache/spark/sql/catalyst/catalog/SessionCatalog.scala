@@ -587,13 +587,6 @@ class SessionCatalog(
   }
 
   /**
-   * Return the database of global temporary view.
-   */
-  def getGlobalTempViewDatabase: String = {
-    globalTempViewManager.database
-  }
-
-  /**
    * Drop a local temporary view.
    *
    * Returns true if this view is dropped successfully, false otherwise.
