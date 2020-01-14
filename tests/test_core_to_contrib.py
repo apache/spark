@@ -212,6 +212,10 @@ HOOK = [
         'airflow.providers.apache.hdfs.hooks.webhdfs.WebHDFSHook',
         'airflow.hooks.webhdfs_hook.WebHDFSHook',
     ),
+    (
+        'airflow.hooks.filesystem.FSHook',
+        'airflow.contrib.hooks.fs_hook.FSHook',
+    ),
 ]
 
 OPERATOR = [
@@ -938,6 +942,14 @@ SENSOR = [
     (
         'airflow.providers.apache.hdfs.sensors.hdfs.HdfsSensor',
         'airflow.sensors.hdfs_sensor.HdfsSensor',
+    ),
+    (
+        'airflow.sensors.weekday_sensor.DayOfWeekSensor',
+        'airflow.contrib.sensors.weekday_sensor.DayOfWeekSensor',
+    ),
+    (
+        'airflow.sensors.filesystem.FileSensor',
+        'airflow.contrib.sensors.file_sensor.FileSensor',
     ),
 ]
 
