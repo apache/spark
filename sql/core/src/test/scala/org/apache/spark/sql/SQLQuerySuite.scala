@@ -3372,20 +3372,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-28670: create function should throw AnalysisException if UDF class not found") {
-    Seq(true, false).foreach { isTemporary =>
-      val exp = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udtf_test
-             |AS 'org.apache.spark.sql.hive.execution.UDFTest'
-             |USING JAR '/var/invalid/invalid.jar'
-        """.stripMargin)
-      }
-      assert(exp.getMessage.contains("Resources not found"))
-    }
-  }
-
   test("SPARK-30447: fix constant propagation inside NOT") {
     withTempView("t") {
       Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
