@@ -201,7 +201,8 @@ public class ExternalBlockHandler extends RpcHandler {
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.getAppId().equals(appId)) {
-        logger.warn("Found finished app: {} , but streamState is still in memory, clean it now", appId);
+        logger.warn("Found finished app: {} , " +
+                "but streamState is still in memory, clean it now", appId);
         streams.remove(entry.getKey());
 
         // Release all remaining buffers.

@@ -169,7 +169,8 @@ public class ExternalBlockHandlerSuite {
     when(client.getClientId()).thenReturn("app0");
 
     // add app info to executors
-    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
+    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"},
+            16, "sort");
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors =  Maps.newConcurrentMap();
     executors.put(new AppExecId("app0", "exec1"), shuffleInfo);
     when(blockResolver.getExecutors()).thenReturn(executors);
@@ -239,7 +240,8 @@ public class ExternalBlockHandlerSuite {
   @Test
   public void testDoNotRegisterStreamWhenAppHasFinished() {
     // add app info to executors
-    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
+    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"},
+            16, "sort");
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors =  Maps.newConcurrentMap();
     executors.put(new AppExecId("app0", "exec1"), shuffleInfo);
     when(blockResolver.getExecutors()).thenReturn(executors);
@@ -268,13 +270,16 @@ public class ExternalBlockHandlerSuite {
   @Test
   public void testWhenApplicationRemovedCleanRelatedStreamState() {
     OneForOneStreamManager oneForOneStreamManager = new OneForOneStreamManager();
-    ExternalBlockHandler externalBlockHandler = new ExternalBlockHandler(oneForOneStreamManager, blockResolver);
+    ExternalBlockHandler externalBlockHandler = new ExternalBlockHandler(
+            oneForOneStreamManager,
+            blockResolver);
     Channel dummyChannel = mock(Channel.class, RETURNS_SMART_NULLS);
 
     List<ManagedBuffer> buffers = new ArrayList<>();
     buffers.add(new NioManagedBuffer(ByteBuffer.wrap(new byte[3])));
     buffers.add(new NioManagedBuffer(ByteBuffer.wrap(new byte[7])));
-    oneForOneStreamManager.getStreams().put(1L, new StreamState("app0", buffers.iterator(), dummyChannel));
+    oneForOneStreamManager.getStreams().put(1L,
+            new StreamState("app0", buffers.iterator(), dummyChannel));
     assertEquals(1, oneForOneStreamManager.numStreamStates());
 
     externalBlockHandler.applicationRemoved("app0", false);
