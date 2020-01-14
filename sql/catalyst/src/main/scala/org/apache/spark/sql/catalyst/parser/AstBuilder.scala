@@ -2355,12 +2355,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
     val props = visitTablePropertyList(ctx)
-    val cleanedTableProperties = cleanTableProperties(props, None, false, ctx)
-    val badKeys = cleanedTableProperties.filter { case (_, v) => v != null }.keys
+    val badKeys = props.filter { case (_, v) => v != null }.keys
     if (badKeys.nonEmpty) {
       operationNotAllowed(
         s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
     }
+    val cleanedTableProperties = cleanTableProperties(props, None, false, ctx)
     cleanedTableProperties.keys.toSeq
   }
 
