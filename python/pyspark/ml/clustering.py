@@ -1155,10 +1155,6 @@ class LDAModel(JavaModel, _LDAParams):
     def setTopicDistributionCol(self, value):
         """
         Sets the value of :py:attr:`topicDistributionCol`.
-
-        >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
-        >>> algo.getTopicDistributionCol()
-        'topicDistributionCol'
         """
         return self._set(topicDistributionCol=value)
 
