@@ -28,10 +28,11 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
-case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
+case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   private val supportedJoinTypes =
     Inner :: Cross :: LeftSemi :: LeftAnti :: LeftOuter :: RightOuter :: Nil
@@ -115,8 +116,8 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   def handleSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
-      SortExec(_, _, left: ShuffleQueryStageExec, _),
-      SortExec(_, _, right: ShuffleQueryStageExec, _))
+        s1 @ SortExec(_, _, left: ShuffleQueryStageExec, _),
+        s2 @ SortExec(_, _, right: ShuffleQueryStageExec, _))
       if supportedJoinTypes.contains(joinType) =>
       val leftStats = getStatistics(left)
       val rightStats = getStatistics(right)
@@ -166,15 +167,12 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
             }
             // TODO: we may can optimize the sort merge join to broad cast join after
             //       obtaining the raw data size of per partition,
-            val leftSkewedReader = SkewedShufflePartitionReader(
+            val leftSkewedReader = SkewedPartitionReaderExec(
               left, partitionId, leftMapIdStartIndices(i), leftEndMapId)
-            val leftSort = smj.left.asInstanceOf[SortExec].copy(child = leftSkewedReader)
-
-            val rightSkewedReader = SkewedShufflePartitionReader(right, partitionId,
-                rightMapIdStartIndices(j), rightEndMapId)
-            val rightSort = smj.right.asInstanceOf[SortExec].copy(child = rightSkewedReader)
-              subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
-                leftSort, rightSort)
+            val rightSkewedReader = SkewedPartitionReaderExec(right, partitionId,
+              rightMapIdStartIndices(j), rightEndMapId)
+            subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
+              s1.copy(child = leftSkewedReader), s2.copy(child = rightSkewedReader))
           }
         }
       }
@@ -182,10 +180,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       if (skewedPartitions.nonEmpty) {
         val optimizedSmj = smj.transformDown {
           case sort @ SortExec(_, _, shuffleStage: ShuffleQueryStageExec, _) =>
-            val newStage = shuffleStage.copy(
-              excludedPartitions = skewedPartitions.toSet)
-            newStage.resultOption = shuffleStage.resultOption
-            sort.copy(child = newStage)
+            sort.copy(child = PartialShuffleReaderExec(shuffleStage, skewedPartitions.toSet))
         }
         subJoins += optimizedSmj
         UnionExec(subJoins)
@@ -221,7 +216,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 /**
  * A wrapper of shuffle query stage, which submits one reduce task to read a single
  * shuffle partition 'partitionIndex' produced by the mappers in range [startMapIndex, endMapIndex).
- * This is used to handle the skewed partitions.
+ * This is used to increase the parallelism when reading skewed partitions.
  *
  * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange
  *              node during canonicalization.
@@ -229,7 +224,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
  * @param startMapIndex The start map index.
  * @param endMapIndex The end map index.
  */
-case class SkewedShufflePartitionReader(
+case class SkewedPartitionReaderExec(
     child: QueryStageExec,
     partitionIndex: Int,
     startMapIndex: Int,
@@ -242,10 +237,6 @@ case class SkewedShufflePartitionReader(
   }
   private var cachedSkewedShuffleRDD: SkewedShuffledRowRDD = null
 
-  override def nodeName: String = s"SkewedShuffleReader SkewedShuffleQueryStage: ${child}" +
-    s" SkewedPartition: ${partitionIndex} startMapIndex: ${startMapIndex}" +
-    s" endMapIndex: ${endMapIndex}"
-
   override def doExecute(): RDD[InternalRow] = {
     if (cachedSkewedShuffleRDD == null) {
       cachedSkewedShuffleRDD = child match {
@@ -256,5 +247,47 @@ case class SkewedShufflePartitionReader(
       }
     }
     cachedSkewedShuffleRDD
+  }
+}
+
+/**
+ * A wrapper of shuffle query stage, which skips some partitions when reading the shuffle blocks.
+ *
+ * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange node during
+ *              canonicalization.
+ * @param excludedPartitions The partitions to skip when reading.
+ */
+case class PartialShuffleReaderExec(
+    child: QueryStageExec,
+    excludedPartitions: Set[Int]) extends UnaryExecNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = {
+    UnknownPartitioning(1)
+  }
+
+  private def shuffleExchange(): ShuffleExchangeExec = child match {
+    case stage: ShuffleQueryStageExec => stage.shuffle
+    case _ =>
+      throw new IllegalStateException("operating on canonicalization plan")
+  }
+
+  private def getPartitionIndexRanges(): Array[(Int, Int)] = {
+    val length = shuffleExchange().shuffleDependency.partitioner.numPartitions
+    (0 until length).filterNot(excludedPartitions.contains).map(i => (i, i + 1)).toArray
+  }
+
+  private var cachedShuffleRDD: RDD[InternalRow] = null
+
+  override def doExecute(): RDD[InternalRow] = {
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = if (excludedPartitions.isEmpty) {
+        child.execute()
+      } else {
+        shuffleExchange().createShuffledRDD(Some(getPartitionIndexRanges()))
+      }
+    }
+    cachedShuffleRDD
   }
 }

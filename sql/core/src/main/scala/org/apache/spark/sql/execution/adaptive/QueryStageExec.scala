@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
@@ -135,8 +134,7 @@ abstract class QueryStageExec extends LeafExecNode {
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan,
-    val excludedPartitions: Set[Int] = Set.empty) extends QueryStageExec {
+    override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeExec => s
@@ -162,26 +160,6 @@ case class ShuffleQueryStageExec(
         action.cancel()
       case _ =>
     }
-  }
-
-  private def getPartitionIndexRanges(): Array[(Int, Int)] = {
-    val length = shuffle.shuffleDependency.partitioner.numPartitions
-    (0 until length).filterNot(excludedPartitions.contains).map(i => (i, i + 1)).toArray
-  }
-
-  private var cachedShuffleRDD: RDD[InternalRow] = null
-
-  override def doExecute(): RDD[InternalRow] = {
-    if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = excludedPartitions match {
-        case e if e.isEmpty =>
-          plan.execute()
-        case _ =>
-          shuffle.createShuffledRDD(
-            Some(getPartitionIndexRanges()))
-      }
-    }
-    cachedShuffleRDD
   }
 }
 

@@ -533,7 +533,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect {
-        case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+        case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
       }.length == 2)
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
 
@@ -566,7 +566,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
 
       val reusedStages = level1Stages.flatMap { stage =>
         stage.plan.collect {
-          case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
         }
       }
       assert(reusedStages.length == 1)
