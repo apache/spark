@@ -34,12 +34,13 @@ import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, J
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{DDLUtils, ExternalCommandExecutor}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.sources.ExternalCommandRunnableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -158,6 +159,27 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def options(options: java.util.Map[String, String]): DataFrameReader = {
     this.options(options.asScala)
     this
+  }
+
+  /**
+   * Execute a random DDL/DML command inside an external execution engine rather than Spark,
+   * especially for JDBC data source. This could be useful when user has some custom commands
+   * which Spark doesn't support, need to be executed. Please note that this is not appropriate
+   * for query which returns lots of data.
+   *
+   * @since 3.0.0
+   */
+  def executeCommand(command: String): DataFrame = {
+    DataSource.lookupDataSource(source, sparkSession.sessionState.conf) match {
+      case provider if classOf[ExternalCommandRunnableProvider].isAssignableFrom(provider) =>
+        Dataset.ofRows(sparkSession,
+          ExternalCommandExecutor(command, extraOptions.toMap,
+            provider.newInstance().asInstanceOf[ExternalCommandRunnableProvider]))
+
+      case _ =>
+        throw new AnalysisException(s"`executeCommand` is not allowed for source: $source, " +
+          s"because it doesn't implement `CommandProvider`")
+    }
   }
 
   /**

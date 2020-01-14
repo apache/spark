@@ -178,6 +178,24 @@ trait CreatableRelationProvider {
 }
 
 /**
+ * @since 3.0.0
+ */
+@Stable
+trait ExternalCommandRunnableProvider {
+  /**
+   * Execute a random DDL/DML command inside an external execution engine rather than Spark,
+   * especially for JDBC data source. This could be useful when user has some custom commands
+   * which Spark doesn't support, need to be executed. Please note that this is not appropriate
+   * for query which returns lots of data.
+   *
+   * @param command the command provide by user
+   * @param parameters data source-specific parameters
+   * @return output information from the command
+   */
+  def executeCommand(command: String, parameters: Map[String, String]): Array[String]
+}
+
+/**
  * Represents a collection of tuples with a known schema. Classes that extend BaseRelation must
  * be able to produce the schema of their data in the form of a `StructType`. Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various

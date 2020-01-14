@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, QueryExecution
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
+import org.apache.spark.sql.sources.ExternalCommandRunnableProvider
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
@@ -181,5 +182,23 @@ case class StreamingExplainCommand(
     Seq(Row(outputString))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  }
+}
+
+/**
+ * Used to execute users' DDL/DML command inside an external execution engine rather than Spark.
+ * Please check [[ExternalCommandRunnableProvider]] for details.
+ */
+case class ExternalCommandExecutor(
+    command: String,
+    parameters: Map[String, String],
+    provider: ExternalCommandRunnableProvider) extends RunnableCommand {
+
+  override def output: Seq[Attribute] =
+    Seq(AttributeReference("command_output", StringType)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val output = provider.executeCommand(command, parameters)
+    Seq(Row(output.mkString("\n")))
   }
 }
