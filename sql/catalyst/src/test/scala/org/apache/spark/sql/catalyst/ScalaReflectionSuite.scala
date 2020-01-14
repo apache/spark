@@ -150,11 +150,10 @@ object TestingValueClass {
   case class IntWrapper(val i: Int) extends AnyVal
   case class StrWrapper(s: String) extends AnyVal
 
-  case class ValueClassData(
-                             intField: Int,
-                             wrappedInt: IntWrapper, // an int column
-                             strField: String,
-                             wrappedStr: StrWrapper) // a string column
+  case class ValueClassData(intField: Int,
+                            wrappedInt: IntWrapper, // an int column
+                            strField: String,
+                            wrappedStr: StrWrapper) // a string column
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {

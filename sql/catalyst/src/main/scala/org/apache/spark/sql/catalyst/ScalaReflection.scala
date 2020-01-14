@@ -762,13 +762,13 @@ object ScalaReflection extends ScalaReflection {
    * @return unwrapped param
    */
   private def unwrapValueClassParam(param: (String, `Type`)): (String, `Type`) = {
-    val (name, typ) = param
-    val unwrappedTyp = if (typ.typeSymbol.asClass.isDerivedValueClass) {
-      getConstructorParameters(typ.dealias).head._2
+    val (name, tpe) = param
+    val unwrappedTpe = if (tpe.typeSymbol.asClass.isDerivedValueClass) {
+      getConstructorParameters(tpe.dealias).head._2
     } else {
-      typ
+      tpe
     }
-    (name, unwrappedTyp)
+    (name, unwrappedTpe)
   }
 
   private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
