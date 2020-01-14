@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.internal
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.{AppenderSkeleton, Level}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -331,13 +329,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("log deprecation warnings") {
-    val logAppender = new AppenderSkeleton {
-      val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-      override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
-      override def close(): Unit = {}
-      override def requiresLayout(): Boolean = false
-    }
+    val logAppender = new LogAppender
     def check(config: String): Unit = {
       assert(logAppender.loggingEvents.exists(
         e => e.getLevel == Level.WARN &&
