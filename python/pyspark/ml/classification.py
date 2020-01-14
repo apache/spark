@@ -1311,7 +1311,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
         """
         return self._set(checkpointInterval=value)
 
-    @since("1.4.0")
+    @since("1.6.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -2162,13 +2162,6 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
-
-    @since("2.0.0")
-    def getStepSize(self):
-        """
-        Gets the value of stepSize or its default value.
-        """
-        return self.getOrDefault(self.stepSize)
 
     @since("2.0.0")
     def getInitialWeights(self):
