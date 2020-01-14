@@ -56,6 +56,10 @@ class InMemoryFileIndex(
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
+  assert(userSpecifiedPartitionSpec.isEmpty ||
+    userSpecifiedPartitionSpec.get.partitions.map(_.path).equals(rootPathsSpecified),
+    "")
+
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
   // such streaming metadata dir or files, e.g. when after globbing "basePath/*" where "basePath"
