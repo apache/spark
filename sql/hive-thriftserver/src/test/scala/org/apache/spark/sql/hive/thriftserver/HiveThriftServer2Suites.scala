@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.{File, FilenameFilter}
+import java.io.{BufferedWriter, File, FilenameFilter, FileWriter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
@@ -32,16 +32,20 @@ import scala.io.Source
 import scala.util.{Random, Try}
 
 import com.google.common.io.Files
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType, RowSet}
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
+import org.apache.hive.service.server.HiveServer2
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
@@ -1211,5 +1215,44 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     } finally {
       super.afterAll()
     }
+  }
+}
+
+object SPARK_25061 {
+  def main(args: Array[String]): Unit = {
+
+    val propKey = "hive.metastore.server.max.threads"
+    val propXmlValue = "1"
+    val propCliValue = "2"
+
+    // Prepare hive-site.xml
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>$propKey</name>
+         |    <value>$propXmlValue</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+    val hiveSiteXml = new File(Utils.createTempDir().getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(hiveSiteXml))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    // pass --hiveconf to override hive-site.xml property
+    // Refer org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.main
+    val hiveConfArgs = Array("--hiveconf", s"""$propKey=$propCliValue""")
+    val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
+    optionsProcessor.parse(hiveConfArgs)
+
+    // Prepare a hiveclient and assert for the property value
+    val sparkConf = new SparkConf()
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    hadoopConf.addResource(new Path("file", null, hiveSiteXml.getCanonicalPath))
+    val hiveConfValue = HiveUtils
+      .newClientForMetadata(sparkConf, hadoopConf)
+      .getConf(propKey, "FAIL")
+    assert(hiveConfValue === propCliValue)
   }
 }
