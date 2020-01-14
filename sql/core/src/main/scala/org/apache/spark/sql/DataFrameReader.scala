@@ -180,7 +180,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       case _ =>
         throw new AnalysisException(s"`executeCommand` is not allowed for source: $source, " +
-          s"because it doesn't implement `CommandProvider`")
+          s"because it doesn't implement `ExternalCommandRunnableProvider`")
     }
   }
 
