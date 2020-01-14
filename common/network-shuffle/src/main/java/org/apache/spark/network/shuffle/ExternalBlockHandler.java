@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import com.codahale.metrics.Gauge;
@@ -39,6 +40,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.server.OneForOneStreamManager.StreamState;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
@@ -109,15 +111,29 @@ public class ExternalBlockHandler extends RpcHandler {
               numBlockIds += ids.length;
             }
           }
-          streamId = streamManager.registerStream(client.getClientId(),
-            new ShuffleManagedBufferIterator(msg), client.getChannel());
+         if (shouldRegisterStream(msg.appId, msg.execId, client)) {
+           streamId = streamManager.registerStream(msg.appId,
+                   new ShuffleManagedBufferIterator(msg), client.getChannel());
+         } else {
+           Exception e = new RuntimeException("can not register stream since the app: " +
+                   msg.appId + " has already terminated");
+           callback.onFailure(e);
+           return;
+         }
         } else {
           // For the compatibility with the old version, still keep the support for OpenBlocks.
           OpenBlocks msg = (OpenBlocks) msgObj;
           numBlockIds = msg.blockIds.length;
           checkAuth(client, msg.appId);
-          streamId = streamManager.registerStream(client.getClientId(),
-            new ManagedBufferIterator(msg), client.getChannel());
+          if (shouldRegisterStream(msg.appId, msg.execId, client)) {
+            streamId = streamManager.registerStream(msg.appId,
+                    new ManagedBufferIterator(msg), client.getChannel());
+          } else {
+            Exception e = new RuntimeException("can not register stream since the app: " +
+                    msg.appId + " has already terminated");
+            callback.onFailure(e);
+            return;
+          }
         }
         if (logger.isTraceEnabled()) {
           logger.trace(
@@ -180,6 +196,21 @@ public class ExternalBlockHandler extends RpcHandler {
    * local directories associated with the executors of that application in a separate thread.
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+    logger.info("Current numStreamStates size: {}", streamManager.numStreamStates());
+    ConcurrentHashMap<Long, StreamState> streams = streamManager.getStreams();
+    for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
+      StreamState state = entry.getValue();
+      if (state.getAppId().equals(appId)) {
+        logger.warn("Found finished app: {} , but streamState is still in memory, clean it now", appId);
+        streams.remove(entry.getKey());
+
+        // Release all remaining buffers.
+        while (state.getBuffers().hasNext()) {
+          state.getBuffers().next().release();
+        }
+      }
+    }
+
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
@@ -388,4 +419,13 @@ public class ExternalBlockHandler extends RpcHandler {
     super.channelInactive(client);
   }
 
+  private boolean shouldRegisterStream(String appId, String execId, TransportClient client) {
+    if (!blockManager.getExecutors().containsKey(new AppExecId(appId, execId))) {
+      logger.warn("the App {} with execId {} is not exist, so do not register stream",
+              appId, execId);
+      client.getChannel().close();
+      return false;
+    }
+    return true;
+  }
 }

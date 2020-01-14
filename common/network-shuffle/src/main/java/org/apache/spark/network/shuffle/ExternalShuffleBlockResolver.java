@@ -76,6 +76,10 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
+  public ConcurrentMap<AppExecId, ExecutorShuffleInfo> getExecutors() {
+    return executors;
+  }
+
   /**
    *  Caches index file information so that we can avoid open/close the index files
    *  for each block fetch.

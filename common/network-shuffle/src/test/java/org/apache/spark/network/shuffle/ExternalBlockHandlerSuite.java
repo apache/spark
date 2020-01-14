@@ -18,10 +18,15 @@
 package org.apache.spark.network.shuffle;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.ConcurrentMap;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
+import com.google.common.collect.Maps;
+import io.netty.channel.Channel;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -35,6 +40,7 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.server.OneForOneStreamManager.StreamState;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
@@ -43,6 +49,7 @@ import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.shuffle.protocol.UploadBlock;
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 
 public class ExternalBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
@@ -161,6 +168,12 @@ public class ExternalBlockHandlerSuite {
   private void checkOpenBlocksReceive(BlockTransferMessage msg, ManagedBuffer[] blockMarkers) {
     when(client.getClientId()).thenReturn("app0");
 
+    // add app info to executors
+    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
+    ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors =  Maps.newConcurrentMap();
+    executors.put(new AppExecId("app0", "exec1"), shuffleInfo);
+    when(blockResolver.getExecutors()).thenReturn(executors);
+
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
     handler.receive(client, msg.toByteBuffer(), callback);
 
@@ -221,5 +234,50 @@ public class ExternalBlockHandlerSuite {
 
     verify(callback, never()).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
+  }
+
+  @Test
+  public void testDoNotRegisterStreamWhenAppHasFinished() {
+    // add app info to executors
+    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
+    ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors =  Maps.newConcurrentMap();
+    executors.put(new AppExecId("app0", "exec1"), shuffleInfo);
+    when(blockResolver.getExecutors()).thenReturn(executors);
+
+    Channel dummyChannel = mock(Channel.class, RETURNS_SMART_NULLS);
+    when(client.getChannel()).thenReturn(dummyChannel);
+    when(client.getClientId()).thenReturn("app1");
+
+    // suppose app1's info has been cleaned
+    // for OpenBlocks msg case
+    OpenBlocks openBlocks = new OpenBlocks(
+            "app1", "exec1", new String[] { "shuffle_0_0_0", "shuffle_0_0_1" });
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    handler.receive(client, openBlocks.toByteBuffer(), callback);
+    verify(callback, times(1)).onFailure(any(Throwable.class));
+    assertEquals(0, streamManager.numStreamStates());
+
+    // for FetchShuffleBlocks msg case
+    FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
+            "app1", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, false);
+    handler.receive(client, fetchShuffleBlocks.toByteBuffer(), callback);
+    verify(callback, never()).onSuccess(any(ByteBuffer.class));
+    assertEquals(0, streamManager.numStreamStates());
+  }
+
+  @Test
+  public void testWhenApplicationRemovedCleanRelatedStreamState() {
+    OneForOneStreamManager oneForOneStreamManager = new OneForOneStreamManager();
+    ExternalBlockHandler externalBlockHandler = new ExternalBlockHandler(oneForOneStreamManager, blockResolver);
+    Channel dummyChannel = mock(Channel.class, RETURNS_SMART_NULLS);
+
+    List<ManagedBuffer> buffers = new ArrayList<>();
+    buffers.add(new NioManagedBuffer(ByteBuffer.wrap(new byte[3])));
+    buffers.add(new NioManagedBuffer(ByteBuffer.wrap(new byte[7])));
+    oneForOneStreamManager.getStreams().put(1L, new StreamState("app0", buffers.iterator(), dummyChannel));
+    assertEquals(1, oneForOneStreamManager.numStreamStates());
+
+    externalBlockHandler.applicationRemoved("app0", false);
+    assertEquals(0, oneForOneStreamManager.numStreamStates());
   }
 }

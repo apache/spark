@@ -45,7 +45,7 @@ public class OneForOneStreamManager extends StreamManager {
   private final ConcurrentHashMap<Long, StreamState> streams;
 
   /** State of a single stream. */
-  private static class StreamState {
+  public static class StreamState {
     final String appId;
     final Iterator<ManagedBuffer> buffers;
 
@@ -59,10 +59,18 @@ public class OneForOneStreamManager extends StreamManager {
     // Used to keep track of the number of chunks being transferred and not finished yet.
     volatile long chunksBeingTransferred = 0L;
 
-    StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
+    public StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
       this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
       this.associatedChannel = channel;
+    }
+
+    public String getAppId() {
+      return appId;
+    }
+
+    public Iterator<ManagedBuffer> getBuffers() {
+      return buffers;
     }
   }
 
@@ -207,5 +215,9 @@ public class OneForOneStreamManager extends StreamManager {
   @VisibleForTesting
   public int numStreamStates() {
     return streams.size();
+  }
+
+  public ConcurrentHashMap<Long, StreamState> getStreams() {
+    return streams;
   }
 }
