@@ -149,10 +149,24 @@ case class AggregateExpression(
       case PartialMerge => "merge_"
       case Final | Complete => ""
     }
-    prefix + aggregateFunction.toAggString(isDistinct)
+    val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
+    mode match {
+      case Partial | Complete if filter.isDefined =>
+        s"$aggFuncStr filter ${filter.get.toString}"
+      case _ =>
+        aggFuncStr
+    }
   }
 
-  override def sql: String = aggregateFunction.sql(isDistinct)
+  override def sql: String = {
+    val aggFuncStr = aggregateFunction.sql(isDistinct)
+    mode match {
+      case Partial | Complete if filter.isDefined =>
+        s"$aggFuncStr FILTER ${filter.get.sql}"
+      case _ =>
+        aggFuncStr
+    }
+  }
 }
 
 /**
