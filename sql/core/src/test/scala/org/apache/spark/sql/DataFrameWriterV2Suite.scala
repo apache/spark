@@ -22,11 +22,15 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -49,6 +53,46 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   after {
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
+  }
+
+  test("DataFrameWriteV2 encode identifiers correctly") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+
+    spark.table("source").writeTo("testcat.table_name").append()
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[AppendData])
+    checkV2Identifiers(plan.asInstanceOf[AppendData].table)
+
+    spark.table("source").writeTo("testcat.table_name").overwrite(lit(true))
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[OverwriteByExpression])
+    checkV2Identifiers(plan.asInstanceOf[OverwriteByExpression].table)
+
+    spark.table("source").writeTo("testcat.table_name").overwritePartitions()
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[OverwritePartitionsDynamic])
+    checkV2Identifiers(plan.asInstanceOf[OverwritePartitionsDynamic].table)
+  }
+
+  private def checkV2Identifiers(
+      plan: LogicalPlan,
+      identifiers: Seq[String] = Seq("table_name"),
+      catalogName: String = "testcat"): Unit = {
+    assert(plan.isInstanceOf[DataSourceV2Relation])
+    val v2 = plan.asInstanceOf[DataSourceV2Relation]
+    assert(v2.identifiers.length == identifiers.length)
+    assert(identifiers.forall(t => v2.identifiers.exists(_.name() == t)))
+    assert(v2.catalogIdentifier.exists(_ == catalogName))
   }
 
   test("Append: basic append") {
