@@ -28,9 +28,11 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
  * This class tracks live SQL executions, and pass the list to the [[SQLLiveEntitiesEventFilter]]
- * to help SQLLiveEntitiesEventFilter to reject finished SQL executions as well as relevant
- * jobs (+ stages/tasks/RDDs). Unlike BasicEventFilterBuilder, it doesn't concern about the status
- * of individual job - it only concerns whether SQL execution is finished or not.
+ * to help SQLLiveEntitiesEventFilter to accept live SQL executions as well as relevant
+ * jobs (+ stages/tasks/RDDs).
+ *
+ * Note that this class only tracks the jobs which are relevant to SQL executions - cannot classify
+ * between finished job and live job without relation of SQL execution.
  */
 private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilterBuilder {
   private val _liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
@@ -103,16 +105,13 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
 }
 
 /**
- * This class rejects events which are related to the finished SQL executions based on the
- * given information.
+ * This class accepts events which are related to the live SQL executions based on the given
+ * information.
  *
- * Note that acceptFn will not match the event instead of returning false if the event is related
- * to job but not coupled with live SQL executions, because the instance has the information about
- * jobs for live SQL executions which should be accepted, but don't know whether the job is
- * related to the finished SQL executions, or job is NOT related to the SQL executions. For this
- * case, it just gives up the decision and let other filters decide it.
- *
- * The events which are not related to the SQL execution will be considered as "Don't mind".
+ * Note that acceptFn will not match the event ("Don't mind") instead of returning false on
+ * job related events, because it cannot determine whether the job is related to the finished
+ * SQL executions, or job is NOT related to the SQL executions. For this case, it just gives up
+ * the decision and let other filters decide it.
  */
 private[spark] class SQLLiveEntitiesEventFilter(
     liveSQLExecutions: Set[Long],

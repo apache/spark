@@ -148,7 +148,7 @@ object ListenerEventsTestHelper {
       jobProps: Properties,
       execIds: Array[String],
       time: Long): JobInfo = {
-    // Start a job with 1 stages / 4 tasks each
+    // Start a job with 1 stage / 4 tasks each
     val rddsForStage = createRdds(2)
     val stage = createStage(rddsForStage, Nil)
 
