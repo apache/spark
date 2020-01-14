@@ -1521,12 +1521,10 @@ class AvroV2Suite extends AvroSuite {
         .write
         .format("avro")
         .partitionBy("p1", "p2")
-        .option("header", true)
         .save(dir.getCanonicalPath)
       val df = spark
         .read
         .format("avro")
-        .option("header", true)
         .load(dir.getCanonicalPath)
         .where("p1 = 1 and p2 = 2 and value != \"a\"")
 
