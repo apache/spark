@@ -532,7 +532,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions == Map("other" -> "20", "location" -> "s3://bucket/path/to/data"))
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -566,7 +566,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions == Map("other" -> "20", "location" -> "s3://bucket/path/to/data"))
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -599,7 +599,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
         assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions.isEmpty)
+        assert(ctas.writeOptions == Map("location" -> "/user/external/page_view"))
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -668,11 +668,13 @@ class PlanResolutionSuite extends AnalysisTest {
       "view support in catalog has not been implemented")
   }
 
+  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {
     val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment1' = 'new_comment')"
-    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment1', 'test')"
-    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment1', 'test')"
+        "'comment' = 'new_comment')"
+    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     val parsed1_view = parseAndResolve(sql1_view)
     val parsed2_view = parseAndResolve(sql2_view)
@@ -680,24 +682,26 @@ class PlanResolutionSuite extends AnalysisTest {
 
     val tableIdent = TableIdentifier("table_name", None)
     val expected1_view = AlterTableSetPropertiesCommand(
-      tableIdent, Map("test" -> "test", "comment1" -> "new_comment"), isView = true)
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment1", "test"), ifExists = false, isView = true)
+      tableIdent, Seq("comment", "test"), ifExists = false, isView = true)
     val expected3_view = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment1", "test"), ifExists = true, isView = true)
+      tableIdent, Seq("comment", "test"), ifExists = true, isView = true)
 
     comparePlans(parsed1_view, expected1_view)
     comparePlans(parsed2_view, expected2_view)
     comparePlans(parsed3_view, expected3_view)
   }
 
+  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter table: alter table properties") {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"ALTER TABLE $tblName SET TBLPROPERTIES ('test' = 'test', " +
-          "'comment1' = 'new_comment')"
-        val sql2 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('comment1', 'test')"
-        val sql3 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES IF EXISTS ('comment1', 'test')"
+          "'comment' = 'new_comment')"
+        val sql2 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('comment', 'test')"
+        val sql3 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
@@ -706,11 +710,11 @@ class PlanResolutionSuite extends AnalysisTest {
         val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
           val expected1 = AlterTableSetPropertiesCommand(
-            tableIdent, Map("test" -> "test", "comment1" -> "new_comment"), isView = false)
+            tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
           val expected2 = AlterTableUnsetPropertiesCommand(
-            tableIdent, Seq("comment1", "test"), ifExists = false, isView = false)
+            tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
           val expected3 = AlterTableUnsetPropertiesCommand(
-            tableIdent, Seq("comment1", "test"), ifExists = true, isView = false)
+            tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
@@ -720,14 +724,14 @@ class PlanResolutionSuite extends AnalysisTest {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
                 TableChange.setProperty("test", "test"),
-                TableChange.setProperty("comment1", "new_comment")))
+                TableChange.setProperty("comment", "new_comment")))
             case _ => fail("expect AlterTable")
           }
 
           parsed2 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
-                TableChange.removeProperty("comment1"),
+                TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
             case _ => fail("expect AlterTable")
           }
@@ -735,7 +739,7 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed3 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
-                TableChange.removeProperty("comment1"),
+                TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
             case _ => fail("expect AlterTable")
           }

@@ -196,7 +196,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      val (_, _, _, options, _, _) = visitCreateTableClauses(ctx.createTableClauses())
+      val (_, _, _, options, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx))
       val schema = Option(ctx.colTypeList()).map(createSchema)

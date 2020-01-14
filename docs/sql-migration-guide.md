@@ -310,20 +310,6 @@ license: |
         </tr>
         <tr>
           <td>
-            comment
-          </td>
-          <td>
-            yes
-          </td>
-          <td>
-            yes
-          </td>
-          <td>
-            For databases and tables, please use the COMMENT clause to specify it.
-          </td>
-        </tr>
-        <tr>
-          <td>
             ownerName
           </td>
           <td>

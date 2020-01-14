@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -63,7 +64,6 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       defaultProvider,
       Map.empty[String, String],
-      None,
       None,
       false)
     parseCompare(createSql, expectedPlan)
@@ -256,7 +256,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Map.empty[String, String],
         "parquet",
-        Map.empty[String, String],
+        Map("location" -> "/tmp/file"),
         Some("/tmp/file"),
         None)
     Seq(createSql, replaceSql).foreach { sql =>
@@ -390,7 +390,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Map("p1" -> "v1", "p2" -> "v2"),
         "parquet",
-        Map.empty[String, String],
+        Map("location" -> "/user/external/page_view"),
         Some("/user/external/page_view"),
         Some("This is the staging page view table"))
     Seq(s1, s2, s3, s4).foreach { sql =>
@@ -2034,7 +2034,7 @@ class DDLParserSuite extends AnalysisTest {
             create.properties,
             create.provider,
             create.options,
-            create.location,
+            create.options.get(TableCatalog.PROP_LOCATION),
             create.comment)
         case replace: ReplaceTableStatement =>
           TableSpec(
@@ -2045,7 +2045,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.properties,
             replace.provider,
             replace.options,
-            replace.location,
+            replace.options.get(TableCatalog.PROP_LOCATION),
             replace.comment)
         case ctas: CreateTableAsSelectStatement =>
           TableSpec(
@@ -2056,7 +2056,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.properties,
             ctas.provider,
             ctas.options,
-            ctas.location,
+            ctas.options.get(TableCatalog.PROP_LOCATION),
             ctas.comment)
         case rtas: ReplaceTableAsSelectStatement =>
           TableSpec(
@@ -2067,7 +2067,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.properties,
             rtas.provider,
             rtas.options,
-            rtas.location,
+            rtas.options.get(TableCatalog.PROP_LOCATION),
             rtas.comment)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +

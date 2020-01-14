@@ -267,14 +267,12 @@ private[sql] object CatalogV2Util {
   def convertTableProperties(
       properties: Map[String, String],
       options: Map[String, String],
-      location: Option[String],
       comment: Option[String],
       provider: String): Map[String, String] = {
     properties ++
       options.filterKeys(!_.equalsIgnoreCase("path")) ++
       Map(TableCatalog.PROP_PROVIDER -> provider) ++
-      comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      location.orElse(CaseInsensitiveMap(options).get("path")).map(TableCatalog.PROP_LOCATION -> _)
+      comment.map(TableCatalog.PROP_COMMENT -> _)
   }
 
   def createAlterTable(

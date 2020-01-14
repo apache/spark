@@ -494,7 +494,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(statement.properties.isEmpty)
     assert(statement.provider == conf.defaultDataSourceName)
     assert(statement.options.isEmpty)
-    assert(statement.location.isEmpty)
     assert(statement.comment.isEmpty)
     assert(!statement.ifNotExists)
   }
@@ -664,7 +663,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(state.properties.isEmpty)
       assert(state.provider == conf.defaultDataSourceName)
       assert(state.options.isEmpty)
-      assert(state.location.isEmpty)
       assert(state.comment.isEmpty)
       assert(!state.ifNotExists)
     }

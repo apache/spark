@@ -33,7 +33,7 @@ Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
 -- !query 2
-COMMENT ON TABLE table_with_comment IS 'modified comment'
+ALTER TABLE table_with_comment SET TBLPROPERTIES("comment"= "modified comment", "type"= "parquet")
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -59,6 +59,7 @@ Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
+Table Properties    	[type=parquet]      	                    
 Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
@@ -98,7 +99,7 @@ Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
 -- !query 7
-COMMENT ON TABLE table_comment IS 'added comment'
+ALTER TABLE table_comment SET TBLPROPERTIES(comment = "added comment")
 -- !query 7 schema
 struct<>
 -- !query 7 output
@@ -126,7 +127,7 @@ Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
 -- !query 9
-COMMENT ON TABLE table_comment IS NULL
+ALTER TABLE table_comment UNSET TBLPROPERTIES IF EXISTS ('comment')
 -- !query 9 schema
 struct<>
 -- !query 9 output
@@ -149,7 +150,6 @@ Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
-Comment             	                    	                    
 Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
