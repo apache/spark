@@ -199,6 +199,6 @@ case class ExternalCommandExecutor(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val output = provider.executeCommand(command, parameters)
-    Seq(Row(output.mkString("\n")))
+    output.map(Row(_))
   }
 }

@@ -33,8 +33,10 @@ class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
       .executeCommand("hello")
     // executeCommand should execute the command eagerly
     assert(System.getProperty("command") === "world")
-    val output = df.collect().head.getString(0)
-    assert(output === Array("hello".reverse, parameters.toString()).mkString("\n"))
+    val output1 = df.collect()(0).getString(0)
+    val output2 = df.collect()(1).getString(0)
+    assert(output1 === "hello".reverse)
+    assert(output2 === parameters.toString)
     System.clearProperty("command")
   }
 }
