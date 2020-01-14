@@ -894,6 +894,86 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("create/replace/alter table - reserved properties") {
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      TableCatalog.RESERVED_PROPERTIES.asScala.foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+            }
+            assert(e.getMessage.contains(s"$key is a reserved table property"))
+          }
+        }
+
+        val e1 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='bar')")
+        }
+        assert(e1.getMessage.contains(s"$key is a reserved table property"))
+
+        val e2 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+        }
+        assert(e2.getMessage.contains(s"$key is a reserved table property"))
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      TableCatalog.RESERVED_PROPERTIES.asScala.foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          withTable("testcat.reservedTest") {
+            Seq("CREATE", "REPLACE").foreach { action =>
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+              val tableCatalog = catalog("testcat").asTableCatalog
+              val identifier = Identifier.of(Array(), "reservedTest")
+              val originValue = tableCatalog.loadTable(identifier).properties().get(key)
+              assert(originValue != "bar", "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='newValue')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("create/replace - path property") {
+    Seq("true", "false").foreach { conf =>
+      withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, conf)) {
+        withTable("testcat.reservedTest") {
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e1 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' OPTIONS" +
+                s" ('path'='bar')")
+            }
+            assert(e1.getMessage.contains(s"LOCATION and 'path' in OPTIONS"))
+
+            val e2 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo OPTIONS" +
+                s" ('path'='foo', 'PaTh'='bar')")
+            }
+            assert(e2.getMessage.contains(s"Duplicated"))
+
+            sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' TBLPROPERTIES" +
+              s" ('path'='bar', 'Path'='noop')")
+            val tableCatalog = catalog("testcat").asTableCatalog
+            val identifier = Identifier.of(Array(), "reservedTest")
+            assert(tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION) == "foo",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("Path") == "noop",
+              "path as a table property should not have side effects")
+          }
+        }
+      }
+    }
+  }
+
   test("DropNamespace: basic tests") {
     // Session catalog is used.
     sql("CREATE NAMESPACE ns")
@@ -1849,8 +1929,8 @@ class DataSourceV2SQLSuite
 
       val expected = Seq(
         Row("owner", owner),
-        Row("provider", provider),
-        Row("status", status))
+        Row("status", status),
+        Row("provider", provider))
 
       assert(properties.schema === schema)
       assert(expected === properties.collect())

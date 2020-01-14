@@ -3,7 +3,7 @@ CREATE TABLE table_with_comment (a STRING, b INT, c STRING, d STRING) USING parq
 DESC FORMATTED table_with_comment;
 
 -- ALTER TABLE BY MODIFYING COMMENT
-ALTER TABLE table_with_comment SET TBLPROPERTIES("comment"= "modified comment", "type"= "parquet");
+COMMENT ON TABLE table_with_comment IS 'modified comment';
 
 DESC FORMATTED table_with_comment;
 
@@ -16,12 +16,12 @@ CREATE TABLE table_comment (a STRING, b INT) USING parquet;
 DESC FORMATTED table_comment;
 
 -- ALTER TABLE BY ADDING COMMENT
-ALTER TABLE table_comment SET TBLPROPERTIES(comment = "added comment");
+COMMENT ON TABLE table_comment IS 'added comment';
 
 DESC formatted table_comment;
 
 -- ALTER UNSET PROPERTIES COMMENT
-ALTER TABLE table_comment UNSET TBLPROPERTIES IF EXISTS ('comment');
+COMMENT ON TABLE table_comment IS NULL ;
 
 DESC FORMATTED table_comment;
 

@@ -566,11 +566,6 @@ class ResolveSessionCatalog(
       ifNotExists: Boolean): CatalogTable = {
 
     val storage = DataSource.buildStorageFormatFromOptions(options)
-    if (location.isDefined && storage.locationUri.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-            "you can only specify one of them.")
-    }
     val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
 
     val tableType = if (customLocation.isDefined) {

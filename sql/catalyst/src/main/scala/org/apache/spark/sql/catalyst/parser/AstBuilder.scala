@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
@@ -2355,12 +2355,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
     val props = visitTablePropertyList(ctx)
-    val badKeys = props.filter { case (_, v) => v != null }.keys
+    val cleanedTableProperties = cleanTableProperties(props, None, false, ctx)
+    val badKeys = cleanedTableProperties.filter { case (_, v) => v != null }.keys
     if (badKeys.nonEmpty) {
       operationNotAllowed(
         s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
     }
-    props.keys.toSeq
+    cleanedTableProperties.keys.toSeq
   }
 
   /**
@@ -2669,6 +2670,41 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx.EXTENDED != null)
     }
 
+  private def cleanTableProperties(
+      properties: Map[String, String],
+      location: Option[String],
+      isOptionClause: Boolean,
+      ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
+    import org.apache.spark.sql.connector.catalog.TableCatalog._
+    val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
+    var pathDefined = false
+    properties.filter {
+      case (PROP_PROVIDER, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_PROVIDER is a reserved table property, please use" +
+          s" the USING clause to specify it.", ctx)
+      case (PROP_PROVIDER, _) => false
+      case (PROP_LOCATION, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_LOCATION is a reserved table property, please use" +
+          s" the LOCATION clause to specify it.", ctx)
+      case (PROP_LOCATION, _) => false
+      case (PROP_COMMENT, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_COMMENT is a reserved table property, please use" +
+          s" the COMMENT clause to specify it.", ctx)
+      case (PROP_COMMENT, _) => false
+      case (path, _) if path.equalsIgnoreCase("path") && isOptionClause && location.nonEmpty =>
+        throw new ParseException(s"LOCATION and 'path' in OPTIONS are both used to indicate the" +
+          s" custom table path, you can only specify one of them.", ctx)
+      case (path, _) if path.equalsIgnoreCase("path") && isOptionClause =>
+        if (pathDefined) {
+          throw new ParseException("Duplicated 'path' keys found in the OPTIONS clause", ctx)
+        } else {
+          pathDefined = true
+          true
+        }
+      case _ => true
+    }
+  }
+
   override def visitCreateTableClauses(ctx: CreateTableClausesContext): TableClauses = {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
@@ -2680,11 +2716,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val partitioning: Seq[Transform] =
       Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val location = visitLocationSpecList(ctx.locationSpec())
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val cleanedTableProperties =
+      cleanTableProperties(properties, location, false, ctx)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val cleanTableOptions = cleanTableProperties(options, location, true, ctx)
     val comment = visitCommentSpecList(ctx.commentSpec())
-    (partitioning, bucketSpec, properties, options, location, comment)
+    (partitioning, bucketSpec, cleanedTableProperties, cleanTableOptions, location, comment)
   }
 
   /**
@@ -2718,6 +2757,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val defaultProvider = conf.defaultDataSourceName
     val provider =
       Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
@@ -3010,18 +3050,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * For example:
    * {{{
-   *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
-   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
+   *   ALTER TABLE table SET TBLPROPERTIES ('table_property' = 'property_value');
+   *   ALTER VIEW view SET TBLPROPERTIES ('table_property' = 'property_value');
    * }}}
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
+    val cleanedTableProperties = cleanTableProperties(properties, None, false, ctx)
     if (ctx.VIEW != null) {
-      AlterViewSetPropertiesStatement(identifier, properties)
+      AlterViewSetPropertiesStatement(identifier, cleanedTableProperties)
     } else {
-      AlterTableSetPropertiesStatement(identifier, properties)
+      AlterTableSetPropertiesStatement(identifier, cleanedTableProperties)
     }
   }
 

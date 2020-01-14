@@ -21,11 +21,10 @@ import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -271,40 +270,11 @@ private[sql] object CatalogV2Util {
       location: Option[String],
       comment: Option[String],
       provider: String): Map[String, String] = {
-    if (options.contains("path") && location.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-          "you can only specify one of them.")
-    }
-
-    if ((options.contains(TableCatalog.PROP_COMMENT)
-      || properties.contains(TableCatalog.PROP_COMMENT)) && comment.isDefined) {
-      throw new AnalysisException(
-        s"COMMENT and option/property '${TableCatalog.PROP_COMMENT}' " +
-          s"are both used to set the table comment, you can only specify one of them.")
-    }
-
-    if (options.contains(TableCatalog.PROP_PROVIDER)
-      || properties.contains(TableCatalog.PROP_PROVIDER)) {
-      throw new AnalysisException(
-        "USING and option/property 'provider' are both used to set the provider implementation, " +
-          "you can only specify one of them.")
-    }
-
-    val filteredOptions = options.filterKeys(_ != "path")
-
-    // create table properties from TBLPROPERTIES and OPTIONS clauses
-    val tableProperties = new mutable.HashMap[String, String]()
-    tableProperties ++= properties
-    tableProperties ++= filteredOptions
-
-    // convert USING, LOCATION, and COMMENT clauses to table properties
-    tableProperties += (TableCatalog.PROP_PROVIDER -> provider)
-    comment.map(text => tableProperties += (TableCatalog.PROP_COMMENT -> text))
-    location.orElse(options.get("path")).map(
-      loc => tableProperties += (TableCatalog.PROP_LOCATION -> loc))
-
-    tableProperties.toMap
+    properties ++
+      options.filterKeys(!_.equalsIgnoreCase("path")) ++
+      Map(TableCatalog.PROP_PROVIDER -> provider) ++
+      comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      location.orElse(CaseInsensitiveMap(options).get("path")).map(TableCatalog.PROP_LOCATION -> _)
   }
 
   def createAlterTable(
