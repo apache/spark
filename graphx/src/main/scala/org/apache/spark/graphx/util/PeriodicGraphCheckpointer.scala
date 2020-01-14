@@ -79,13 +79,8 @@ import org.apache.spark.util.PeriodicCheckpointer
  */
 private[spark] class PeriodicGraphCheckpointer[VD, ED](
     checkpointInterval: Int,
-    sc: SparkContext,
-    storageLevel: StorageLevel)
+    sc: SparkContext)
   extends PeriodicCheckpointer[Graph[VD, ED]](checkpointInterval, sc) {
-  require(storageLevel != StorageLevel.NONE)
-
-  def this(checkpointInterval: Int, sc: SparkContext) =
-    this(checkpointInterval, sc, StorageLevel.MEMORY_ONLY)
 
   override protected def checkpoint(data: Graph[VD, ED]): Unit = data.checkpoint()
 
@@ -96,10 +91,10 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
       /* We need to use cache because persist does not honor the default storage level requested
        * when constructing the graph. Only cache does that.
        */
-      data.vertices.persist(storageLevel)
+      data.vertices.cache()
     }
     if (data.edges.getStorageLevel == StorageLevel.NONE) {
-      data.edges.persist(storageLevel)
+      data.edges.cache()
     }
   }
 
