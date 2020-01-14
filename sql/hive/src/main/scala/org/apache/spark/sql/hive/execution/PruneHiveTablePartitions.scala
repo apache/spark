@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Attri
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.BooleanType
 
@@ -46,7 +45,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   /**
    * Extract the partition filters from the filters on the table.
    */
-  private def extractPartitionPruningFilters(
+  private def getPartitionKeyFilters(
       filters: Seq[Expression],
       relation: HiveTableRelation): Seq[Expression] = {
     val normalizedFilters = filters.map { e =>
@@ -99,9 +98,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
    * Update the statistics of the table.
    */
   private def updateTableMeta(
-              tableMeta: CatalogTable,
-              prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
-    val sizeInBytes = try {
+      tableMeta: CatalogTable,
+      prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
+    val sizeOfPartitions = try {
       prunedPartitions.map { partition =>
         val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
         val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
@@ -110,8 +109,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         } else if (totalSize.isDefined && totalSize.get > 0L) {
           totalSize.get
         } else {
-          CommandUtils.calculateLocationSize(
-            session.sessionState, tableMeta.identifier, partition.storage.locationUri)
+          0L
         }
       }.sum
     } catch {
@@ -119,13 +117,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         logWarning("Failed to get table size from HDFS.", e)
         conf.defaultSizeInBytes
     }
+    // If size of partitions is zero fall back to the default size.
+    val sizeInBytes = if (sizeOfPartitions == 0L) conf.defaultSizeInBytes else sizeOfPartitions
     tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val partitionPruningFilters = extractPartitionPruningFilters(filters, relation)
+      val partitionPruningFilters = getPartitionKeyFilters(filters, relation)
       // SPARK-24085: subquery should be skipped for partition pruning
       val hasSubquery = partitionPruningFilters.exists(SubqueryExpression.hasSubquery)
       if (partitionPruningFilters.nonEmpty && !hasSubquery) {
