@@ -78,7 +78,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // null character, expressed in Unicode literal syntax
     ("""\u0000""", Some("\u0000"), None),
     // and specified directly
-    ("\0", Some("\u0000"), None)
+    ("\u0000", Some("\u0000"), None)
   )
 
   test("should correctly produce separator strings, or exceptions, from input") {

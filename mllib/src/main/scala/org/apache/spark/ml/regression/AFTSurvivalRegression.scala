@@ -31,7 +31,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
@@ -215,13 +215,13 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val featuresSummarizer = instances.treeAggregate(
-      createSummarizerBuffer("mean", "variance", "count"))(
+      Summarizer.createSummarizerBuffer("mean", "std", "count"))(
       seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
       combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
       depth = $(aggregationDepth)
     )
 
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresStd = featuresSummarizer.std.toArray
     val numFeatures = featuresStd.size
 
     instr.logPipelineStage(this)
@@ -349,7 +349,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -358,12 +358,14 @@ class AFTSurvivalRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
       val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+        .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {
@@ -377,7 +379,15 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    if (isDefined(quantilesCol) && $(quantilesCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(quantilesCol), $(quantileProbabilities).length)
+    }
+    outputSchema
   }
 
   @Since("1.6.0")
@@ -576,8 +586,8 @@ private class AFTAggregator(
 
     val margin = {
       var sum = 0.0
-      xi.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+      xi.foreachNonZero { (index, value) =>
+        if (localFeaturesStd(index) != 0.0) {
           sum += coefficients(index) * (value / localFeaturesStd(index))
         }
       }
@@ -591,8 +601,8 @@ private class AFTAggregator(
 
     gradientSumArray(0) += delta + multiplier * sigma * epsilon
     gradientSumArray(1) += { if (fitIntercept) multiplier else 0.0 }
-    xi.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    xi.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         gradientSumArray(index + 2) += multiplier * (value / localFeaturesStd(index))
       }
     }

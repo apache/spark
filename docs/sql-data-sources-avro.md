@@ -198,9 +198,22 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by a user in JSON format. The data type and naming of record fields
-    should match the Avro data type when reading from Avro or match the Spark's internal data type (e.g., StringType, IntegerType) when writing to Avro files; otherwise, the read/write action will fail.</td>
-    <td>read and write</td>
+    <td>Optional schema provided by a user in JSON format.
+      <ul>
+        <li>
+          When reading Avro, this option can be set to an evolved schema, which is compatible but different with
+          the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
+          For example, if we set an evolved schema containing one additional column with a default value,
+          the reading result in Spark will contain the new column too.
+        </li>
+        <li>
+          When writing Avro, this option can be set if the expected output Avro schema doesn't match the
+          schema converted by Spark. For example, the expected schema of one column is of "enum" type,
+          instead of "string" type in the default converted schema.
+        </li>
+      </ul>
+    </td>
+    <td> read, write and function <code>from_avro</code></td>
   </tr>
   <tr>
     <td><code>recordName</code></td>

@@ -28,10 +28,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -101,9 +102,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
-    functionRegistry.createOrReplaceTempFunction(name, builder)
-    udf
+    udf match {
+      case udaf: UserDefinedAggregator[_, _, _] =>
+        def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+      case _ =>
+        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+    }
   }
 
   // scalastyle:off line.size.limit

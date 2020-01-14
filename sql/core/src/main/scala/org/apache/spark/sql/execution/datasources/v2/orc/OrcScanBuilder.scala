@@ -43,6 +43,8 @@ case class OrcScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
       readDataSchema(), readPartitionSchema(), options, pushedFilters())

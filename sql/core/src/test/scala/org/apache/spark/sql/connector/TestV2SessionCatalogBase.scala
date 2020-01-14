@@ -74,6 +74,11 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
     t
   }
 
+  override def dropTable(ident: Identifier): Boolean = {
+    tables.remove(fullIdentifier(ident))
+    super.dropTable(ident)
+  }
+
   def clearTables(): Unit = {
     assert(!tables.isEmpty, "Tables were empty, maybe didn't use the session catalog code path?")
     tables.keySet().asScala.foreach(super.dropTable)

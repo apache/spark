@@ -169,6 +169,8 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = rf.fit(df)
 
     testPredictionModelSinglePrediction(model, df)
+    testClassificationModelSingleRawPrediction(model, df)
+    testProbClassificationModelSingleProbPrediction(model, df)
   }
 
   test("Fitting without numClasses in metadata") {
@@ -242,6 +244,13 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)

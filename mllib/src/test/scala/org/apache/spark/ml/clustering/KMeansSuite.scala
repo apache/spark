@@ -60,6 +60,9 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
+    val transformed = model.transform(dataset)
+    checkNominalOnDF(transformed, "prediction", model.clusterCenters.length)
+
     MLTestingUtils.checkCopyAndUids(kmeans, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
@@ -155,7 +158,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   }
 
   test("KMeans using cosine distance") {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -188,7 +191,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
   test("KMeans with cosine distance is not supported for 0-length vectors") {
     val model = new KMeans().setDistanceMeasure(DistanceMeasure.COSINE).setK(2)
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5)
@@ -213,7 +216,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
     assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
-
 
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
@@ -250,6 +252,231 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     val model = kmeans.fit(dataset)
     testClusteringModelSinglePrediction(model, model.predict, dataset,
       model.getFeaturesCol, model.getPredictionCol)
+  }
+
+  test("compare with weightCol and without weightCol") {
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0), Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4), Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0), Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+
+    val model1 = new KMeans()
+      .setK(3)
+      .setSeed(42)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setTol(1e-6)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .fit(df1)
+
+    val predictionDf1 = model1.transform(df1)
+    assert(predictionDf1.select("prediction").distinct().count() == 3)
+    val predictionsMap1 = predictionDf1.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap1(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap1(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap1(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap1(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(-100.0, 90.0)))
+
+    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      (Vectors.dense(1.0, 1.0), 1.0),
+      (Vectors.dense(10.0, 10.0), 2.0),
+      (Vectors.dense(1.0, 0.5), 1.0),
+      (Vectors.dense(10.0, 4.4), 2.0),
+      (Vectors.dense(-1.0, 1.0), 1.0),
+      (Vectors.dense(-100.0, 90.0), 2.0)))).toDF("features", "weightCol")
+
+    val model2 = new KMeans()
+      .setK(3)
+      .setSeed(42)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setTol(1e-6)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .setWeightCol("weightCol")
+      .fit(df2)
+
+    val predictionDf2 = model2.transform(df2)
+    assert(predictionDf2.select("prediction").distinct().count() == 3)
+    val predictionsMap2 = predictionDf2.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap2(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap2(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap2(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap2(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(-100.0, 90.0)))
+
+    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    // compare if model1 and model2 have the same cluster centers
+    assert(model1.clusterCenters.length === model2.clusterCenters.length)
+    assert(model1.clusterCenters.toSet.subsetOf((model2.clusterCenters.toSet)))
+  }
+
+  test("Two centers with weightCol") {
+    // use the same weight for all samples.
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      (Vectors.dense(0.0, 0.0), 2.0),
+      (Vectors.dense(0.0, 0.1), 2.0),
+      (Vectors.dense(0.1, 0.0), 2.0),
+      (Vectors.dense(9.0, 0.0), 2.0),
+      (Vectors.dense(9.0, 0.2), 2.0),
+      (Vectors.dense(9.2, 0.0), 2.0)))).toDF("features", "weightCol")
+
+    val model1 = new KMeans()
+      .setK(2)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setWeightCol("weightCol")
+      .setMaxIter(10)
+      .fit(df1)
+
+    val predictionDf1 = model1.transform(df1)
+    assert(predictionDf1.select("prediction").distinct().count() == 2)
+    val predictionsMap1 = predictionDf1.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap1(Vectors.dense(0.0, 0.0)) ==
+      predictionsMap1(Vectors.dense(0.0, 0.1)))
+    assert(predictionsMap1(Vectors.dense(0.0, 0.0)) ==
+      predictionsMap1(Vectors.dense(0.1, 0.0)))
+    assert(predictionsMap1(Vectors.dense(9.0, 0.0)) ==
+      predictionsMap1(Vectors.dense(9.0, 0.2)))
+    assert(predictionsMap1(Vectors.dense(9.0, 0.2)) ==
+      predictionsMap1(Vectors.dense(9.2, 0.0)))
+
+    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    // center 1:
+    // total weights in cluster 1: 2.0 + 2.0 + 2.0 = 6.0
+    // x: 9.0 * (2.0/6.0) + 9.0 * (2.0/6.0) + 9.2 * (2.0/6.0) = 9.066666666666666
+    // y: 0.0 * (2.0/6.0) + 0.2 * (2.0/6.0) + 0.0 * (2.0/6.0) = 0.06666666666666667
+    // center 2:
+    // total weights in cluster 2: 2.0 + 2.0 + 2.0 = 6.0
+    // x: 0.0 * (2.0/6.0) + 0.0 * (2.0/6.0) + 0.1 * (2.0/6.0) = 0.03333333333333333
+    // y: 0.0 * (2.0/6.0) + 0.1 * (2.0/6.0) + 0.0 * (2.0/6.0) = 0.03333333333333333
+    val model1_center1 = Vectors.dense(9.066666666666666, 0.06666666666666667)
+    val model1_center2 = Vectors.dense(0.03333333333333333, 0.03333333333333333)
+    assert(model1.clusterCenters(0) === model1_center1)
+    assert(model1.clusterCenters(1) === model1_center2)
+
+    // use different weight
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      (Vectors.dense(0.0, 0.0), 1.0),
+      (Vectors.dense(0.0, 0.1), 2.0),
+      (Vectors.dense(0.1, 0.0), 3.0),
+      (Vectors.dense(9.0, 0.0), 2.5),
+      (Vectors.dense(9.0, 0.2), 1.0),
+      (Vectors.dense(9.2, 0.0), 2.0)))).toDF("features", "weightCol")
+
+    val model2 = new KMeans()
+      .setK(2)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setWeightCol("weightCol")
+      .setMaxIter(10)
+      .fit(df2)
+
+    val predictionDf2 = model2.transform(df2)
+    assert(predictionDf2.select("prediction").distinct().count() == 2)
+    val predictionsMap2 = predictionDf2.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap2(Vectors.dense(0.0, 0.0)) ==
+      predictionsMap2(Vectors.dense(0.0, 0.1)))
+    assert(predictionsMap2(Vectors.dense(0.0, 0.0)) ==
+      predictionsMap2(Vectors.dense(0.1, 0.0)))
+    assert(predictionsMap2(Vectors.dense(9.0, 0.0)) ==
+      predictionsMap2(Vectors.dense(9.0, 0.2)))
+    assert(predictionsMap2(Vectors.dense(9.0, 0.2)) ==
+      predictionsMap2(Vectors.dense(9.2, 0.0)))
+
+    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    // center 1:
+    // total weights in cluster 1: 2.5 + 1.0 + 2.0 = 5.5
+    // x: 9.0 * (2.5/5.5) + 9.0 * (1.0/5.5) + 9.2 * (2.0/5.5) = 9.072727272727272
+    // y: 0.0 * (2.5/5.5) + 0.2 * (1.0/5.5) + 0.0 * (2.0/5.5) = 0.03636363636363637
+    // center 2:
+    // total weights in cluster 2: 1.0 + 2.0 + 3.0 = 6.0
+    // x: 0.0 * (1.0/6.0) + 0.0 * (2.0/6.0) + 0.1 * (3.0/6.0) = 0.05
+    // y: 0.0 * (1.0/6.0) + 0.1 * (2.0/6.0) + 0.0 * (3.0/6.0) = 0.03333333333333333
+    val model2_center1 = Vectors.dense(9.072727272727272, 0.03636363636363637)
+    val model2_center2 = Vectors.dense(0.05, 0.03333333333333333)
+    assert(model2.clusterCenters(0) === model2_center1)
+    assert(model2.clusterCenters(1) === model2_center2)
+  }
+
+  test("Four centers with weightCol") {
+    // no weight
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(0.1, 0.1),
+      Vectors.dense(5.0, 0.2),
+      Vectors.dense(10.0, 0.0),
+      Vectors.dense(15.0, 0.5),
+      Vectors.dense(32.0, 18.0),
+      Vectors.dense(30.1, 20.0),
+      Vectors.dense(-6.0, -6.0),
+      Vectors.dense(-10.0, -10.0))).map(v => TestRow(v)))
+
+    val model1 = new KMeans()
+      .setK(4)
+      .setInitMode(MLlibKMeans.K_MEANS_PARALLEL)
+      .setMaxIter(10)
+      .fit(df1)
+
+    val predictionDf1 = model1.transform(df1)
+    assert(predictionDf1.select("prediction").distinct().count() == 4)
+    val predictionsMap1 = predictionDf1.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap1(Vectors.dense(0.1, 0.1)) ==
+      predictionsMap1(Vectors.dense(5.0, 0.2)) )
+    assert(predictionsMap1(Vectors.dense(10.0, 0.0)) ==
+      predictionsMap1(Vectors.dense(15.0, 0.5)) )
+    assert(predictionsMap1(Vectors.dense(32.0, 18.0)) ==
+      predictionsMap1(Vectors.dense(30.1, 20.0)))
+    assert(predictionsMap1(Vectors.dense(-6.0, -6.0)) ==
+      predictionsMap1(Vectors.dense(-10.0, -10.0)))
+
+    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    // use same weight, should have the same result as no weight
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      (Vectors.dense(0.1, 0.1), 2.0),
+      (Vectors.dense(5.0, 0.2), 2.0),
+      (Vectors.dense(10.0, 0.0), 2.0),
+      (Vectors.dense(15.0, 0.5), 2.0),
+      (Vectors.dense(32.0, 18.0), 2.0),
+      (Vectors.dense(30.1, 20.0), 2.0),
+      (Vectors.dense(-6.0, -6.0), 2.0),
+      (Vectors.dense(-10.0, -10.0), 2.0)))).toDF("features", "weightCol")
+
+    val model2 = new KMeans()
+      .setK(4)
+      .setInitMode(MLlibKMeans.K_MEANS_PARALLEL)
+      .setWeightCol("weightCol")
+      .setMaxIter(10)
+      .fit(df2)
+
+    val predictionDf2 = model2.transform(df2)
+    assert(predictionDf2.select("prediction").distinct().count() == 4)
+    val predictionsMap2 = predictionDf2.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap2(Vectors.dense(0.1, 0.1)) ==
+      predictionsMap2(Vectors.dense(5.0, 0.2)))
+    assert(predictionsMap2(Vectors.dense(10.0, 0.0)) ==
+      predictionsMap2(Vectors.dense(15.0, 0.5)))
+    assert(predictionsMap2(Vectors.dense(32.0, 18.0)) ==
+      predictionsMap2(Vectors.dense(30.1, 20.0)))
+    assert(predictionsMap2(Vectors.dense(-6.0, -6.0)) ==
+      predictionsMap2(Vectors.dense(-10.0, -10.0)))
+
+    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+
+    assert(model1.clusterCenters === model2.clusterCenters)
   }
 }
 

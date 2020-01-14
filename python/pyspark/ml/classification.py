@@ -25,7 +25,7 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
     _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams
-from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, _JavaPredictorParams, JavaPredictionModel, JavaWrapper
@@ -45,7 +45,8 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
-           'OneVsRest', 'OneVsRestModel']
+           'OneVsRest', 'OneVsRestModel',
+           'FMClassifier', 'FMClassificationModel']
 
 
 class _JavaClassifierParams(HasRawPredictionCol, _JavaPredictorParams):
@@ -94,6 +95,13 @@ class JavaClassificationModel(JavaPredictionModel, _JavaClassifierParams):
         Number of classes (values which the label can take).
         """
         return self._call_java("numClasses")
+
+    @since("3.0.0")
+    def predictRaw(self, value):
+        """
+        Raw prediction for each possible label.
+        """
+        return self._call_java("predictRaw", value)
 
 
 class _JavaProbabilisticClassifierParams(HasProbabilityCol, HasThresholds, _JavaClassifierParams):
@@ -148,6 +156,13 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel,
         """
         return self._set(thresholds=value)
 
+    @since("3.0.0")
+    def predictProbability(self, value):
+        """
+        Predict the probability of each class given the features.
+        """
+        return self._call_java("predictProbability", value)
+
 
 class _LinearSVCParams(_JavaClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
                        HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold):
@@ -192,11 +207,11 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     0.01
     >>> model = svm.fit(df)
     >>> model.setPredictionCol("newPrediction")
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getPredictionCol()
     'newPrediction'
     >>> model.setThreshold(0.5)
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getThreshold()
     0.5
     >>> model.coefficients
@@ -210,6 +225,8 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, -1.0, -1.0))]).toDF()
     >>> model.predict(test0.head().features)
     1.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([-1.4831, 1.4831])
     >>> result = model.transform(test0).head()
     >>> result.newPrediction
     1.0
@@ -567,6 +584,10 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
     >>> blorModel.predict(test0.head().features)
     1.0
+    >>> blorModel.predictRaw(test0.head().features)
+    DenseVector([-3.54..., 3.54...])
+    >>> blorModel.predictProbability(test0.head().features)
+    DenseVector([0.028, 0.972])
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     1.0
@@ -811,9 +832,6 @@ class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticReg
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class LogisticRegressionSummary(JavaWrapper):
@@ -1150,6 +1168,10 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.predict(test0.head().features)
     0.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([1.0, 0.0])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([1.0, 0.0])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1381,6 +1403,10 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.predict(test0.head().features)
     0.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([2.0, 0.0])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([1.0, 0.0])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1620,6 +1646,8 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     ...     leafCol="leafId")
     >>> gbt.setMaxIter(5)
     GBTClassifier...
+    >>> gbt.setMinWeightFractionPerNode(0.049)
+    GBTClassifier...
     >>> gbt.getMaxIter()
     5
     >>> gbt.getFeatureSubsetStrategy()
@@ -1640,6 +1668,10 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.predict(test0.head().features)
     0.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([1.1697, -1.1697])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([0.9121, 0.0879])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1687,14 +1719,15 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
                  featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None,
-                 leafCol="", minWeightFractionPerNode=0.0):
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                 weightCol=None)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1714,14 +1747,16 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0):
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                  weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                  weightCol=None)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -1829,6 +1864,20 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
         """
         return self._set(stepSize=value)
 
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
 
 class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
                              _GBTClassifierParams, JavaMLWritable, JavaMLReadable):
@@ -1881,7 +1930,8 @@ class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
                       "default is 1.0", typeConverter=TypeConverters.toFloat)
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
+                      "(case-sensitive). Supported options: multinomial (default), bernoulli " +
+                      "and gaussian.",
                       typeConverter=TypeConverters.toString)
 
     @since("1.5.0")
@@ -1910,7 +1960,15 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     TF-IDF vectors, it can be used for document classification. By making every vector a
     binary (0/1) data, it can also be used as `Bernoulli NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html>`_.
-    The input feature values must be nonnegative.
+    The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+    Since 3.0.0, it supports Complement NB which is an adaptation of the Multinomial NB.
+    Specifically, Complement NB uses statistics from the complement of each class to compute
+    the model's coefficients. The inventors of Complement NB show empirically that the parameter
+    estimates for CNB are more stable than those for Multinomial NB. Like Multinomial NB, the
+    input feature values for Complement NB must be nonnegative.
+    Since 3.0.0, it also supports Gaussian NB
+    <https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes>`_.
+    which can handle continuous data.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -1921,16 +1979,22 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.setFeaturesCol("features")
-    NaiveBayes_...
+    NaiveBayesModel...
     >>> model.getSmoothing()
     1.0
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
+    >>> model.sigma
+    DenseMatrix(0, 0, [...], ...)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.predict(test0.head().features)
     1.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([-1.72..., -0.99...])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([0.32..., 0.67...])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     1.0
@@ -1958,6 +2022,20 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> result = model3.transform(test0).head()
     >>> result.prediction
     0.0
+    >>> nb3 = NaiveBayes().setModelType("gaussian")
+    >>> model4 = nb3.fit(df)
+    >>> model4.getModelType()
+    'gaussian'
+    >>> model4.sigma
+    DenseMatrix(2, 2, [0.0, 0.25, 0.0, 0.0], 1)
+    >>> nb5 = NaiveBayes(smoothing=1.0, modelType="complement", weightCol="weight")
+    >>> model5 = nb5.fit(df)
+    >>> model5.getModelType()
+    'complement'
+    >>> model5.theta
+    DenseMatrix(2, 2, [...], 1)
+    >>> model5.sigma
+    DenseMatrix(0, 0, [...], ...)
 
     .. versionadded:: 1.5.0
     """
@@ -2040,6 +2118,14 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
         """
         return self._call_java("theta")
 
+    @property
+    @since("3.0.0")
+    def sigma(self):
+        """
+        variance of each feature.
+        """
+        return self._call_java("sigma")
+
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
                                   HasTol, HasStepSize, HasSolver):
@@ -2114,8 +2200,10 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     100
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
-    MultilayerPerceptronClassifier...
-    >>> model.layers
+    MultilayerPerceptronClassificationModel...
+    >>> model.getMaxIter()
+    100
+    >>> model.getLayers()
     [2, 2, 2]
     >>> model.weights.size
     12
@@ -2124,6 +2212,10 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
     >>> model.predict(testDF.head().features)
     1.0
+    >>> model.predictRaw(testDF.head().features)
+    DenseVector([-16.208, 16.344])
+    >>> model.predictProbability(testDF.head().features)
+    DenseVector([0.0, 1.0])
     >>> model.transform(testDF).select("features", "prediction").show()
     +---------+----------+
     | features|prediction|
@@ -2140,7 +2232,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model_path = temp_path + "/mlp_model"
     >>> model.save(model_path)
     >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
-    >>> model.layers == model2.layers
+    >>> model.getLayers() == model2.getLayers()
     True
     >>> model.weights == model2.weights
     True
@@ -2148,7 +2240,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
-    >>> model3.layers == model.layers
+    >>> model3.getLayers() == model.getLayers()
     True
 
     .. versionadded:: 1.6.0
@@ -2244,21 +2336,14 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
         return self._set(solver=value)
 
 
-class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable,
+class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel,
+                                              _MultilayerPerceptronParams, JavaMLWritable,
                                               JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0
     """
-
-    @property
-    @since("1.6.0")
-    def layers(self):
-        """
-        array of layer sizes including input and output layers.
-        """
-        return self._call_java("javaLayers")
 
     @property
     @since("2.0.0")
@@ -2712,6 +2797,228 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         _java_obj.set("labelCol", self.getLabelCol())
         _java_obj.set("predictionCol", self.getPredictionCol())
         return _java_obj
+
+
+@inherit_doc
+class FMClassifier(JavaProbabilisticClassifier, _FactorizationMachinesParams, JavaMLWritable,
+                   JavaMLReadable):
+    """
+    Factorization Machines learning algorithm for classification.
+
+    solver Supports:
+
+    * gd (normal mini-batch gradient descent)
+    * adamW (default)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.classification import FMClassifier
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> fm = FMClassifier(factorSize=2)
+    >>> fm.setSeed(11)
+    FMClassifier...
+    >>> model = fm.fit(df)
+    >>> model.getMaxIter()
+    100
+    >>> test0 = spark.createDataFrame([
+    ...     (Vectors.dense(-1.0),),
+    ...     (Vectors.dense(0.5),),
+    ...     (Vectors.dense(1.0),),
+    ...     (Vectors.dense(2.0),)], ["features"])
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([22.13..., -22.13...])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([1.0, 0.0])
+    >>> model.transform(test0).select("features", "probability").show(10, False)
+    +--------+------------------------------------------+
+    |features|probability                               |
+    +--------+------------------------------------------+
+    |[-1.0]  |[0.9999999997574736,2.425264676902229E-10]|
+    |[0.5]   |[0.47627851732981163,0.5237214826701884]  |
+    |[1.0]   |[5.491554426243495E-4,0.9994508445573757] |
+    |[2.0]   |[2.005766663870645E-10,0.9999999997994233]|
+    +--------+------------------------------------------+
+    ...
+    >>> model.intercept
+    -7.316665276826291
+    >>> model.linear
+    DenseVector([14.8232])
+    >>> model.factors
+    DenseMatrix(1, 2, [0.0163, -0.0051], 1)
+
+    .. versionadded:: 3.0.0
+    """
+
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
+                       typeConverter=TypeConverters.toInt)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 probabilityCol="probability", rawPredictionCol="rawPrediction",
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None)
+        """
+        super(FMClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.FMClassifier", self.uid)
+        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                         tol=1e-6, solver="adamW")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  probabilityCol="probability", rawPredictionCol="rawPrediction",
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None)
+        Sets Params for FMClassifier.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FMClassificationModel(java_model)
+
+    @since("3.0.0")
+    def setFactorSize(self, value):
+        """
+        Sets the value of :py:attr:`factorSize`.
+        """
+        return self._set(factorSize=value)
+
+    @since("3.0.0")
+    def setFitLinear(self, value):
+        """
+        Sets the value of :py:attr:`fitLinear`.
+        """
+        return self._set(fitLinear=value)
+
+    @since("3.0.0")
+    def setMiniBatchFraction(self, value):
+        """
+        Sets the value of :py:attr:`miniBatchFraction`.
+        """
+        return self._set(miniBatchFraction=value)
+
+    @since("3.0.0")
+    def setInitStd(self, value):
+        """
+        Sets the value of :py:attr:`initStd`.
+        """
+        return self._set(initStd=value)
+
+    @since("3.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("3.0.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("3.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("3.0.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+
+class FMClassificationModel(JavaProbabilisticClassificationModel, _FactorizationMachinesParams,
+                            JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by :class:`FMClassifier`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("3.0.0")
+    def linear(self):
+        """
+        Model linear term.
+        """
+        return self._call_java("linear")
+
+    @property
+    @since("3.0.0")
+    def factors(self):
+        """
+        Model factor term.
+        """
+        return self._call_java("factors")
 
 
 if __name__ == "__main__":
