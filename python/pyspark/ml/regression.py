@@ -593,8 +593,12 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
     IsotonicRegressionModel...
+    >>> model.numFeatures()
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
+    0.0
+    >>> model.predict(test0.head().features[model.getFeatureIndex()])
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
@@ -726,6 +730,20 @@ class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritab
         regression.
         """
         return self._call_java("predictions")
+
+    @since("3.0.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
+
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
 
 
 class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
@@ -1497,8 +1515,7 @@ class GBTRegressionModel(_TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable
         return self._call_java("evaluateEachIteration", dataset, loss)
 
 
-class _AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                   HasMaxIter, HasTol, HasFitIntercept,
+class _AFTSurvivalRegressionParams(_JavaPredictorParams, HasMaxIter, HasTol, HasFitIntercept,
                                    HasAggregationDepth):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
@@ -1545,7 +1562,7 @@ class _AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 
 @inherit_doc
-class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
+class AFTSurvivalRegression(JavaPredictor, _AFTSurvivalRegressionParams,
                             JavaMLWritable, JavaMLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
@@ -1665,27 +1682,6 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
         return self._set(maxIter=value)
 
     @since("1.6.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("1.6.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
-
-    @since("1.6.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("1.6.0")
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
@@ -1707,27 +1703,13 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
         return self._set(aggregationDepth=value)
 
 
-class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
+class AFTSurvivalRegressionModel(JavaPredictionModel, _AFTSurvivalRegressionParams,
                                  JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     @since("3.0.0")
     def setQuantileProbabilities(self, value):
@@ -1773,13 +1755,6 @@ class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
         Predicted Quantiles
         """
         return self._call_java("predictQuantiles", features)
-
-    @since("2.0.0")
-    def predict(self, features):
-        """
-        Predicted value
-        """
-        return self._call_java("predict", features)
 
 
 class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,

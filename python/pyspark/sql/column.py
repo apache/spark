@@ -669,8 +669,9 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
         >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).show()
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+
