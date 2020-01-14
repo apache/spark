@@ -66,31 +66,11 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   private def prunePartitions(
       relation: HiveTableRelation,
       partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
-    val partitions =
     if (conf.metastorePartitionPruning) {
       session.sessionState.catalog.listPartitionsByFilter(
         relation.tableMeta.identifier, partitionFilters)
     } else {
       session.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
-    }
-    val shouldKeep = partitionFilters.reduceLeftOption(And).map { filter =>
-      require(filter.dataType == BooleanType,
-        s"Data type of predicate $filter must be ${BooleanType.catalogString} rather than " +
-          s"${filter.dataType.catalogString}.")
-      BindReferences.bindReference(filter, relation.partitionCols)
-    }
-    if (shouldKeep.nonEmpty) {
-      partitions.filter{ partition =>
-        val hivePartition =
-          HiveClientImpl.toHivePartition(partition, HiveClientImpl.toHiveTable(relation.tableMeta))
-        val dataTypes = relation.partitionCols.map(_.dataType)
-        val castedValues = hivePartition.getValues.asScala.zip(dataTypes)
-          .map { case (value, dataType) => cast(Literal(value), dataType).eval(null) }
-        val row = InternalRow.fromSeq(castedValues)
-        shouldKeep.get.eval(row).asInstanceOf[Boolean]
-      }
-    } else {
-      partitions
     }
   }
 
