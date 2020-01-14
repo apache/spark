@@ -209,7 +209,7 @@ Partition Provider  	Catalog
 
 
 -- !query 13
-ALTER TABLE t UNSET TBLPROPERTIES (comment)
+COMMENT ON TABLE t IS NULL
 -- !query 13 schema
 struct<>
 -- !query 13 output
@@ -241,6 +241,7 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
+Comment             	                    	                    
 Table Properties    	[t=test]            	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
