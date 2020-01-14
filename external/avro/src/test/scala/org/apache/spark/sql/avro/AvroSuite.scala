@@ -1506,14 +1506,12 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         .repartition(2)
         .write
         .format("avro")
-        .option("header", true)
         .save(dir.getCanonicalPath)
       withLogAppender(logAppender) {
         spark
           .read
           .format("avro")
           .option(AvroOptions.ignoreExtensionKey, false)
-          .option("header", true)
           .load(dir.getCanonicalPath)
           .count()
       }
