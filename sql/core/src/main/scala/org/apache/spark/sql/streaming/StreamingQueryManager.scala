@@ -69,8 +69,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         logInfo(s"Registered listener ${listener.getClass.getName}")
       })
     }
-    if (sparkSession.sparkContext.conf.get(UI_ENABLED)) {
-      addListener(sparkSession.sharedState.streamingQueryStatusListener.get)
+    sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
+      addListener(listener)
     }
   } catch {
     case e: Exception =>

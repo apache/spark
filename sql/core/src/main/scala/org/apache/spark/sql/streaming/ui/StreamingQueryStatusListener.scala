@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.streaming.ui
 
+import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress}
 
@@ -32,6 +34,9 @@ import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryPro
  * TODO: Add support for history server.
  */
 class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListener {
+
+  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   /**
    * We use runId as the key here instead of id in active query status map,
@@ -45,13 +50,15 @@ class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListe
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     activeQueryStatus.putIfAbsent(event.runId,
-      new StreamingQueryUIData(event.name, event.id, event.runId))
+      new StreamingQueryUIData(event.name, event.id, event.runId, event.submitTime))
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+    val batchTimestamp = timestampFormat.parse(event.progress.timestamp).getTime
     val queryStatus = activeQueryStatus.getOrDefault(
       event.progress.runId,
-      new StreamingQueryUIData(event.progress.name, event.progress.id, event.progress.runId))
+      new StreamingQueryUIData(event.progress.name, event.progress.id, event.progress.runId,
+        batchTimestamp))
     queryStatus.updateProcess(event.progress, streamingProgressRetention)
   }
 
@@ -80,8 +87,8 @@ class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListe
 private[ui] class StreamingQueryUIData(
     val name: String,
     val id: UUID,
-    val runId: UUID) {
-  val submitTime: Long = System.currentTimeMillis()
+    val runId: UUID,
+    val submitTime: Long) {
 
   /** Holds the most recent query progress updates. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()

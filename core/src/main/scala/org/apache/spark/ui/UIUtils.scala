@@ -636,15 +636,31 @@ private[spark] object UIUtils extends Logging {
   def durationDataPadding(
       values: Array[(Long, ju.Map[String, JLong])]): Array[(Long, Map[String, Double])] = {
     val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
-    values.map { case (x, y) =>
-      val dataPadding = operationLabels.map(d =>
-        if (y.containsKey(d)) {
-          (d, y.get(d).toDouble)
+    values.map { case (xValue, yValue) =>
+      val dataPadding = operationLabels.map { opLabel =>
+        if (yValue.containsKey(opLabel)) {
+          (opLabel, yValue.get(opLabel).toDouble)
         } else {
-          (d, 0d)
+          (opLabel, 0d)
         }
-      )
-      (x, dataPadding.toMap)
+      }
+      (xValue, dataPadding.toMap)
+    }
+  }
+
+  def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
+    if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{message}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      Seq.empty[Node]
     }
   }
 }

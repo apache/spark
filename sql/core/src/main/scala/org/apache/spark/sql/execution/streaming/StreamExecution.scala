@@ -307,7 +307,8 @@ abstract class StreamExecution(
       }
 
       // `postEvent` does not throw non fatal exception.
-      postEvent(new QueryStartedEvent(id, runId, name))
+      val submitTime = triggerClock.getTimeMillis()
+      postEvent(new QueryStartedEvent(id, runId, name, submitTime))
 
       // Unblock starting thread
       startLatch.countDown()

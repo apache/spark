@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryPage(parent: StreamingQueryTab, statusListener: StreamingQueryStatusListener)
+class StreamingQueryPage(parent: StreamingQueryTab)
     extends WebUIPage("") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -46,24 +46,12 @@ class StreamingQueryPage(parent: StreamingQueryTab, statusListener: StreamingQue
       if (queryActive) {
         return Seq.empty[Node]
       }
-      val s = detail.asInstanceOf[String]
-      val isMultiline = s.indexOf('\n') >= 0
+      val detailString = detail.asInstanceOf[String]
+      val isMultiline = detailString.indexOf('\n') >= 0
       val summary = StringEscapeUtils.escapeHtml4(
-        if (isMultiline) s.substring(0, s.indexOf('\n')) else s
+        if (isMultiline) detailString.substring(0, detailString.indexOf('\n')) else detailString
       )
-      val details = if (isMultiline) {
-        // scalastyle:off
-        <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-              class="expand-details">
-          +details
-        </span> ++
-          <div class="stacktrace-details collapsed">
-            <pre>{s}</pre>
-          </div>
-        // scalastyle:on
-      } else {
-        ""
-      }
+      val details = SparkUIUtils.detailsUINode(isMultiline, detailString)
       <td>{summary}{details}</td>
     }
 
@@ -102,7 +90,8 @@ class StreamingQueryPage(parent: StreamingQueryTab, statusListener: StreamingQue
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) = statusListener.allQueryStatus.partition(_.isActive)
+    val (activeQueries, inactiveQueries) = parent.statusListener.allQueryStatus
+      .partition(_.isActive)
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input /sec",

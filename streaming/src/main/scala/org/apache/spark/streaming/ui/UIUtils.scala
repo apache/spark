@@ -23,6 +23,8 @@ import scala.xml.Node
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.ui.{ UIUtils => SparkUIUtils }
+
 private[streaming] object UIUtils {
 
   /**
@@ -109,19 +111,7 @@ private[streaming] object UIUtils {
       } else {
         failureReason
       }
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureDetails}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = SparkUIUtils.detailsUINode(isMultiline, failureDetails)
 
     if (rowspan == 1) {
       <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>

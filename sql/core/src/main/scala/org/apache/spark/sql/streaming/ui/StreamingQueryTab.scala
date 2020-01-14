@@ -26,8 +26,8 @@ class StreamingQueryTab(val statusListener: StreamingQueryStatusListener, sparkU
 
   val parent = sparkUI
 
-  attachPage(new StreamingQueryPage(this, statusListener))
-  attachPage(new StreamingQueryStatisticsPage(this, statusListener))
+  attachPage(new StreamingQueryPage(this))
+  attachPage(new StreamingQueryStatisticsPage(this))
   parent.attachTab(this)
 
   parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")

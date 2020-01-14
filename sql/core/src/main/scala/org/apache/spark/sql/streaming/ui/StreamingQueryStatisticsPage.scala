@@ -30,9 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryStatisticsPage(
-    parent: StreamingQueryTab,
-    statusListener: StreamingQueryStatusListener)
+class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -50,7 +48,7 @@ class StreamingQueryStatisticsPage(
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = statusListener.allQueryStatus.find { case q =>
+    val query = parent.statusListener.allQueryStatus.find { case q =>
       q.runId.equals(UUID.fromString(parameterId))
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
