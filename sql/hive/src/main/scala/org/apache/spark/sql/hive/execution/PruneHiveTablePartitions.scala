@@ -47,8 +47,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
    * Extract the partition filters from the filters on the table.
    */
   private def extractPartitionPruningFilters(
-              filters: Seq[Expression],
-              relation: HiveTableRelation): Seq[Expression] = {
+      filters: Seq[Expression],
+      relation: HiveTableRelation): Seq[Expression] = {
     val normalizedFilters = filters.map { e =>
       e transform {
         case a: AttributeReference =>
@@ -64,8 +64,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   /**
    * Prune the hive table using filters on the partitions of the table.
    */
-  private def prunePartitions(relation: HiveTableRelation, partitionFilters: Seq[Expression])
-  : Seq[CatalogTablePartition] = {
+  private def prunePartitions(
+      relation: HiveTableRelation,
+      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
     val partitions =
     if (conf.metastorePartitionPruning) {
       session.sessionState.catalog.listPartitionsByFilter(
