@@ -239,21 +239,21 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
         s"spark.security.credentials.kafka.enabled" -> "false"
       )
     )
-    val kafkaParams = getKafkaParams(true, Some("custom_jaas_config"))
+    val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
     assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken without cluster config should return true") {
     setSparkEnv(Map.empty)
-    val kafkaParams = getKafkaParams(true, Some("custom_jaas_config"))
+    val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
     assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken without jaas config should return true") {
     setSparkEnv(Map.empty)
-    val kafkaParams = getKafkaParams(false)
+    val kafkaParams = getKafkaParams(addJaasConfig = false)
 
     assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
   }
@@ -265,7 +265,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       )
     )
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams(true)
+    val kafkaParams = getKafkaParams(addJaasConfig = true)
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
@@ -279,7 +279,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       )
     )
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams(true)
+    val kafkaParams = getKafkaParams(addJaasConfig = true)
     addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
