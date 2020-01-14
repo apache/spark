@@ -176,7 +176,12 @@ private[hive] class HiveClientImpl(
     // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
     // has hive-site.xml. So, HiveConf will use that to override its default values.
     // 2: we set all spark confs to this hiveConf.
-    // 3: we set all entries in config to this hiveConf.
+    // 3: we take the conf passed as --hiveconf which would be set as system properties
+    // by org.apache.hive.service.server.HiveServer2.ServerOptionsProcessor.parse in
+    // org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.main.
+    // 4: we set all entries in extraConfig to this hiveConf which have the highest precedence.
+    // To summarize, the order of precedence will be
+    // hadoopConf < sparkConf < overrideProps < extraConfig
 
     // not to lose command line overwritten properties
     // make a copy overridden props so that it can be reinserted finally
