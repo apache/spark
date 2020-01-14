@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
 import java.util.Locale
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -75,6 +78,34 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    def checkRemoteJarFile(path: String): Boolean = {
+      val hadoopPath = new Path(path)
+      val scheme = hadoopPath.toUri.getScheme
+      if (!Array("http", "https", "ftp").contains(scheme)) {
+        !hadoopPath.getFileSystem(hadoopConf).exists(hadoopPath)
+      } else {
+        false
+      }
+    }
+    val nonExistentResources = resources.filter { r =>
+      val filePath = r.uri
+      // For local paths with backslashes on Windows
+      if(filePath.contains("\\")) {
+        !new File(filePath).exists()
+      } else {
+        val uri = new Path(filePath).toUri
+        uri.getScheme match {
+          case null | "file" => !new File(uri.getPath).exists()
+          // for local schema no need to verify same as SparkContext.addJar
+          case "local" => false
+          case _ => checkRemoteJarFile(filePath)
+        }
+      }
+    }
+    if (nonExistentResources.nonEmpty) {
+      throw new AnalysisException(s"Resources not found: ${nonExistentResources.mkString(",")}")
+    }
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
       // We first load resources and then put the builder in the function registry.

@@ -3380,6 +3380,38 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df, Row(1))
     }
   }
+
+  test("SPARK-28670: create function should throw AnalysisException if UDF class not found") {
+    Seq(true, false).foreach { isTemporary =>
+      // test with no schema, file schema
+      Seq("", "file:").foreach{ schema =>
+        val exp = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udf_test
+               |AS 'org.apache.spark.sql.hive.execution.UDFTest'
+               |USING JAR '${schema}/var/invalid/invalid.jar'
+        """.stripMargin)
+        }
+        assert(exp.getMessage.contains("Resources not found"))
+      }
+    }
+  }
+
+  test("SPARK-28670: create function should throw AnalysisException with backslashes on Windows") {
+    Seq(true, false).foreach { isTemporary =>
+        val exp = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udf_test
+               |AS 'org.apache.spark.sql.hive.execution.UDFTest'
+               |USING JAR 'var\\invalid\\invalid.jar'
+        """.stripMargin)
+        }
+        assert(exp.getMessage.contains("Resources not found"))
+      }
+  }
+
 }
 
 case class Foo(bar: Option[String])
