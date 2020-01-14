@@ -1411,7 +1411,7 @@ object SQLConf {
         "is very time consuming. Setting this value to negative will disable statistic " +
         "calculation via file system.")
       .intConf
-      .createWithDefault(1000)
+      .createWithDefault(100)
 
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
