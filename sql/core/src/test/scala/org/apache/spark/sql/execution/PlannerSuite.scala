@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, PruneShuffleAndSort, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -433,7 +433,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val inputPlan = ShuffleExchangeExec(
       partitioning,
       DummySparkPlan(outputPartitioning = partitioning))
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = PruneShuffleAndSort().apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
@@ -725,6 +725,42 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         assert(rightKeys === rightPartitioningExpressions)
       case _ => fail(outputPlan.toString)
     }
+  }
+
+  test("SPARK-28148: repartition after join is not optimized away") {
+    val df1 = spark.range(0, 5000000, 1, 5)
+    val df2 = spark.range(0, 10000000, 1, 5)
+
+    // non global sort order and partitioning should be reusable after left join
+    val outputPlan1 = df1.join(df2, Seq("id"), "left")
+      .repartition(df1("id"))
+      .sortWithinPartitions(df1("id"))
+      .queryExecution.executedPlan
+    val numSorts1 = outputPlan1.collect{case s: SortExec => s }
+    val numShuffles1 = outputPlan1.collect{case s: ShuffleExchangeExec => s }
+    assert(numSorts1.length == 2)
+    assert(numShuffles1.length == 2)
+
+    // non global sort order and partitioning should be reusable after inner join
+    val outputPlan2 = df1.join(df2, Seq("id"))
+      .repartition(df1("id"))
+      .sortWithinPartitions(df1("id"))
+      .queryExecution.executedPlan
+
+    val numSorts2 = outputPlan2.collect{case s: SortExec => s }
+    val numShuffles2 = outputPlan2.collect{case s: ShuffleExchangeExec => s }
+    assert(numSorts2.length == 2)
+    assert(numShuffles2.length == 2)
+
+    // global sort should not be removed
+    val outputPlan3 = df1.join(df2, Seq("id"))
+      .orderBy(df1("id"))
+      .queryExecution.executedPlan
+
+    val numSorts3 = outputPlan3.collect{case s: SortExec => s }
+    val numShuffles3 = outputPlan3.collect{case s: ShuffleExchangeExec => s }
+    assert(numSorts3.length == 3)
+    assert(numShuffles3.length == 3)
   }
 
   test("SPARK-24500: create union with stream of children") {
