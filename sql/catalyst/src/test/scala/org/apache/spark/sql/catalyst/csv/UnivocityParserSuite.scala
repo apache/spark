@@ -296,27 +296,24 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     check(filters = Seq(), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 2)), expected = Seq())
-    check(filters = Seq(StringStartsWith("s", "b")), expected = Seq())
+    check(requiredSchema = "s STRING", filters = Seq(StringStartsWith("s", "b")), expected = Seq())
     check(
       requiredSchema = "i INTEGER, s STRING",
       filters = Seq(StringStartsWith("s", "a")),
       expected = Seq(InternalRow(1, UTF8String.fromString("a"))))
     check(
-      requiredSchema = "",
-      filters = Seq(LessThan("i", 10)),
-      expected = Seq(InternalRow.empty))
-    check(
       input = "1,a,3.14",
       dataSchema = "i INTEGER, s STRING, d DOUBLE",
+      requiredSchema = "i INTEGER, d DOUBLE",
       filters = Seq(EqualTo("d", 3.14)),
-      expected = Seq(InternalRow(1)))
+      expected = Seq(InternalRow(1, 3.14)))
 
     try {
       check(filters = Seq(EqualTo("invalid attr", 1)), expected = Seq())
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+        assert(e.getMessage.contains("invalid attr does not exist"))
     }
 
     try {
@@ -328,7 +325,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+        assert(e.getMessage.contains("i does not exist"))
     }
   }
 }

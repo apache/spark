@@ -59,30 +59,13 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val csvFilters = new CSVFilters(
-    filters,
-    dataSchema,
-    requiredSchema,
-    options.columnPruning)
-
-  val parsedSchema = csvFilters.readSchema
-
-  // Mapping of field indexes of `parsedSchema` to indexes of `requiredSchema`.
-  // It returns -1 if `requiredSchema` doesn't contain a field from `parsedSchema`.
-  private val parsedToRequiredIndex: Array[Int] = {
-    val arr = Array.fill(parsedSchema.length)(-1)
-    for {
-      readIndex <- 0 until parsedSchema.length
-      reqIndex <- requiredSchema.getFieldIndex(parsedSchema(readIndex).name)
-    } {
-      arr(readIndex) = reqIndex
-    }
-    arr
-  }
-
   // This index is used to reorder parsed tokens
   private val tokenIndexArr =
-    parsedSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+
+  // When column pruning is enabled, the parser only parses the required columns based on
+  // their positions in the data schema.
+  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
 
   val tokenizer = {
     val parserSetting = options.asParserSettings
@@ -95,9 +78,6 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
-  // The row is used as a temporary placeholder of parsed and converted values.
-  // It is needed for applying the pushdown filters.
-  private val parsedRow = new GenericInternalRow(parsedSchema.length)
   // Pre-allocated Seq to avoid the overhead of the seq builder.
   private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
@@ -112,6 +92,8 @@ class UnivocityParser(
     options.dateFormat,
     options.zoneId,
     options.locale)
+
+  private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -138,7 +120,7 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    parsedSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
   }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
@@ -221,7 +203,7 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (options.columnPruning && parsedSchema.isEmpty) {
+  private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
     (_: String) => Seq(InternalRow.empty)
@@ -273,34 +255,27 @@ class UnivocityParser(
     } else {
       // When the length of the returned tokens is identical to the length of the parsed schema,
       // we just need to:
-      //  1. Convert the tokens that correspond to the parsed schema.
-      //  2. Apply the pushdown filters to `parsedRow`.
-      //  3. Convert `parsedRow` to `requiredRow` by stripping non-required fields.
+      //  1. Convert the tokens that correspond to the required schema.
+      //  2. Apply the pushdown filters to `requiredRow`.
       var i = 0
-      val requiredSingleRow = requiredRow.head
-      while (i < requiredSchema.length) {
-        requiredSingleRow.setNullAt(i)
-        i += 1
-      }
-
+      val row = requiredRow.head
       var skipRow = false
       var badRecordException: Option[Throwable] = None
-      i = 0
-      while (!skipRow && i < parsedSchema.length) {
+      while (i < requiredSchema.length) {
         try {
-          val convertedValue = valueConverters(i).apply(getToken(tokens, i))
-          parsedRow(i) = convertedValue
-          if (csvFilters.skipRow(parsedRow, i)) {
-            skipRow = true
-          } else {
-            val requiredIndex = parsedToRequiredIndex(i)
-            if (requiredIndex != -1) {
-              requiredSingleRow(requiredIndex) = convertedValue
+          if (!skipRow) {
+            row(i) = valueConverters(i).apply(getToken(tokens, i))
+            if (csvFilters.skipRow(row, i)) {
+              skipRow = true
             }
+          }
+          if (skipRow) {
+            row.setNullAt(i)
           }
         } catch {
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
+            row.setNullAt(i)
         }
         i += 1
       }

@@ -31,35 +31,9 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * converted from parsed CSV fields.
  *
  * @param filters The filters pushed down to CSV datasource.
- * @param dataSchema The full schema with all fields in CSV files.
  * @param requiredSchema The schema with only fields requested by the upper layer.
- * @param columnPruning true if CSV parser can read sub-set of columns otherwise false.
  */
-class CSVFilters(
-    filters: Seq[sources.Filter],
-    dataSchema: StructType,
-    requiredSchema: StructType,
-    columnPruning: Boolean) {
-
-  require(filters.forall(CSVFilters.checkFilterRefs(_, dataSchema)),
-    "All filters must be applicable to the data schema.")
-
-  /**
-   * The schema to read from the underlying CSV parser.
-   * It combines the required schema and the fields referenced by filters.
-   */
-  val readSchema: StructType = {
-    if (columnPruning) {
-      val refs = filters.flatMap(_.references).toSet
-      val readFields = dataSchema.filter { field =>
-        requiredSchema.contains(field) || refs.contains(field.name)
-      }
-      StructType(readFields)
-    } else {
-      dataSchema
-    }
-  }
-
+class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType) {
   /**
    * Converted filters to predicates and grouped by maximum field index
    * in the read schema. For example, if an filter refers to 2 attributes
@@ -73,7 +47,7 @@ class CSVFilters(
    * by the `And` expression.
    */
   private val predicates: Array[BasePredicate] = {
-    val len = readSchema.fields.length
+    val len = requiredSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
     if (SQLConf.get.csvFilterPushDown) {
       val groupedFilters = Array.fill(len)(Seq.empty[sources.Filter])
@@ -88,7 +62,7 @@ class CSVFilters(
         } else {
           // readSchema must contain attributes of all filters.
           // Accordingly, fieldIndex() returns a valid index always.
-          refs.map(readSchema.fieldIndex).max
+          refs.map(requiredSchema.fieldIndex).max
         }
         groupedFilters(index) :+= filter
       }
@@ -126,9 +100,9 @@ class CSVFilters(
 
   // Finds a filter attribute in the read schema and converts it to a `BoundReference`
   private def toRef(attr: String): Option[BoundReference] = {
-    readSchema.getFieldIndex(attr).map { index =>
-      val field = readSchema(index)
-      BoundReference(readSchema.fieldIndex(attr), field.dataType, field.nullable)
+    requiredSchema.getFieldIndex(attr).map { index =>
+      val field = requiredSchema(index)
+      BoundReference(requiredSchema.fieldIndex(attr), field.dataType, field.nullable)
     }
   }
 }
