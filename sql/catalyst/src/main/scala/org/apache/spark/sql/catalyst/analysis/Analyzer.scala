@@ -760,7 +760,7 @@ class Analyzer(
         }
         u
       case u @ UnresolvedTableOrView(ident) =>
-        lookupTempView(ident).getOrElse(u)
+        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -907,8 +907,8 @@ class Analyzer(
         expandRelationName(identifier) match {
           case SessionCatalogAndIdentifier(catalog, ident) =>
             CatalogV2Util.loadTable(catalog, ident) match {
-              // We don't support view in v2 catalog yet. Here we treat v1 view as table and use
-              // `ResolvedTable` to carry it.
+              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                ResolvedView(ident)
               case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
               case None => u
             }

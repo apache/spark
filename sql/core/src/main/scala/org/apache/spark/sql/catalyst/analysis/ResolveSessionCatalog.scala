@@ -218,9 +218,8 @@ class ResolveSessionCatalog(
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe temp view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(SubqueryAlias(name, _), partitionSpec, isExtended) =>
-      val ident = TableIdentifier(name.identifier, name.database)
-      DescribeTableCommand(ident, partitionSpec, isExtended)
+    case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumnStatement(
         SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>

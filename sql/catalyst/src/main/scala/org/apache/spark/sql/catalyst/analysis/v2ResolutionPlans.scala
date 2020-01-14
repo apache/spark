@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, Table, TableCatalog}
 
 /**
@@ -43,7 +43,7 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
 
 /**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
- * be resolved to [[ResolvedTable]] or view relation during analysis.
+ * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
 case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
@@ -63,5 +63,14 @@ case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String]
  */
 case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
   extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved (temp) views.
+ */
+// TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
+//       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
+case class ResolvedView(identifier: Identifier) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

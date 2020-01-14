@@ -49,22 +49,20 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
-  private val table1: Table = {
-    val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(new StructType().add("i", "int"))
-    t
+  private val v1Table: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int"))
+    when(t.tableType).thenReturn(CatalogTableType.MANAGED)
+    V1Table(t)
   }
 
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
-        case "tab" =>
-          table
-        case "tab1" =>
-          table1
-        case name =>
-          throw new NoSuchTableException(name)
+        case "tab" => table
+        case "tab1" => table
+        case name => throw new NoSuchTableException(name)
       }
     })
     when(newCatalog.name()).thenReturn("testcat")
@@ -75,20 +73,11 @@ class PlanResolutionSuite extends AnalysisTest {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
-        case "v1Table" =>
-          val v1Table = mock(classOf[V1Table])
-          when(v1Table.schema).thenReturn(new StructType().add("i", "int"))
-          v1Table
-        case "v1Table1" =>
-          val v1Table1 = mock(classOf[V1Table])
-          when(v1Table1.schema).thenReturn(new StructType().add("i", "int"))
-          v1Table1
-        case "v2Table" =>
-          table
-        case "v2Table1" =>
-          table1
-        case name =>
-          throw new NoSuchTableException(name)
+        case "v1Table" => v1Table
+        case "v1Table1" => v1Table
+        case "v2Table" => table
+        case "v2Table1" => table
+        case name => throw new NoSuchTableException(name)
       }
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
