@@ -383,7 +383,7 @@ object FileStreamSource {
       }
     }
 
-    def cleanTask(entry: FileEntry): Unit
+    protected def cleanTask(entry: FileEntry): Unit
   }
 
   private[sql] object FileStreamSourceCleaner {
@@ -477,7 +477,7 @@ object FileStreamSource {
       filters.toList
     }
 
-    override def cleanTask(entry: FileEntry): Unit = {
+    override protected def cleanTask(entry: FileEntry): Unit = {
       val curPath = new Path(new URI(entry.path))
       val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
@@ -501,7 +501,7 @@ object FileStreamSource {
   private[sql] class SourceFileRemover(fileSystem: FileSystem)
     extends FileStreamSourceCleaner with Logging {
 
-    override def cleanTask(entry: FileEntry): Unit = {
+    override protected def cleanTask(entry: FileEntry): Unit = {
       val curPath = new Path(new URI(entry.path))
       try {
         logDebug(s"Removing completed file $curPath")
