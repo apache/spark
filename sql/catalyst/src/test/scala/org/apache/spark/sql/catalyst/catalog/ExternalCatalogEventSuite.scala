@@ -228,7 +228,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       storage = storage,
       schema = new StructType().add("id", "long"))
 
-    val partition = CatalogTablePartition(spec = Map("key" -> "0"),
+    val partition = CatalogTablePartition(spec = Map("key1" -> "1", "key2" -> "2"),
       storage = CatalogStorageFormat.empty)
 
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
@@ -246,7 +246,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       CreatePartitionEvent("db5", "tbl1", Seq(partition)) :: Nil)
 
     // RENAME
-    val newPartition = CatalogTablePartition(spec = Map("key1" -> "1", "key2" -> "2"),
+    val newPartition = CatalogTablePartition(spec = Map("key1" -> "3", "key2" -> "4"),
       storage = CatalogStorageFormat.empty)
 
     catalog.renamePartitions("db5", "tbl1", Seq(partition.spec), Seq(newPartition.spec))

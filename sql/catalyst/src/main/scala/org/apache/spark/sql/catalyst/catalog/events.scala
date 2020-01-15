@@ -246,7 +246,7 @@ case class DropPartitionEvent(
   extends PartitionEvent
 
 /**
- * Event fired before a function is renamed.
+ * Event fired before a partition is renamed.
  */
 case class RenamePartitionPreEvent(
     database: String,
@@ -256,7 +256,7 @@ case class RenamePartitionPreEvent(
   extends PartitionEvent
 
 /**
- * Event fired after a function has been renamed.
+ * Event fired after a partition has been renamed.
  */
 case class RenamePartitionEvent(
     database: String,
@@ -266,7 +266,7 @@ case class RenamePartitionEvent(
   extends PartitionEvent
 
 /**
- * Event fired before a function is altered.
+ * Event fired before a partition is altered.
  */
 case class AlterPartitionPreEvent(
     database: String,
@@ -275,7 +275,7 @@ case class AlterPartitionPreEvent(
   extends PartitionEvent
 
 /**
- * Event fired after a function has been altered.
+ * Event fired after a partition has been altered.
  */
 case class AlterPartitionEvent(
     database: String,
