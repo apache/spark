@@ -174,8 +174,9 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def executorDecommissioned(fullId: String, message: String) {
-    logInfo("Executor %s decommissioned: %s".format(fullId, message))
+    logInfo("Asked to decommission executor")
     decommissionExecutor(fullId.split("/")(1))
+    logInfo("Executor %s decommissioned: %s".format(fullId, message))
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {

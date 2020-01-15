@@ -199,7 +199,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeExecutor(executorId, reason)
 
       case DecommissionExecutor(executorId) =>
-        logError(s"Received decommission executor message ${executorId}.")
+        logInfo(s"Received decommission executor message ${executorId}.")
         decommissionExecutor(executorId)
 
       case RemoveWorker(workerId, host, message) =>
@@ -426,6 +426,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (shouldDisable) {
         logError(s"Decommissioning executor $executorId.")
         scheduler.executorDecommission(executorId)
+        logError(s"Finished decommissioning executor $executorId.")
       } else {
         logError(s"Skipping decommissioning of executor $executorId.")
       }
@@ -559,10 +560,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-   * Called by subclasses when notified of a decommissioning worker.
+   * Called by subclasses when notified of a decommissioning executor.
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     if (driverEndpoint != null) {
+      logInfo("Propegating executor decommission to driver.")
       driverEndpoint.send(DecommissionExecutor(executorId))
     }
   }
