@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -401,7 +402,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
@@ -440,7 +443,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql, withDefault = true) match {
       case create: CreateV2Table =>
@@ -478,7 +483,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "p2" -> "v2",
       "provider" -> v2Format,
       "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
+      "comment" -> "This is the staging page view table",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
@@ -515,7 +522,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
@@ -549,7 +558,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql, withDefault = true) match {
       case ctas: CreateTableAsSelect =>
@@ -582,7 +593,9 @@ class PlanResolutionSuite extends AnalysisTest {
       "p2" -> "v2",
       "provider" -> v2Format,
       "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
+      "comment" -> "This is the staging page view table",
+      "ownerName" -> Utils.getCurrentUserName(),
+      "ownerType" -> "USER")
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>

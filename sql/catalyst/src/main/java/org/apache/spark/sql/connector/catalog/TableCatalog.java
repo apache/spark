@@ -57,9 +57,20 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_PROVIDER = "provider";
 
   /**
+   * A property to specify the owner of the table.
+   */
+  String PROP_OWNER_NAME = "ownerName";
+
+  /**
+   * A property to specify the type of the table's owner.
+   */
+  String PROP_OWNER_TYPE = "ownerType";
+
+  /**
    * The list of reserved table properties.
    */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_PROVIDER);
+  List<String> RESERVED_PROPERTIES =
+    Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_PROVIDER, PROP_OWNER_NAME, PROP_OWNER_TYPE);
 
   /**
    * List the tables in a namespace from the catalog.

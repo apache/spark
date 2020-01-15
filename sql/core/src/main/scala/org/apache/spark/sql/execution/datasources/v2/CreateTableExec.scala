@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 case class CreateTableExec(
     catalog: TableCatalog,
@@ -38,7 +39,11 @@ case class CreateTableExec(
   override protected def run(): Seq[InternalRow] = {
     if (!catalog.tableExists(identifier)) {
       try {
-        catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+        val ownership = Map(
+          TableCatalog.PROP_OWNER_NAME -> Utils.getCurrentUserName(),
+          TableCatalog.PROP_OWNER_TYPE -> "USER")
+        catalog.createTable(identifier, tableSchema, partitioning.toArray,
+          (tableProperties ++ ownership).asJava)
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
           logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")

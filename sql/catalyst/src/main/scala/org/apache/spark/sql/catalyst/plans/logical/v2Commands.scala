@@ -303,6 +303,16 @@ case class AlterNamespaceSetOwner(
 }
 
 /**
+ * ALTER TABLE ... SET OWNER command, as parsed from SQL.
+ */
+case class AlterTableSetOwner(
+    child: LogicalPlan,
+    ownerName: String,
+    ownerType: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(

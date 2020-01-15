@@ -3622,4 +3622,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  /**
+   * Create an [[AlterTableSetOwner]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE tableName SET OWNER (USER|ROLE|GROUP) identityName;
+   * }}}
+   */
+  override def visitSetTableOwner(ctx: SetTableOwnerContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+      AlterTableSetOwner(
+        UnresolvedTable(nameParts),
+        ctx.identifier.getText,
+        ctx.ownerType.getText)
+    }
+  }
 }
