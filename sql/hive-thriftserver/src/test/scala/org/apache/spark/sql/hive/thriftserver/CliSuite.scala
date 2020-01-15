@@ -401,12 +401,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "1.000000000000000000"
     )
   }
-  
+
   test("SPARK-30049 Should not complaint for quotes in commented lines") {
     runCliWithin(3.minute)(
       """SELECT 1 -- someone's comment here
         |;""".stripMargin -> "|  1|"
     )
   }
-  
+
 }

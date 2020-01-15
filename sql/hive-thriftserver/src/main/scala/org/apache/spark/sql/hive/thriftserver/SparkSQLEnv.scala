@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
@@ -47,7 +47,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
   def readStream: String => String = {
     prefix =>
-      scala.Console.withOut(stdOut){
+      scala.Console.withOut(stdOut) {
         printf(prefix)
         stdOut.flush()
       }
