@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.IOException
-
 import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, ExternalCatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
@@ -36,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport {
 
-  override val conf = session.sessionState.conf
+  override val conf: SQLConf = session.sessionState.conf
 
   /**
    * Extract the partition filters from the filters on the table.
@@ -62,7 +61,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       session.sessionState.catalog.listPartitionsByFilter(
         relation.tableMeta.identifier, partitionFilters.toSeq)
     } else {
-      session.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+      ExternalCatalogUtils.prunePartitionsByFilter(relation.tableMeta,
+        session.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
+        partitionFilters.toSeq, conf.sessionLocalTimeZone)
     }
   }
 
@@ -72,26 +73,23 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   private def updateTableMeta(
       tableMeta: CatalogTable,
       prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
-    val sizeOfPartitions = try {
-      prunedPartitions.map { partition =>
-        val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
-        val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
-        if (rawDataSize.isDefined && rawDataSize.get > 0) {
-          rawDataSize.get
-        } else if (totalSize.isDefined && totalSize.get > 0L) {
-          totalSize.get
-        } else {
-          0L
-        }
-      }.sum
-    } catch {
-      case e: IOException =>
-        logWarning("Failed to get table size from HDFS.", e)
-        conf.defaultSizeInBytes
+    val sizeOfPartitions = prunedPartitions.map { partition =>
+      val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
+      val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+      if (rawDataSize.isDefined && rawDataSize.get > 0) {
+        rawDataSize.get
+      } else if (totalSize.isDefined && totalSize.get > 0L) {
+        totalSize.get
+      } else {
+        0L
+      }
     }
-    // If size of partitions is zero fall back to the default size.
-    val sizeInBytes = if (sizeOfPartitions == 0L) conf.defaultSizeInBytes else sizeOfPartitions
-    tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+    if (sizeOfPartitions.forall(s => s>0)) {
+      val sizeInBytes = sizeOfPartitions.sum
+      tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+    } else {
+      tableMeta
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
