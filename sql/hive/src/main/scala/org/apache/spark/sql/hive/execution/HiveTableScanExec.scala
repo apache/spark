@@ -146,7 +146,7 @@ case class HiveTableScanExec(
    * @param partitions All partitions of the relation.
    * @return Partitions that are involved in the query plan.
    */
-  private[hive] def prunePartitions(partitions: Seq[HivePartition]) = {
+  private[hive] def prunePartitions(partitions: Seq[HivePartition]): Seq[HivePartition] = {
     boundPruningPred match {
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
@@ -162,22 +162,41 @@ case class HiveTableScanExec(
     }
   }
 
-  // exposed for tests
-  @transient lazy val rawPartitions = {
-    val prunedPartitions =
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-          partitionPruningPred.nonEmpty) {
-        // Retrieve the original attributes based on expression ID so that capitalization matches.
-        val normalizedFilters = partitionPruningPred.map(_.transform {
-          case a: AttributeReference => originalAttributes(a)
-        })
-        relation.prunedPartitions.getOrElse(
-          sparkSession.sessionState.catalog
-            .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters))
-      } else {
+  @transient lazy val partitions: Seq[HivePartition] = {
+    if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+      partitionPruningPred.nonEmpty) {
+      val normalizedFilters = partitionPruningPred.map(_.transform {
+        case a: AttributeReference => originalAttributes(a)
+      })
+      sparkSession.sessionState.catalog
+        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    } else {
+      val hivePartitions =
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+          .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+      if (partitionPruningPred.nonEmpty) {
+        prunePartitions(hivePartitions)
+      } else {
+        hivePartitions
       }
-    prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    }
+  }
+
+  // Only for tests
+  @transient lazy val prunedPartitionsViaHiveMetastore: Seq[HivePartition] = {
+    if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+      partitionPruningPred.nonEmpty) {
+      val normalizedFilters = partitionPruningPred.map(_.transform {
+        case a: AttributeReference => originalAttributes(a)
+      })
+      sparkSession.sessionState.catalog
+        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    } else {
+      sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -189,7 +208,7 @@ case class HiveTableScanExec(
       }
     } else {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(prunePartitions(rawPartitions))
+        hadoopReader.makeRDDForPartitionedTable(partitions)
       }
     }
     val numOutputRows = longMetric("numOutputRows")
