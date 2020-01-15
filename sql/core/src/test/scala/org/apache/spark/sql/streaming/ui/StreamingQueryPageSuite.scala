@@ -36,17 +36,18 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val statusListener = mock(classOf[StreamingQueryStatusListener], RETURNS_SMART_NULLS)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.statusListener).thenReturn(statusListener)
 
     val streamQuery = createStreamQueryUIData(id)
     when(statusListener.allQueryStatus).thenReturn(Seq(streamQuery))
-    var html = renderStreamingQueryPage(request, tab, statusListener)
+    var html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
     assert(html.contains("completed streaming queries (0)"))
 
     when(streamQuery.isActive).thenReturn(false)
     when(streamQuery.exception).thenReturn(None)
-    html = renderStreamingQueryPage(request, tab, statusListener)
+    html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
@@ -54,7 +55,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
 
     when(streamQuery.isActive).thenReturn(false)
     when(streamQuery.exception).thenReturn(Option("exception in query"))
-    html = renderStreamingQueryPage(request, tab, statusListener)
+    html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
@@ -70,10 +71,11 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(request.getParameter("id")).thenReturn(id.toString)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.statusListener).thenReturn(statusListener)
 
     val streamQuery = createStreamQueryUIData(id)
     when(statusListener.allQueryStatus).thenReturn(Seq(streamQuery))
-    val html = renderStreamingQueryStatisticsPage(request, tab, statusListener)
+    val html = renderStreamingQueryStatisticsPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
 
     assert(html.contains("<strong>name: </strong>query<"))
@@ -95,6 +97,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(streamQuery.name).thenReturn("query")
     when(streamQuery.id).thenReturn(id)
     when(streamQuery.runId).thenReturn(id)
+    when(streamQuery.submitTime).thenReturn(1L)
     when(streamQuery.lastProgress).thenReturn(progress)
     when(streamQuery.recentProgress).thenReturn(Array(progress))
     when(streamQuery.exception).thenReturn(None)
@@ -108,16 +111,14 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
    */
   private def renderStreamingQueryPage(
       request: HttpServletRequest,
-      tab: StreamingQueryTab,
-      listener: StreamingQueryStatusListener): Seq[Node] = {
+      tab: StreamingQueryTab): Seq[Node] = {
     val page = new StreamingQueryPage(tab)
     page.render(request)
   }
 
   private def renderStreamingQueryStatisticsPage(
       request: HttpServletRequest,
-      tab: StreamingQueryTab,
-      listener: StreamingQueryStatusListener): Seq[Node] = {
+      tab: StreamingQueryTab): Seq[Node] = {
     val page = new StreamingQueryStatisticsPage(tab)
     page.render(request)
   }
