@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.ui
 import java.util.Properties
 
 import scala.collection.mutable.ListBuffer
+
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.ExecutorMetrics
@@ -34,7 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SQLExecution, SparkPlanInfo}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf

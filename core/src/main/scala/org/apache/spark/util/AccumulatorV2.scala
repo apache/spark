@@ -371,8 +371,12 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
             fragmentId
               .flatMap(_fragments.remove)
               .getOrElse((0L, 0L))
-          val maxSum = math.max(fragmentSum, o.sum)
-          val maxCount = math.max(fragmentCount, o.count)
+          val (maxSum, maxCount) =
+            if (o.sum > fragmentSum || (o.sum == fragmentSum && o.count < fragmentCount)) {
+              (o.sum, o.count)
+            } else {
+              (fragmentSum, fragmentCount)
+            }
           _sum += maxSum - fragmentSum
           _count += maxCount - fragmentCount
           fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
@@ -390,7 +394,6 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
@@ -475,8 +478,12 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
             fragmentId
               .flatMap(_fragments.remove)
               .getOrElse((0.0, 0L))
-          val maxSum = math.max(fragmentSum, o.sum)
-          val maxCount = math.max(fragmentCount, o.count)
+          val (maxSum, maxCount) =
+            if (o.sum > fragmentSum || (o.sum == fragmentSum && o.count < fragmentCount)) {
+              (o.sum, o.count)
+            } else {
+              (fragmentSum, fragmentCount)
+            }
           _sum += maxSum - fragmentSum
           _count += maxCount - fragmentCount
           fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
