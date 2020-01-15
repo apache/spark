@@ -424,11 +424,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
 
       if (shouldDisable) {
-        logError(s"Decommissioning executor $executorId.")
-        scheduler.executorDecommission(executorId)
-        logError(s"Finished decommissioning executor $executorId.")
+        logInfo(s"Starting decommissioning executor $executorId.")
+        try {
+          scheduler.executorDecommission(executorId)
+        } catch {
+          case e: Exception =>
+            logError(s"Unexpected error during decommissioning ${e.toString}", e)
+        }
+        logInfo(s"Finished decommissioning executor $executorId.")
       } else {
-        logError(s"Skipping decommissioning of executor $executorId.")
+        logInfo(s"Skipping decommissioning of executor $executorId.")
       }
       shouldDisable
     }
