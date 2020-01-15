@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.util.Locale
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -33,10 +34,14 @@ private object MsSqlServerDialect extends JdbcDialect {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Option(StringType)
     } else {
-      sqlType match {
-        case java.sql.Types.SMALLINT => Some(ShortType)
-        case java.sql.Types.REAL => Some(FloatType)
-        case _ => None
+      if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+        None
+      } else {
+        sqlType match {
+          case java.sql.Types.SMALLINT => Some(ShortType)
+          case java.sql.Types.REAL => Some(FloatType)
+          case _ => None
+        }
       }
     }
   }
@@ -46,7 +51,8 @@ private object MsSqlServerDialect extends JdbcDialect {
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
-    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+      Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
 

@@ -391,7 +391,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(updated.schema == expectedSchema)
   }
 
-  test("alterTable: update column data type and nullability") {
+  test("alterTable: update column nullability") {
     val catalog = newCatalog()
 
     val originalSchema = new StructType()
@@ -402,25 +402,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == originalSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateColumnType(Array("id"), LongType, true))
+      TableChange.updateColumnNullability(Array("id"), true))
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
+    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     assert(updated.schema == expectedSchema)
-  }
-
-  test("alterTable: update optional column to required fails") {
-    val catalog = newCatalog()
-
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-
-    assert(table.schema == schema)
-
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType, false))
-    }
-
-    assert(exc.getMessage.contains("Cannot change optional column to required"))
-    assert(exc.getMessage.contains("id"))
   }
 
   test("alterTable: update missing column fails") {
@@ -1010,31 +995,18 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove location") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
 
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
+      val exc = intercept[UnsupportedOperationException] {
+        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+      }
+      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+
     }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
-
-    catalog.dropNamespace(testNs)
-  }
-
-  test("alterNamespace: fail to remove comment") {
-    val catalog = newCatalog()
-
-    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
-
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
-    }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
-
     catalog.dropNamespace(testNs)
   }
 }

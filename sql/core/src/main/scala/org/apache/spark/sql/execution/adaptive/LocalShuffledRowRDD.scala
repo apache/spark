@@ -82,7 +82,7 @@ class LocalShuffledRowRDD(
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    tracker.getMapLocation(dependency, partition.index)
+    tracker.getMapLocation(dependency, partition.index, partition.index + 1)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
@@ -92,9 +92,11 @@ class LocalShuffledRowRDD(
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
-    val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
+
+    val reader = SparkEnv.get.shuffleManager.getReaderForRange(
       dependency.shuffleHandle,
       mapIndex,
+      mapIndex + 1,
       localRowPartition.startPartition,
       localRowPartition.endPartition,
       context,

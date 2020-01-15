@@ -71,7 +71,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     plan match {
       case c @ CoalescedShuffleReaderExec(s: ShuffleQueryStageExec, _) =>
         LocalShuffleReaderExec(
-          s, getPartitionStartIndices(s, Some(c.partitionStartIndices.length)))
+          s, getPartitionStartIndices(s, Some(c.partitionIndices.length)))
       case s: ShuffleQueryStageExec =>
         LocalShuffleReaderExec(s, getPartitionStartIndices(s, None))
     }
@@ -136,9 +136,10 @@ object OptimizeLocalShuffleReader {
     }
   }
 
-  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = {
-    plan.isInstanceOf[ShuffleQueryStageExec] ||
-      plan.isInstanceOf[CoalescedShuffleReaderExec]
+  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
+    case s: ShuffleQueryStageExec => s.shuffle.canChangeNumPartitions
+    case CoalescedShuffleReaderExec(s: ShuffleQueryStageExec, _) => s.shuffle.canChangeNumPartitions
+    case _ => false
   }
 }
 

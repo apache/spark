@@ -291,7 +291,7 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
 @Since("3.0.0")
 class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
-  extends Predictor[Vector, FMRegressor, FMRegressionModel]
+  extends Regressor[Vector, FMRegressor, FMRegressionModel]
   with FactorizationMachines with FMRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
@@ -454,7 +454,7 @@ class FMRegressionModel private[regression] (
     @Since("3.0.0") val intercept: Double,
     @Since("3.0.0") val linear: Vector,
     @Since("3.0.0") val factors: Matrix)
-  extends PredictionModel[Vector, FMRegressionModel]
+  extends RegressionModel[Vector, FMRegressionModel]
   with FMRegressorParams with MLWritable {
 
   @Since("3.0.0")
@@ -632,8 +632,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         val gardSize = data.indices.length * factorSize +
           (if (fitLinear) data.indices.length else 0) +
           (if (fitIntercept) 1 else 0)
-        val gradIndex = Array.fill(gardSize)(0)
-        val gradValue = Array.fill(gardSize)(0.0)
+        val gradIndex = Array.ofDim[Int](gardSize)
+        val gradValue = Array.ofDim[Double](gardSize)
         var gradI = 0
         val vWeightsSize = numFeatures * factorSize
 
@@ -658,7 +658,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
         OldVectors.sparse(weights.size, gradIndex, gradValue)
       case data: OldLinalg.DenseVector =>
-        val gradient = Array.fill(weights.size)(0.0)
+        val gradient = Array.ofDim[Double](weights.size)
         val vWeightsSize = numFeatures * factorSize
 
         if (fitIntercept) gradient(weights.size - 1) += 1.0

@@ -26,6 +26,18 @@ import org.apache.spark.sql.types.StructType
 class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  var originalValue: String = _
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
+
   private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
@@ -256,10 +268,10 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
             "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
               "IN subquery#x\\)\\]"
           val expected_pattern3 =
-            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
               "/df2/.*, ... 99 entries\\]"
           val expected_pattern4 =
-            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
               "/df1/.*, ... 999 entries\\]"
           withNormalizedExplain(sqlText) { normalizedOutput =>
             assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
