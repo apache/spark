@@ -184,7 +184,6 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   override def estimateStatistics(): Statistics = {
-
     val conf = sparkSession.sessionState.conf
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
