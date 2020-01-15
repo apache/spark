@@ -562,8 +562,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called by subclasses when notified of a decommissioning worker.
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
-    // Only log the failure since we don't care about the result.
-    driverEndpoint.send(DecommissionExecutor(executorId))
+    if (driverEndpoint != null) {
+      driverEndpoint.send(DecommissionExecutor(executorId))
+    }
   }
 
   def sufficientResourcesRegistered(): Boolean = true
