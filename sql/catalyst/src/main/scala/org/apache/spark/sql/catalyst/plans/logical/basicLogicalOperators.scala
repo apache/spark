@@ -641,7 +641,7 @@ object Expand {
     val attrMap = groupByAttrs.zipWithIndex.toMap
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
-      groupingSetsAttrs.map(_.map(_.canonicalized).toSet).distinct.size
+      groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
 
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
