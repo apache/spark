@@ -85,10 +85,15 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
-    | grep "Dependencies classpath:" -A 1 \
-    | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1,2,3 | rev | sort \
-    | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly | grep "Dependencies classpath:" -A 1 | tail -n 1 | tr ":" "\n" | awk -F '/' '{
+    artifact_id=$(NF-2);
+    version=$(NF-1);
+    jar_name=$(NF-0);
+    classifier_start_index=length(artifact_id"-"version"-") + 1;
+    classifier_end_index=index(jar_name, ".jar") - 1;
+    classifier=substr(jar_name, classifier_start_index, classifier_end_index - classifier_start_index + 1);
+    print artifact_id"/"version (length(classifier) > 0 ? "/" : "") classifier"/"jar_name
+  }' | sort | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done
 
 if [[ $@ == **replace-manifest** ]]; then
