@@ -217,6 +217,18 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
   }
 
+  test("SPARK-30514: test executor pyspark memory " +
+      "with java resource and spark.kubernetes.isPython=true") {
+    baseConf.set("spark.kubernetes.resource.type", "java")
+    baseConf.set("spark.kubernetes.isPython", "true")
+    baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)
+
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
+    val executor = step.configurePod(SparkPod.initialPod())
+    // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
+    assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
+  }
+
   test("auth secret propagation") {
     val conf = baseConf.clone()
       .set(config.NETWORK_AUTH_ENABLED, true)
