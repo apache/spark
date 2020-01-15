@@ -366,7 +366,7 @@ GROUP BY dept_id
 struct<>
 -- !query 32 output
 org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) filter (where exists#x [dept_id#x]) AS avg(salary) FILTER (WHERE exists(dept_id))#x]
+IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE exists#x [dept_id#x]) AS avg(salary) FILTER (WHERE exists(dept_id))#x]
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias `dept`
@@ -392,7 +392,7 @@ GROUP BY dept_id
 struct<>
 -- !query 33 output
 org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) filter (where NOT exists#x [dept_id#x]) AS sum(salary) FILTER (WHERE (NOT exists(dept_id)))#x]
+IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE NOT exists#x [dept_id#x]) AS sum(salary) FILTER (WHERE (NOT exists(dept_id)))#x]
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias `dept`
@@ -417,7 +417,7 @@ GROUP BY dept_id
 struct<>
 -- !query 34 output
 org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) filter (where dept_id#x IN (list#x [])) AS avg(salary) FILTER (WHERE (dept_id IN (listquery())))#x]
+IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE dept_id#x IN (list#x [])) AS avg(salary) FILTER (WHERE (dept_id IN (listquery())))#x]
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias `dept`
@@ -442,7 +442,7 @@ GROUP BY dept_id
 struct<>
 -- !query 35 output
 org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) filter (where NOT dept_id#x IN (list#x [])) AS sum(salary) FILTER (WHERE (NOT (dept_id IN (listquery()))))#x]
+IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE NOT dept_id#x IN (list#x [])) AS sum(salary) FILTER (WHERE (NOT (dept_id IN (listquery()))))#x]
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias `dept`
