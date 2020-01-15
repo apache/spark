@@ -61,7 +61,8 @@ private[spark] class BasicExecutorFeatureStep(
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
   private val executorMemoryTotal =
-    if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)) {
+    if (kubernetesConf.get(APP_RESOURCE_TYPE).contains(APP_RESOURCE_TYPE_PYTHON) ||
+        kubernetesConf.get(org.apache.spark.deploy.k8s.Config.IS_PYTHON_APP)) {
       executorMemoryWithOverhead +
         kubernetesConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
     } else {

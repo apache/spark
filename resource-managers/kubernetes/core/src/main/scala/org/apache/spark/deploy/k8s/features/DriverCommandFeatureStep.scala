@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVar, EnvVarBuilder}
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
@@ -62,7 +62,18 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def configureForJava(pod: SparkPod, res: String): SparkPod = {
-    val driverContainer = baseDriverContainer(pod, res).build()
+    val javaEnvs = if (conf.get(IS_PYTHON_APP)) {
+      Seq(new EnvVarBuilder()
+        .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
+        .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
+        .build())
+    } else {
+      Seq[EnvVar]()
+    }
+
+    val driverContainer = baseDriverContainer(pod, res)
+      .addAllToEnv(javaEnvs.asJava)
+      .build()
     SparkPod(pod.pod, driverContainer)
   }
 

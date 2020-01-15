@@ -297,6 +297,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val IS_PYTHON_APP =
+    ConfigBuilder("spark.kubernetes.isPython")
+      .doc("Whether to use python with spark-internal")
+      .booleanConf
+      .createWithDefault(false)
+
   val APP_RESOURCE_TYPE =
     ConfigBuilder("spark.kubernetes.resource.type")
       .doc("This sets the resource type internally")

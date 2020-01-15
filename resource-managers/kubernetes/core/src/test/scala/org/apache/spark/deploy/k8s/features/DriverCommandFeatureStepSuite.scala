@@ -40,6 +40,29 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       mainResource, "5", "7"))
   }
 
+  test("SPARK-30514: java resource with spark.kubernetes.isPython=true") {
+    val mainResource = "local:/main.jar"
+    val sparkConf = new SparkConf(false)
+      .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
+      .set("spark.kubernetes.isPython", "true")
+    val spec = applyFeatureStep(
+      JavaMainAppResource(Some(mainResource)),
+      conf = sparkConf,
+      appArgs = Array("5", "7"))
+
+    assert(spec.pod.container.getArgs.asScala === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7"))
+
+    val envs = spec.pod.container.getEnv.asScala
+      .map { env => (env.getName, env.getValue) }
+      .toMap
+    val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "2")
+    assert(envs === expected)
+  }
+
   test("python resource") {
     val mainResource = "local:/main.py"
     val sparkConf = new SparkConf(false)
