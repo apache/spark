@@ -338,7 +338,7 @@ object MyExtensions {
       "myFunction",
       "usage",
       "extended usage",
-      "examples",
+      "    Examples:",
       """
        note
       """,
@@ -748,7 +748,7 @@ object MyExtensions2 {
       "myFunction2",
       "usage",
       "extended usage",
-      "examples",
+      "    Examples:",
       """
        note
       """,
@@ -780,7 +780,7 @@ object MyExtensions2Duplicate {
       "myFunction2",
       "usage",
       "extended usage",
-      "examples",
+      "    Examples:",
       """
        note
       """,
