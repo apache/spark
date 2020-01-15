@@ -20,17 +20,16 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.hive.common.StatsSetupConst
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, BindReferences, Expression, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, BindReferences, Expression, ExpressionSet, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.BooleanType
 
@@ -47,17 +46,13 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
    */
   private def getPartitionKeyFilters(
       filters: Seq[Expression],
-      relation: HiveTableRelation): Seq[Expression] = {
-    val normalizedFilters = filters.map { e =>
-      e transform {
-        case a: AttributeReference =>
-          a.withName(relation.output.find(_.semanticEquals(a)).get.name)
-      }
-    }
-    val partitionSet = AttributeSet(relation.partitionCols)
-    normalizedFilters.filter { predicate =>
-      !predicate.references.isEmpty && predicate.references.subsetOf(partitionSet)
-    }
+      relation: HiveTableRelation): ExpressionSet = {
+    val normalizedFilters = DataSourceStrategy.normalizeExprs(
+      filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
+    val partitionColumnSet = AttributeSet(relation.partitionCols)
+    ExpressionSet(normalizedFilters.filter { f =>
+      !f.references.isEmpty && f.references.subsetOf(partitionColumnSet)
+    })
   }
 
   /**
@@ -65,10 +60,10 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
    */
   private def prunePartitions(
       relation: HiveTableRelation,
-      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
+      partitionFilters: ExpressionSet): Seq[CatalogTablePartition] = {
     if (conf.metastorePartitionPruning) {
       session.sessionState.catalog.listPartitionsByFilter(
-        relation.tableMeta.identifier, partitionFilters)
+        relation.tableMeta.identifier, partitionFilters.toSeq)
     } else {
       session.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
     }
@@ -105,11 +100,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val partitionPruningFilters = getPartitionKeyFilters(filters, relation)
-      // SPARK-24085: subquery should be skipped for partition pruning
-      val hasSubquery = partitionPruningFilters.exists(SubqueryExpression.hasSubquery)
-      if (partitionPruningFilters.nonEmpty && !hasSubquery) {
-        val newPartitions = prunePartitions(relation, partitionPruningFilters)
+      val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
+      if (partitionKeyFilters.nonEmpty) {
+        val newPartitions = prunePartitions(relation, partitionKeyFilters)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))
