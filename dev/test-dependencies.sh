@@ -85,7 +85,9 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly | grep "Dependencies classpath:" -A 1 | tail -n 1 | tr ":" "\n" | awk -F '/' '{
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
+  | grep "Dependencies classpath:" -A 1 \
+  | tail -n 1 | tr ":" "\n" | awk -F '/' '{
     # For each dependency classpath, we fetch the last three parts split by "/": artifact id, version, and jar name.
     # Since classifier, if exists, always sits between "artifact_id-version-" and ".jar" suffix in the jar name,
     # we extract classifier and put it right before the jar name explicitly.
