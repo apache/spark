@@ -19,19 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.IOException
 
-import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, BindReferences, Expression, ExpressionSet, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.types.BooleanType
 
 /**
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
