@@ -593,7 +593,7 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
     IsotonicRegressionModel...
-    >>> model.numFeatures()
+    >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
@@ -731,6 +731,7 @@ class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritab
         """
         return self._call_java("predictions")
 
+    @property
     @since("3.0.0")
     def numFeatures(self):
         """
