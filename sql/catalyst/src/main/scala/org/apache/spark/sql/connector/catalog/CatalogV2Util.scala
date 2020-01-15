@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -267,12 +266,14 @@ private[sql] object CatalogV2Util {
   def convertTableProperties(
       properties: Map[String, String],
       options: Map[String, String],
+      location: Option[String],
       comment: Option[String],
       provider: String): Map[String, String] = {
     properties ++
-      options.filterKeys(!_.equalsIgnoreCase("path")) ++
+      options ++
       Map(TableCatalog.PROP_PROVIDER -> provider) ++
-      comment.map(TableCatalog.PROP_COMMENT -> _)
+      comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      location.map(TableCatalog.PROP_LOCATION -> _)
   }
 
   def createAlterTable(

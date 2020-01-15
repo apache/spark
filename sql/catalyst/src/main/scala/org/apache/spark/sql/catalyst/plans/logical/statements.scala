@@ -66,6 +66,7 @@ case class CreateTableStatement(
     properties: Map[String, String],
     provider: String,
     options: Map[String, String],
+    location: Option[String],
     comment: Option[String],
     ifNotExists: Boolean) extends ParsedStatement
 
@@ -80,6 +81,7 @@ case class CreateTableAsSelectStatement(
     properties: Map[String, String],
     provider: String,
     options: Map[String, String],
+    location: Option[String],
     comment: Option[String],
     ifNotExists: Boolean) extends ParsedStatement {
 
@@ -114,6 +116,7 @@ case class ReplaceTableStatement(
     properties: Map[String, String],
     provider: String,
     options: Map[String, String],
+    location: Option[String],
     comment: Option[String],
     orCreate: Boolean) extends ParsedStatement
 
@@ -128,6 +131,7 @@ case class ReplaceTableAsSelectStatement(
     properties: Map[String, String],
     provider: String,
     options: Map[String, String],
+    location: Option[String],
     comment: Option[String],
     orCreate: Boolean) extends ParsedStatement {
 

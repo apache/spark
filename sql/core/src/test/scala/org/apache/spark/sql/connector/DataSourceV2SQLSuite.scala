@@ -951,13 +951,13 @@ class DataSourceV2SQLSuite
               sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' OPTIONS" +
                 s" ('path'='bar')")
             }
-            assert(e1.getMessage.contains(s"LOCATION and 'path' in OPTIONS"))
+            assert(e1.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
 
             val e2 = intercept[ParseException] {
               sql(s"$action TABLE testcat.reservedTest USING foo OPTIONS" +
                 s" ('path'='foo', 'PaTh'='bar')")
             }
-            assert(e2.getMessage.contains(s"Duplicated"))
+            assert(e2.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
 
             sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' TBLPROPERTIES" +
               s" ('path'='bar', 'Path'='noop')")

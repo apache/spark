@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -64,6 +63,7 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       defaultProvider,
       Map.empty[String, String],
+      None,
       None,
       false)
     parseCompare(createSql, expectedPlan)
@@ -256,7 +256,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Map.empty[String, String],
         "parquet",
-        Map("location" -> "/tmp/file"),
+        Map.empty[String, String],
         Some("/tmp/file"),
         None)
     Seq(createSql, replaceSql).foreach { sql =>
@@ -390,7 +390,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Map("p1" -> "v1", "p2" -> "v2"),
         "parquet",
-        Map("location" -> "/user/external/page_view"),
+        Map.empty[String, String],
         Some("/user/external/page_view"),
         Some("This is the staging page view table"))
     Seq(s1, s2, s3, s4).foreach { sql =>
@@ -447,41 +447,45 @@ class DDLParserSuite extends AnalysisTest {
     assert(TableSpec(parsedPlan) === tableSpec)
   }
 
+  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {
     val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment1' = 'new_comment')"
-    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment1', 'test')"
-    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment1', 'test')"
+        "'comment' = 'new_comment')"
+    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     comparePlans(parsePlan(sql1_view),
       AlterViewSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment1" -> "new_comment")))
+      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(parsePlan(sql2_view),
       AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment1", "test"), ifExists = false))
+      Seq("table_name"), Seq("comment", "test"), ifExists = false))
     comparePlans(parsePlan(sql3_view),
       AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment1", "test"), ifExists = true))
+      Seq("table_name"), Seq("comment", "test"), ifExists = true))
   }
 
+  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter table: alter table properties") {
     val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment1' = 'new_comment')"
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment1', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment1', 'test')"
+        "'comment' = 'new_comment')"
+    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     comparePlans(
       parsePlan(sql1_table),
       AlterTableSetPropertiesStatement(
-        Seq("table_name"), Map("test" -> "test", "comment1" -> "new_comment")))
+        Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(
       parsePlan(sql2_table),
       AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment1", "test"), ifExists = false))
+        Seq("table_name"), Seq("comment", "test"), ifExists = false))
     comparePlans(
       parsePlan(sql3_table),
       AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment1", "test"), ifExists = true))
+        Seq("table_name"), Seq("comment", "test"), ifExists = true))
   }
 
   test("alter table: add column") {
@@ -2034,7 +2038,7 @@ class DDLParserSuite extends AnalysisTest {
             create.properties,
             create.provider,
             create.options,
-            create.options.get(TableCatalog.PROP_LOCATION),
+            create.location,
             create.comment)
         case replace: ReplaceTableStatement =>
           TableSpec(
@@ -2045,7 +2049,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.properties,
             replace.provider,
             replace.options,
-            replace.options.get(TableCatalog.PROP_LOCATION),
+            replace.location,
             replace.comment)
         case ctas: CreateTableAsSelectStatement =>
           TableSpec(
@@ -2056,7 +2060,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.properties,
             ctas.provider,
             ctas.options,
-            ctas.options.get(TableCatalog.PROP_LOCATION),
+            ctas.location,
             ctas.comment)
         case rtas: ReplaceTableAsSelectStatement =>
           TableSpec(
@@ -2067,7 +2071,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.properties,
             rtas.provider,
             rtas.options,
-            rtas.options.get(TableCatalog.PROP_LOCATION),
+            rtas.location,
             rtas.comment)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
