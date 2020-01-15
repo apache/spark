@@ -436,7 +436,8 @@ case class RenameTable(
  */
 case class ShowTables(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    extended: Boolean = false) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 
   override val output: Seq[Attribute] = Seq(

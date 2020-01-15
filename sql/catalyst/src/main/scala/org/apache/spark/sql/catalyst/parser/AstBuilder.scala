@@ -2838,7 +2838,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowTables(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
-      Option(ctx.pattern).map(string))
+      Option(ctx.pattern).map(string),
+      if (ctx.EXTENDED() == null) false else true)
   }
 
   /**

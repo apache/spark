@@ -347,22 +347,22 @@ class ResolveSessionCatalog(
       }
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
-    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
+    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern, extended) =>
       assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw new AnalysisException(
             s"The database name is not valid: ${ns.quoted}")
       }
-      ShowTablesCommand(Some(ns.head), pattern)
+      ShowTablesCommand(Some(ns.head), pattern, extended)
 
-    case ShowTableStatement(ns, pattern, partitionsSpec) =>
+    case ShowTableStatement(ns, pattern, partitionsSpec, _) =>
       val db = ns match {
         case Some(ns) if ns.length != 1 =>
           throw new AnalysisException(
             s"The database name is not valid: ${ns.quoted}")
         case _ => ns.map(_.head)
       }
-      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
+      ShowTableCommand(db, Some(pattern), true, partitionsSpec)
 
     case AnalyzeTableStatement(tbl, partitionSpec, noScan) =>
       val v1TableName = parseV1Table(tbl, "ANALYZE TABLE")

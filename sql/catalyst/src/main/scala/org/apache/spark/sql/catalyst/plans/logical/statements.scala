@@ -344,7 +344,8 @@ case class InsertIntoStatement(
 case class ShowTableStatement(
     namespace: Option[Seq[String]],
     pattern: String,
-    partitionSpec: Option[TablePartitionSpec])
+    partitionSpec: Option[TablePartitionSpec],
+    extended: Boolean = false)
   extends ParsedStatement
 
 /**

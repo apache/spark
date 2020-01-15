@@ -730,9 +730,10 @@ class Analyzer(
   case class ResolveNamespace(catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
+      case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace =
-          ResolvedNamespace(currentCatalog.asNamespaceCatalog, catalogManager.currentNamespace))
+          ResolvedNamespace(currentCatalog.asNamespaceCatalog, catalogManager.currentNamespace),
+          extended = s.extended)
       case UnresolvedNamespace(Seq()) =>
         ResolvedNamespace(currentCatalog.asNamespaceCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>

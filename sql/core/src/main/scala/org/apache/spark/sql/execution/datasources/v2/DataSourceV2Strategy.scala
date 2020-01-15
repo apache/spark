@@ -237,7 +237,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
       ShowNamespacesExec(r.output, catalog, ns, pattern) :: Nil
 
-    case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
+    case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern, _) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>

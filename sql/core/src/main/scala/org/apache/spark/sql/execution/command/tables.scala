@@ -818,17 +818,65 @@ case class DescribeColumnCommand(
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
- *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
  *   [PARTITION(partition_spec)];
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
+    isExtended: Boolean = false) extends RunnableCommand {
+
+  // The result of SHOW TABLES has three basic columns: database, tableName and
+  // isTemporary. If `isExtended` is true, append column `type` to the output columns.
+  override val output: Seq[Attribute] = {
+    val tableExtendedInfo = if (isExtended) {
+      AttributeReference("type", StringType, nullable = false)() :: Nil
+    } else {
+      Nil
+    }
+    AttributeReference("database", StringType, nullable = false)() ::
+      AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    // Since we need to return a Seq of rows, we will call getTables directly
+    // instead of calling tables in sparkSession.
+    val catalog = sparkSession.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    // Show the information of tables.
+    val tables =
+      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+    tables.map { tableIdent =>
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
+      val isTemp = catalog.isTemporaryTable(tableIdent)
+      if (isExtended) {
+        val tableType = catalog.getTempViewOrPermanentTableMetadata(tableIdent).tableType.name
+        Row(database, tableName, isTemp, s"$tableType\n")
+      } else {
+        Row(database, tableName, isTemp)
+      }
+    }
+  }
+}
+
+/**
+ * A command for users to get tables in the given database.
+ * If a databaseName is not given, the current database will be used.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
+ *   [PARTITION(partition_spec)];
+ * }}}
+ */
+case class ShowTableCommand(
+    databaseName: Option[String],
+    tableIdentifierPattern: Option[String],
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
 
-  // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
+  // The result of SHOW TABLE has three basic columns: database, tableName and
   // isTemporary. If `isExtended` is true, append column `information` to the output columns.
   override val output: Seq[Attribute] = {
     val tableExtendedInfo = if (isExtended) {
@@ -877,7 +925,6 @@ case class ShowTablesCommand(
     }
   }
 }
-
 
 /**
  * A command for users to list the properties for a table. If propertyKey is specified, the value
