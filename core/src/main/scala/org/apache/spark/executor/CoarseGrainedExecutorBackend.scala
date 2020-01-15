@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.lang.Thread
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -148,7 +149,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           logError("Asked to launch a task while decommissioned.")
           driver match {
             case Some(endpoint) =>
-              logError("Sending DecommissionExecutor to driver")
+              logInfo("Sending DecommissionExecutor to driver")
               endpoint.send(DecommissionExecutor(executorId))
             case _ =>
               logError("No registered driver to send Decommission to.")
@@ -238,7 +239,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
-    logError("Decommissioning self")
+    logInfo("Decommissioning self")
     try {
       decommissioned = true
       // Tell master we are are decommissioned so it stops trying to schedule us

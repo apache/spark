@@ -41,7 +41,7 @@ if __name__ == "__main__":
     print("Waiting some more....")
     time.sleep(2400)
     rdd.collect()
-    print("Stopping spark")
+    print("Finished waiting, stopping Spark.")
     spark.stop()
     print("Done, exiting Python")
     sys.exit(0)

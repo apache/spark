@@ -32,7 +32,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",
-      expectedLogOnCompletion = Seq("Decommissioning executor"),
+      expectedLogOnCompletion = Seq("Decommissioning executor",
+        "Finished waiting, stopping Spark"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,

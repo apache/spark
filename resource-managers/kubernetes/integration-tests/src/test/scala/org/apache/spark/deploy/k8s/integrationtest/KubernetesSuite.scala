@@ -40,9 +40,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter  with BasicTestsSuite with SecretsTestsSuite
+  with BeforeAndAfterAll with BeforeAndAfter  /* with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging with Eventually
+  with DepsTestsSuite */ with DecommissionSuite /* with RTestsSuite */ with Logging with Eventually
   with Matchers {
 
 
@@ -303,7 +303,7 @@ class KubernetesSuite extends SparkFunSuite
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
-        logInfo("Beginning watch of executors")
+        println("Beginning watch of executors")
         override def onClose(cause: KubernetesClientException): Unit =
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
@@ -313,24 +313,24 @@ class KubernetesSuite extends SparkFunSuite
             case Action.MODIFIED =>
               execPods(name) = resource
             case Action.ADDED =>
-              logInfo(s"Add event received for $name.")
+              println(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
               // decommissioning.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
-                logDebug("Waiting for first pod to become OK prior to deletion")
+                println("Waiting for first pod to become OK prior to deletion")
                 Eventually.eventually(patienceTimeout, patienceInterval) {
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
                 // Sleep a small interval to allow execution of job
-                logDebug("Sleeping before killing pod.")
-                Thread.sleep(2000)
+                println("Sleeping before killing pod.")
+                Thread.sleep(700000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
-                logDebug(s"Pod: $name deleted")
+                println(s"Triggered pod decom/delete: $name deleted")
               } else {
               }
             case Action.DELETED | Action.ERROR =>

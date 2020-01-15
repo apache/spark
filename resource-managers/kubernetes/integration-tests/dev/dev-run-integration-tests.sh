@@ -158,6 +158,7 @@ properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
   -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
+  -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
 $TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}
