@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -111,7 +112,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
+    val selectedPartitions = fileIndex.listPartitionData(partitionFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
@@ -159,19 +160,37 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
     partitions.toArray
   }
 
+  private def getSizeInBytes(conf: SQLConf): Long = {
+    if (fileIndex.partitionSpec().partitionColumns.isEmpty) {
+      fileIndex.sizeInBytes
+    } else {
+      val (partitionNum, partitionData) =
+        if (partitionFilters.isEmpty) {
+          (fileIndex.partitionSpec().partitions.size, None)
+        } else {
+          val partitions = fileIndex.listPartitionData(partitionFilters)
+          (partitions.size, Some(partitions))
+        }
+      if (partitionNum <= conf.maxPartNumForStatsCalculateViaFS) {
+        if (partitionData.isDefined) {
+          fileIndex.sizeInBytesOfPartitions(partitionData.get)
+        } else {
+          fileIndex.sizeInBytes
+        }
+      } else {
+        conf.defaultSizeInBytes
+      }
+    }
+  }
+
   override def estimateStatistics(): Statistics = {
-    val partitions = fileIndex.listPartitions(partitionFilters)
+
     val conf = sparkSession.sessionState.conf
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
         val compressionFactor = conf.fileCompressionFactor
-        val size =
-          if (partitions.isDefined && partitions.get.size<=conf.maxPartNumForStatsCalculateViaFS) {
-            (compressionFactor * fileIndex.sizeInBytes).toLong
-          } else {
-            (compressionFactor * conf.defaultSizeInBytes).toLong
-          }
-        OptionalLong.of(size)
+        val sizeInBytes = getSizeInBytes(conf)
+        OptionalLong.of((compressionFactor*sizeInBytes).toLong)
       }
 
       override def numRows(): OptionalLong = OptionalLong.empty()

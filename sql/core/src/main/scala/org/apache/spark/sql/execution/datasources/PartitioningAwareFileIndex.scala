@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
@@ -66,16 +66,7 @@ abstract class PartitioningAwareFileIndex(
     parameters.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
-  def listPartitions(partitionFilters: Seq[Expression]): Option[Seq[PartitionPath]] = {
-    if (partitionSpec().partitionColumns.nonEmpty) {
-      Some(prunePartitions(partitionFilters, partitionSpec()))
-    } else {
-      None
-    }
-  }
-
-  override def listFiles(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+  override def listPartitionData(partitionFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
       isDataPath(f.getPath) && f.getLen > 0
     }
@@ -109,6 +100,10 @@ abstract class PartitioningAwareFileIndex(
     allFiles().map(_.getPath.toUri.toString).toArray
 
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
+
+  def sizeInBytesOfPartitions(partitions: Seq[PartitionDirectory]): Long = {
+    partitions.flatMap(_.files).map(_.getLen).sum
+  }
 
   def allFiles(): Seq[FileStatus] = {
     val files = if (partitionSpec().partitionColumns.isEmpty && !recursiveFileLookup) {

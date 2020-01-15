@@ -297,7 +297,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         .inferSchema(
           sparkSession,
           options,
-          fileIndex.listFiles(Nil, Nil).flatMap(_.files))
+          fileIndex.listPartitionData(Nil).flatMap(_.files))
         .map(mergeWithMetastoreSchema(relation.tableMeta.dataSchema, _))
 
       inferredSchema match {

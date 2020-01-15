@@ -58,7 +58,8 @@ class InMemoryFileIndex(
 
   assert(userSpecifiedPartitionSpec.isEmpty ||
     userSpecifiedPartitionSpec.get.partitions.map(_.path).equals(rootPathsSpecified),
-    "")
+    s"The rootPathsSpecified ($rootPathsSpecified) is inconsistent with the file paths " +
+      s"of userSpecifiedPartitionSpec (${userSpecifiedPartitionSpec.get.partitions.map(_.path)}).")
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
