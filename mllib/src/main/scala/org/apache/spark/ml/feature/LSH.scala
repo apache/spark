@@ -25,6 +25,7 @@ import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -136,15 +137,38 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       // Limit the use of hashDist since it's controversial
       val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
       val hashDistCol = hashDistUDF(col($(outputCol)))
+      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
-      // Compute threshold to get exact k elements.
-      // TODO: SPARK-18409: Use approxQuantile to get the threshold
-      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(numNearestNeighbors)
-      val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
-      val hashThreshold = thresholdDataset.take(1).head.getDouble(0)
+      val relativeError = 0.05
+      val (summary, count) = modelDatasetWithDist.select(distCol)
+        .rdd
+        .mapPartitions { iter =>
+          if (iter.hasNext) {
+            var s = new QuantileSummaries(
+              QuantileSummaries.defaultCompressThreshold, relativeError)
+            var c = 0L
+            while (iter.hasNext) {
+              val Row(dist: Double) = iter.next
+              s = s.insert(dist)
+              c += 1
+            }
+            Iterator.single((s.compress, c))
+          } else Iterator.empty
+        }.treeReduce { case ((s1, c1), (s2, c2)) => (s1.merge(s2), c1 + c2) }
 
-      // Filter the dataset where the hash value is less than the threshold.
-      modelDataset.filter(hashDistCol <= hashThreshold)
+      // Compute threshold to get around k elements.
+      // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
+      // so we pick quantile p = M / N + err
+      // M: the number of nearest neighbors; N: the number of elements in dataset
+      val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
+
+      if (approxQuantile >= 1) {
+        modelDatasetWithDist
+      } else {
+        val hashThreshold = summary.query(approxQuantile).get
+        // Filter the dataset where the hash value is less than the threshold.
+        modelDatasetWithDist.filter(hashDistCol <= hashThreshold)
+      }
     }
 
     // Get the top k nearest neighbor by their distance to the key
@@ -169,11 +193,11 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    *         to show the distance between each row and the key.
    */
   def approxNearestNeighbors(
-    dataset: Dataset[_],
-    key: Vector,
-    numNearestNeighbors: Int,
-    distCol: String): Dataset[_] = {
-    approxNearestNeighbors(dataset, key, numNearestNeighbors, true, distCol)
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      distCol: String): Dataset[_] = {
+      approxNearestNeighbors(dataset, key, numNearestNeighbors, true, distCol)
   }
 
   /**
@@ -325,7 +349,7 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
+    val inputDim = MetadataUtils.getNumFeatures(dataset, $(inputCol))
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }

@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-preview</version>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -94,6 +94,10 @@
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-mapreduce</artifactId>
       <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
@@ -177,7 +181,7 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
-          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>
@@ -194,6 +198,7 @@
               <sources>
                 <source>v${hive.version.short}/src/main/scala</source>
                 <source>v${hive.version.short}/src/main/java</source>
+                <source>src/main/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>

@@ -286,7 +286,7 @@ class FPGrowthModel private[ml] (
 
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[_]) => {
+    val predictUDF = udf((items: Seq[Any]) => {
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
@@ -310,6 +310,11 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
+  }
 }
 
 @Since("2.2.0")

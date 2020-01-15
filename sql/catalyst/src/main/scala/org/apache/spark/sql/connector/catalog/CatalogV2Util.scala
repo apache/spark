@@ -24,10 +24,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -103,26 +105,16 @@ private[sql] object CatalogV2Util {
         case add: AddColumn =>
           add.fieldNames match {
             case Array(name) =>
-              val newField = StructField(name, add.dataType, nullable = add.isNullable)
-              Option(add.comment) match {
-                case Some(comment) =>
-                  schema.add(newField.withComment(comment))
-                case _ =>
-                  schema.add(newField)
-              }
+              val field = StructField(name, add.dataType, nullable = add.isNullable)
+              val newField = Option(add.comment).map(field.withComment).getOrElse(field)
+              addField(schema, newField, add.position())
 
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
                   val field = StructField(names.last, add.dataType, nullable = add.isNullable)
-                  val newParentType = Option(add.comment) match {
-                    case Some(comment) =>
-                      parentType.add(field.withComment(comment))
-                    case None =>
-                      parentType.add(field)
-                  }
-
-                  Some(StructField(parent.name, newParentType, parent.nullable, parent.metadata))
+                  val newField = Option(add.comment).map(field.withComment).getOrElse(field)
+                  Some(parent.copy(dataType = addField(parentType, newField, add.position())))
 
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
@@ -135,16 +127,38 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
+            Some(field.copy(dataType = update.newDataType))
+          })
+
+        case update: UpdateColumnNullability =>
+          replace(schema, update.fieldNames, field => {
+            Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>
           replace(schema, update.fieldNames, field =>
             Some(field.withComment(update.newComment)))
+
+        case update: UpdateColumnPosition =>
+          def updateFieldPos(struct: StructType, name: String): StructType = {
+            val oldField = struct.fields.find(_.name == name).getOrElse {
+              throw new IllegalArgumentException("Field not found: " + name)
+            }
+            val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
+            addField(withFieldRemoved, oldField, update.position())
+          }
+
+          update.fieldNames() match {
+            case Array(name) =>
+              updateFieldPos(schema, name)
+            case names =>
+              replace(schema, names.init, parent => parent.dataType match {
+                case parentType: StructType =>
+                  Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
+                case _ =>
+                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
+              })
+          }
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None)
@@ -153,6 +167,25 @@ private[sql] object CatalogV2Util {
           // ignore non-schema changes
           schema
       }
+    }
+  }
+
+  private def addField(
+      schema: StructType,
+      field: StructField,
+      position: ColumnPosition): StructType = {
+    if (position == null) {
+      schema.add(field)
+    } else if (position.isInstanceOf[First]) {
+      StructType(field +: schema.fields)
+    } else {
+      val afterCol = position.asInstanceOf[After].column()
+      val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
+      if (fieldIndex == -1) {
+        throw new IllegalArgumentException("AFTER column not found: " + afterCol)
+      }
+      val (before, after) = schema.fields.splitAt(fieldIndex + 1)
+      StructType(before ++ (field +: after))
     }
   }
 
@@ -224,6 +257,10 @@ private[sql] object CatalogV2Util {
       case _: NoSuchNamespaceException => None
     }
 
+  def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
+    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+  }
+
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
@@ -240,14 +277,15 @@ private[sql] object CatalogV2Util {
           "you can only specify one of them.")
     }
 
-    if ((options.contains("comment") || properties.contains("comment"))
-      && comment.isDefined) {
+    if ((options.contains(TableCatalog.PROP_COMMENT)
+      || properties.contains(TableCatalog.PROP_COMMENT)) && comment.isDefined) {
       throw new AnalysisException(
-        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
-          "only specify one of them.")
+        s"COMMENT and option/property '${TableCatalog.PROP_COMMENT}' " +
+          s"are both used to set the table comment, you can only specify one of them.")
     }
 
-    if (options.contains("provider") || properties.contains("provider")) {
+    if (options.contains(TableCatalog.PROP_PROVIDER)
+      || properties.contains(TableCatalog.PROP_PROVIDER)) {
       throw new AnalysisException(
         "USING and option/property 'provider' are both used to set the provider implementation, " +
           "you can only specify one of them.")
@@ -261,9 +299,10 @@ private[sql] object CatalogV2Util {
     tableProperties ++= filteredOptions
 
     // convert USING, LOCATION, and COMMENT clauses to table properties
-    tableProperties += ("provider" -> provider)
-    comment.map(text => tableProperties += ("comment" -> text))
-    location.orElse(options.get("path")).map(loc => tableProperties += ("location" -> loc))
+    tableProperties += (TableCatalog.PROP_PROVIDER -> provider)
+    comment.map(text => tableProperties += (TableCatalog.PROP_COMMENT -> text))
+    location.orElse(options.get("path")).map(
+      loc => tableProperties += (TableCatalog.PROP_LOCATION -> loc))
 
     tableProperties.toMap
   }
@@ -277,5 +316,15 @@ private[sql] object CatalogV2Util {
     val ident = tableName.asIdentifier
     val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
+  }
+
+  def getTableProviderCatalog(
+      provider: SupportsCatalogOptions,
+      catalogManager: CatalogManager,
+      options: CaseInsensitiveStringMap): TableCatalog = {
+    Option(provider.extractCatalog(options))
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.v2SessionCatalog)
+      .asTableCatalog
   }
 }

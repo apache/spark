@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
+import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -89,6 +89,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
+        case Tail(IntegerLiteral(limit), child) =>
+          CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
       case Limit(IntegerLiteral(limit), Sort(order, true, child))
@@ -422,7 +424,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        aggregate.AggUtils.planStreamingAggregation(
+        AggUtils.planStreamingAggregation(
           normalizedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
@@ -474,8 +476,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, _)
           if left.isStreaming && right.isStreaming =>
 
-          new StreamingSymmetricHashJoinExec(
-            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+          new StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, condition,
+            stateVersion, planLater(left), planLater(right)) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
@@ -516,13 +519,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
-            aggregate.AggUtils.planAggregateWithoutDistinct(
+            AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.AggUtils.planAggregateWithOneDistinct(
+            AggUtils.planAggregateWithOneDistinct(
               normalizedGroupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
@@ -747,6 +750,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case _: UpdateTable =>
         throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
+      case _: MergeIntoTable =>
+        throw new UnsupportedOperationException(s"MERGE INTO TABLE is not supported temporarily.")
+      case logical.CollectMetrics(name, metrics, child) =>
+        execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
       case _ => Nil
     }
   }

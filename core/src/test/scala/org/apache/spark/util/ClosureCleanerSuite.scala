@@ -299,7 +299,7 @@ private object TestUserClosuresActuallyCleaned {
     rdd.aggregateByKey(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 }).count()
   }
   def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
-  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { (_, _) => return; 1 } }
   def testReduceByKeyLocally(rdd: RDD[(Int, Int)]): Unit = {
     rdd.reduceByKeyLocally { case (_, _) => return; 1 }
   }

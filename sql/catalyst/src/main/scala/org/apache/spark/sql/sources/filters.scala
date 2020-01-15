@@ -29,7 +29,7 @@ import org.apache.spark.annotation.{Evolving, Stable}
  * @since 1.3.0
  */
 @Stable
-abstract class Filter {
+sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
    * @since 2.1.0

@@ -694,7 +694,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (vlen % 8 == 0);
       assert (longArray != null);
 
-      if (numKeys == MAX_CAPACITY
+      // We should not increase number of keys to be MAX_CAPACITY. The usage pattern of this map is
+      // lookup + append. If we append key until the number of keys to be MAX_CAPACITY, next time
+      // the call of lookup will hang forever because it cannot find an empty slot.
+      if (numKeys == MAX_CAPACITY - 1
         // The map could be reused from last spill (because of no enough memory to grow),
         // then we don't try to grow again if hit the `growthThreshold`.
         || !canGrowArray && numKeys >= growthThreshold) {
@@ -741,7 +744,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
         longArray.set(pos * 2 + 1, keyHashcode);
         isDefined = true;
 
-        if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
+        // We use two array entries per key, so the array size is twice the capacity.
+        // We should compare the current capacity of the array, instead of its size.
+        if (numKeys >= growthThreshold && longArray.size() / 2 < MAX_CAPACITY) {
           try {
             growAndRehash();
           } catch (SparkOutOfMemoryError oom) {

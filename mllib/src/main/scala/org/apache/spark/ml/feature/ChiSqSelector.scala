@@ -289,8 +289,7 @@ final class ChiSqSelectorModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
-    val outputFields = schema.fields :+ newField
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, newField)
   }
 
   /**
@@ -316,6 +315,11 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ChiSqSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+  }
 }
 
 @Since("1.6.0")

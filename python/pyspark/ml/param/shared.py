@@ -283,6 +283,24 @@ class HasTol(Params):
         return self.getOrDefault(self.tol)
 
 
+class HasRelativeError(Params):
+    """
+    Mixin for param relativeError: the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]
+    """
+
+    relativeError = Param(Params._dummy(), "relativeError", "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasRelativeError, self).__init__()
+        self._setDefault(relativeError=0.001)
+
+    def getRelativeError(self):
+        """
+        Gets the value of relativeError or its default value.
+        """
+        return self.getOrDefault(self.relativeError)
+
+
 class HasStepSize(Params):
     """
     Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).

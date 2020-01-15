@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -96,7 +98,9 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
   test("SPARK-22219: refactor to control to generate comment") {
     Seq(true, false).foreach { flag =>
-      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
+      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
         val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
           .queryExecution.executedPlan)
         assert(res.length == 2)

@@ -445,7 +445,7 @@ object JdbcUtils extends Logging {
 
     case ByteType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, rs.getByte(pos + 1))
+        row.setByte(pos, rs.getByte(pos + 1))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -652,7 +652,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
-    var totalRowCount = 0
+    var totalRowCount = 0L
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.

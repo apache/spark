@@ -225,6 +225,8 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     >>> model = als.fit(df)
     >>> model.getUserCol()
     'user'
+    >>> model.setUserCol("user")
+    ALSModel...
     >>> model.getItemCol()
     'item'
     >>> model.setPredictionCol("newPrediction")

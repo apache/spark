@@ -187,7 +187,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     import TestUtils._
 
     val conf = new SparkConf()
-      .set(EXECUTOR_CORES, 3)
+      .set(EXECUTOR_CORES, 1)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .setMaster(
       "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
@@ -282,6 +282,7 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
     when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
     when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
     when(ts.nodeBlacklist()).thenReturn(Set.empty[String])
+    when(ts.resourcesReqsPerTask).thenReturn(Seq.empty)
     ts
   }
 

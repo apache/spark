@@ -33,6 +33,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
+import org.apache.spark.resource.ResourceRequirement
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -68,6 +69,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
+  private val taskResourceNumParts: Map[String, Int] =
+    if (scheduler.resourcesReqsPerTask != null) {
+      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
+    } else {
+      Map.empty
+    }
+
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
   // protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should only
@@ -87,9 +95,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet; maps
   // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
-  // be considered an app-related failure).
+  // be considered an app-related failure). Visible for testing only.
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private val executorsPendingToRemove = new HashMap[String, Boolean]
+  private[scheduler] val executorsPendingToRemove = new HashMap[String, Boolean]
+
+  // Executors that have been lost, but for which we don't yet know the real exit reason.
+  private val executorsPendingLossReason = new HashSet[String]
 
   // A map to store hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -114,9 +125,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
-
-    // Executors that have been lost, but for which we don't yet know the real exit reason.
-    protected val executorsPendingLossReason = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -186,6 +194,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         // automatically, so try to tell the executor to stop itself. See SPARK-13519.
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
+
+      case LaunchedExecutor(executorId) =>
+        executorDataMap.get(executorId).foreach { data =>
+          data.freeCores = data.totalCores
+        }
+        makeOffers(executorId)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -215,9 +229,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map{ case (k, v) =>
-            (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
+            (v.name,
+             new ExecutorResourceInfo(v.name, v.addresses,
+               // tell the executor it can schedule resources up to numParts times,
+               // as configured by the user, or set to 1 as that is the default (1 task/resource)
+               taskResourceNumParts.getOrElse(v.name, 1)))
+          }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
+            0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -236,7 +255,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           context.reply(true)
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
-          makeOffers()
         }
 
       case StopDriver =>
@@ -267,7 +285,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
@@ -296,7 +314,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        if (executorIsAlive(executorId)) {
+        if (isExecutorActive(executorId)) {
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
@@ -312,11 +330,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
       }
-    }
-
-    private def executorIsAlive(executorId: String): Boolean = synchronized {
-      !executorsPendingToRemove.contains(executorId) &&
-        !executorsPendingLossReason.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -397,7 +410,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
      */
     protected def disableExecutor(executorId: String): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
-        if (executorIsAlive(executorId)) {
+        if (isExecutorActive(executorId)) {
           executorsPendingLossReason += executorId
           true
         } else {
@@ -474,12 +487,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
    * be called in the yarn-client mode when AM re-registers after a failure.
+   * Visible for testing only.
    * */
-  protected def reset(): Unit = {
+  protected[scheduler] def reset(): Unit = {
     val executors: Set[String] = synchronized {
       requestedTotalExecutors = 0
       numPendingExecutors = 0
-      executorsPendingToRemove.clear()
       executorDataMap.keys.toSet
     }
 
@@ -542,7 +555,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
-    executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
+    executorDataMap.contains(id) &&
+      !executorsPendingToRemove.contains(id) &&
+      !executorsPendingLossReason.contains(id)
   }
 
   override def maxNumConcurrentTasks(): Int = synchronized {

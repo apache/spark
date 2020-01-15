@@ -22,10 +22,11 @@ import java.net.Socket
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.concurrent
 import scala.collection.mutable
 import scala.util.Properties
 
-import com.google.common.collect.MapMaker
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.DeveloperApi
@@ -75,7 +76,8 @@ class SparkEnv (
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
-  private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
+  private[spark] val hadoopJobMetadata =
+    CacheBuilder.newBuilder().softValues().build[String, AnyRef]().asMap()
 
   private[spark] var driverTmpDir: Option[String] = None
 
@@ -195,6 +197,7 @@ object SparkEnv extends Logging {
   private[spark] def createExecutorEnv(
       conf: SparkConf,
       executorId: String,
+      bindAddress: String,
       hostname: String,
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
@@ -202,7 +205,7 @@ object SparkEnv extends Logging {
     val env = create(
       conf,
       executorId,
-      hostname,
+      bindAddress,
       hostname,
       None,
       isLocal,
@@ -211,6 +214,17 @@ object SparkEnv extends Logging {
     )
     SparkEnv.set(env)
     env
+  }
+
+  private[spark] def createExecutorEnv(
+      conf: SparkConf,
+      executorId: String,
+      hostname: String,
+      numCores: Int,
+      ioEncryptionKey: Option[Array[Byte]],
+      isLocal: Boolean): SparkEnv = {
+    createExecutorEnv(conf, executorId, hostname,
+      hostname, numCores, ioEncryptionKey, isLocal)
   }
 
   /**
@@ -339,19 +353,26 @@ object SparkEnv extends Logging {
       None
     }
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
-      BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-      new BlockManagerMasterEndpoint(
-        rpcEnv,
-        isLocal,
-        conf,
-        listenerBus,
-        if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
-          externalShuffleClient
-        } else {
-          None
-        })),
-      conf, isDriver)
+    // Mapping from block manager id to the block manager's information.
+    val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
+    val blockManagerMaster = new BlockManagerMaster(
+      registerOrLookupEndpoint(
+        BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+        new BlockManagerMasterEndpoint(
+          rpcEnv,
+          isLocal,
+          conf,
+          listenerBus,
+          if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
+            externalShuffleClient
+          } else {
+            None
+          }, blockManagerInfo)),
+      registerOrLookupEndpoint(
+        BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
+        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),
+      conf,
+      isDriver)
 
     val blockTransferService =
       new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
@@ -383,7 +404,7 @@ object SparkEnv extends Logging {
       conf.set(EXECUTOR_ID, executorId)
       val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.EXECUTOR, conf,
         securityManager)
-      ms.start()
+      ms.start(conf.get(METRICS_STATIC_SOURCES_ENABLED))
       ms
     }
 

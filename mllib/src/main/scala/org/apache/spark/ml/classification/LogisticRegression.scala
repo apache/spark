@@ -34,11 +34,10 @@ import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
@@ -501,22 +500,20 @@ class LogisticRegression @Since("1.2.0") (
       probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
       fitIntercept)
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
+    val (summarizer, labelSummarizer) = instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
+      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
+                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = $(aggregationDepth)
+    )
 
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
-      )(seqOp, combOp, $(aggregationDepth))
-    }
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -571,14 +568,14 @@ class LogisticRegression @Since("1.2.0") (
           s"coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
-          new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
+          new Array[Int](numCoefficientSets + 1), Array.emptyIntArray, Array.emptyDoubleArray,
           isTransposed = true).compressed
         val interceptVec = if (isMultinomial) {
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
         } else {
           Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
         }
-        (coefMatrix, interceptVec, Array.empty[Double])
+        (coefMatrix, interceptVec, Array.emptyDoubleArray)
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
           instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
@@ -586,7 +583,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val featuresMean = summarizer.mean.toArray
-        val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+        val featuresStd = summarizer.std.toArray
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -724,7 +721,7 @@ class LogisticRegression @Since("1.2.0") (
               value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+            optInitialModel.get.interceptVector.foreachNonZero { (classIndex, value) =>
               initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }
@@ -858,7 +855,7 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val centers = Array.fill(numFeatures)(0.0)
+          val centers = Array.ofDim[Double](numFeatures)
           denseCoefficientMatrix.foreachActive { case (i, j, v) =>
             centers(j) += v
           }
@@ -1131,7 +1128,8 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
       margins(features)
     } else {
@@ -1185,8 +1183,7 @@ class LogisticRegressionModel private[spark] (
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 
   override def toString: String = {
-    s"LogisticRegressionModel: " +
-    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+    s"LogisticRegressionModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
   }
 }
 

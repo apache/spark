@@ -282,7 +282,7 @@ class OneHotEncoderModel private[ml] (
       if (idx < size) {
         Vectors.sparse(size, Array(idx.toInt), Array(1.0))
       } else {
-        Vectors.sparse(size, Array.empty[Int], Array.empty[Double])
+        Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
       }
     }
   }
@@ -376,6 +376,13 @@ class OneHotEncoderModel private[ml] (
 
   @Since("3.0.0")
   override def write: MLWriter = new OneHotEncoderModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"OneHotEncoderModel: uid=$uid, dropLast=${$(dropLast)}, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("3.0.0")

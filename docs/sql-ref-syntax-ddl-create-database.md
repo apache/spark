@@ -24,10 +24,10 @@ Creates a database with the specified name. If database with the same name alrea
 
 ### Syntax
 {% highlight sql %}
-CREATE {DATABASE | SCHEMA} [ IF NOT EXISTS ] database_name
+CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
   [ COMMENT database_comment ]
   [ LOCATION database_directory ]
-  [ WITH DBPROPERTIES (property_name=property_value [ , ...]) ]
+  [ WITH DBPROPERTIES ( property_name = property_value [ , ... ] ) ]
 {% endhighlight %}
 
 ### Parameters
@@ -44,7 +44,7 @@ CREATE {DATABASE | SCHEMA} [ IF NOT EXISTS ] database_name
     <dt><code><em>database_comment</em></code></dt>
     <dd>Specifies the description for the database.</dd>
 
-    <dt><code><em>WITH DBPROPERTIES (property_name=property_value [ , ...])</em></code></dt>
+    <dt><code><em>WITH DBPROPERTIES ( property_name=property_value [ , ... ] )</em></code></dt>
     <dd>Specifies the properties for the database in key-value pairs.</dd>
 </dl>
 

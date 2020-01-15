@@ -21,16 +21,18 @@ import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
-import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
+import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
 
+import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -82,7 +84,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     val tabName = "tbl"
     withTable(tabName) {
       val e = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $tabName (i INT, j STRING)")
+        sql(s"CREATE TABLE $tabName (i INT, j STRING) STORED AS parquet")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE"))
     }
@@ -110,13 +112,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     import testImplicits._
     withTable("t", "t1") {
       var e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
+        sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT a, b from t1")
+        sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
@@ -168,9 +170,65 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
+
+  test("throw exception if Create Table LIKE USING Hive built-in ORC in in-memory catalog") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
+      }.getMessage
+      assert(e.contains("Hive built-in ORC data source must be used with Hive support enabled"))
+    }
+  }
+
+  test("ALTER TABLE ALTER COLUMN with position is not supported") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t ALTER COLUMN i TYPE INT FIRST")
+      }
+      assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
+    }
+  }
+
+  test("SPARK-25403 refresh the table after inserting data") {
+    withTable("t") {
+      val catalog = spark.sessionState.catalog
+      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      sql("CREATE TABLE t (a INT) USING parquet")
+      sql("INSERT INTO TABLE t VALUES (1)")
+      assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+      assert(spark.table("t").count() === 1)
+      assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+    }
+  }
+
+  test("SPARK-19784 refresh the table after altering the table location") {
+    withTable("t") {
+      withTempDir { dir =>
+        val catalog = spark.sessionState.catalog
+        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val p1 = s"${dir.getCanonicalPath}/p1"
+        val p2 = s"${dir.getCanonicalPath}/p2"
+        sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
+        sql("INSERT INTO TABLE t VALUES (1)")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        spark.range(5).toDF("a").write.parquet(p2)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$p2'")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        assert(spark.table("t").count() === 5)
+        assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+      }
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
+
+  protected val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
 
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
@@ -315,7 +373,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      assert(db1 == CatalogDatabase(
+      assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
         dbName,
         "",
         getDBPath(dbName),
@@ -338,7 +396,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expPath = makeQualifiedPath(tmpDir.toString)
-          assert(db1 == CatalogDatabase(
+          assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
             expPath,
@@ -361,7 +419,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
+        assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
           getDBPath(dbNameWithoutBackTicks),
@@ -734,7 +792,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -743,7 +802,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -752,7 +812,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -1725,7 +1786,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
@@ -1953,6 +2014,60 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-30312: truncate table - keep acl/permission") {
+    import testImplicits._
+    val ignorePermissionAcl = Seq(true, false)
+
+    ignorePermissionAcl.foreach { ignore =>
+      withSQLConf(
+        "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> ignore.toString) {
+        withTable("tab1") {
+          sql("CREATE TABLE tab1 (col INT) USING parquet")
+          sql("INSERT INTO tab1 SELECT 1")
+          checkAnswer(spark.table("tab1"), Row(1))
+
+          val tablePath = new Path(spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fs = tablePath.getFileSystem(hadoopConf)
+          val fileStatus = fs.getFileStatus(tablePath);
+
+          fs.setPermission(tablePath, new FsPermission("777"))
+          assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
+
+          // Set ACL to table path.
+          val customAcl = new java.util.ArrayList[AclEntry]()
+          customAcl.add(new AclEntry.Builder()
+            .setType(AclEntryType.USER)
+            .setScope(AclEntryScope.ACCESS)
+            .setPermission(FsAction.READ).build())
+          fs.setAcl(tablePath, customAcl)
+          assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
+
+          sql("TRUNCATE TABLE tab1")
+          assert(spark.table("tab1").collect().isEmpty)
+
+          val fileStatus2 = fs.getFileStatus(tablePath)
+          if (ignore) {
+            assert(fileStatus2.getPermission().toString() != "rwxrwxrwx")
+          } else {
+            assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
+          }
+          val aclEntries = fs.getAclStatus(tablePath).getEntries()
+          if (ignore) {
+            assert(aclEntries.size() == 0)
+          } else {
+            assert(aclEntries.size() == 1)
+            assert(aclEntries.get(0) == customAcl.get(0))
+          }
+        }
+      }
+    }
+  }
+
   test("create temporary view with mismatched schema") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")
@@ -2089,7 +2204,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
-          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+          assert(message.contains(
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
     }
@@ -2817,5 +2934,75 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }
       }
     }
+  }
+
+  test("Create Table LIKE USING provider") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t1", "t2", "t3", "t4") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+
+      sql("CREATE TABLE t1 LIKE s USING orc")
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.provider == Some("orc"))
+
+      sql("CREATE TABLE t2 LIKE s USING hive")
+      val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table2.provider == Some("hive"))
+
+      val e1 = intercept[ClassNotFoundException] {
+        sql("CREATE TABLE t3 LIKE s USING unknown")
+      }.getMessage
+      assert(e1.contains("Failed to find data source"))
+
+      withGlobalTempView("src") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
+        sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
+        val table = catalog.getTableMetadata(TableIdentifier("t4"))
+        assert(table.provider == Some("parquet"))
+      }
+    }
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
+    val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
+    val testFile = File.createTempFile("testFile", "1", directoryToAdd)
+    spark.sql(s"ADD FILE $directoryToAdd")
+    assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
+  }
+
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
+    withTempDir { testDir =>
+      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+        val msg = intercept[SparkException] {
+          spark.sql(s"ADD FILE $testDir")
+        }.getMessage
+        assert(msg.contains("is a directory and recursive is not turned on"))
+      }
+    }
+  }
+}
+
+object FakeLocalFsFileSystem {
+  var aclStatus = new AclStatus.Builder().build()
+}
+
+// A fake test local filesystem used to test ACL. It keeps a ACL status. If deletes
+// a path of this filesystem, it will clean up the ACL status. Note that for test purpose,
+// it has only one ACL status for all paths.
+class FakeLocalFsFileSystem extends RawLocalFileSystem {
+  import FakeLocalFsFileSystem._
+
+  override def delete(f: Path, recursive: Boolean): Boolean = {
+    aclStatus = new AclStatus.Builder().build()
+    super.delete(f, recursive)
+  }
+
+  override def getAclStatus(path: Path): AclStatus = aclStatus
+
+  override def setAcl(path: Path, aclSpec: java.util.List[AclEntry]): Unit = {
+    aclStatus = new AclStatus.Builder().addEntries(aclSpec).build()
   }
 }

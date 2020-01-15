@@ -296,14 +296,12 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-        >>> df.select(df.l[0], df.d["key"]).show()
-        +----+------+
-        |l[0]|d[key]|
-        +----+------+
-        |   1| value|
-        +----+------+
+
+        .. versionchanged:: 3.0
+           If `key` is a `Column` object, the indexing operator should be used instead.
+           For example, `map_col.getItem(col('id'))` should be replaced with `map_col[col('id')]`.
         """
-        return self[key]
+        return _bin_op("getItem")(self, key)
 
     @since(1.3)
     def getField(self, name):
@@ -671,8 +669,9 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
         >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).show()
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+

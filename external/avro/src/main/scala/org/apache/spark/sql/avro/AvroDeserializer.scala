@@ -32,10 +32,10 @@ import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
@@ -110,7 +110,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
       // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
+        updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
@@ -167,14 +167,14 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (ARRAY, ArrayType(elementType, containsNull)) =>
         val elementWriter = newWriter(avroType.getElementType, elementType, path)
         (updater, ordinal, value) =>
-          val array = value.asInstanceOf[GenericData.Array[Any]]
-          val len = array.size()
-          val result = createArrayData(elementType, len)
+          val collection = value.asInstanceOf[java.util.Collection[Any]]
+          val result = createArrayData(elementType, collection.size())
           val elementUpdater = new ArrayDataUpdater(result)
 
           var i = 0
-          while (i < len) {
-            val element = array.get(i)
+          val iter = collection.iterator()
+          while (iter.hasNext) {
+            val element = iter.next()
             if (element == null) {
               if (!containsNull) {
                 throw new RuntimeException(s"Array value at path ${path.mkString(".")} is not " +

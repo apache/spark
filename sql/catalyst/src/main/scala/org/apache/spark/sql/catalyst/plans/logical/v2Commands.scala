@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.NamedRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -250,18 +250,65 @@ case class CreateNamespace(
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
  */
 case class DropNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     ifExists: Boolean,
-    cascade: Boolean) extends Command
+    cascade: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
+ * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ */
+case class DescribeNamespace(
+    namespace: LogicalPlan,
+    extended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetProperties(
+    namespace: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetLocation(
+    namespace: LogicalPlan,
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
+ */
+case class AlterNamespaceSetOwner(
+    child: LogicalPlan,
+    ownerName: String,
+    ownerType: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
-    catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())
 }
@@ -271,7 +318,7 @@ case class ShowNamespaces(
  */
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
+  override lazy val resolved: Boolean = table.resolved
 
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
@@ -290,10 +337,50 @@ case class DeleteFromTable(
  */
 case class UpdateTable(
     table: LogicalPlan,
-    columns: Seq[Expression],
-    values: Seq[Expression],
+    assignments: Seq[Assignment],
     condition: Option[Expression]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the MERGE INTO command that works for v2 tables.
+ */
+case class MergeIntoTable(
+    targetTable: LogicalPlan,
+    sourceTable: LogicalPlan,
+    mergeCondition: Expression,
+    matchedActions: Seq[MergeAction],
+    notMatchedActions: Seq[MergeAction]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = Seq(targetTable, sourceTable)
+}
+
+sealed abstract class MergeAction(
+    condition: Option[Expression]) extends Expression with Unevaluable {
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def children: Seq[Expression] = condition.toSeq
+}
+
+case class DeleteAction(condition: Option[Expression]) extends MergeAction(condition)
+
+case class UpdateAction(
+    condition: Option[Expression],
+    assignments: Seq[Assignment]) extends MergeAction(condition) {
+  override def children: Seq[Expression] = condition.toSeq ++ assignments
+}
+
+case class InsertAction(
+    condition: Option[Expression],
+    assignments: Seq[Assignment]) extends MergeAction(condition) {
+  override def children: Seq[Expression] = condition.toSeq ++ assignments
+}
+
+case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def children: Seq[Expression] = key ::  value :: Nil
 }
 
 /**
@@ -313,9 +400,7 @@ case class AlterTable(
     table: NamedRelation,
     changes: Seq[TableChange]) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
-
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
       case add: AddColumn =>
         add.fieldNames match {
@@ -339,12 +424,21 @@ case class AlterTable(
 }
 
 /**
+ * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
+ */
+case class RenameTable(
+    catalog: TableCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends Command
+
+/**
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(
-    catalog: TableCatalog,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
@@ -364,3 +458,51 @@ case class SetCatalogAndNamespace(
 case class RefreshTable(
     catalog: TableCatalog,
     ident: Identifier) extends Command
+
+/**
+ * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.
+ */
+case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalog", StringType, nullable = false)(),
+    AttributeReference("namespace", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TBLPROPERTIES command that works for v2 catalogs.
+ */
+case class ShowTableProperties(
+    table: NamedRelation,
+    propertyKey: Option[String]) extends Command{
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan that defines or changes the comment of an NAMESPACE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON (DATABASE|SCHEMA|NAMESPACE) namespaceIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
+ */
+case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON TABLE tableIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
+ */
+case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}

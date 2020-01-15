@@ -245,7 +245,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null, conf, true) {
+  val blockManagerMaster = new BlockManagerMaster(null, null, conf, true) {
       override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
         blockIds.map {
           _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
@@ -826,6 +826,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val listener = new SparkListener() {
       override def onJobStart(event: SparkListenerJobStart): Unit = {
         try {
+          // spark.job.description can be implicitly set for 0 partition jobs.
+          // So event.properties and properties can be different. See SPARK-29997.
+          event.properties.remove(SparkContext.SPARK_JOB_DESCRIPTION)
+          properties.remove(SparkContext.SPARK_JOB_DESCRIPTION)
+
           assert(event.properties.equals(properties), "Expected same content of properties, " +
             s"but got properties with different content. props in caller ${properties} /" +
             s" props in event ${event.properties}")

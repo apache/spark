@@ -29,7 +29,7 @@ import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, Vectors => OldVectors}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -52,10 +52,8 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), $(k))
   }
-
 }
 
 /**
@@ -145,30 +143,22 @@ class PCAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val func = { vector: Vector =>
-      vector match {
-        case dv: DenseVector =>
-          pc.transpose.multiply(dv)
-        case SparseVector(size, indices, values) =>
-          /* SparseVector -> single row SparseMatrix */
-          val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-          val projection = sm.multiply(pc)
-          Vectors.dense(projection.values)
-        case _ =>
-          throw new IllegalArgumentException("Unsupported vector format. Expected " +
-            s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-      }
-    }
-
-    val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    val transposed = pc.transpose
+    val transformer = udf { vector: Vector => transposed.multiply(vector) }
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), $(k))
+    }
+    outputSchema
   }
 
   @Since("1.5.0")
@@ -179,6 +169,11 @@ class PCAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new PCAModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"PCAModel: uid=$uid, k=${$(k)}"
+  }
 }
 
 @Since("1.6.0")
@@ -223,8 +218,7 @@ object PCAModel extends MLReadable[PCAModel] {
         // pc field is the old matrix format in Spark <= 1.6
         // explainedVariance field is not present in Spark <= 1.6
         val Row(pc: OldDenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
-        new PCAModel(metadata.uid, pc.asML,
-          Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+        new PCAModel(metadata.uid, pc.asML, new DenseVector(Array.emptyDoubleArray))
       }
       metadata.getAndSetParams(model)
       model

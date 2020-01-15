@@ -452,15 +452,10 @@ from numerics
 window w as (order by f_numeric range between
              1.1 preceding and 'NaN' following)
 -- !query 28 schema
-struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int>
+struct<>
 -- !query 28 output
-1	-3	NULL	NULL
-2	-1	NULL	NULL
-3	0	NULL	NULL
-4	1	NULL	NULL
-5	1	NULL	NULL
-6	2	NULL	NULL
-7	100	NULL	NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: NaN
 
 
 -- !query 29

@@ -42,12 +42,13 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.deploy.StandaloneResourceUtils._
-import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.executor.{ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -220,6 +221,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
+  private var _plugins: Option[PluginContainer] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -442,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
-        Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
+        Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {
         None
       }
@@ -539,6 +541,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
+    // Initialize any plugins before the task scheduler is initialized.
+    _plugins = PluginContainer(this)
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -546,9 +551,16 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
+    val _executorMetricsSource =
+      if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
+        Some(new ExecutorMetricsSource)
+      } else {
+        None
+      }
+
     // create and start the heartbeater for collecting memory metrics
     _heartbeater = new Heartbeater(
-      () => SparkContext.this.reportHeartBeat(),
+      () => SparkContext.this.reportHeartBeat(_executorMetricsSource),
       "driver-heartbeater",
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
     _heartbeater.start()
@@ -568,7 +580,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    _env.metricsSystem.start()
+    _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
@@ -617,10 +629,12 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -1519,17 +1533,17 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new Path(path).toUri
-    val schemeCorrectedPath = uri.getScheme match {
-      case null => new File(path).getCanonicalFile.toURI.toString
+    val schemeCorrectedURI = uri.getScheme match {
+      case null => new File(path).getCanonicalFile.toURI
       case "local" =>
         logWarning("File with 'local' scheme is not supported to add to file server, since " +
           "it is already available on every node.")
         return
-      case _ => path
+      case _ => uri
     }
 
-    val hadoopPath = new Path(schemeCorrectedPath)
-    val scheme = new URI(schemeCorrectedPath).getScheme
+    val hadoopPath = new Path(schemeCorrectedURI)
+    val scheme = schemeCorrectedURI.getScheme
     if (!Array("http", "https", "ftp").contains(scheme)) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
@@ -1549,7 +1563,11 @@ class SparkContext(config: SparkConf) extends Logging {
     val key = if (!isLocal && scheme == "file") {
       env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else {
-      schemeCorrectedPath
+        if (uri.getScheme == null) {
+          schemeCorrectedURI.toString
+        } else {
+          path
+        }
     }
     val timestamp = System.currentTimeMillis
     if (addedFiles.putIfAbsent(key, timestamp).isEmpty) {
@@ -1842,7 +1860,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     def checkRemoteJarFile(path: String): String = {
       val hadoopPath = new Path(path)
-      val scheme = new URI(path).getScheme
+      val scheme = hadoopPath.toUri.getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
         try {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
@@ -1864,21 +1882,21 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
-    if (path == null) {
-      logWarning("null specified as parameter to addJar")
+    if (path == null || path.isEmpty) {
+      logWarning("null or empty path specified as parameter to addJar")
     } else {
       val key = if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
         addLocalJarFile(new File(path))
       } else {
-        val uri = new URI(path)
+        val uri = new Path(path).toUri
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
         uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
-            addLocalJarFile(new File(uri.getRawPath))
+            addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists only on the driver node
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
@@ -1975,6 +1993,9 @@ class SparkContext(config: SparkConf) extends Logging {
         listenerBus.stop()
         _listenerBusStarted = false
       }
+    }
+    Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
@@ -2464,8 +2485,10 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Reports heartbeat metrics for the driver. */
-  private def reportHeartBeat(): Unit = {
+  private def reportHeartBeat(executorMetricsSource: Option[ExecutorMetricsSource]): Unit = {
     val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
+    executorMetricsSource.foreach(_.updateMetricsSnapshot(currentMetrics))
+
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
     driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
@@ -2756,9 +2779,13 @@ object SparkContext extends Logging {
       } else {
         executorCores.get
       }
+      // some cluster managers don't set the EXECUTOR_CORES config by default (standalone
+      // and mesos coarse grained), so we can't rely on that config for those.
+      val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
+        (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
 
       // Number of cores per executor must meet at least one task requirement.
-      if (execCores < taskCores) {
+      if (shouldCheckExecCores && execCores < taskCores) {
         throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
           s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
       }
@@ -2766,11 +2793,14 @@ object SparkContext extends Logging {
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
       val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-      val executorResourcesAndAmounts =
-        parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
+      val executorResourcesAndAmounts = parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
           .map(request => (request.id.resourceName, request.amount)).toMap
-      var numSlots = execCores / taskCores
-      var limitingResourceName = "CPU"
+
+      var (numSlots, limitingResourceName) = if (shouldCheckExecCores) {
+        (execCores / taskCores, "CPU")
+      } else {
+        (-1, "")
+      }
 
       taskResourceRequirements.foreach { taskReq =>
         // Make sure the executor resources were specified through config.
@@ -2790,21 +2820,48 @@ object SparkContext extends Logging {
             s" = ${taskReq.amount}")
         }
         // Compare and update the max slots each executor can provide.
-        val resourceNumSlots = execAmount / taskReq.amount
+        // If the configured amount per task was < 1.0, a task is subdividing
+        // executor resources. If the amount per task was > 1.0, the task wants
+        // multiple executor resources.
+        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
+          if (shouldCheckExecCores) {
+            throw new IllegalArgumentException("The number of slots on an executor has to be " +
+              "limited by the number of cores, otherwise you waste resources and " +
+              "dynamic allocation doesn't work properly. Your configuration has " +
+              s"core/task cpu slots = ${numSlots} and " +
+              s"${taskReq.resourceName} = ${resourceNumSlots}. " +
+              "Please adjust your configuration so that all resources require same number " +
+              "of executor slots.")
+          }
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
         }
       }
-      // There have been checks above to make sure the executor resources were specified and are
-      // large enough if any task resources were specified.
+      if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sc.conf)) {
+        // if we can't rely on the executor cores config throw a warning for user
+        logWarning("Please ensure that the number of slots available on your " +
+          "executors is limited by the number of cores to task cpus and not another " +
+          "custom resource. If cores is not the limiting resource then dynamic " +
+          "allocation will not work properly!")
+      }
+      // warn if we would waste any resources due to another resource limiting the number of
+      // slots on an executor
       taskResourceRequirements.foreach { taskReq =>
         val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
-        if (taskReq.amount * numSlots < execAmount) {
+        if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
+          val taskReqStr = if (taskReq.numParts > 1) {
+            s"${taskReq.amount}/${taskReq.numParts}"
+          } else {
+            s"${taskReq.amount}"
+          }
+          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execAmount}, task = ${taskReq.amount}) will result in wasted " +
-            s"resources due to resource ${limitingResourceName} limiting the number of " +
-            s"runnable tasks per executor to: ${numSlots}. Please adjust your configuration."
+            s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+            s"runnable tasks = ${resourceNumSlots}) will " +
+            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
+            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
+            s"your configuration."
           if (Utils.isTesting) {
             throw new SparkException(message)
           } else {
@@ -2863,6 +2920,14 @@ object SparkContext extends Logging {
             "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
         }
+
+        // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
+        // to false because this mode is intended to be used for testing and in this case all the
+        // executors are running on the same host. So if host local reading was enabled here then
+        // testing of the remote fetching would be secondary as setting this config explicitly to
+        // false would be required in most of the unit test (despite the fact that remote fetching
+        // is much more frequent in production).
+        sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(

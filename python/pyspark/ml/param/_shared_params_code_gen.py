@@ -123,6 +123,8 @@ if __name__ == "__main__":
         ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
         ("tol", "the convergence tolerance for iterative algorithms (>= 0).", None,
          "TypeConverters.toFloat"),
+        ("relativeError", "the relative target precision for the approximate quantile " +
+         "algorithm. Must be in the range [0, 1]", "0.001", "TypeConverters.toFloat"),
         ("stepSize", "Step size to be used for each iteration of optimization (>= 0).", None,
          "TypeConverters.toFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +

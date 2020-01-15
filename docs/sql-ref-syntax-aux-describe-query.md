@@ -26,7 +26,7 @@ describe the query output.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} [QUERY] input_statement
+{ DESC | DESCRIBE } [ QUERY ] input_statement
 {% endhighlight %}
 
 ### Parameters
@@ -62,7 +62,7 @@ DESCRIBE QUERY select age, sum(age) FROM person GROUP BY age;
   |sum(age)|bigint   |null      |
   +--------+---------+----------+
 
--- Returns column metadata information for common table experession (`CTE`).
+-- Returns column metadata information for common table expression (`CTE`).
 DESCRIBE QUERY WITH all_names_cte
   AS (SELECT name from person) SELECT * FROM all_names_cte;
   +--------+---------+-------+

@@ -96,13 +96,15 @@ private[ml] class WeightedLeastSquares(
    */
   def fit(
       instances: RDD[Instance],
-      instr: OptionalInstrumentation = OptionalInstrumentation.create(classOf[WeightedLeastSquares])
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(
+        classOf[WeightedLeastSquares]),
+      depth: Int = 2
     ): WeightedLeastSquaresModel = {
     if (regParam == 0.0) {
       instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
     }
 
-    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
+    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_), depth)
     summary.validate()
     instr.logInfo(s"Number of instances: ${summary.count}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k

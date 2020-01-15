@@ -24,6 +24,18 @@ grammar SqlBase;
   public boolean legacy_setops_precedence_enbled = false;
 
   /**
+   * When false, a literal with an exponent would be converted into
+   * double type rather than decimal type.
+   */
+  public boolean legacy_exponent_literal_as_decimal_enabled = false;
+
+  /**
+   * When false, CREATE TABLE syntax without a provider will use
+   * the value of spark.sql.sources.default as its provider.
+   */
+  public boolean legacy_create_hive_table_by_default_enabled = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -46,9 +58,9 @@ grammar SqlBase;
   }
 
   /**
-   * When true, ANSI SQL parsing mode is enabled.
+   * When true, the behavior of keywords follows ANSI SQL standard.
    */
-  public boolean ansi = false;
+  public boolean SQL_standard_keyword_behavior = false;
 }
 
 singleStatement
@@ -79,36 +91,34 @@ singleTableSchema
     : colTypeList EOF
     ;
 
-singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
-    ;
-
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE (database | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
-        ((COMMENT comment=STRING) |
+    | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
+        (commentSpec |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
-    | ALTER database db=errorCapturingIdentifier
-        SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
-    | ALTER database db=errorCapturingIdentifier
-        SET locationSpec                                               #setDatabaseLocation
-    | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier
+    | ALTER namespace multipartIdentifier
+        SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
+    | ALTER namespace multipartIdentifier
+        SET locationSpec                                               #setNamespaceLocation
+    | ALTER namespace multipartIdentifier
+        SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
+    | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader ('(' colTypeList ')')? tableProvider
-        ((OPTIONS options=tablePropertyList) |
-        (PARTITIONED BY partitioning=transformList) |
-        bucketSpec |
-        locationSpec |
-        (COMMENT comment=STRING) |
-        (TBLPROPERTIES tableProps=tablePropertyList))*
+    | {!legacy_create_hive_table_by_default_enabled}?
+        createTableHeader ('(' colTypeList ')')? tableProvider?
+        createTableClauses
+        (AS? query)?                                                   #createTable
+    | {legacy_create_hive_table_by_default_enabled}?
+        createTableHeader ('(' colTypeList ')')? tableProvider
+        createTableClauses
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        ((COMMENT comment=STRING) |
+        (commentSpec |
         (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
         PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
@@ -119,14 +129,14 @@ statement
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier locationSpec?                      #createTableLike
-    | replaceTableHeader ('(' colTypeList ')')? tableProvider
-        ((OPTIONS options=tablePropertyList) |
-        (PARTITIONED BY partitioning=transformList) |
-        bucketSpec |
+        LIKE source=tableIdentifier
+        (tableProvider |
+        rowFormat |
+        createFileFormat |
         locationSpec |
-        (COMMENT comment=STRING) |
-        (TBLPROPERTIES tableProps=tablePropertyList))*
+        (TBLPROPERTIES tableProps=tablePropertyList))*                 #createTableLike
+    | replaceTableHeader ('(' colTypeList ')')? tableProvider
+        createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
@@ -136,77 +146,83 @@ statement
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+    | ALTER TABLE table=multipartIdentifier
+        RENAME COLUMN
+        from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
+        DROP (COLUMN | COLUMNS)
+        '(' columns=multipartIdentifierList ')'                        #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) '(' columns=qualifiedNameList ')'      #dropTableColumns
-    | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=qualifiedNameList              #dropTableColumns
-    | ALTER (TABLE | VIEW) from=tableIdentifier
-        RENAME TO to=tableIdentifier                                   #renameTable
+        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
+    | ALTER (TABLE | VIEW) from=multipartIdentifier
+        RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
-    | ALTER TABLE multipartIdentifier
-        (ALTER | CHANGE) COLUMN? qualifiedName
-        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
-    | ALTER TABLE tableIdentifier partitionSpec?
+    | ALTER TABLE table=multipartIdentifier
+        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
+        (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
+    | ALTER TABLE table=multipartIdentifier
+        ALTER COLUMN? column=multipartIdentifier
+        setOrDrop=(SET | DROP) NOT NULL                                #alterColumnNullability
+    | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
-        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+        colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
-    | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
-    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
-    | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
-    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
+    | ALTER TABLE multipartIdentifier
+        (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
-        VIEW (IF NOT EXISTS)? tableIdentifier
+        VIEW (IF NOT EXISTS)? multipartIdentifier
         identifierCommentList?
-        ((COMMENT STRING) |
+        (commentSpec |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES tablePropertyList))*
         AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
-    | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
+    | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
-        qualifiedName AS className=STRING
+        multipartIdentifier AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
-    | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
-    | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
+    | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW TBLPROPERTIES table=tableIdentifier
+    | SHOW TBLPROPERTIES table=multipartIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
-    | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
+    | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
+        ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
-        (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
+        (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
+    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
+    | (DESC | DESCRIBE) namespace EXTENDED?
+        multipartIdentifier                                            #describeNamespace
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
+    | COMMENT ON namespace multipartIdentifier IS
+        comment=(STRING | NULL)                                        #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
@@ -217,12 +233,10 @@ statement
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
-    | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
-    | UPDATE multipartIdentifier tableAlias setClause whereClause?     #updateTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -271,7 +285,6 @@ unsupportedHiveNativeCommands
     | kw1=COMMIT
     | kw1=ROLLBACK
     | kw1=DFS
-    | kw1=DELETE kw2=FROM
     ;
 
 createTableHeader
@@ -298,6 +311,10 @@ locationSpec
     : LOCATION STRING
     ;
 
+commentSpec
+    : COMMENT STRING
+    ;
+
 query
     : ctes? queryTerm queryOrganization
     ;
@@ -321,8 +338,9 @@ partitionVal
     : identifier (EQ constant)?
     ;
 
-database
-    : DATABASE
+namespace
+    : NAMESPACE
+    | DATABASE
     | SCHEMA
     ;
 
@@ -347,7 +365,16 @@ namedQuery
     ;
 
 tableProvider
-    : USING qualifiedName
+    : USING multipartIdentifier
+    ;
+
+createTableClauses
+    :((OPTIONS options=tablePropertyList) |
+     (PARTITIONED BY partitioning=transformList) |
+     bucketSpec |
+     locationSpec |
+     commentSpec |
+     (TBLPROPERTIES tableProps=tablePropertyList))*
     ;
 
 tablePropertyList
@@ -399,6 +426,14 @@ resource
 dmlStatementNoWith
     : insertInto queryTerm queryOrganization                                       #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
+    | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
+    | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
+    | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
+        USING (source=multipartIdentifier |
+          '(' sourceQuery=query')') sourceAlias=tableAlias
+        ON mergeCondition=booleanExpression
+        matchedClause*
+        notMatchedClause*                                                          #mergeIntoTable
     ;
 
 queryOrganization
@@ -483,10 +518,33 @@ selectClause
     ;
 
 setClause
-    : SET assign (',' assign)*
+    : SET assignmentList
     ;
 
-assign
+matchedClause
+    : WHEN MATCHED (AND matchedCond=booleanExpression)? THEN matchedAction
+    ;
+notMatchedClause
+    : WHEN NOT MATCHED (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    ;
+
+matchedAction
+    : DELETE
+    | UPDATE SET ASTERISK
+    | UPDATE SET assignmentList
+    ;
+
+notMatchedAction
+    : INSERT ASTERISK
+    | INSERT '(' columns=multipartIdentifierList ')'
+        VALUES '(' expression (',' expression)* ')'
+    ;
+
+assignmentList
+    : assignment (',' assignment)*
+    ;
+
+assignment
     : key=multipartIdentifier EQ value=expression
     ;
 
@@ -603,7 +661,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : identifier (COMMENT STRING)?
+    : identifier commentSpec?
     ;
 
 relationPrimary
@@ -634,6 +692,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+multipartIdentifierList
+    : multipartIdentifier (',' multipartIdentifier)*
     ;
 
 multipartIdentifier
@@ -687,7 +749,8 @@ predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
-    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | NOT? kind=RLIKE pattern=valueExpression
+    | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
@@ -718,10 +781,10 @@ primaryExpression
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (OVER windowSpec)?                                                                      #functionCall
-    | IDENTIFIER '->' expression                                                               #lambda
-    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
+    | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
+       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
+    | identifier '->' expression                                                               #lambda
+    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -761,12 +824,23 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
@@ -776,27 +850,16 @@ intervalValue
 
 intervalUnit
     : DAY
-    | DAYS
     | HOUR
-    | HOURS
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
     | MINUTE
-    | MINUTES
     | MONTH
-    | MONTHS
     | SECOND
-    | SECONDS
-    | WEEK
-    | WEEKS
     | YEAR
-    | YEARS
+    | identifier
     ;
 
 colPosition
-    : FIRST | AFTER qualifiedName
+    : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
 dataType
@@ -811,7 +874,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
+    : name=multipartIdentifier dataType (NOT NULL)? commentSpec? colPosition?
     ;
 
 colTypeList
@@ -819,7 +882,7 @@ colTypeList
     ;
 
 colType
-    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
     ;
 
 complexColTypeList
@@ -827,7 +890,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (COMMENT STRING)?
+    : identifier ':' dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -870,6 +933,13 @@ qualifiedNameList
     : qualifiedName (',' qualifiedName)*
     ;
 
+functionName
+    : qualifiedName
+    | FILTER
+    | LEFT
+    | RIGHT
+    ;
+
 qualifiedName
     : identifier ('.' identifier)*
     ;
@@ -889,14 +959,14 @@ errorCapturingIdentifierExtra
 
 identifier
     : strictIdentifier
-    | {!ansi}? strictNonReserved
+    | {!SQL_standard_keyword_behavior}? strictNonReserved
     ;
 
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
-    | {ansi}? ansiNonReserved #unquotedIdentifier
-    | {!ansi}? nonReserved    #unquotedIdentifier
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -904,7 +974,9 @@ quotedIdentifier
     ;
 
 number
-    : MINUS? DECIMAL_VALUE            #decimalLiteral
+    : {!legacy_exponent_literal_as_decimal_enabled}? MINUS? EXPONENT_VALUE #exponentLiteral
+    | {!legacy_exponent_literal_as_decimal_enabled}? MINUS? DECIMAL_VALUE  #decimalLiteral
+    | {legacy_exponent_literal_as_decimal_enabled}? MINUS? (EXPONENT_VALUE | DECIMAL_VALUE) #legacyDecimalLiteral
     | MINUS? INTEGER_VALUE            #integerLiteral
     | MINUS? BIGINT_LITERAL           #bigIntLiteral
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
@@ -913,13 +985,13 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `spark.sql.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
 // - Non-reserved keywords:
 //     Keywords that have a special meaning only in particular contexts and can be used as
-//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     identifiers in other contexts. For example, `EXPLAIN SELECT ...` is a command, but EXPLAIN
 //     can be used as identifiers in other places.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
@@ -957,7 +1029,6 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
-    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -988,7 +1059,6 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
-    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1015,12 +1085,8 @@ ansiNonReserved
     | LOGICAL
     | MACRO
     | MAP
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
-    | MINUTES
-    | MONTHS
+    | MATCHED
+    | MERGE
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1034,6 +1100,7 @@ ansiNonReserved
     | OVER
     | OVERLAY
     | OVERWRITE
+    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1067,7 +1134,6 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
-    | SECONDS
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
@@ -1105,15 +1171,12 @@ ansiNonReserved
     | USE
     | VALUES
     | VIEW
-    | WEEK
-    | WEEKS
     | WINDOW
-    | YEARS
     ;
 
-// When `spark.sql.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `spark.sql.ansi.enabled=true`.
+//     Same definition as the one when `SQL_standard_keyword_behavior=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
@@ -1190,7 +1253,6 @@ nonReserved
     | DATABASE
     | DATABASES
     | DAY
-    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1206,6 +1268,7 @@ nonReserved
     | DROP
     | ELSE
     | END
+    | ESCAPE
     | ESCAPED
     | EXCHANGE
     | EXISTS
@@ -1216,6 +1279,7 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FILTER
     | FIELDS
     | FILEFORMAT
     | FIRST
@@ -1234,7 +1298,6 @@ nonReserved
     | GROUPING
     | HAVING
     | HOUR
-    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1266,14 +1329,10 @@ nonReserved
     | LOGICAL
     | MACRO
     | MAP
-    | MICROSECOND
-    | MICROSECONDS
-    | MILLISECOND
-    | MILLISECONDS
+    | MATCHED
+    | MERGE
     | MINUTE
-    | MINUTES
     | MONTH
-    | MONTHS
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1294,6 +1353,7 @@ nonReserved
     | OVERLAPS
     | OVERLAY
     | OVERWRITE
+    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1330,7 +1390,6 @@ nonReserved
     | ROWS
     | SCHEMA
     | SECOND
-    | SECONDS
     | SELECT
     | SEPARATED
     | SERDE
@@ -1379,14 +1438,11 @@ nonReserved
     | USER
     | VALUES
     | VIEW
-    | WEEK
-    | WEEKS
     | WHEN
     | WHERE
     | WINDOW
     | WITH
     | YEAR
-    | YEARS
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
@@ -1449,7 +1505,6 @@ DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DAY: 'DAY';
-DAYS: 'DAYS';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1464,6 +1519,7 @@ DISTRIBUTE: 'DISTRIBUTE';
 DROP: 'DROP';
 ELSE: 'ELSE';
 END: 'END';
+ESCAPE: 'ESCAPE';
 ESCAPED: 'ESCAPED';
 EXCEPT: 'EXCEPT';
 EXCHANGE: 'EXCHANGE';
@@ -1476,6 +1532,7 @@ EXTRACT: 'EXTRACT';
 FALSE: 'FALSE';
 FETCH: 'FETCH';
 FIELDS: 'FIELDS';
+FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';
@@ -1494,7 +1551,6 @@ GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
 HOUR: 'HOUR';
-HOURS: 'HOURS';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1530,14 +1586,10 @@ LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 MACRO: 'MACRO';
 MAP: 'MAP';
-MICROSECOND: 'MICROSECOND';
-MICROSECONDS: 'MICROSECONDS';
-MILLISECOND: 'MILLISECOND';
-MILLISECONDS: 'MILLISECONDS';
+MATCHED: 'MATCHED';
+MERGE: 'MERGE';
 MINUTE: 'MINUTE';
-MINUTES: 'MINUTES';
 MONTH: 'MONTH';
-MONTHS: 'MONTHS';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
@@ -1560,6 +1612,7 @@ OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
 OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
+OWNER: 'OWNER';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
@@ -1597,7 +1650,6 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 SCHEMA: 'SCHEMA';
 SECOND: 'SECOND';
-SECONDS: 'SECONDS';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -1650,14 +1702,11 @@ USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
 VIEW: 'VIEW';
-WEEK: 'WEEK';
-WEEKS: 'WEEKS';
 WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
-YEARS: 'YEARS';
 //============================
 // End of the keywords list
 //============================
@@ -1704,9 +1753,13 @@ INTEGER_VALUE
     : DIGIT+
     ;
 
-DECIMAL_VALUE
+EXPONENT_VALUE
     : DIGIT+ EXPONENT
-    | DECIMAL_DIGITS EXPONENT? {isValidDecimal()}?
+    | DECIMAL_DIGITS EXPONENT {isValidDecimal()}?
+    ;
+
+DECIMAL_VALUE
+    : DECIMAL_DIGITS {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL

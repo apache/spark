@@ -25,14 +25,14 @@ A column is associated with a data type and represents
 a specific attribute of an entity (for example, `age` is a column of an
 entity called `person`). Sometimes, the value of a column
 specific to a row is not known at the time the row comes into existence.
-In `SQL`, such values are represnted as `NULL`. This section details the
+In `SQL`, such values are represented as `NULL`. This section details the
 semantics of `NULL` values handling in various operators, expressions and
 other `SQL` constructs.
 
 1. [Null handling in comparison operators](#comp-operators)
 2. [Null handling in Logical operators](#logical-operators)
 3. [Null handling in Expressions](#expressions)
-      1. [Null handling in null-in-tolerant expressions](#null-in-tolerant)
+      1. [Null handling in null-intolerant expressions](#null-intolerant)
       2. [Null handling Expressions that can process null value operands](#can-process-null)
       3. [Null handling in built-in aggregate expressions](#built-in-aggregate)
 4. [Null handling in WHERE, HAVING and JOIN conditions](#condition-expressions)
@@ -61,10 +61,10 @@ the `age` column and this table will be used in various examples in the sections
 <tr><td>700</td><td>Dan</td><td>50</td></tr>
 </table>
 
-### Comparision operators <a name="comp-operators"></a>
+### Comparison operators <a name="comp-operators"></a>
 
 Apache spark supports the standard comparison operators such as '>', '>=', '=', '<' and '<='.
-The result of these operators is unknown or `NULL` when one of the operarands or both the operands are
+The result of these operators is unknown or `NULL` when one of the operands or both the operands are
 unknown or `NULL`. In order to compare the `NULL` values for equality, Spark provides a null-safe
 equal operator ('<=>'), which returns `False` when one of the operand is `NULL` and returns 'True` when
 both the operands are `NULL`. The following table illustrates the behaviour of comparison operators when
@@ -152,7 +152,7 @@ SELECT NULL <=> NULL;
 Spark supports standard logical operators such as `AND`, `OR` and `NOT`. These operators take `Boolean` expressions
 as the arguments and return a `Boolean` value.  
 
-The following tables illustrate the behavior of logical opeators when one or both operands are `NULL`.
+The following tables illustrate the behavior of logical operators when one or both operands are `NULL`.
 
 <table class="tsclass" border="1">
   <tr>
@@ -236,12 +236,12 @@ The comparison operators and logical operators are treated as expressions in
 Spark. Other than these two kinds of expressions, Spark supports other form of
 expressions such as function expressions, cast expressions, etc. The expressions
 in Spark can be broadly classified as :
-- Null in-tolerent expressions
+- Null intolerant expressions
 - Expressions that can process `NULL` value operands
   - The result of these expressions depends on the expression itself.
 
-#### Null in-tolerant expressions <a name="null-in-tolerant"></a>
-Null in-tolerant expressions return `NULL` when one or more arguments of 
+#### Null intolerant expressions <a name="null-intolerant"></a>
+Null intolerant expressions return `NULL` when one or more arguments of 
 expression are `NULL` and most of the expressions fall in this category.
 
 ##### Examples
@@ -297,7 +297,7 @@ SELECT isnull(null) AS expression_output;
   |true             |
   +-----------------+
 
--- Returns the first occurence of non `NULL` value.
+-- Returns the first occurrence of non `NULL` value.
 SELECT coalesce(null, null, 3, null) AS expression_output;
   +-----------------+
   |expression_output|
@@ -460,7 +460,7 @@ WHERE p1.age <=> p2.age
 {% endhighlight %}
 
 ### Aggregate operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
-As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparision-operators),
+As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparison-operators),
 two `NULL` values are not equal. However, for the purpose of grouping and distinct processing, the two or more
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
@@ -604,13 +604,14 @@ SELECT name, age FROM unknown_age;
 ### EXISTS/NOT EXISTS Subquery <a name="exists-not-exists"></a>
 In Spark, EXISTS and NOT EXISTS expressions are allowed inside a WHERE clause. 
 These are boolean expressions which return either `TRUE` or
-`FALSE`. In otherwords, EXISTS is a membership condition and returns `TRUE`
+`FALSE`. In other words, EXISTS is a membership condition and returns `TRUE`
 when the subquery it refers to returns one or more rows. Similary, NOT EXISTS
 is a non-membership condition and returns TRUE when no rows or zero rows are
 returned from the subquery.
 
 These two expressions are not affected by presence of NULL in the result of
-the subquery. 
+the subquery. They are normally faster because they can be converted to
+semijoins / anti-semijoins without special provisions for null awareness.
 
 #### Examples
 {% highlight sql %}
@@ -668,6 +669,10 @@ To summarize, below are the rules for computing the result of an `IN` expression
   list does not contain NULL values
 - UNKNOWN is returned when the value is `NULL`, or the non-NULL value is not found in the list
   and the list contains at least one `NULL` value
+
+NOT IN always returns UNKNOWN when the list contains `NULL`, regardless of the input value.
+This is because IN returns UNKNOWN if the value is not in the list containing `NULL`,
+and because NOT UNKNOWN is again UNKNOWN.
  
 #### Examples
 {% highlight sql %}

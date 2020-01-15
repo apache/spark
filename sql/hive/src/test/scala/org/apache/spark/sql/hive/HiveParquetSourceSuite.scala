@@ -212,7 +212,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
 
       val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-      val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
+      val df2 = df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
       intercept[Throwable](df2.write.parquet(filePath))
 
       val df3 = df2.toDF("str", "max_int")

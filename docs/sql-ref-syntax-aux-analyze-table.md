@@ -25,20 +25,33 @@ The `ANALYZE TABLE` statement collects statistics about the table to be used by 
 
 ### Syntax
 {% highlight sql %}
-ANALYZE TABLE table_name [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) ]
+ANALYZE TABLE table_identifier [ partition_spec ]
     COMPUTE STATISTICS [ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]
 
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, partition statistics is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 <dl>
