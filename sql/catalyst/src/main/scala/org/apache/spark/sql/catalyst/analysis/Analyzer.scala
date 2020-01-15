@@ -454,7 +454,7 @@ class Analyzer(
         gid: Attribute): LogicalPlan = {
       // Change the nullability of group by aliases if necessary. For example, if we have
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullabilty of b to be TRUE.
+      // should change the nullability of b to be TRUE.
       // TODO: For Cube/Rollup just set nullability to be `true`.
       val expandedAttributes = groupByAliases.map { alias =>
         if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
