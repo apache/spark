@@ -2754,7 +2754,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val defaultProvider = conf.defaultDataSourceName
     val provider =
       Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
-
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
