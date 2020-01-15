@@ -16,14 +16,27 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""This module is deprecated. Please use `airflow.providers.microsoft.azure.sensors.azure_cosmos`."""
 
-import warnings
+import unittest
 
-# pylint: disable=unused-import
-from airflow.providers.microsoft.azure.sensors.azure_cosmos import AzureCosmosDocumentSensor  # noqa
+from airflow.models import Connection
+from airflow.providers.microsoft.azure.hooks.azure_container_registry import AzureContainerRegistryHook
+from airflow.utils import db
 
-warnings.warn(
-    "This module is deprecated. Please use `airflow.providers.microsoft.azure.sensors.azure_cosmos`.",
-    DeprecationWarning, stacklevel=2
-)
+
+class TestAzureContainerRegistryHook(unittest.TestCase):
+
+    def test_get_conn(self):
+        db.merge_conn(
+            Connection(
+                conn_id='azure_container_registry',
+                login='myuser',
+                password='password',
+                host='test.cr',
+            )
+        )
+        hook = AzureContainerRegistryHook(conn_id='azure_container_registry')
+        self.assertIsNotNone(hook.connection)
+        self.assertEqual(hook.connection.username, 'myuser')
+        self.assertEqual(hook.connection.password, 'password')
+        self.assertEqual(hook.connection.server, 'test.cr')

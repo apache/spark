@@ -221,29 +221,29 @@ These integrations allow you to perform various operations within the Microsoft 
      - Sensors
 
    * - `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`__
-     - :mod:`airflow.contrib.hooks.wasb_hook`
-     - :mod:`airflow.contrib.operators.wasb_delete_blob_operator`
-     - :mod:`airflow.contrib.sensors.wasb_sensor`
+     - :mod:`airflow.providers.microsoft.azure.hooks.wasb`
+     - :mod:`airflow.providers.microsoft.azure.operators.wasb_delete_blob`
+     - :mod:`airflow.providers.microsoft.azure.sensors.wasb`
 
    * - `Azure Container Instances <https://azure.microsoft.com/en-us/services/container-instances/>`__
-     - :mod:`airflow.contrib.hooks.azure_container_instance_hook`,
-       :mod:`airflow.contrib.hooks.azure_container_registry_hook`,
-       :mod:`airflow.contrib.hooks.azure_container_volume_hook`
-     - :mod:`airflow.contrib.operators.azure_container_instances_operator`
+     - :mod:`airflow.providers.microsoft.azure.hooks.azure_container_instance`,
+       :mod:`airflow.providers.microsoft.azure.hooks.azure_container_registry`,
+       :mod:`airflow.providers.microsoft.azure.hooks.azure_container_volume`
+     - :mod:`airflow.providers.microsoft.azure.operators.azure_container_instances`
      -
 
    * - `Azure Cosmos DB <https://azure.microsoft.com/en-us/services/cosmos-db/>`__
-     - :mod:`airflow.contrib.hooks.azure_cosmos_hook`
-     - :mod:`airflow.contrib.operators.azure_cosmos_operator`
-     - :mod:`airflow.contrib.sensors.azure_cosmos_sensor`
+     - :mod:`airflow.providers.microsoft.azure.hooks.azure_cosmos`
+     - :mod:`airflow.providers.microsoft.azure.operators.azure_cosmos`
+     - :mod:`airflow.providers.microsoft.azure.sensors.azure_cosmos`
 
    * - `Azure Data Lake Storage <https://azure.microsoft.com/en-us/services/storage/data-lake-storage/>`__
-     - :mod:`airflow.contrib.hooks.azure_data_lake_hook`
-     - :mod:`airflow.contrib.operators.adls_list_operator`
+     - :mod:`airflow.providers.microsoft.azure.hooks.azure_data_lake`
+     - :mod:`airflow.providers.microsoft.azure.operators.adls_list`
      -
 
    * - `Azure Files <https://azure.microsoft.com/en-us/services/storage/files/>`__
-     - :mod:`airflow.contrib.hooks.azure_fileshare_hook`
+     - :mod:`airflow.providers.microsoft.azure.hooks.azure_fileshare`
      -
      -
 

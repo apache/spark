@@ -216,6 +216,31 @@ HOOK = [
         'airflow.hooks.filesystem.FSHook',
         'airflow.contrib.hooks.fs_hook.FSHook',
     ),
+    (
+        'airflow.providers.microsoft.azure.hooks.azure_container_instance.AzureContainerInstanceHook',
+        'airflow.contrib.hooks.azure_container_instance_hook.AzureContainerInstanceHook',
+    ),
+    (
+        'airflow.providers.microsoft.azure.hooks.azure_container_registry.AzureContainerRegistryHook',
+        'airflow.contrib.hooks.azure_container_registry_hook.AzureContainerRegistryHook',
+    ),
+    (
+        'airflow.providers.microsoft.azure.hooks.azure_container_volume.AzureContainerVolumeHook',
+        'airflow.contrib.hooks.azure_container_volume_hook.AzureContainerVolumeHook',
+    ),
+    (
+        'airflow.providers.microsoft.azure.hooks.azure_cosmos.AzureCosmosDBHook',
+        'airflow.contrib.hooks.azure_cosmos_hook.AzureCosmosDBHook',
+    ),
+    (
+        'airflow.providers.microsoft.azure.hooks.azure_fileshare.AzureFileShareHook',
+        'airflow.contrib.hooks.azure_fileshare_hook.AzureFileShareHook',
+    ),
+    (
+        'airflow.providers.microsoft.azure.hooks.wasb.WasbHook',
+        'airflow.contrib.hooks.wasb_hook.WasbHook',
+    ),
+
 ]
 
 OPERATOR = [
@@ -869,6 +894,23 @@ OPERATOR = [
         'airflow.providers.apache.pig.operators.pig.PigOperator',
         'airflow.operators.pig_operator.PigOperator',
     ),
+    (
+        'airflow.providers.microsoft.azure.operators.adls_list.AzureDataLakeStorageListOperator',
+        'airflow.contrib.operators.adls_list_operator.AzureDataLakeStorageListOperator',
+    ),
+    (
+        'airflow.providers.microsoft.azure.operators'
+        '.azure_container_instances.AzureContainerInstancesOperator',
+        'airflow.contrib.operators.azure_container_instances_operator.AzureContainerInstancesOperator',
+    ),
+    (
+        'airflow.providers.microsoft.azure.operators.azure_cosmos.AzureCosmosInsertDocumentOperator',
+        'airflow.contrib.operators.azure_cosmos_operator.AzureCosmosInsertDocumentOperator',
+    ),
+    (
+        'airflow.providers.microsoft.azure.operators.wasb_delete_blob.WasbDeleteBlobOperator',
+        'airflow.contrib.operators.wasb_delete_blob_operator.WasbDeleteBlobOperator',
+    ),
 ]
 
 SENSOR = [
@@ -950,6 +992,14 @@ SENSOR = [
     (
         'airflow.sensors.filesystem.FileSensor',
         'airflow.contrib.sensors.file_sensor.FileSensor',
+    ),
+    (
+        'airflow.providers.microsoft.azure.sensors.wasb.WasbBlobSensor',
+        'airflow.contrib.sensors.wasb_sensor.WasbBlobSensor',
+    ),
+    (
+        'airflow.providers.microsoft.azure.sensors.wasb.WasbPrefixSensor',
+        'airflow.contrib.sensors.wasb_sensor.WasbPrefixSensor',
     ),
 ]
 

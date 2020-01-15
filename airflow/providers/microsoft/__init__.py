@@ -16,27 +16,3 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
-import unittest
-
-from airflow.contrib.hooks.azure_container_registry_hook import AzureContainerRegistryHook
-from airflow.models import Connection
-from airflow.utils import db
-
-
-class TestAzureContainerRegistryHook(unittest.TestCase):
-
-    def test_get_conn(self):
-        db.merge_conn(
-            Connection(
-                conn_id='azure_container_registry',
-                login='myuser',
-                password='password',
-                host='test.cr',
-            )
-        )
-        hook = AzureContainerRegistryHook(conn_id='azure_container_registry')
-        self.assertIsNotNone(hook.connection)
-        self.assertEqual(hook.connection.username, 'myuser')
-        self.assertEqual(hook.connection.password, 'password')
-        self.assertEqual(hook.connection.server, 'test.cr')
