@@ -30,8 +30,9 @@ case class PruneShuffleAndSort() extends Rule[SparkPlan] {
         child.outputPartitioning match {
           case lower: HashPartitioning if upper.semanticEquals(lower) => child
           case _ @ PartitioningCollection(partitionings) =>
-            if (partitionings.exists{case lower: HashPartitioning =>
-              upper.semanticEquals(lower)
+            if (partitionings.exists{
+              case lower: HashPartitioning => upper.semanticEquals(lower)
+              case _ => false
             }) {
               child
             } else {
