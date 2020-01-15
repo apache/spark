@@ -22,7 +22,7 @@ set -ex
 echo "Asked to decommission"
 # Find the pid to signal
 date | tee -a ${LOG}
-WORKER_PID=$(ps axf | grep java | grep org.apache.spark.executor.CoarseGrainedExecutorBackend | grep -v grep)
+WORKER_PID=$(ps -o pid -C java | tail -n 1)
 echo "Using worker pid $WORKER_PID"
 kill -s SIGPWR ${WORKER_PID}
 # For now we expect this to timeout, since we don't start exiting the backend.
@@ -32,5 +32,4 @@ timeout 60 tail --pid=${WORKER_PID} -f /dev/null
 date
 echo "Done"
 date
-echo "Term log was:"
-cat $LOG
+sleep 30
