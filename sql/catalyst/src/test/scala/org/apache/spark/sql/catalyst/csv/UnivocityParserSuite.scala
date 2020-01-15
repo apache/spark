@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.sources.{EqualTo, Filter, LessThan, StringStartsWith}
+import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -273,21 +273,13 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("skipping rows using pushdown filters") {
     def check(
         input: String = "1,a",
-        dataSchema: String = "i INTEGER, s STRING",
-        requiredSchema: String = "i INTEGER",
+        dataSchema: StructType = StructType.fromDDL("i INTEGER, s STRING"),
+        requiredSchema: StructType = StructType.fromDDL("i INTEGER"),
         filters: Seq[Filter],
         expected: Seq[InternalRow]): Unit = {
-      def getSchema(str: String): StructType = str match {
-        case "" => new StructType()
-        case _ => StructType.fromDDL(str)
-      }
       Seq(false, true).foreach { columnPruning =>
         val options = new CSVOptions(Map.empty[String, String], columnPruning, "GMT")
-        val parser = new UnivocityParser(
-          getSchema(dataSchema),
-          getSchema(requiredSchema),
-          options,
-          filters)
+        val parser = new UnivocityParser(dataSchema, requiredSchema, options, filters)
         val actual = parser.parse(input)
         assert(actual === expected)
       }
@@ -296,15 +288,18 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     check(filters = Seq(), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 2)), expected = Seq())
-    check(requiredSchema = "s STRING", filters = Seq(StringStartsWith("s", "b")), expected = Seq())
     check(
-      requiredSchema = "i INTEGER, s STRING",
+      requiredSchema = StructType.fromDDL("s STRING"),
+      filters = Seq(StringStartsWith("s", "b")),
+      expected = Seq())
+    check(
+      requiredSchema = StructType.fromDDL("i INTEGER, s STRING"),
       filters = Seq(StringStartsWith("s", "a")),
       expected = Seq(InternalRow(1, UTF8String.fromString("a"))))
     check(
       input = "1,a,3.14",
-      dataSchema = "i INTEGER, s STRING, d DOUBLE",
-      requiredSchema = "i INTEGER, d DOUBLE",
+      dataSchema = StructType.fromDDL("i INTEGER, s STRING, d DOUBLE"),
+      requiredSchema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
 
@@ -315,8 +310,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
     val errMsg2 = intercept[IllegalArgumentException] {
       check(
-        dataSchema = "",
-        requiredSchema = "",
+        dataSchema = new StructType(),
+        requiredSchema = new StructType(),
         filters = Seq(EqualTo("i", 1)),
         expected = Seq(InternalRow.empty))
     }.getMessage
