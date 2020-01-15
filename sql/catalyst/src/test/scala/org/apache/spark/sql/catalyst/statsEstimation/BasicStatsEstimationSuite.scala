@@ -57,24 +57,24 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("limit estimation: limit < child's rowCount") {
-    val localLimit = LocalLimit(Literal(2), plan)
-    val globalLimit = GlobalLimit(Literal(2), plan)
+    val localLimit = LocalLimit(Literal(2), Literal(0), plan)
+    val globalLimit = GlobalLimit(Literal(2), Literal(0), plan)
     // LocalLimit's stats is just its child's stats except column stats
     checkStats(localLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
     checkStats(globalLimit, Statistics(sizeInBytes = 24, rowCount = Some(2)))
   }
 
   test("limit estimation: limit > child's rowCount") {
-    val localLimit = LocalLimit(Literal(20), plan)
-    val globalLimit = GlobalLimit(Literal(20), plan)
+    val localLimit = LocalLimit(Literal(20), Literal(0), plan)
+    val globalLimit = GlobalLimit(Literal(20), Literal(0), plan)
     checkStats(localLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
     // Limit is larger than child's rowCount, so GlobalLimit's stats is equal to its child's stats.
     checkStats(globalLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
   test("limit estimation: limit = 0") {
-    val localLimit = LocalLimit(Literal(0), plan)
-    val globalLimit = GlobalLimit(Literal(0), plan)
+    val localLimit = LocalLimit(Literal(0), Literal(0), plan)
+    val globalLimit = GlobalLimit(Literal(0), Literal(0), plan)
     val stats = Statistics(sizeInBytes = 1, rowCount = Some(0))
     checkStats(localLimit, stats)
     checkStats(globalLimit, stats)

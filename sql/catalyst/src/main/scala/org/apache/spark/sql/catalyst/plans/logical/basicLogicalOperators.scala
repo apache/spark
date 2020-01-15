@@ -745,6 +745,21 @@ case class Pivot(
 }
 
 /**
+ * A logical offset, which may removing a specified number of rows from the beginning of the
+ * output of child logical plan.
+ */
+case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    import scala.math.max
+    offsetExpr match {
+      case IntegerLiteral(offset) => child.maxRows.map { x => max(x - offset, 0) }
+      case _ => None
+    }
+  }
+}
+
+/**
  * A constructor for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
@@ -766,24 +781,33 @@ case class Pivot(
  * So we introduced LocalLimit and GlobalLimit in the logical plan node for limit pushdown.
  */
 object Limit {
-  def apply(limitExpr: Expression, child: LogicalPlan): UnaryNode = {
-    GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
+  val INVALID_LIMIT = Literal(-1)
+  def apply(
+    limitExpr: Expression,
+    offsetExpr: Expression = Literal(0),
+    child: LogicalPlan): UnaryNode = {
+    GlobalLimit(limitExpr, offsetExpr, LocalLimit(limitExpr, offsetExpr, child))
   }
 
-  def unapply(p: GlobalLimit): Option[(Expression, LogicalPlan)] = {
+  def unapply(p: GlobalLimit): Option[(Expression, Expression, LogicalPlan)] = {
     p match {
-      case GlobalLimit(le1, LocalLimit(le2, child)) if le1 == le2 => Some((le1, child))
+      case GlobalLimit(le1, oe1, LocalLimit(le2, oe2, child)) if le1 == le2 && oe1 == oe2 =>
+        Some((le1, oe1, child))
       case _ => None
     }
   }
 }
 
 /**
- * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
+ * A global (coordinated) limit. This operator can remove at most `offsetExpr` number
+ * and emit at most `limitExpr` number in total.
  *
  * See [[Limit]] for more information.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+case class GlobalLimit(
+  limitExpr: Expression,
+  offsetExpr: Expression,
+  child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -794,12 +818,15 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
 }
 
 /**
- * A partition-local (non-coordinated) limit. This operator can emit at most `limitExpr` number
- * of tuples on each physical partition.
+ * A partition-local (non-coordinated) limit. This operator remove at most `offsetExpr`
+ *  number and emit at most `limitExpr` number of tuples on each physical partition.
  *
  * See [[Limit]] for more information.
  */
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+case class LocalLimit(
+  limitExpr: Expression,
+  offsetExpr: Expression,
+  child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def maxRowsPerPartition: Option[Long] = {

@@ -330,9 +330,11 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case GlobalLimit(limitExpr, _, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case LocalLimit(limitExpr, _, _) => checkLimitLikeClause("limit", limitExpr)
+
+          case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
