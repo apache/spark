@@ -150,21 +150,17 @@ case class AggregateExpression(
       case Final | Complete => ""
     }
     val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
-    mode match {
-      case Partial | Complete if filter.isDefined =>
-        s"$aggFuncStr filter ${filter.get.toString}"
-      case _ =>
-        aggFuncStr
+    filter match {
+      case Some(predicate) => s"$aggFuncStr filter $predicate"
+      case _ => aggFuncStr
     }
   }
 
   override def sql: String = {
     val aggFuncStr = aggregateFunction.sql(isDistinct)
-    mode match {
-      case Partial | Complete if filter.isDefined =>
-        s"$aggFuncStr FILTER ${filter.get.sql}"
-      case _ =>
-        aggFuncStr
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER ${predicate.sql}"
+      case _ => aggFuncStr
     }
   }
 }
