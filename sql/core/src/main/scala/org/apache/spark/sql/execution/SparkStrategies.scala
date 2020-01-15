@@ -84,7 +84,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
             if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Project(projectList, Sort(order, true, child)))
+        case Limit(
+            IntegerLiteral(limit),
+            IntegerLiteral(offset),
+            Project(projectList, Sort(order, true, child)))
             if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
@@ -96,7 +99,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
           if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
-      case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Project(projectList, Sort(order, true, child)))
+      case Limit(
+          IntegerLiteral(limit),
+          IntegerLiteral(offset),
+          Project(projectList, Sort(order, true, child)))
           if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
       case _ => Nil
