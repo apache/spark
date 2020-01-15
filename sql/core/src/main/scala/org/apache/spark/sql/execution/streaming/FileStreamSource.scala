@@ -357,7 +357,7 @@ object FileStreamSource {
   }
 
   private[sql] abstract class FileStreamSourceCleaner extends Logging {
-    private val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
+    val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
 
     private val cleanThreadPool: Option[ThreadPoolExecutor] = if (numThreads > 0) {
       logDebug(s"Cleaning file source on $numThreads separate thread(s)")
