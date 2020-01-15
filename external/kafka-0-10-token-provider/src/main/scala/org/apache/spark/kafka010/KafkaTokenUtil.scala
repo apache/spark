@@ -38,6 +38,7 @@ import org.apache.kafka.common.security.token.delegation.DelegationToken
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
@@ -290,17 +291,17 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  def isConnectorUsingCurrentToken(
+  def needTokenUpdate(
       sparkConf: SparkConf,
       params: ju.Map[String, Object],
       clusterConfig: Option[KafkaTokenClusterConf]): Boolean = {
-    if (sparkConf.getBoolean("spark.security.credentials.kafka.enabled", true) &&
+    if (HadoopDelegationTokenManager.isServiceEnabled(sparkConf, "kafka") &&
         clusterConfig.isDefined && params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
       logDebug("Delegation token used by connector, checking if uses the latest token.")
       val connectorJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
-      getTokenJaasParams(clusterConfig.get) == connectorJaasParams
+      getTokenJaasParams(clusterConfig.get) != connectorJaasParams
     } else {
-      true
+      false
     }
   }
 }
