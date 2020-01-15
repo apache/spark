@@ -152,7 +152,7 @@ case class AggregateExpression(
     }
     val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
     filter match {
-      case Some(predicate) => s"$aggFuncStr filter (where $predicate)"
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE $predicate)"
       case _ => aggFuncStr
     }
   }
