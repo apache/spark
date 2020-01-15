@@ -412,9 +412,9 @@ object SimplifyBinaryComparison
   private def canSimplifyComparison(
       left: Expression,
       right: Expression,
-      getNotNullExpressions: () => ExpressionSet): Boolean = {
+      notNullExpressions: => ExpressionSet): Boolean = {
     if (left.semanticEquals(right)) {
-      (!left.nullable && !right.nullable) || getNotNullExpressions().contains(left)
+      (!left.nullable && !right.nullable) || notNullExpressions.contains(left)
     } else {
       false
     }
@@ -430,20 +430,17 @@ object SimplifyBinaryComparison
         case _ => Seq.empty
       })
 
-      val getNotNullExpressions = () => notNullExpressions
-
       l transformExpressionsUp {
         // True with equality
         case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-        case a EqualTo b if canSimplifyComparison(a, b, getNotNullExpressions) => TrueLiteral
-        case a GreaterThanOrEqual b if canSimplifyComparison(a, b, getNotNullExpressions) =>
+        case a EqualTo b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+        case a GreaterThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) =>
           TrueLiteral
-        case a LessThanOrEqual b if canSimplifyComparison(a, b, getNotNullExpressions) =>
-          TrueLiteral
+        case a LessThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
 
         // False with inequality
-        case a GreaterThan b if canSimplifyComparison(a, b, getNotNullExpressions) => FalseLiteral
-        case a LessThan b if canSimplifyComparison(a, b, getNotNullExpressions) => FalseLiteral
+        case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+        case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
       }
   }
 }
