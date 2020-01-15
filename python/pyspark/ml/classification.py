@@ -1311,7 +1311,6 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
         """
         return self._set(checkpointInterval=value)
 
-    @since("1.4.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -1387,6 +1386,8 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42,
     ...     leafCol="leafId")
+    >>> rf.getMinWeightFractionPerNode()
+    0.0
     >>> model = rf.fit(td)
     >>> model.getLabelCol()
     'indexed'
@@ -1441,14 +1442,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
-                 leafCol="", minWeightFractionPerNode=0.0):
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
-                 leafCol="", minWeightFractionPerNode=0.0)
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None)
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1467,14 +1468,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
-                  leafCol="", minWeightFractionPerNode=0.0):
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
-                  leafCol="", minWeightFractionPerNode=0.0)
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None)
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1558,6 +1559,20 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
 
 
 class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
@@ -2164,13 +2179,6 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
         return self.getOrDefault(self.blockSize)
 
     @since("2.0.0")
-    def getStepSize(self):
-        """
-        Gets the value of stepSize or its default value.
-        """
-        return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
     def getInitialWeights(self):
         """
         Gets the value of initialWeights or its default value.
@@ -2637,13 +2645,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     .. versionadded:: 2.0.0
     """
 
-    @since("2.0.0")
-    def setClassifier(self, value):
-        """
-        Sets the value of :py:attr:`classifier`.
-        """
-        return self._set(classifier=value)
-
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
@@ -2661,18 +2662,6 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`rawPredictionCol`.
         """
         return self._set(rawPredictionCol=value)
-
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    def setWeightCol(self, value):
-        """
-        Sets the value of :py:attr:`weightCol`.
-        """
-        return self._set(weightCol=value)
 
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
@@ -2773,8 +2762,9 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         models = [JavaParams._from_java(model) for model in java_stage.models()]
-        py_stage = cls(models=models).setPredictionCol(predictionCol).setLabelCol(labelCol)\
+        py_stage = cls(models=models).setPredictionCol(predictionCol)\
             .setFeaturesCol(featuresCol)
+        py_stage._set(labelCol=labelCol)
         py_stage._set(classifier=classifier)
         py_stage._resetUid(java_stage.uid())
         return py_stage

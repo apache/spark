@@ -171,36 +171,6 @@ object SQLConf {
     }
   }
 
-  /**
-   * Holds information about keys that have been removed.
-   *
-   * @param key The removed config key.
-   * @param version Version of Spark where key was removed.
-   * @param defaultValue The default config value. It can be used to notice
-   *                     users that they set non-default value to an already removed config.
-   * @param comment Additional info regarding to the removed config.
-   */
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
-
-  /**
-   * The map contains info about removed SQL configs. Keys are SQL config names,
-   * map values contain extra information like the version in which the config was removed,
-   * config's default value and a comment.
-   */
-  val removedSQLConfigs: Map[String, RemovedConfig] = {
-    val configs = Seq(
-      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
-        "It was removed to prevent errors like SPARK-23173 for non-default value."),
-      RemovedConfig(
-        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
-        "It was removed to prevent loosing of users data for non-default value."),
-      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
-        "It was removed to prevent errors like SPARK-23549 for non-default value.")
-    )
-
-    Map(configs.map { cfg => cfg.key -> cfg } : _*)
-  }
-
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -452,6 +422,36 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.enabled")
+    .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
+      "runtime.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD =
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold")
+      .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
+        "partition in adaptive skewed join.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
+
+  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")
+      .doc("A partition is considered as a skewed partition if its size is larger than" +
+        " this factor multiple the median partition size and also larger than " +
+        s" ${ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key}")
+      .intConf
+      .createWithDefault(10)
+
+  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS =
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionMaxSplits")
+      .doc("Configures the maximum number of task to handle a skewed partition in adaptive skewed" +
+        "join.")
+      .intConf
+      .checkValue( _ >= 1, "The split size at least be 1")
+      .createWithDefault(5)
+
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .doc("The relation with a non-empty partition ratio lower than this config will not be " +
@@ -554,14 +554,6 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
     .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
-
-  val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
-    .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
-      "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
-      "extended type. In this mode, the microsecond portion of the timestamp value will be " +
-      "truncated.")
-    .booleanConf
-    .createWithDefault(false)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -1170,13 +1162,6 @@ object SQLConf {
       .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
       .booleanConf
       .createWithDefault(true)
-
-  val VARIABLE_SUBSTITUTE_DEPTH =
-    buildConf("spark.sql.variable.substitute.depth")
-      .internal()
-      .doc("Deprecated: The maximum replacements the substitution engine will do.")
-      .intConf
-      .createWithDefault(40)
 
   val ENABLE_TWOLEVEL_AGG_MAP =
     buildConf("spark.sql.codegen.aggregate.map.twolevel.enabled")
@@ -2191,13 +2176,9 @@ object SQLConf {
    */
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
-      DeprecatedConfig(VARIABLE_SUBSTITUTE_DEPTH.key, "2.1",
-        "The SQL config is not used by Spark anymore."),
       DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
         "Behavior for `false` config value is considered as a bug, and " +
-          "it will be prohibited in the future releases."),
-      DeprecatedConfig(PARQUET_INT64_AS_TIMESTAMP_MILLIS.key, "2.3",
-        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
+        "it will be prohibited in the future releases."),
       DeprecatedConfig(
         PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
         "The config allows to switch to the behaviour before Spark 2.4 " +
@@ -2208,6 +2189,41 @@ object SQLConf {
         s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
+
+  /**
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
+   */
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+
+  /**
+   * The map contains info about removed SQL configs. Keys are SQL config names,
+   * map values contain extra information like the version in which the config was removed,
+   * config's default value and a comment.
+   */
+  val removedSQLConfigs: Map[String, RemovedConfig] = {
+    val configs = Seq(
+      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23173 for non-default value."),
+      RemovedConfig(
+        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
+        "It was removed to prevent loosing of users data for non-default value."),
+      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23549 for non-default value."),
+      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
+        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
+      RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
+        "The config was deprecated since Spark 2.3." +
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2475,18 +2491,8 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
 
-  def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
-
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
-    val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
-    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
-      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
-      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
-      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
-      ParquetOutputTimestampType.TIMESTAMP_MILLIS
-    } else {
-      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
-    }
+    ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
   }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
@@ -2543,8 +2549,6 @@ class SQLConf extends Serializable with Logging {
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
-
-  def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 

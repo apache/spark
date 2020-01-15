@@ -18,23 +18,30 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.scalalang.typed
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 @deprecated("This test suite will be removed.", "3.0.0")
-class DeprecatedWholeStageCodegenSuite extends QueryTest with SharedSparkSession {
+class DeprecatedWholeStageCodegenSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   test("simple typed UDAF should be included in WholeStageCodegen") {
-    import testImplicits._
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // With enable AQE, the WholeStageCodegenExec rule is applied when running QueryStageExec.
+      import testImplicits._
 
-    val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1)).toDS()
-      .groupByKey(_._1).agg(typed.sum(_._2))
+      val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1)).toDS()
+        .groupByKey(_._1).agg(typed.sum(_._2))
 
-    val plan = ds.queryExecution.executedPlan
-    assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
+      val plan = ds.queryExecution.executedPlan
+      assert(find(plan)(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
+      assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
+    }
   }
 }

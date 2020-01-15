@@ -22,6 +22,7 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -35,7 +36,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 class DynamicPartitionPruningSuite
     extends QueryTest
     with SharedSparkSession
-    with GivenWhenThen {
+    with GivenWhenThen
+    with AdaptiveSparkPlanHelper {
 
   val tableFormat: String = "parquet"
 
@@ -320,7 +322,7 @@ class DynamicPartitionPruningSuite
 
         def getFactScan(plan: SparkPlan): SparkPlan = {
           val scanOption =
-            plan.find {
+            find(plan) {
               case s: FileSourceScanExec =>
                 s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
               case _ => false
@@ -1204,7 +1206,9 @@ class DynamicPartitionPruningSuite
   test("join key with multiple references on the filtering plan") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
