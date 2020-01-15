@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.PrintStream
+import java.io.{InputStream, PrintStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
@@ -32,10 +32,36 @@ private[hive] object SparkSQLEnv extends Logging {
   var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
 
-  def init(conf: SparkConf = new SparkConf(loadDefaults = true)): Unit = {
+  private var stdIn: InputStream = System.in
+  private var stdOut: PrintStream = System.out
+  private var stdErr: PrintStream = System.out
+
+  def setOut(out: PrintStream): Unit = stdOut = out
+  def setErr(err: PrintStream): Unit = stdErr = err
+  def setIn(in: InputStream): Unit = stdIn = in
+
+  // scalastyle:off println
+  def printStream: String => Unit = (str: String) => scala.Console.withOut(stdOut)(println(str))
+  def printErrStream: String => Unit = (str: String) => scala.Console.withOut(stdErr)(println(str))
+  // scalastyle:on println
+
+  def readStream: String => String = {
+    prefix =>
+      scala.Console.withOut(stdOut){
+        printf(prefix)
+        stdOut.flush()
+      }
+      scala.io.Source.fromInputStream(stdIn).bufferedReader().readLine()
+  }
+
+  def init(conf: SparkConf = null): Unit = {
     logDebug("Initializing SparkSQLEnv")
     if (sqlContext == null) {
-      val sparkConf = conf
+      val sparkConf = if (conf == null) {
+        new SparkConf(loadDefaults = true)
+      } else {
+        conf
+      }
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = sparkConf

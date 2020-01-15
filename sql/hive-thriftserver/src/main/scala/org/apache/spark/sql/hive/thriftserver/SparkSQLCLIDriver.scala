@@ -97,9 +97,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
 
   val master = SparkSQLEnv.sparkContext.master
   val appId = SparkSQLEnv.sparkContext.applicationId
-  // scalastyle:off println
-  println(s"Spark master: $master, Application Id: $appId")
-  // scalastyle:on println
+  SparkSQLEnv.printStream(s"Spark master: $master, Application Id: $appId")
 
   // Executing init files, if any, (-i) first, after applying settings.
   sparkSQLArgs.getInitFile.foreach { initFile =>
@@ -135,7 +133,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
       " " * spaces + "> "
     }
 
-    val promptedLine = Try(StdIn.readLine(prompt)) match {
+    val promptedLine = Try(SparkSQLEnv.readStream(prompt)) match {
       case Failure(exception) => throw new InterruptedException(exception.getMessage)
       case Success(value) => value
     }

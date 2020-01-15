@@ -122,6 +122,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       case Success(result) => processLines(result)
       case Failure(exception) =>
         logError(exception.getMessage)
+        SparkSQLEnv.printErrStream(exception.getMessage)
         1
     }
   }
@@ -137,16 +138,13 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       case Success(value) =>
         value match {
           case Some(results) =>
-            // scalastyle:off println
-            println(showQueryResults(results))
-            // scalastyle:on println
+            SparkSQLEnv.printStream(showQueryResults(results))
           case None =>
         }
         0
       case Failure(exception) =>
-        // scalastyle:off println
-        println(s"Error in query: ${exception.getMessage}")
-        // scalastyle:on println
+        logError(exception.getMessage)
+        SparkSQLEnv.printErrStream(s"Error in query: ${exception.getMessage}")
         1
     }
   }
@@ -160,12 +158,11 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   def processShellCmd(cmd: String): Int = {
     Try(cmd.!!) match {
       case Success(value) =>
-        // scalastyle:off println
-        println(value)
-        // scalastyle:on println
+        SparkSQLEnv.printStream(value)
         0
       case Failure(exception) =>
         logError(exception.getMessage)
+        SparkSQLEnv.printErrStream(exception.getMessage)
         1
     }
   }

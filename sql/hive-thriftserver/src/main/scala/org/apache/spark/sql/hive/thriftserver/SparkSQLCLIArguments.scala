@@ -156,7 +156,7 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
         sys.exit(1)
       case Success(value) =>
         logDebug(value.mkString)
-      case _ =>
+        showHelp()
     }
   }
 
@@ -259,8 +259,9 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
   def showHelp(): Unit = {
     if (parsed.get("help").nonEmpty) {
       // scalastyle:off println
-      println(usage)
+//      println(usage)
       // scalastyle:on println
+      SparkSQLEnv.printStream(usage)
       sys.exit(0)
     }
   }
