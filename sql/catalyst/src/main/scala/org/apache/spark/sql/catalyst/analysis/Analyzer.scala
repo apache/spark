@@ -892,28 +892,27 @@ class Analyzer(
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
-        expandRelationName(identifier) match {
-          case SessionCatalogAndIdentifier(catalog, ident) =>
-            CatalogV2Util.loadTable(catalog, ident) match {
-              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                u.failAnalysis(s"$ident is a view not table.")
-              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
-              case None => u
-            }
-          case _ => u
-        }
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView =>
+            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
+          case table => table
+        }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier) =>
-        expandRelationName(identifier) match {
-          case SessionCatalogAndIdentifier(catalog, ident) =>
-            CatalogV2Util.loadTable(catalog, ident) match {
-              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                ResolvedView(ident)
-              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
-              case None => u
-            }
-          case _ => u
-        }
+        lookupTableOrView(identifier).getOrElse(u)
+    }
+
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+      expandRelationName(identifier) match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident).map {
+            case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+              ResolvedView(ident)
+            case table =>
+              ResolvedTable(catalog.asTableCatalog, ident, table)
+          }
+        case _ => None
+      }
     }
 
     // Look up a relation from the session catalog with the following logic:

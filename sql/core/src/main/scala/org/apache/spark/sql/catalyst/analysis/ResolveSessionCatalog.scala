@@ -217,7 +217,7 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    // Use v1 command to describe temp view, as v2 catalog doesn't support view yet.
+    // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
