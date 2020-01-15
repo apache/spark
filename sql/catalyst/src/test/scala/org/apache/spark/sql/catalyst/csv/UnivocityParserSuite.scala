@@ -308,24 +308,18 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
 
-    try {
+    val errMsg = intercept[IllegalArgumentException] {
       check(filters = Seq(EqualTo("invalid attr", 1)), expected = Seq())
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("invalid attr does not exist"))
-    }
+    }.getMessage
+    assert(errMsg.contains("invalid attr does not exist"))
 
-    try {
+    val errMsg2 = intercept[IllegalArgumentException] {
       check(
         dataSchema = "",
         requiredSchema = "",
         filters = Seq(EqualTo("i", 1)),
         expected = Seq(InternalRow.empty))
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("i does not exist"))
-    }
+    }.getMessage
+    assert(errMsg2.contains("i does not exist"))
   }
 }
