@@ -117,17 +117,34 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
+    RuntimeException failedToReleaseBufferException = null;
+
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
         streams.remove(entry.getKey());
 
-        // Release all remaining buffers.
-        while (state.buffers.hasNext()) {
-          state.buffers.next().release();
+        try {
+          // Release all remaining buffers.
+          while (state.buffers.hasNext()) {
+            ManagedBuffer buffer = state.buffers.next();
+            if (buffer != null) {
+              buffer.release();
+            }
+          }
+        } catch (RuntimeException e) {
+          if (failedToReleaseBufferException == null) {
+            failedToReleaseBufferException = e;
+          } else {
+            logger.error("Exception trying to release remaining StreamState buffers", e);
+          }
         }
       }
+    }
+
+    if (failedToReleaseBufferException != null) {
+      throw failedToReleaseBufferException;
     }
   }
 
