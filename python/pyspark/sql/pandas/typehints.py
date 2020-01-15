@@ -46,37 +46,58 @@ def infer_eval_type(sig):
         raise ValueError(
             "Type hint for the return type should be specified; however, got %s" % sig)
 
-    # Series or Frame, ... -> Series or Frame
+    # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
     is_series_or_frame = (
-        all(a == pd.Series or a == pd.DataFrame for a in parameters_sig) and
+        all(a == pd.Series or  # Series
+            a == pd.DataFrame or  # DataFrame
+            check_union_annotation(  # Union[DataFrame, Series]
+                a,
+                parameter_check_func=lambda na: na == pd.Series or na == pd.DataFrame)
+            for a in parameters_sig) and
         (return_annotation == pd.Series or return_annotation == pd.DataFrame))
 
-    # Iterator[Tuple[Series or Frame, ...] -> Iterator[Series or Frame]
+    # Iterator[Tuple[Series, Frame or Union[DataFrame, Series], ...] -> Iterator[Series or Frame]
     is_iterator_tuple_series_or_frame = (
         len(parameters_sig) == 1 and
-        check_iterator_annotation(
+        check_iterator_annotation(  # Iterator
             parameters_sig[0],
-            parameter_check_func=lambda a: check_tuple_annotation(
+            parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
                 a,
-                parameter_check_func=lambda aa: (
-                    aa == pd.DataFrame or aa == pd.Series or aa == Ellipsis))) and
+                parameter_check_func=lambda ta: (
+                    ta == Ellipsis or  # ...
+                    ta == pd.Series or  # Series
+                    ta == pd.DataFrame or  # DataFrame
+                    check_union_annotation(  # Union[DataFrame, Series]
+                        ta,
+                        parameter_check_func=lambda na: (
+                            na == pd.Series or na == pd.DataFrame))))) and
         check_iterator_annotation(
             return_annotation,
             parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series))
 
-    # Iterator[Series or Frame] -> Iterator[Series or Frame]
+    # Iterator[Series, Frame or Union[DataFrame, Series]] -> Iterator[Series or Frame]
     is_iterator_series_or_frame = (
         len(parameters_sig) == 1 and
         check_iterator_annotation(
             parameters_sig[0],
-            parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series) and
+            parameter_check_func=lambda a: (
+                a == pd.Series or  # Series
+                a == pd.DataFrame or  # DataFrame
+                check_union_annotation(  # Union[DataFrame, Series]
+                    a,
+                    parameter_check_func=lambda ua: ua == pd.Series or ua == pd.DataFrame))) and
         check_iterator_annotation(
             return_annotation,
             parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series))
 
-    # Series or Frame, ... -> Any
+    # Series, Frame or Union[DataFrame, Series], ... -> Any
     is_series_or_frame_agg = (
-        all(a == pd.Series or a == pd.DataFrame for a in parameters_sig) and (
+        all(a == pd.Series or  # Series
+            a == pd.DataFrame or  # DataFrame
+            check_union_annotation(  # Union[DataFrame, Series]
+                a,
+                parameter_check_func=lambda ua: ua == pd.Series or ua == pd.DataFrame)
+            for a in parameters_sig) and (
             # It's tricky to whitelist which types pd.Series constructor can take.
             # Simply blacklist common types used here for now (which becomes object
             # types Spark can't recognize).
@@ -88,9 +109,7 @@ def infer_eval_type(sig):
 
     if is_series_or_frame:
         return PandasUDFType.SCALAR
-    elif is_iterator_tuple_series_or_frame:
-        return PandasUDFType.SCALAR_ITER
-    elif is_iterator_series_or_frame:
+    elif is_iterator_tuple_series_or_frame or is_iterator_series_or_frame:
         return PandasUDFType.SCALAR_ITER
     elif is_series_or_frame_agg:
         return PandasUDFType.GROUPED_AGG
@@ -102,13 +121,21 @@ def check_tuple_annotation(annotation, parameter_check_func=None):
     # Python 3.6 has `__name__`. Python 3.7 and 3.8 have `_name`.
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
-    assert name is not None, "_name or __name__ not in the type annotation, %s" % annotation
     return name == "Tuple" and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__)))
 
 
 def check_iterator_annotation(annotation, parameter_check_func=None):
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
-    assert name is not None, "_name or __name__ not in the type annotation, %s" % annotation
     return name == "Iterator" and (
+        parameter_check_func is None or all(map(parameter_check_func, annotation.__args__)))
+
+
+def check_union_annotation(annotation, parameter_check_func=None):
+    import typing
+
+    # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
+    # to version. For example, it's abc.Iterator in Python 3.7 but typing.Iterator in Python 3.6.
+    origin = getattr(annotation, "__origin__", None)
+    return origin == typing.Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__)))

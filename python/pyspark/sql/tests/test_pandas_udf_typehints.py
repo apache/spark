@@ -74,6 +74,14 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertEqual(
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.SCALAR)
 
+        exec(
+            "from typing import Union\n"
+            "def func(col: Union[pd.Series, pd.DataFrame], *, col2: pd.DataFrame) -> pd.Series:\n"
+            "    pass",
+            self.local)
+        self.assertEqual(
+            infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.SCALAR)
+
     def test_type_annotation_scalar_iter(self):
         exec(
             "from typing import Iterator\n"
@@ -97,6 +105,14 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertEqual(
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.SCALAR_ITER)
 
+        exec(
+            "from typing import Iterator, Tuple, Union\n"
+            "def func(iter: Iterator[Tuple[Union[pd.DataFrame, pd.Series], ...]])"
+            " -> Iterator[pd.Series]: pass",
+            self.local)
+        self.assertEqual(
+            infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.SCALAR_ITER)
+
     def test_type_annotation_group_agg(self):
         exec(
             "def func(col: pd.Series) -> str: pass",
@@ -105,14 +121,12 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.GROUPED_AGG)
 
         exec(
-            "import pandas as pd\n"
             "def func(col: pd.DataFrame, col1: pd.Series) -> int: pass",
             self.local)
         self.assertEqual(
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.GROUPED_AGG)
 
         exec(
-            "import pandas as pd\n"
             "from pyspark.sql import Row\n"
             "def func(col: pd.DataFrame, *args: pd.Series) -> Row: pass",
             self.local)
@@ -120,7 +134,6 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.GROUPED_AGG)
 
         exec(
-            "import pandas as pd\n"
             "def func(col: pd.Series, *args: pd.Series, **kwargs: pd.DataFrame) -> str:\n"
             "    pass",
             self.local)
@@ -128,8 +141,15 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.GROUPED_AGG)
 
         exec(
-            "import pandas as pd\n"
             "def func(col: pd.Series, *, col2: pd.DataFrame) -> float:\n"
+            "    pass",
+            self.local)
+        self.assertEqual(
+            infer_eval_type(inspect.signature(self.local['func'])), PandasUDFType.GROUPED_AGG)
+
+        exec(
+            "from typing import Union\n"
+            "def func(col: Union[pd.Series, pd.DataFrame], *, col2: pd.DataFrame) -> float:\n"
             "    pass",
             self.local)
         self.assertEqual(
@@ -150,6 +170,24 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertRaisesRegex(
             NotImplementedError,
             "Unsupported signature.*int",
+            infer_eval_type, inspect.signature(self.local['func']))
+
+        exec(
+            "from typing import Union\n"
+            "def func(col: Union[pd.DataFrame, str], col1: int) -> pd.DataFrame: pass",
+            self.local)
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Unsupported signature.*str",
+            infer_eval_type, inspect.signature(self.local['func']))
+
+        exec(
+            "from typing import Tuple\n"
+            "def func(col: pd.Series) -> Tuple[pd.DataFrame]: pass",
+            self.local)
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Unsupported signature.*Tuple",
             infer_eval_type, inspect.signature(self.local['func']))
 
         exec(
@@ -182,7 +220,8 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         df = self.spark.range(10).selectExpr("id", "id as v")
 
         exec(
-            "def plus_one(v: pd.Series) -> pd.Series:\n"
+            "import typing\n"
+            "def plus_one(v: typing.Union[pd.Series, pd.DataFrame]) -> pd.Series:\n"
             "    return v + 1",
             self.local)
 
