@@ -1578,7 +1578,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
-    buildConf("spark.sql.truncateTable.ignorePermissionAcl")
+    buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
       .doc("When set to true, TRUNCATE TABLE command will not try to set back original " +
         "permission and ACLs when re-creating the table/partition paths.")
