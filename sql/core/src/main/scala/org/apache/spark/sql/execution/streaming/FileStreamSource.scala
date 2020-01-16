@@ -357,14 +357,15 @@ object FileStreamSource {
   }
 
   private[sql] abstract class FileStreamSourceCleaner extends Logging {
-    val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
-
-    private val cleanThreadPool: Option[ThreadPoolExecutor] = if (numThreads > 0) {
-      logDebug(s"Cleaning file source on $numThreads separate thread(s)")
-      Some(ThreadUtils.newDaemonCachedThreadPool("file-source-cleaner-threadpool", numThreads))
-    } else {
-      logDebug("Cleaning file source on main thread")
-      None
+    private val cleanThreadPool: Option[ThreadPoolExecutor] = {
+      val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
+      if (numThreads > 0) {
+        logDebug(s"Cleaning file source on $numThreads separate thread(s)")
+        Some(ThreadUtils.newDaemonCachedThreadPool("file-source-cleaner-threadpool", numThreads))
+      } else {
+        logDebug("Cleaning file source on main thread")
+        None
+      }
     }
 
     def stop(): Unit = cleanThreadPool.foreach(ThreadUtils.shutdown(_))
