@@ -978,7 +978,10 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !killedByOtherAttempt.contains(tid)) {
+        // We may have a running task whose partition has been marked as successful,
+        // this partition has another task completed in another stage attempt.
+        // We treat it as a running task and will call handleFailedTask later.
+        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
