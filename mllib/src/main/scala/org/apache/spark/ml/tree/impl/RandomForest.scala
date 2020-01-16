@@ -203,9 +203,9 @@ private[spark] object RandomForest extends Logging with Serializable {
 
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
+      val splitSeed = if (strategy.numRandomSplitsPerFeature > 0) rng.nextLong else -1L
       val bestSplit = RandomForest.findBestSplits(baggedInput, metadata, topNodesForGroup,
-        nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack, timer, nodeIds,
-        outputBestSplits = strategy.useNodeIdCache)
+        nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack, strategy, nodeIds, splitSeed)
       if (strategy.useNodeIdCache) {
         nodeIds = updateNodeIds(baggedInput, nodeIds, bcSplits, bestSplit)
         nodeIdCheckpointer.update(nodeIds)
@@ -459,6 +459,8 @@ private[spark] object RandomForest extends Logging with Serializable {
    *                point's node Id for a corresponding tree. This is used to prevent
    *                the need to pass the entire tree to the executors during the node
    *                stat aggregation phase.
+   * @param seed seed used in extra trees to control the draw of the candidate splits
+   *             for each feature.
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
@@ -468,9 +470,11 @@ private[spark] object RandomForest extends Logging with Serializable {
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       bcSplits: Broadcast[Array[Array[Split]]],
       nodeStack: mutable.ListBuffer[(Int, LearningNode)],
-      timer: TimeTracker = new TimeTracker,
+      strategy: OldStrategy,
       nodeIds: RDD[Array[Int]] = null,
-      outputBestSplits: Boolean = false): Array[Map[Int, Split]] = {
+      seed: Long = -1L): Array[Map[Int, Split]] = {
+
+    if (strategy.useNodeIdCache) { require(nodeIds != null) }
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -494,8 +498,6 @@ private[spark] object RandomForest extends Logging with Serializable {
      * drastically reduce the communication overhead.
      */
 
-    val useNodeIdCache = nodeIds != null
-
     // numNodes:  Number of nodes in this group
     val numNodes = nodesForGroup.values.map(_.length).sum
     logDebug(s"numNodes = $numNodes")
@@ -504,7 +506,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     logDebug(s"isMulticlass = ${metadata.isMulticlass}")
     logDebug(s"isMulticlassWithCategoricalFeatures = " +
       s"${metadata.isMulticlassWithCategoricalFeatures}")
-    logDebug(s"using nodeIdCache = $useNodeIdCache")
+    logDebug(s"using nodeIdCache = ${strategy.useNodeIdCache}")
 
     /*
      * Performs a sequential aggregation over a partition for a particular tree and node.
@@ -609,9 +611,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
     }
 
-    // Calculate best splits for all nodes in the group
-    timer.start("chooseSplits")
-
     // In each partition, iterate all instances and compute aggregate stats for each node,
     // yield a (nodeIndex, nodeAggregateStats) pair for each node.
     // After a `reduceByKey` operation,
@@ -621,7 +620,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
 
-    val partitionAggregates = if (useNodeIdCache) {
+    val partitionAggregates = if (strategy.useNodeIdCache) {
 
       input.zip(nodeIds).mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
@@ -668,14 +667,13 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // find best split for each node
         val (split: Split, stats: ImpurityStats) =
-          binsToBestSplit(aggStats, bcSplits.value, featuresForNode, nodes(nodeIndex))
+          binsToBestSplit(aggStats, bcSplits.value, featuresForNode, nodes(nodeIndex),
+            strategy.numRandomSplitsPerFeature, seed)
         (nodeIndex, (split, stats))
     }.collectAsMap()
     nodeToFeaturesBc.destroy()
 
-    timer.stop("chooseSplits")
-
-    val bestSplits = if (outputBestSplits) {
+    val bestSplits = if (strategy.useNodeIdCache) {
       Array.ofDim[mutable.Map[Int, Split]](metadata.numTrees)
     } else {
       null
@@ -708,7 +706,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),
             rightChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.rightImpurityCalculator)))
 
-          if (outputBestSplits) {
+          if (strategy.useNodeIdCache) {
             val bestSplitsInTree = bestSplits(treeIndex)
             if (bestSplitsInTree == null) {
               bestSplits(treeIndex) = mutable.Map[Int, Split](nodeIndex -> split)
@@ -733,7 +731,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
     }
 
-    if (outputBestSplits) {
+    if (strategy.useNodeIdCache) {
       bestSplits.map { m => if (m == null) null else m.toMap }
     } else {
       null
@@ -814,8 +812,9 @@ private[spark] object RandomForest extends Logging with Serializable {
       binAggregates: DTStatsAggregator,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
-      node: LearningNode): (Split, ImpurityStats) = {
-
+      node: LearningNode,
+      numRandomSplits: Int,
+      seed: Long): (Split, ImpurityStats) = {
     // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
     var gainAndImpurityStats: ImpurityStats = if (level == 0) {
@@ -825,10 +824,10 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
 
     val validFeatureSplits =
-      Range(0, binAggregates.metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
+      Iterator.range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
         featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
           .getOrElse((featureIndexIdx, featureIndexIdx))
-      }.withFilter { case (_, featureIndex) =>
+      }.filter { case (_, featureIndex) =>
         binAggregates.metadata.numSplits(featureIndex) != 0
       }
 
@@ -836,6 +835,14 @@ private[spark] object RandomForest extends Logging with Serializable {
     val splitsAndImpurityInfo =
       validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
         val numSplits = binAggregates.metadata.numSplits(featureIndex)
+        val splitIndices = if (0 < numRandomSplits && numRandomSplits < numSplits) {
+          val rng = new Random(seed + featureIndex)
+          val indices = Seq.range(0, numSplits)
+          rng.shuffle(indices).take(numRandomSplits).sorted.iterator
+        } else {
+          Iterator.range(0, numSplits)
+        }
+
         if (binAggregates.metadata.isContinuous(featureIndex)) {
           // Cumulative sum (scanLeft) of bin statistics.
           // Afterwards, binAggregates for a bin is the sum of aggregates for
@@ -848,7 +855,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           }
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIdx =>
+            splitIndices.map { splitIdx =>
               val leftChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
               val rightChildStats =
@@ -863,7 +870,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIndex =>
+            splitIndices.map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
               val rightChildStats = binAggregates.getParentImpurityCalculator()
                 .subtract(leftChildStats)
@@ -932,7 +939,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           val lastCategory = categoriesSortedByCentroid.last._1
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIndex =>
+            splitIndices.map { splitIndex =>
               val featureValue = categoriesSortedByCentroid(splitIndex)._1
               val leftChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)

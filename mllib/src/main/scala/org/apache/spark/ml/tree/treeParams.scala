@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.util.Try
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ProbabilisticClassifierParams
 import org.apache.spark.ml.linalg.VectorUDT
@@ -333,7 +334,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   setDefault(subsamplingRate -> 1.0)
 
   /** @group getParam */
-  final def getSubsamplingRate: Double = $(subsamplingRate)
+  def getSubsamplingRate: Double = $(subsamplingRate)
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -470,6 +471,38 @@ private[ml] trait RandomForestClassifierParams
 
 private[ml] trait RandomForestRegressorParams
   extends RandomForestParams with TreeEnsembleRegressorParams with TreeRegressorParams
+
+/**
+ * Parameters for Extra Trees algorithms.
+ */
+private[ml] trait ExtraTreesParams extends TreeEnsembleParams with Logging {
+
+  /**
+   * Number of random drawn splits for each candidate feature before finding best split.
+   * (default = 1)
+   * @group expertParam
+   */
+  final val numRandomSplitsPerFeature: IntParam =
+    new IntParam(this, "numRandomSplitsPerFeature",
+      "Number of random drawn splits for each candidate feature before finding best split",
+      ParamValidators.gtEq(1))
+
+  setDefault(numRandomSplitsPerFeature -> 1)
+
+  /** @group expertGetParam */
+  final def getNumRandomSplitsPerFeature: Int = $(numRandomSplitsPerFeature)
+
+  final override def getSubsamplingRate: Double = {
+    logWarning("ExtraTreesParams.getSubsamplingRate should NOT be used")
+    $(subsamplingRate)
+  }
+}
+
+private[ml] trait ExtraTreesClassifierParams
+  extends ExtraTreesParams with RandomForestClassifierParams
+
+private[ml] trait ExtraTreesRegressorParams
+  extends ExtraTreesParams with RandomForestRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.

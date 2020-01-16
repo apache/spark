@@ -19,11 +19,13 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml._
+import org.apache.spark.ml.classification.ClassificationModel
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
+import org.apache.spark.ml.regression.RegressionModel
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
@@ -283,5 +285,53 @@ object MLTestingUtils extends SparkFunSuite {
       compareFunc(x, y)
     }
     assert(inTol / pred1.length.toDouble >= fractionInTol)
+  }
+
+  def validateClassifier(
+      predict: Vector => Double,
+      input: Seq[LabeledPoint],
+      required: Double): Unit = {
+    val predictions = input.map(x => predict(x.features))
+    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
+      prediction != expected.label
+    }
+    val accuracy = (input.length - numOffPredictions).toDouble / input.length
+    assert(accuracy >= required,
+      s"validateClassifier calculated accuracy $accuracy but required $required.")
+  }
+
+  def validateClassifier(
+      model: ClassificationModel[Vector, _],
+      input: Seq[LabeledPoint],
+      required: Double): Unit = {
+    validateClassifier((v: Vector) => model.predict(v), input, required)
+  }
+
+  def validateRegressor(
+      predict: Vector => Double,
+      input: Seq[LabeledPoint],
+      required: Double,
+      metricName: String): Unit = {
+    val predictions = input.map(x => predict(x.features))
+    val errors = predictions.zip(input).map { case (prediction, point) =>
+      point.label - prediction
+    }
+    val metric = metricName match {
+      case "mse" =>
+        errors.map(err => err * err).sum / errors.size
+      case "mae" =>
+        errors.map(math.abs).sum / errors.size
+    }
+
+    assert(metric <= required,
+      s"validateRegressor calculated $metricName $metric but required $required.")
+  }
+
+  def validateRegressor(
+      model: RegressionModel[Vector, _],
+      input: Seq[LabeledPoint],
+      required: Double,
+      metricName: String): Unit = {
+    validateRegressor((v: Vector) => model.predict(v), input, required, metricName)
   }
 }

@@ -351,7 +351,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
     val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack, strategy)
     bcSplits.destroy()
 
     // don't enqueue leaf nodes into node queue
@@ -395,7 +395,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
     val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack, strategy)
     bcSplits.destroy()
 
     // don't enqueue a node into node queue if its impurity is 0.0

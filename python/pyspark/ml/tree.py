@@ -353,3 +353,26 @@ class _TreeRegressorParams(_HasVarianceImpurity):
     Private class to track supported impurity measures.
     """
     pass
+
+
+class _ExtraTreesParams(Params):
+    """
+    Private class to track supported Extra Trees algorithms.
+
+    .. versionadded:: 3.0.0
+    """
+
+    numRandomSplitsPerFeature = Param(Params._dummy(), "numRandomSplitsPerFeature",
+                                      "Number of random drawn splits for each candidate feature " +
+                                      "before finding best split (>=1).",
+                                      typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(_ExtraTreesParams, self).__init__()
+
+    @since("3.0.0")
+    def getNumRandomSplitsPerFeature(self):
+        """
+        Gets the value of numRandomSplitsPerFeature or its default value.
+        """
+        return self.getOrDefault(self.numRandomSplitsPerFeature)

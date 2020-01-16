@@ -289,6 +289,41 @@ Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
 
 </div>
 
+## Extremely Randomized Trees classifier
+
+Extremely Randomized Trees (ExtraTrees) are a popular classification and regression method using ensembles of randomized decision trees. 
+More information about the `spark.ml` implementation can be found further in the [section on ExtraTrees](#extremely-randomized-trees).
+
+
+**Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.ExtraTreesClassifier) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/ExtraTreesClassifierExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/ExtraTreesClassifier.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaExtraTreesClassifierExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.ExtraTreesClassifier) for more details.
+
+{% include_example python/ml/extra_trees_classifier_example.py %}
+</div>
+
+</div>
+
 ## Gradient-boosted tree classifier
 
 Gradient-boosted trees (GBTs) are a popular classification and regression method using ensembles of decision trees. 
@@ -838,6 +873,41 @@ Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
 
 </div>
 
+## Extremely Randomized Trees regression
+
+Extremely Randomized Trees (ExtraTrees) are a popular classification and regression method using ensembles of randomized decision trees. 
+More information about the `spark.ml` implementation can be found further in the [section on ExtraTrees](#extremely-randomized-trees).
+
+
+**Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.ExtraTreesRegressor) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/ExtraTreesRegressorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/ExtraTreesRegressor.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaExtraTreesRegressorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.ExtraTreesRegressor) for more details.
+
+{% include_example python/ml/extra_trees_regressor_example.py %}
+</div>
+
+</div>
+
 ## Gradient-boosted tree regression
 
 Gradient-boosted trees (GBTs) are a popular regression method using ensembles of decision trees. 
@@ -1280,6 +1350,89 @@ The `spark.ml` implementation supports random forests for binary and multiclass 
 using both continuous and categorical features.
 
 For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html#random-forests).
+
+### Inputs and Outputs
+
+We list the input and output (prediction) column types here.
+All output columns are optional; to exclude an output column, set its corresponding Param to an empty string.
+
+#### Input Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>labelCol</td>
+      <td>Double</td>
+      <td>"label"</td>
+      <td>Label to predict</td>
+    </tr>
+    <tr>
+      <td>featuresCol</td>
+      <td>Vector</td>
+      <td>"features"</td>
+      <td>Feature vector</td>
+    </tr>
+  </tbody>
+</table>
+
+#### Output Columns (Predictions)
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+      <th align="left">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>predictionCol</td>
+      <td>Double</td>
+      <td>"prediction"</td>
+      <td>Predicted label</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>rawPredictionCol</td>
+      <td>Vector</td>
+      <td>"rawPrediction"</td>
+      <td>Vector of length # classes, with the counts of training instance labels at the tree node which makes the prediction</td>
+      <td>Classification only</td>
+    </tr>
+    <tr>
+      <td>probabilityCol</td>
+      <td>Vector</td>
+      <td>"probability"</td>
+      <td>Vector of length # classes equal to rawPrediction normalized to a multinomial distribution</td>
+      <td>Classification only</td>
+    </tr>
+  </tbody>
+</table>
+
+
+## Extremely Randomized Trees
+
+[Extremely Randomized Trees](https://en.wikipedia.org/wiki/Random_forest#ExtraTrees)
+or ExtraTrees fits a number of randomized decision trees.
+It is similar to ordinary random forests in that they are an ensemble of individual trees, however,
+randomness goes one step further in the way splits are computed. On each leaf, candidate splits are drawn at random for
+each feature and the best of these randomly-chosen splits is selected. Another main difference is that each tree is trained
+on the whole training dataset by default.
+The `spark.ml` implementation supports extremely randomized trees for binary and multiclass classification and for regression,
+using both continuous and categorical features.
+
+For more information on the algorithm itself, please see [this paper](https://orbi.uliege.be/bitstream/2268/9357/1/geurts-mlj-advance.pdf).
 
 ### Inputs and Outputs
 

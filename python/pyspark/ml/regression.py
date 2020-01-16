@@ -21,7 +21,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _TreeEnsembleParams, _RandomForestParams, _GBTParams, \
-    _HasVarianceImpurity, _TreeRegressorParams
+    _HasVarianceImpurity, _TreeRegressorParams, _ExtraTreesParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, JavaPredictionModel, _JavaPredictorParams, JavaWrapper
@@ -38,6 +38,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
            'RandomForestRegressor', 'RandomForestRegressionModel',
+           'ExtraTreesRegressor', 'ExtraTreesRegressionModel',
            'FMRegressor', 'FMRegressionModel']
 
 
@@ -1247,6 +1248,248 @@ class RandomForestRegressionModel(
 
     @property
     @since("2.0.0")
+    def featureImportances(self):
+        """
+        Estimate of the importance of each feature.
+
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
+
+        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
+        """
+        return self._call_java("featureImportances")
+
+
+class _ExtraTreesRegressorParamsParams(_RandomForestRegressorParams, _ExtraTreesParams):
+    """
+    Params for :py:class:`ExtraTreesRegressor` and :py:class:`ExtraTreesRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+    def getSubsamplingRate(self):
+        """
+        Gets the value of subsamplingRate or its default value.
+        """
+        warnings.warn("ExtraTreesParams.getSubsamplingRate should NOT be used")
+        return self.getOrDefault(self.subsamplingRate)
+
+
+@inherit_doc
+class ExtraTreesRegressor(JavaPredictor, _ExtraTreesRegressorParamsParams, JavaMLWritable,
+                          JavaMLReadable):
+    """
+    `ExtraTrees <https://en.wikipedia.org/wiki/Random_forest#ExtraTrees>`_
+    learning algorithm for classification.
+    It supports both continuous and categorical features.
+
+    >>> from numpy import allclose
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> etr = ExtraTreesRegressor(numTrees=2, maxDepth=2)
+    >>> etr.getMinWeightFractionPerNode()
+    0.0
+    >>> etr.setSeed(42)
+    ExtraTreesRegressor...
+    >>> model = etr.fit(df)
+    >>> model.getSeed()
+    42
+    >>> model.setLeafCol("leafId")
+    ExtraTreesRegressionModel...
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
+    >>> allclose(model.treeWeights, [1.0, 1.0])
+    True
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> model.predictLeaf(test0.head().features)
+    DenseVector([0.0, 0.0])
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0])
+    >>> model.numFeatures
+    1
+    >>> model.trees
+    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
+    >>> model.getNumTrees
+    2
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> model.transform(test1).head().prediction
+    1.0
+    >>> etr_path = temp_path + "/etr"
+    >>> etr.save(etr_path)
+    >>> etr2 = ExtraTreesRegressor.load(etr_path)
+    >>> etr2.getNumTrees()
+    2
+    >>> model_path = temp_path + "/etr_model"
+    >>> model.save(model_path)
+    >>> model2 = ExtraTreesRegressionModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                 impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto",
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None,
+                 numRandomSplitsPerFeature=1, subsamplingRate=1.0):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto", \
+                 leafCol=", minWeightFractionPerNode=0.0", weightCol=None, \
+                 numRandomSplitsPerFeature=1, subsamplingRate=1.0)
+        """
+        super(ExtraTreesRegressor, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.ExtraTreesRegressor", self.uid)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="variance", numTrees=20, featureSubsetStrategy="auto",
+                         leafCol="", minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1,
+                         subsamplingRate=1.0)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("1.4.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                  impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto",
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None,
+                  numRandomSplitsPerFeature=1, subsamplingRate=1.0):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                  impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto", \
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, \
+                  numRandomSplitsPerFeature=1, subsamplingRate=1.0)
+        Sets params for linear regression.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return RandomForestRegressionModel(java_model)
+
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    def setNumTrees(self, value):
+        """
+        Sets the value of :py:attr:`numTrees`.
+        """
+        return self._set(numTrees=value)
+
+    def setBootstrap(self, value):
+        """
+        Sets the value of :py:attr:`bootstrap`.
+        """
+        return self._set(bootstrap=value)
+
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+    def setNumRandomSplitsPerFeature(self, value):
+        """
+        Sets the value of :py:attr:`numRandomSplitsPerFeature`.
+        """
+        return self._set(numRandomSplitsPerFeature=value)
+
+
+class ExtraTreesRegressionModel(_TreeEnsembleModel, _ExtraTreesRegressorParamsParams,
+                                JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by :class:`ExtraTreesRegressor`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
+    @property
     def featureImportances(self):
         """
         Estimate of the importance of each feature.

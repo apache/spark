@@ -24,7 +24,8 @@ from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
-    _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams
+    _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams, \
+    _ExtraTreesParams
 from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
@@ -43,6 +44,7 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
            'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
+           'ExtraTreesClassifier', 'ExtraTreesClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
            'OneVsRest', 'OneVsRestModel',
@@ -1611,6 +1613,262 @@ class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClass
 
     @property
     @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
+
+
+@inherit_doc
+class _ExtraTreesClassifierParams(_RandomForestClassifierParams, _ExtraTreesParams):
+    """
+    Params for :py:class:`ExtraTreesClassifier` and :py:class:`ExtraTreesClassificationModel`.
+    """
+    def getSubsamplingRate(self):
+        """
+        Gets the value of subsamplingRate or its default value.
+        """
+        warnings.warn("ExtraTreesParams.getSubsamplingRate should NOT be used")
+        return self.getOrDefault(self.subsamplingRate)
+
+
+@inherit_doc
+class ExtraTreesClassifier(JavaProbabilisticClassifier, _ExtraTreesClassifierParams,
+                           JavaMLWritable, JavaMLReadable):
+    """
+    `ExtraTrees <https://en.wikipedia.org/wiki/Random_forest#ExtraTrees>`_
+    learning algorithm for classification.
+    It supports both binary and multiclass labels, as well as both continuous and categorical
+    features.
+
+    >>> import numpy
+    >>> from numpy import allclose
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.feature import StringIndexer
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> si_model = stringIndexer.fit(df)
+    >>> td = si_model.transform(df)
+    >>> etc = ExtraTreesClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42,
+    ...     leafCol="leafId")
+    >>> etc.getMinWeightFractionPerNode()
+    0.0
+    >>> model = etc.fit(td)
+    >>> model.getLabelCol()
+    'indexed'
+    >>> model.setFeaturesCol("features")
+    ExtraTreesClassificationModel...
+    >>> model.setRawPredictionCol("newRawPrediction")
+    ExtraTreesClassificationModel...
+    >>> model.getRawPredictionCol()
+    'newRawPrediction'
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
+    >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
+    True
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> model.predictRaw(test0.head().features)
+    DenseVector([3.0, 0.0])
+    >>> model.predictProbability(test0.head().features)
+    DenseVector([1.0, 0.0])
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> numpy.argmax(result.probability)
+    0
+    >>> numpy.argmax(result.newRawPrediction)
+    0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> model.transform(test1).head().prediction
+    1.0
+    >>> model.trees
+    [DecisionTreeClassificationModel...depth=..., DecisionTreeClassificationModel...]
+    >>> etc_path = temp_path + "/etc"
+    >>> etc.save(etc_path)
+    >>> etc2 = ExtraTreesClassifier.load(etc_path)
+    >>> etc2.getNumTrees()
+    3
+    >>> model_path = temp_path + "/etc_model"
+    >>> model.save(model_path)
+    >>> model2 = ExtraTreesClassificationModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 probabilityCol="probability", rawPredictionCol="rawPrediction",
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, leafCol="",
+                 minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1,
+                 subsamplingRate=1.0):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, leafCol="", \
+                 minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1, \
+                 subsamplingRate=1.0)
+        """
+        super(ExtraTreesClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.ExtraTreesClassifier", self.uid)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
+                         leafCol="", minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1,
+                         subsamplingRate=1.0)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  probabilityCol="probability", rawPredictionCol="rawPrediction",
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", leafCol="",
+                  minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1,
+                  subsamplingRate=1.0):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", leafCol="", \
+                  minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1, \
+                  subsamplingRate=1.0)
+        Sets params for linear classification.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return ExtraTreesClassificationModel(java_model)
+
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    def setNumTrees(self, value):
+        """
+        Sets the value of :py:attr:`numTrees`.
+        """
+        return self._set(numTrees=value)
+
+    def setBootstrap(self, value):
+        """
+        Sets the value of :py:attr:`bootstrap`.
+        """
+        return self._set(bootstrap=value)
+
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+    def setNumRandomSplitsPerFeature(self, value):
+        """
+        Sets the value of :py:attr:`numRandomSplitsPerFeature`.
+        """
+        return self._set(numRandomSplitsPerFeature=value)
+
+
+class ExtraTreesClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                                    _ExtraTreesClassifierParams, JavaMLWritable,
+                                    JavaMLReadable):
+    """
+    Model fitted by ExtraTreesClassifier.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    def featureImportances(self):
+        """
+        Estimate of the importance of each feature.
+
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
+
+        .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
+        """
+        return self._call_java("featureImportances")
+
+    @property
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
