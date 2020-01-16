@@ -24,9 +24,9 @@ SELECT '' AS eleven, unique1, unique2, stringu1
 SELECT '' AS ten, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990;
-SELECT '' AS five, unique1, unique2, stringu1
-		FROM onek
-		ORDER BY unique1 OFFSET 990 LIMIT 5;
+-- SELECT '' AS five, unique1, unique2, stringu1
+-- 		FROM onek
+-- 		ORDER BY unique1 OFFSET 990 LIMIT 5;
 SELECT '' AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 LIMIT 5 OFFSET 900;
