@@ -344,7 +344,22 @@ $ kubectl -n=<namespace> logs -f <driver-pod-name>
 The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
+### Setting up custom logging configuration
+Spark uses `log4j.properties` under the conf dir as the standard way of setting up a logger configuration.
 
+1) Kubernetes lets us define a
+ [config map](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) and can be sometimes convenient
+ to provide custom logging configuration using a config map. For example, config map can be updated irrespective
+ of point of submission of spark job.
+ Once the user defined config map is created inside the kubernetes cluster, we can mount it and configure
+ for spark to use it be setting the property: `spark.kubernetes.loggingConf.configMapName`.
+ 
+2) For spark cluster mode of deployment, the configuration file present inside the `conf/` dir is
+ by default auto configured as a kubernetes config map and setup for all executors and driver as logging
+ configuration. The name of the logging configuration file is by default `log4j.properties` and can be
+ altered using the property: `spark.kubernetes.loggingConf.fileName`.
+
+Setting up a `configMapName` takes precedence over the other methods of setting logger configuration. 
 ### Accessing Driver UI
 
 The UI associated with any application can be accessed locally using

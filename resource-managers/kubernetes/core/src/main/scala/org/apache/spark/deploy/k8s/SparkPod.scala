@@ -25,11 +25,11 @@ private[spark] case class SparkPod(pod: Pod, container: Container) {
    *
    * Use it like:
    *
-   *     original.modify { case pod =>
+   *     original.transform { case pod =>
    *       // update pod and return new one
-   *     }.modify { case pod =>
+   *     }.transform { case pod =>
    *       // more changes that create a new pod
-   *     }.modify {
+   *     }.transform {
    *       case pod if someCondition => // new pod
    *     }
    *

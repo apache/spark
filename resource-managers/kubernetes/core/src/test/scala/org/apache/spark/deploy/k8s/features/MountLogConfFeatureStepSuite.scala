@@ -23,7 +23,7 @@ import org.apache.spark.launcher.SparkLauncher
 
 class MountLogConfFeatureStepSuite extends SparkFunSuite {
   // TODO add more tests.
-  test("Do not enable mount logging conf feature," +
+  test("Do not enable mount logger config feature," +
     " if neither of logging configuration file or user defined config map is configured.") {
     val sparkConf = new SparkConf(false)
       .set(SparkLauncher.DEPLOY_MODE, "cluster")
@@ -33,6 +33,27 @@ class MountLogConfFeatureStepSuite extends SparkFunSuite {
     val initPod = SparkPod.initialPod()
     val configuredPod = step.configurePod(initPod)
     assert(configuredPod == initPod, "Pod should be unchanged.")
+  }
+
+  test("Do not enable mount logger config for client mode, unless an explicit" +
+    " config map is configured") {
+    // For client mode we cannot create k8s resources like config maps, so we rely on explicit
+    // setup by the user.
+    val sparkConf = new SparkConf(false)
+      .set(SparkLauncher.DEPLOY_MODE, "client")
+      .set(Config.KUBERNETES_LOGGING_CONF_FILE_NAME, "log4j.properties")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val step = new MountLogConfFeatureStep(conf)
+    val initPod = SparkPod.initialPod()
+    val configuredPod = step.configurePod(initPod)
+    assert(configuredPod == initPod, "Pod should be unchanged.")
+    val configMapName = "config-map-logging"
+    sparkConf.set(Config.KUBERNETES_LOGGING_CONF_CONFIG_MAP, configMapName)
+    val conf2 = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val step2 = new MountLogConfFeatureStep(conf2)
+    assert(step2.getAdditionalPodSystemProperties().nonEmpty)
+    val configuredPod2 = step2.configurePod(initPod)
+    assert(configuredPod2.pod.getSpec.getVolumes.get(0).getConfigMap.getName == configMapName)
   }
 
   test("Do not create a config map if user provided configMap is configured.") {

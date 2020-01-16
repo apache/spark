@@ -20,10 +20,9 @@ package org.apache.spark.deploy.k8s.features
 import java.net.URL
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.io.Source
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, EnvVarBuilder, HasMetadata, PodBuilder, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder, VolumeMountBuilder}
 
 import org.apache.spark.deploy.k8s.{Config, KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
