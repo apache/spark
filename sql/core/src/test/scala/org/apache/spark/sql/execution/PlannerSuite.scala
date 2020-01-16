@@ -728,39 +728,45 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-28148: repartition after join is not optimized away") {
+
+    def numSorts(plan: SparkPlan): Int = {
+      plan.collect{case s: SortExec => s }.length
+    }
+
+    def numShuffles(plan: SparkPlan): Int = {
+      plan.collect{case s: ShuffleExchangeExec => s }.length
+    }
+
     val df1 = spark.range(0, 5000000, 1, 5)
     val df2 = spark.range(0, 10000000, 1, 5)
+
+    val outputPlan0 = df1.join(df2, Seq("id"), "left")
+      .repartition(20, df1("id")).queryExecution.executedPlan
+    assert(numSorts(outputPlan0) == 2)
+    assert(numShuffles(outputPlan0) == 3, "user defined numPartitions shouldn't be eliminated")
 
     // non global sort order and partitioning should be reusable after left join
     val outputPlan1 = df1.join(df2, Seq("id"), "left")
       .repartition(df1("id"))
       .sortWithinPartitions(df1("id"))
       .queryExecution.executedPlan
-    val numSorts1 = outputPlan1.collect{case s: SortExec => s }
-    val numShuffles1 = outputPlan1.collect{case s: ShuffleExchangeExec => s }
-    assert(numSorts1.length == 2)
-    assert(numShuffles1.length == 2)
+    assert(numSorts(outputPlan1) == 2)
+    assert(numShuffles(outputPlan1) == 2)
 
     // non global sort order and partitioning should be reusable after inner join
     val outputPlan2 = df1.join(df2, Seq("id"))
       .repartition(df1("id"))
       .sortWithinPartitions(df1("id"))
       .queryExecution.executedPlan
-
-    val numSorts2 = outputPlan2.collect{case s: SortExec => s }
-    val numShuffles2 = outputPlan2.collect{case s: ShuffleExchangeExec => s }
-    assert(numSorts2.length == 2)
-    assert(numShuffles2.length == 2)
+    assert(numSorts(outputPlan2) == 2)
+    assert(numShuffles(outputPlan2) == 2)
 
     // global sort should not be removed
     val outputPlan3 = df1.join(df2, Seq("id"))
       .orderBy(df1("id"))
       .queryExecution.executedPlan
-
-    val numSorts3 = outputPlan3.collect{case s: SortExec => s }
-    val numShuffles3 = outputPlan3.collect{case s: ShuffleExchangeExec => s }
-    assert(numSorts3.length == 3)
-    assert(numShuffles3.length == 3)
+    assert(numSorts(outputPlan3) == 3)
+    assert(numShuffles(outputPlan3) == 3)
   }
 
   test("SPARK-24500: create union with stream of children") {
