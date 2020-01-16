@@ -267,7 +267,7 @@ class SparkConversionMixin(object):
                     warnings.warn(msg)
                     raise
         data = self._convert_from_pandas(data, schema, timezone)
-        return self._create_dataframe(data, schema, samplingRatio, samplingRatio)
+        return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
     def _convert_from_pandas(self, pdf, schema, timezone):
         """
