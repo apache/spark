@@ -105,8 +105,8 @@ public class TransportConf {
     return conf.getInt(SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default is 64. */
-  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, 64); }
+  /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
+  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, -1); }
 
   /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
   public int serverThreads() { return conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0); }

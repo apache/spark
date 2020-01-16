@@ -659,17 +659,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
-  <td>
-    Length of the accept queue for the shuffle service. For large applications, this value may
-    need to be increased, so that incoming connections are not dropped if the service cannot keep
-    up with a large number of connections arriving in a short period of time. This needs to
-    be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1477,15 +1466,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Port for the driver to listen on.
     This is used for communicating with the executors and the standalone Master.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.rpc.io.backLog</code></td>
-  <td>64</td>
-  <td>
-    Length of the accept queue for the RPC server. For large applications, this value may
-    need to be increased, so that incoming connections are not dropped when a large number of
-    connections arrives in a short period of time.
   </td>
 </tr>
 <tr>
