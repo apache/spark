@@ -972,8 +972,10 @@ class DecisionTreeRegressor(JavaRegressor, _DecisionTreeRegressorParams, JavaMLW
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
-                                  JavaMLWritable, JavaMLReadable):
+class DecisionTreeRegressionModel(
+    JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`DecisionTreeRegressor`.
 
@@ -1217,8 +1219,10 @@ class RandomForestRegressor(JavaRegressor, _RandomForestRegressorParams, JavaMLW
         return self._set(minWeightFractionPerNode=value)
 
 
-class RandomForestRegressionModel(JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
-                                  JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(
+    JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -1511,7 +1515,10 @@ class GBTRegressor(JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
         return self._set(minWeightFractionPerNode=value)
 
 
-class GBTRegressionModel(JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(
+    JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`GBTRegressor`.
 
