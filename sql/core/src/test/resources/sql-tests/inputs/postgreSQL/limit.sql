@@ -88,12 +88,12 @@ DROP VIEW INT8_TBL;
 
 -- Stress test for variable LIMIT in conjunction with bounded-heap sorting
 
-SELECT
-  (SELECT n
-     FROM (VALUES (1)) AS x,
-          (SELECT n FROM generate_series(1,10) AS n
-             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
-  FROM generate_series(1,10) AS s;
+-- SELECT
+--   (SELECT n
+--      FROM (VALUES (1)) AS x,
+--           (SELECT n FROM generate_series(1,10) AS n
+--              ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
+--   FROM generate_series(1,10) AS s;
 
 --
 -- Test behavior of volatile and set-returning functions in conjunction
