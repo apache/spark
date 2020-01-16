@@ -163,7 +163,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // At first, all the rows belong to the root nodes (node Id == 1).
       nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
       nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
-        strategy.getCheckpointInterval, sc)
+        strategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
       nodeIdCheckpointer.update(nodeIds)
     }
 
