@@ -757,3 +757,45 @@ object CombineConcats extends Rule[LogicalPlan] {
       flattenConcats(concat)
   }
 }
+
+/**
+ * Removes unnecessary null checks for If/CaseWhen conditions
+ * with NullIntolerant expressions.
+ */
+object RemoveRedundantNullChecks extends Rule[LogicalPlan] {
+  /**
+   * @param ifNullExpr expression that takes place if checkedExpr is null
+   * @param ifNotNullExpr expression that takes place if checkedExpr is not null
+   * @param checkedExpr expression that is checked for null value
+   */
+  private def isRedundant(
+      ifNullExpr: Expression,
+      ifNotNullExpr: Expression,
+      checkedExpr: Expression): Boolean = {
+    (ifNullExpr == checkedExpr || ifNullExpr == Literal.create(null, checkedExpr.dataType)) &&
+      ifNotNullExpr.isInstanceOf[NullIntolerant] &&
+      ifNotNullExpr.children.contains(checkedExpr)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case i @ If(predicate, trueValue, falseValue) => predicate match {
+      case IsNull(child) if isRedundant(trueValue, falseValue, child) => falseValue
+      case IsNotNull(child) if isRedundant(falseValue, trueValue, child) => trueValue
+      case _ => i
+    }
+    case c @ CaseWhen(branches, Some(elseValue)) if branches.length == 1 =>
+      branches(0)._1 match {
+        case IsNotNull(child) if isRedundant(elseValue, branches(0)._2, child) => branches(0)._2
+        case IsNull(child) if isRedundant(branches(0)._2, elseValue, child) => elseValue
+        case _ => c
+      }
+    case c @ CaseWhen(branches, None) if branches.length == 1 =>
+      branches(0)._1 match {
+        case IsNotNull(child) if (
+          isRedundant(
+            Literal.create(null, child.dataType),
+            branches(0)._2, child)) => branches(0)._2
+        case _ => c
+      }
+  }
+}

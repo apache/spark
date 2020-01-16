@@ -104,7 +104,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveRedundantAliases,
         RemoveNoopOperators,
         SimplifyExtractValueOps,
-        CombineConcats) ++
+        CombineConcats,
+        RemoveRedundantNullChecks) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
