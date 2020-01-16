@@ -39,7 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")
@@ -299,7 +299,8 @@ private[sql] object V2SessionCatalog {
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap -- SupportsNamespaces.RESERVED_PROPERTIES.asScala)
+      properties = metadata.asScala.toMap --
+        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {

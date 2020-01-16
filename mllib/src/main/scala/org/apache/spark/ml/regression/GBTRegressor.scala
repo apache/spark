@@ -56,7 +56,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.4.0")
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
+  extends Regressor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
@@ -227,7 +227,7 @@ class GBTRegressionModel private[ml](
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
     override val numFeatures: Int)
-  extends PredictionModel[Vector, GBTRegressionModel]
+  extends RegressionModel[Vector, GBTRegressionModel]
   with GBTRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 

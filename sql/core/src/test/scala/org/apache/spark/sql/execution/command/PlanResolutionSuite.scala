@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubsti
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -49,22 +49,20 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
-  private val table1: Table = {
-    val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(new StructType().add("i", "int"))
-    t
+  private val v1Table: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int"))
+    when(t.tableType).thenReturn(CatalogTableType.MANAGED)
+    V1Table(t)
   }
 
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
-        case "tab" =>
-          table
-        case "tab1" =>
-          table1
-        case name =>
-          throw new NoSuchTableException(name)
+        case "tab" => table
+        case "tab1" => table
+        case name => throw new NoSuchTableException(name)
       }
     })
     when(newCatalog.name()).thenReturn("testcat")
@@ -75,26 +73,11 @@ class PlanResolutionSuite extends AnalysisTest {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
-        case "v1Table" =>
-          val catalogTable = mock(classOf[CatalogTable])
-          when(catalogTable.tableType).thenReturn(CatalogTableType.MANAGED)
-          val v1Table = mock(classOf[V1Table])
-          when(v1Table.schema).thenReturn(new StructType().add("i", "int"))
-          when(v1Table.v1Table).thenReturn(catalogTable)
-          v1Table
-        case "v1Table1" =>
-          val v1Table1 = mock(classOf[V1Table])
-          when(v1Table1.schema).thenReturn(new StructType().add("i", "int"))
-          v1Table1
-        case "v2Table" =>
-          table
-        case "v2Table1" =>
-          table1
-        // Table named "v" is considered as a view in `ResolveSessionCatalog`.
-        case "v" =>
-          table
-        case name =>
-          throw new NoSuchTableException(name)
+        case "v1Table" => v1Table
+        case "v1Table1" => v1Table
+        case "v2Table" => table
+        case "v2Table1" => table
+        case name => throw new NoSuchTableException(name)
       }
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
@@ -105,6 +88,7 @@ class PlanResolutionSuite extends AnalysisTest {
     new InMemoryCatalog,
     EmptyFunctionRegistry,
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+  v1SessionCatalog.createTempView("v", LocalRelation(Nil), false)
 
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
@@ -146,11 +130,10 @@ class PlanResolutionSuite extends AnalysisTest {
     val analyzer = new Analyzer(catalogManager, conf)
     val rules = Seq(
       CTESubstitution,
+      analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables,
-      analyzer.ResolveRelations,
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")))
+      analyzer.ResolveTables)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -819,7 +802,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("DESCRIBE TABLE") {
+  test("DESCRIBE relation") {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"DESC TABLE $tblName"
@@ -834,27 +817,31 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeTable(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeTable(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
         }
 
         val sql3 = s"DESC TABLE $tblName PARTITION(a=1)"
+        val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
-          val parsed3 = parseAndResolve(sql3)
           val expected3 = DescribeTableCommand(
             TableIdentifier(tblName, None), Map("a" -> "1"), false)
           comparePlans(parsed3, expected3)
         } else {
-          // val e = intercept[AnalysisException](parseAndResolve(sql3))
-          // assert(e.message.contains("DESCRIBE TABLE does not support partition for v2 tables"))
+          parsed3 match {
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended) =>
+              assert(!isExtended)
+              assert(partitionSpec == Map("a" -> "1"))
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+          }
         }
     }
 

@@ -86,6 +86,21 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column with NOT NULL") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      sql(s"ALTER TABLE $t ADD COLUMN data string NOT NULL")
+
+      val table = getTableMetadata(t)
+
+      assert(table.name === fullTableName(t))
+      assert(table.schema === StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("data", StringType, nullable = false))))
+    }
+  }
+
   test("AlterTable: add column with comment") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -290,9 +305,30 @@ trait AlterTableTests extends SharedSparkSession {
       sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint")
 
       val table = getTableMetadata(t)
-
       assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", LongType))
+    }
+  }
+
+  test("AlterTable: SET/DROP NOT NULL") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint NOT NULL) USING $v2Format")
+      sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
+
+      val table = getTableMetadata(t)
+      assert(table.name === fullTableName(t))
+      assert(table.schema === new StructType().add("id", LongType, nullable = false))
+
+      sql(s"ALTER TABLE $t ALTER COLUMN id DROP NOT NULL")
+      val table2 = getTableMetadata(t)
+      assert(table2.name === fullTableName(t))
+      assert(table2.schema === new StructType().add("id", LongType))
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
+      }
+      assert(e.message.contains("Cannot change nullable column to non-nullable"))
     }
   }
 
@@ -303,7 +339,6 @@ trait AlterTableTests extends SharedSparkSession {
       sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
 
       val table = getTableMetadata(t)
-
       assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)

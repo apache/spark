@@ -419,9 +419,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           s"Schema did not match for query #$i\n${expected.sql}: $output") {
           output.schema
         }
-        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-          output.output
-        }
+        assertResult(expected.output.sorted, s"Result did not match" +
+          s" for query #$i\n${expected.sql}") { output.output.sorted }
       }
     }
   }
@@ -461,6 +460,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
+          | _: DescribeRelation
           | _: DescribeColumnStatement => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)

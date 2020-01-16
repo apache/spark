@@ -733,7 +733,7 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasDistanceMeasure):
+                             HasDistanceMeasure, HasWeightCol):
     """
     Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
 
@@ -838,9 +838,9 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     clusters, larger clusters get higher priority.
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
-    ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
-    >>> df = spark.createDataFrame(data, ["features"])
+    >>> data = [(Vectors.dense([0.0, 0.0]), 2.0), (Vectors.dense([1.0, 1.0]), 2.0),
+    ...         (Vectors.dense([9.0, 8.0]), 2.0), (Vectors.dense([8.0, 9.0]), 2.0)]
+    >>> df = spark.createDataFrame(data, ["features", "weighCol"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> bkm.setMaxIter(10)
     BisectingKMeans...
@@ -848,6 +848,8 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     10
     >>> bkm.clear(bkm.maxIter)
     >>> bkm.setSeed(1)
+    BisectingKMeans...
+    >>> bkm.setWeightCol("weighCol")
     BisectingKMeans...
     >>> bkm.getSeed()
     1
@@ -872,7 +874,7 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     >>> summary.clusterSizes
     [2, 2]
     >>> summary.trainingCost
-    2.000...
+    4.000...
     >>> transformed = model.transform(df).select("features", "newPrediction")
     >>> rows = transformed.collect()
     >>> rows[0].newPrediction == rows[1].newPrediction
@@ -901,10 +903,12 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
+                 weightCol=None):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
+                 weightCol=None)
         """
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
@@ -916,10 +920,12 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
+                  weightCol=None):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
+                  weightCol=None)
         Sets params for BisectingKMeans.
         """
         kwargs = self._input_kwargs
@@ -973,6 +979,13 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
@@ -1142,10 +1155,6 @@ class LDAModel(JavaModel, _LDAParams):
     def setTopicDistributionCol(self, value):
         """
         Sets the value of :py:attr:`topicDistributionCol`.
-
-        >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
-        >>> algo.getTopicDistributionCol()
-        'topicDistributionCol'
         """
         return self._set(topicDistributionCol=value)
 

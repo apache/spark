@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.internal
 
+import scala.language.reflectiveCalls
+
 import org.apache.hadoop.fs.Path
+import org.apache.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -258,12 +261,6 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
-    // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
-    spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
-    assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
-
-    // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority over PARQUET_INT64_AS_TIMESTAMP_MILLIS
     spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
@@ -329,5 +326,26 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       spark.conf.set(config, !defaultValue)
     }
     assert(e.getMessage.contains(config))
+  }
+
+  test("log deprecation warnings") {
+    val logAppender = new LogAppender
+    def check(config: String): Unit = {
+      assert(logAppender.loggingEvents.exists(
+        e => e.getLevel == Level.WARN &&
+        e.getRenderedMessage.contains(config)))
+    }
+
+    val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
+    withLogAppender(logAppender) {
+      spark.conf.set(config1, true)
+    }
+    check(config1)
+
+    val config2 = SQLConf.ARROW_EXECUTION_ENABLED.key
+    withLogAppender(logAppender) {
+      spark.conf.unset(config2)
+    }
+    check(config2)
   }
 }

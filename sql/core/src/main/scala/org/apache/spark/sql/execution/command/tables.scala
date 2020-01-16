@@ -24,6 +24,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
+import org.apache.hadoop.fs.permission.{AclEntry, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -494,13 +495,59 @@ case class TruncateTableCommand(
         partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
+    val ignorePermissionAcl = SQLConf.get.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
         try {
           val fs = path.getFileSystem(hadoopConf)
+
+          // Not all fs impl. support these APIs.
+          var optPermission: Option[FsPermission] = None
+          var optAcls: Option[java.util.List[AclEntry]] = None
+          if (!ignorePermissionAcl) {
+            val fileStatus = fs.getFileStatus(path)
+            try {
+              optPermission = Some(fileStatus.getPermission())
+            } catch {
+              case NonFatal(_) => // do nothing
+            }
+
+            try {
+              optAcls = Some(fs.getAclStatus(path).getEntries)
+            } catch {
+              case NonFatal(_) => // do nothing
+            }
+          }
+
           fs.delete(path, true)
+
+          // We should keep original permission/acl of the path.
+          // For owner/group, only super-user can set it, for example on HDFS. Because
+          // current user can delete the path, we assume the user/group is correct or not an issue.
           fs.mkdirs(path)
+          if (!ignorePermissionAcl) {
+            optPermission.foreach { permission =>
+              try {
+                fs.setPermission(path, permission)
+              } catch {
+                case NonFatal(e) =>
+                  throw new SecurityException(
+                    s"Failed to set original permission $permission back to " +
+                      s"the created path: $path. Exception: ${e.getMessage}")
+              }
+            }
+            optAcls.foreach { acls =>
+              try {
+                fs.setAcl(path, acls)
+              } catch {
+                case NonFatal(e) =>
+                  throw new SecurityException(
+                    s"Failed to set original ACL $acls back to " +
+                      s"the created path: $path. Exception: ${e.getMessage}")
+              }
+            }
+          }
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
@@ -1040,8 +1087,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // view columns shouldn't have data type info
         s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
       }
-      builder ++= viewColumns.mkString("(", ", ", ")\n")
+      builder ++= concatByMultiLines(viewColumns)
     }
+  }
+
+  private def concatByMultiLines(iter: Iterable[String]): String = {
+    iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
@@ -1051,7 +1102,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
+      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
     }
   }
 
@@ -1065,7 +1116,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }.map(_.toDDL)
 
     if (columns.nonEmpty) {
-      builder ++= columns.mkString("(", ", ", ")\n")
+      builder ++= concatByMultiLines(columns)
     }
   }
 
@@ -1077,7 +1128,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     if (metadata.bucketSpec.isDefined) {
       val bucketSpec = metadata.bucketSpec.get
-      builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(",")})\n"
+      builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(", ")})\n"
 
       if (bucketSpec.sortColumnNames.nonEmpty) {
         builder ++= s"SORTED BY (${bucketSpec.sortColumnNames.map(_ + " ASC").mkString(", ")})\n"
@@ -1097,7 +1148,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
+      builder ++= s"WITH SERDEPROPERTIES ${concatByMultiLines(serdeProps)}"
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -1134,7 +1185,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
+      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
     }
   }
 
@@ -1155,7 +1206,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= columns.mkString("(", ", ", ")\n")
+    builder ++= concatByMultiLines(columns)
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
@@ -1166,9 +1217,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     if (dataSourceOptions.nonEmpty) {
-      builder ++= "OPTIONS (\n"
-      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
-      builder ++= ")\n"
+      builder ++= s"OPTIONS ${concatByMultiLines(dataSourceOptions)}"
     }
   }
 

@@ -293,6 +293,16 @@ case class AlterNamespaceSetLocation(
 }
 
 /**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
+ */
+case class AlterNamespaceSetOwner(
+    child: LogicalPlan,
+    ownerName: String,
+    ownerType: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
@@ -305,16 +315,13 @@ case class ShowNamespaces(
 }
 
 /**
- * The logical plan of the DESCRIBE TABLE command that works for v2 tables.
+ * The logical plan of the DESCRIBE relation_name command that works for v2 tables.
  */
-case class DescribeTable(
-    table: LogicalPlan,
+case class DescribeRelation(
+    relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends Command {
-  override lazy val resolved: Boolean = table.resolved
-
-  override def children: Seq[LogicalPlan] = table :: Nil
-
+  override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
 
