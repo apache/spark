@@ -790,6 +790,7 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    comparePlans(parsePlan("describe t"),
       DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
