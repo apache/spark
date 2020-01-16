@@ -598,10 +598,10 @@ class SparkSession(SparkConversionMixin):
         if has_pandas and isinstance(data, pandas.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(
-                data, schema, verifySchema, samplingRatio)
-        return self._create_dataframe(data, schema, verifySchema, samplingRatio)
+                data, schema, samplingRatio, verifySchema)
+        return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-    def _create_dataframe(self, data, schema, verifySchema, samplingRatio):
+    def _create_dataframe(self, data, schema, samplingRatio, verifySchema):
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
