@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
@@ -271,7 +271,7 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-          writeOptions = c.options.filterKeys(_ != "path"),
+          writeOptions = c.options,
           ignoreIfExists = c.ifNotExists)
       }
 
@@ -307,7 +307,7 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-          writeOptions = c.options.filterKeys(_ != "path"),
+          writeOptions = c.options,
           orCreate = c.orCreate)
       }
 
@@ -553,16 +553,11 @@ class ResolveSessionCatalog(
       location: Option[String],
       comment: Option[String],
       ifNotExists: Boolean): CatalogTable = {
+    val storage = CatalogStorageFormat.empty.copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
 
-    val storage = DataSource.buildStorageFormatFromOptions(options)
-    if (location.isDefined && storage.locationUri.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-            "you can only specify one of them.")
-    }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
-
-    val tableType = if (customLocation.isDefined) {
+    val tableType = if (location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -571,7 +566,7 @@ class ResolveSessionCatalog(
     CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage.copy(locationUri = customLocation),
+      storage = storage,
       schema = schema,
       provider = Some(provider),
       partitionColumnNames = partitioning.asPartitionColumns,
