@@ -57,6 +57,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     resourceProfile: ResourceProfile)
   extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
+  import CoarseGrainedExecutorBackend._
+
   private implicit val formats = DefaultFormats
 
   private[this] val stopping = new AtomicBoolean(false)
@@ -83,9 +85,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
-      // This is a very fast action so we can use "ThreadUtils.sameThread"
-      case Success(msg) =>
-        // Always receive `true`. Just ignore it
+      case Success(_) =>
+        self.send(RegisteredExecutor)
       case Failure(e) =>
         exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
     }(ThreadUtils.sameThread)
@@ -124,9 +125,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
-
-    case RegisterExecutorFailed(message) =>
-      exitExecutor(1, "Slave registration failed: " + message)
 
     case LaunchTask(data) =>
       if (executor == null) {
@@ -217,6 +215,10 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
+
+  // Message used internally to start the executor when the driver successfully accepted the
+  // registration request.
+  case object RegisteredExecutor
 
   case class Arguments(
       driverUrl: String,

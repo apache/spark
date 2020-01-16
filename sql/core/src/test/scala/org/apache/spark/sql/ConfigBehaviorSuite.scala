@@ -51,7 +51,11 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
         dist)
     }
 
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+    // When enable AQE, the post partition number is changed.
+    // And the ChiSquareTest result is also need updated. So disable AQE.
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // The default chi-sq value should be low
       assert(computeChiSquareTest() < 10)
 

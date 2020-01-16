@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -38,7 +39,8 @@ class ObjectHashAggregateSuite
   extends QueryTest
   with SQLTestUtils
   with TestHiveSingleton
-  with ExpressionEvalHelper {
+  with ExpressionEvalHelper
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -394,19 +396,19 @@ class ObjectHashAggregateSuite
   }
 
   private def containsSortAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: SortAggregateExec => ()
     }.nonEmpty
   }
 
   private def containsObjectHashAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: ObjectHashAggregateExec => ()
     }.nonEmpty
   }
 
   private def containsHashAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: HashAggregateExec => ()
     }.nonEmpty
   }

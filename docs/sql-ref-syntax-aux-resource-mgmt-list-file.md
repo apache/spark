@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`LIST FILE` lists the files added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
+`LIST FILE` lists the resources added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
 
 ### Syntax
 {% highlight sql %}
