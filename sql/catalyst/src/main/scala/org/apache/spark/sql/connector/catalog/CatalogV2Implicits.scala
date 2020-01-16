@@ -98,6 +98,14 @@ private[sql] object CatalogV2Implicits {
     }
 
     def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+
+    def asTableIdentifier: TableIdentifier = ident.namespace match {
+      case ns if ns.isEmpty => TableIdentifier(ident.name)
+      case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
+    }
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
@@ -118,7 +126,7 @@ private[sql] object CatalogV2Implicits {
     def quoted: String = parts.map(quote).mkString(".")
   }
 
-  private def quote(part: String): String = {
+  def quote(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -51,7 +52,9 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSparkSession {
+class DatasetSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -194,6 +197,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("as case class - take") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
+  }
+
+  test("as case class - tail") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
   }
 
   test("as seq of case class - reorder fields by name") {
@@ -1861,9 +1869,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("groupBy.as") {
-    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData( 3, "three")).toDS()
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
-    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
 
     val df3 = df1.groupBy("id").as[Int, DoubleData]
@@ -1875,10 +1883,21 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(df3, DoubleData(1, "onetwo"))
 
     // Assert that no extra shuffle introduced by cogroup.
-    val exchanges = df3.queryExecution.executedPlan.collect {
+    val exchanges = collect(df3.queryExecution.executedPlan) {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
+  }
+
+  test("tail with different numbers") {
+    Seq(0, 2, 5, 10, 50, 100, 1000).foreach { n =>
+      assert(spark.range(n).tail(6) === (math.max(n - 6, 0) until n))
+    }
+  }
+
+  test("tail should not accept minus value") {
+    val e = intercept[AnalysisException](spark.range(1).tail(-1))
+    e.getMessage.contains("tail expression must be equal to or greater than 0")
   }
 }
 

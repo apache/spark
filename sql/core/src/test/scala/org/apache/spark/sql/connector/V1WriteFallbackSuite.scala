@@ -27,11 +27,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -233,7 +233,9 @@ class InMemoryV1Provider
       // do nothing
       return getRelation
     }
-    val writer = table.newWriteBuilder(new CaseInsensitiveStringMap(parameters.asJava))
+    val writer = table.newWriteBuilder(
+      LogicalWriteInfoImpl(
+        "", StructType(Seq.empty), new CaseInsensitiveStringMap(parameters.asJava)))
     if (mode == SaveMode.Overwrite) {
       writer.asInstanceOf[SupportsTruncate].truncate()
     }
@@ -267,8 +269,8 @@ class InMemoryTableWithV1Fallback(
 
   def getData: Seq[Row] = dataMap.values.flatten.toSeq
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    new FallbackWriteBuilder(options)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new FallbackWriteBuilder(info.options)
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)

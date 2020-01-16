@@ -38,7 +38,9 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   test("roundtrip in to_avro and from_avro - int and string") {
     val df = spark.range(10).select('id, 'id.cast("string").as("str"))
 
-    val avroDF = df.select(to_avro('id).as("a"), to_avro('str).as("b"))
+    val avroDF = df.select(
+      functions.to_avro('id).as("a"),
+      functions.to_avro('str).as("b"))
     val avroTypeLong = s"""
       |{
       |  "type": "int",
@@ -51,12 +53,14 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  "name": "str"
       |}
     """.stripMargin
-    checkAnswer(avroDF.select(from_avro('a, avroTypeLong), from_avro('b, avroTypeStr)), df)
+    checkAnswer(avroDF.select(
+      functions.from_avro('a, avroTypeLong),
+      functions.from_avro('b, avroTypeStr)), df)
   }
 
   test("roundtrip in to_avro and from_avro - struct") {
     val df = spark.range(10).select(struct('id, 'id.cast("string").as("str")).as("struct"))
-    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
     val avroTypeStruct = s"""
       |{
       |  "type": "record",
@@ -67,13 +71,14 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
-    checkAnswer(avroStructDF.select(from_avro('avro, avroTypeStruct)), df)
+    checkAnswer(avroStructDF.select(
+      functions.from_avro('avro, avroTypeStruct)), df)
   }
 
   test("handle invalid input in from_avro") {
     val count = 10
     val df = spark.range(count).select(struct('id, 'id.as("id2")).as("struct"))
-    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
     val avroTypeStruct = s"""
       |{
       |  "type": "record",
@@ -87,7 +92,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
 
     intercept[SparkException] {
       avroStructDF.select(
-        org.apache.spark.sql.avro.functions.from_avro(
+        functions.from_avro(
           'avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
     }
 
@@ -95,7 +100,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     val expected = (0 until count).map(_ => Row(Row(null, null)))
     checkAnswer(
       avroStructDF.select(
-        org.apache.spark.sql.avro.functions.from_avro(
+       functions.from_avro(
           'avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
   }
@@ -115,8 +120,8 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  }, "null" ]
       |}, "null" ]
     """.stripMargin
-    val readBackOne = dfOne.select(to_avro($"array").as("avro"))
-      .select(from_avro($"avro", avroTypeArrStruct).as("array"))
+    val readBackOne = dfOne.select(functions.to_avro($"array").as("avro"))
+      .select(functions.from_avro($"avro", avroTypeArrStruct).as("array"))
     checkAnswer(dfOne, readBackOne)
   }
 
@@ -192,8 +197,8 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       avroStructDF.select(
         functions.from_avro(
           'avro,
-          evolvedAvroSchema,
-          Map("actualSchema" -> actualAvroSchema).asJava)),
+          actualAvroSchema,
+          Map("avroSchema" -> evolvedAvroSchema).asJava)),
       expected)
   }
 }

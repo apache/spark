@@ -22,7 +22,7 @@ import java.math.BigDecimal
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
@@ -309,7 +309,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-19338 Provide identical names for UDFs in the EXPLAIN output") {
     def explainStr(df: DataFrame): String = {
-      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
       val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
       sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
     }

@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
@@ -524,9 +525,10 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
-    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Array(expectedAccumValue))
+    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType,
+      Array(expectedAccumValue), Array.empty[Long])
     val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType,
-      Array(expectedAccumValue2))
+      Array(expectedAccumValue2), Array.empty[Long])
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
@@ -619,9 +621,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   }
 
   test("SPARK-29894 test Codegen Stage Id in SparkPlanInfo") {
-    val df = createTestDataFrame.select(count("*"))
-    val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
-    assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
+      val df = createTestDataFrame.select(count("*"))
+      val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
+      assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
+    }
   }
 }
 

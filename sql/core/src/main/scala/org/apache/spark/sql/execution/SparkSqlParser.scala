@@ -136,10 +136,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       ExplainCommand(
         logicalPlan = statement,
-        extended = ctx.EXTENDED != null,
-        codegen = ctx.CODEGEN != null,
-        cost = ctx.COST != null,
-        formatted = ctx.FORMATTED != null)
+        mode = {
+          if (ctx.EXTENDED != null) ExtendedMode
+          else if (ctx.CODEGEN != null) CodegenMode
+          else if (ctx.COST != null) CostMode
+          else if (ctx.FORMATTED != null) FormattedMode
+          else SimpleMode
+        })
     }
   }
 
@@ -218,38 +221,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       global = ctx.GLOBAL != null,
       provider = ctx.tableProvider.multipartIdentifier.getText,
       options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
-  }
-
-  /**
-   * Create a [[CreateFunctionCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
-   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
-   * }}}
-   */
-  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
-      resourceType match {
-        case "jar" | "file" | "archive" =>
-          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
-        case other =>
-          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
-      }
-    }
-
-    // Extract database, name & alias.
-    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
-    CreateFunctionCommand(
-      functionIdentifier.database,
-      functionIdentifier.funcName,
-      string(ctx.className),
-      resources,
-      ctx.TEMPORARY != null,
-      ctx.EXISTS != null,
-      ctx.REPLACE != null)
   }
 
   /**
@@ -365,7 +336,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
@@ -388,7 +359,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
@@ -422,7 +393,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
-      comment = Option(ctx.comment).map(string))
+      comment = visitCommentSpecList(ctx.commentSpec()))
 
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
@@ -501,7 +472,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // rowStorage used to determine CatalogStorageFormat.serde and
     // CatalogStorageFormat.properties in STORED AS clause.
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)

@@ -131,7 +131,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
+    ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -194,6 +194,24 @@ package object config {
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
       .createWithDefaultString("128m")
+
+  private[spark] val EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN =
+    ConfigBuilder("spark.eventLog.rolling.maxFilesToRetain")
+      // TODO: remove this when integrating compactor with FsHistoryProvider
+      .internal()
+      .doc("The maximum number of event log files which will be retained as non-compacted. " +
+        "By default, all event log files will be retained. Please set the configuration " +
+        s"and ${EVENT_LOG_ROLLING_MAX_FILE_SIZE.key} accordingly if you want to control " +
+        "the overall size of event log files.")
+      .intConf
+      .checkValue(_ > 0, "Max event log files to retain should be higher than 0.")
+      .createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val EVENT_LOG_COMPACTION_SCORE_THRESHOLD =
+    ConfigBuilder("spark.eventLog.rolling.compaction.score.threshold")
+      .internal()
+      .doubleConf
+      .createWithDefault(0.7d)
 
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").stringConf.createOptional
@@ -1095,14 +1113,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
-    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
-      .doc("If enabled, shuffle blocks requested from those block managers which are running on " +
-        "the same host are read from the disk directly instead of being fetched as remote blocks " +
-        "over the network.")
-      .booleanConf
-      .createWithDefault(true)
-
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
       .doc("The max number of executors for which the local dirs are stored. This size is " +
@@ -1147,6 +1157,14 @@ package object config {
         "version job fetching shuffle blocks from old version external shuffle service.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
+    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
+        "blocks requested from those block managers which are running on the same host are read " +
+        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
@@ -1507,7 +1525,8 @@ package object config {
         "longer time than the threshold. This config helps speculate stage with very few " +
         "tasks. Regular speculation configs may also apply if the executor slots are " +
         "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
-        "even though the threshold hasn't been reached.")
+        "even though the threshold hasn't been reached. The number of slots is computed based " +
+        "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 

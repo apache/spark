@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -703,91 +703,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
   }
-
-  test("from_utc_timestamp with literal zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
-    ).toDF("a", "b")
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      checkAnswer(
-        df.select(from_utc_timestamp(col("a"), "PST")),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-      checkAnswer(
-        df.select(from_utc_timestamp(col("b"), "PST")),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    }
-    val msg = intercept[AnalysisException] {
-      df.select(from_utc_timestamp(col("a"), "PST")).collect()
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
-  }
-
-  test("from_utc_timestamp with column zone") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val df = Seq(
-        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
-        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
-      ).toDF("a", "b", "c")
-      checkAnswer(
-        df.select(from_utc_timestamp(col("a"), col("c"))),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-      checkAnswer(
-        df.select(from_utc_timestamp(col("b"), col("c"))),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    }
-  }
-
-  test("to_utc_timestamp with literal zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
-    ).toDF("a", "b")
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      checkAnswer(
-        df.select(to_utc_timestamp(col("a"), "PST")),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
-      checkAnswer(
-        df.select(to_utc_timestamp(col("b"), "PST")),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
-    }
-    val msg = intercept[AnalysisException] {
-      df.select(to_utc_timestamp(col("a"), "PST")).collect()
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
-  }
-
-  test("to_utc_timestamp with column zone") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val df = Seq(
-        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
-        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
-      ).toDF("a", "b", "c")
-      checkAnswer(
-        df.select(to_utc_timestamp(col("a"), col("c"))),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-      checkAnswer(
-        df.select(to_utc_timestamp(col("b"), col("c"))),
-        Seq(
-          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-    }
-  }
-
 
   test("to_timestamp with microseconds precision") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {

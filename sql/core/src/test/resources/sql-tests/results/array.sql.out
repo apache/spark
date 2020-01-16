@@ -75,7 +75,7 @@ select * from primitive_arrays
 -- !query 5 schema
 struct<boolean_array:array<boolean>,tinyint_array:array<tinyint>,smallint_array:array<smallint>,int_array:array<int>,bigint_array:array<bigint>,decimal_array:array<decimal(19,0)>,double_array:array<double>,float_array:array<float>,date_array:array<date>,timestamp_array:array<timestamp>>
 -- !query 5 output
-[true]	[2,1]	[2,1]	[2,1]	[2,1]	[9223372036854775809,9223372036854775808]	[2.0,1.0]	[2.0,1.0]	[2016-03-14,2016-03-13]	[2016-11-15 20:54:00.0,2016-11-12 20:54:00.0]
+[true]	[2,1]	[2,1]	[2,1]	[2,1]	[9223372036854775809,9223372036854775808]	[2.0,1.0]	[2.0,1.0]	[2016-03-14,2016-03-13]	[2016-11-15 20:54:00,2016-11-12 20:54:00]
 
 
 -- !query 6
@@ -122,7 +122,7 @@ from primitive_arrays
 -- !query 8 schema
 struct<sort_array(boolean_array, true):array<boolean>,sort_array(tinyint_array, true):array<tinyint>,sort_array(smallint_array, true):array<smallint>,sort_array(int_array, true):array<int>,sort_array(bigint_array, true):array<bigint>,sort_array(decimal_array, true):array<decimal(19,0)>,sort_array(double_array, true):array<double>,sort_array(float_array, true):array<float>,sort_array(date_array, true):array<date>,sort_array(timestamp_array, true):array<timestamp>>
 -- !query 8 output
-[true]	[1,2]	[1,2]	[1,2]	[1,2]	[9223372036854775808,9223372036854775809]	[1.0,2.0]	[1.0,2.0]	[2016-03-13,2016-03-14]	[2016-11-12 20:54:00.0,2016-11-15 20:54:00.0]
+[true]	[1,2]	[1,2]	[1,2]	[1,2]	[9223372036854775808,9223372036854775809]	[1.0,2.0]	[1.0,2.0]	[2016-03-13,2016-03-14]	[2016-11-12 20:54:00,2016-11-15 20:54:00]
 
 
 -- !query 9

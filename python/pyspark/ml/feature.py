@@ -449,20 +449,6 @@ class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHPa
     .. versionadded:: 2.2.0
     """
 
-    @since("3.0.0")
-    def setInputCol(self, value):
-        """
-        Sets the value of :py:attr:`inputCol`.
-        """
-        return self._set(inputCol=value)
-
-    @since("3.0.0")
-    def setOutputCol(self, value):
-        """
-        Sets the value of :py:attr:`outputCol`.
-        """
-        return self._set(outputCol=value)
-
 
 @inherit_doc
 class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
@@ -872,20 +858,6 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
-
-    @since("3.0.0")
-    def setMinTF(self, value):
-        """
-        Sets the value of :py:attr:`minTF`.
-        """
-        return self._set(minTF=value)
-
-    @since("3.0.0")
-    def setBinary(self, value):
-        """
-        Sets the value of :py:attr:`binary`.
-        """
-        return self._set(binary=value)
 
     @classmethod
     @since("2.4.0")
@@ -1713,6 +1685,20 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.2.0")
@@ -2932,6 +2918,7 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     Centering and scaling happen independently on each feature by computing the relevant
     statistics on the samples in the training set. Median and quantile range are then
     stored to be used on later data using the transform method.
+    Note that NaN values are ignored in the computation of medians and ranges.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(0, Vectors.dense([0.0, 0.0]),),

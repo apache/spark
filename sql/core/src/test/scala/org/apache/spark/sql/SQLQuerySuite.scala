@@ -26,10 +26,13 @@ import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -43,7 +46,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -190,7 +193,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
                 val actual = unindentAndTrim(
                   hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
                 val expected = unindentAndTrim(output)
-                assert(actual === expected)
+                assert(actual.sorted === expected.sorted)
               case _ =>
             })
           }
@@ -783,8 +786,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |   SELECT * FROM testData UNION ALL
           |   SELECT * FROM testData) y
           |WHERE x.key = y.key""".stripMargin),
-      testData.rdd.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -2835,6 +2839,44 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
 
+  test("Support filter clause for aggregate function with hash aggregate") {
+    Seq(("COUNT(a)", 3), ("COLLECT_LIST(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+      val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collect {
+        case agg: HashAggregateExec => agg.aggregateExpressions
+        case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
+      }
+      checkAnswer(df, Row(funcToResult._2))
+    }
+  }
+
+  test("Support filter clause for aggregate function uses SortAggregateExec") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collect {
+        case agg: SortAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
+      }
+      checkAnswer(df, Row(3))
+    }
+  }
+
   test("Non-deterministic aggregate functions should not be deduplicated") {
     val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -3242,7 +3284,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
              |on leftside.a = rightside.a
            """.stripMargin)
 
-        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+        val inMemoryTableScan = collect(queryDf.queryExecution.executedPlan) {
           case i: InMemoryTableScanExec => i
         }
         assert(inMemoryTableScan.size == 2)
@@ -3332,6 +3374,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(df4, Row(new java.math.BigDecimal(1)))
       val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
       checkAnswer(df5, Array.empty[Row])
+    }
+  }
+
+  test("SPARK-30447: fix constant propagation inside NOT") {
+    withTempView("t") {
+      Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
+      val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
+
+      checkAnswer(df, Row(1))
     }
   }
 }

@@ -209,9 +209,9 @@ private[ml] class LeastSquaresAggregator(
       if (diff != 0) {
         val localGradientSumArray = gradientSumArray
         val localFeaturesStd = featuresStd
-        features.foreachActive { (index, value) =>
+        features.foreachNonZero { (index, value) =>
           val fStd = localFeaturesStd(index)
-          if (fStd != 0.0 && value != 0.0) {
+          if (fStd != 0.0) {
             localGradientSumArray(index) += weight * diff * value / fStd
           }
         }

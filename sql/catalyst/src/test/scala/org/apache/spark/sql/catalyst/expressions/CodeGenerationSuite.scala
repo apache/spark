@@ -19,9 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.log4j.AppenderSkeleton
-import org.apache.log4j.spi.LoggingEvent
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -522,20 +519,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
-    class MockAppender extends AppenderSkeleton {
-      var seenMessage = false
-
-      override def append(loggingEvent: LoggingEvent): Unit = {
-        if (loggingEvent.getRenderedMessage().contains("Generated method too long")) {
-          seenMessage = true
-        }
-      }
-
-      override def close(): Unit = {}
-      override def requiresLayout(): Boolean = false
-    }
-
-    val appender = new MockAppender()
+    val appender = new LogAppender
     withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
@@ -543,7 +527,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       val actual = proj(null)
       assert(actual.getInt(0) == x)
     }
-    assert(appender.seenMessage)
+    assert(appender.loggingEvents
+      .exists(_.getRenderedMessage().contains("Generated method too long")))
   }
 
   test("SPARK-28916: subexrepssion elimination can cause 64kb code limit on UnsafeProjection") {

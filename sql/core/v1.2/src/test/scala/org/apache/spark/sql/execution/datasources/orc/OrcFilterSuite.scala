@@ -53,12 +53,11 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        assert(pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pushedFilters")
+        assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for ${o.pushedFilters}")
         checker(maybeFilter.get)
 
       case _ =>
@@ -256,7 +255,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
 
       checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(timestamps(0)) <=> $"_1",
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
       checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
       checkFilterPredicate(Literal(timestamps(2)) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
       checkFilterPredicate(Literal(timestamps(0)) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)

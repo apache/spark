@@ -119,18 +119,22 @@ private[spark] object ResourceUtils extends Logging {
   def parseAllResourceRequests(
       sparkConf: SparkConf,
       componentName: String): Seq[ResourceRequest] = {
-    listResourceIds(sparkConf, componentName).map { id =>
-      parseResourceRequest(sparkConf, id)
-    }
+    listResourceIds(sparkConf, componentName)
+      .map(id => parseResourceRequest(sparkConf, id))
+      .filter(_.amount > 0)
   }
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
-    listResourceIds(sparkConf, componentName).map { resourceId =>
+    val resourceIds = listResourceIds(sparkConf, componentName)
+    val rnamesAndAmounts = resourceIds.map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
+      (resourceId.resourceName, amountDouble)
+    }
+    rnamesAndAmounts.filter { case (_, amount) => amount > 0 }.map { case (rName, amountDouble) =>
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
         val parts = if (amountDouble <= 0.5) {
           Math.floor(1.0 / amountDouble).toInt
@@ -147,7 +151,7 @@ private[spark] object ResourceUtils extends Logging {
       } else {
         (amountDouble.toInt, 1)
       }
-      ResourceRequirement(resourceId.resourceName, amount, parts)
+      ResourceRequirement(rName, amount, parts)
     }
   }
 
@@ -184,10 +188,15 @@ private[spark] object ResourceUtils extends Logging {
     val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
       .filter(_.id.componentName == componentName)
     val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))
-    allocated ++ otherResourceIds.map { id =>
+    val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
-      ResourceAllocation(id, discoverResource(request).addresses)
+      if (request.amount > 0) {
+        Some(ResourceAllocation(id, discoverResource(request).addresses))
+      } else {
+        None
+      }
     }
+    allocated ++ otherResources
   }
 
   private def assertResourceAllocationMeetsRequest(

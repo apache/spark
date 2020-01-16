@@ -27,16 +27,17 @@ import org.mockito.Mockito._
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class JoinSuite extends QueryTest with SharedSparkSession {
+class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
@@ -238,7 +239,9 @@ class JoinSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       bigDataX.join(bigDataY).where($"x.key" === $"y.key"),
-      testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -840,7 +843,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
         case j: SortMergeJoinExec => j
       }
       val executed = df.queryExecution.executedPlan
-      val executedJoins = executed.collect {
+      val executedJoins = collect(executed) {
         case j: SortMergeJoinExec => j
       }
       // This only applies to the above tested queries, in which a child SortMergeJoin always
@@ -1024,12 +1027,12 @@ class JoinSuite extends QueryTest with SharedSparkSession {
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
     val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
 
-    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    val joinNode = find(df.queryExecution.executedPlan)(_.isInstanceOf[BroadcastHashJoinExec])
     assert(joinNode.isDefined)
 
     // There are two PythonUDFs which use attribute from left and right of join, individually.
     // So two PythonUDFs should be evaluated before the join operator, at left and right side.
-    val pythonEvals = joinNode.get.collect {
+    val pythonEvals = collect(joinNode.get) {
       case p: BatchEvalPythonExec => p
     }
     assert(pythonEvals.size == 2)
@@ -1053,7 +1056,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
     assert(filterInAnalysis.isDefined)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
-    val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
+    val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
     assert(filterExec.isEmpty)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)

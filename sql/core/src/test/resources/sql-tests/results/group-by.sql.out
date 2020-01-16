@@ -128,7 +128,7 @@ NULL	1
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData
 -- !query 13 schema
-struct<skewness(CAST(a AS DOUBLE)):double,kurtosis(CAST(a AS DOUBLE)):double,min(a):int,max(a):int,avg(a):double,var_samp(CAST(a AS DOUBLE)):double,stddev_samp(CAST(a AS DOUBLE)):double,sum(a):bigint,count(a):bigint>
+struct<skewness(CAST(a AS DOUBLE)):double,kurtosis(CAST(a AS DOUBLE)):double,min(a):int,max(a):int,avg(a):double,variance(CAST(a AS DOUBLE)):double,stddev(CAST(a AS DOUBLE)):double,sum(a):bigint,count(a):bigint>
 -- !query 13 output
 -0.2723801058145729	-1.5069204152249134	1	3	2.142857142857143	0.8095238095238094	0.8997354108424372	15	7
 
