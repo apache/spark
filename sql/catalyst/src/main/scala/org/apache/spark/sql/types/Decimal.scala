@@ -149,6 +149,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       this._precision = decimal.precision
       this._scale = decimal.scale
     }
+    if (this._precision > DecimalType.MAX_PRECISION) {
+      throw new ArithmeticException(
+        s"Decimal precision ${this._precision} exceeds max precision ${DecimalType.MAX_PRECISION}")
+    }
     this
   }
 
