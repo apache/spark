@@ -117,8 +117,8 @@ import org.apache.spark.sql.types.IntegerType
  *        output = ['key, 'cat1, 'cat2, 'gid, 'value, 'id])
  *       LocalTableScan [...]
  * }}}
- 
-  * Third example: single distinct aggregate function with filter clauses (in sql):
+ *
+ * Third example: single distinct aggregate function with filter clauses (in sql):
  * {{{
  *   SELECT
  *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt1,
@@ -454,6 +454,17 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
       a
+    }
+  }
+
+  /**
+   * Collect all aggregate expressions.
+   */
+  private def collectAggregateExprs(a: Aggregate): Seq[AggregateExpression] = {
+    a.aggregateExpressions.flatMap { e =>
+      e.collect {
+        case ae: AggregateExpression => ae
+      }
     }
   }
 
