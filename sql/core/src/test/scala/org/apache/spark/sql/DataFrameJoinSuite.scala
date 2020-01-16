@@ -19,13 +19,16 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
+class DataFrameJoinSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("join - join using") {
@@ -150,7 +153,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong).hint("broadcast"), "id")
         .queryExecution.executedPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
+    assert(collect(plan2) { case p: BroadcastHashJoinExec => p }.size == 1)
   }
 
   test("join - outer join conversion") {

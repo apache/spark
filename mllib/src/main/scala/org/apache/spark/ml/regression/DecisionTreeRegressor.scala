@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.4.0")
 class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
+  extends Regressor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
 
   @Since("1.4.0")
@@ -159,7 +159,7 @@ class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
     override val numFeatures: Int)
-  extends PredictionModel[Vector, DecisionTreeRegressionModel]
+  extends RegressionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
 
   /** @group setParam */

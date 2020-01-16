@@ -1497,6 +1497,30 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       |}
     """.stripMargin)
   }
+
+  test("log a warning of ignoreExtension deprecation") {
+    val logAppender = new LogAppender
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1), ("d", 2, 1))
+        .toDF("value", "p1", "p2")
+        .repartition(2)
+        .write
+        .format("avro")
+        .save(dir.getCanonicalPath)
+      withLogAppender(logAppender) {
+        spark
+          .read
+          .format("avro")
+          .option(AvroOptions.ignoreExtensionKey, false)
+          .load(dir.getCanonicalPath)
+          .count()
+      }
+      val deprecatedEvents = logAppender.loggingEvents
+        .filter(_.getRenderedMessage.contains(
+          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+      assert(deprecatedEvents.size === 1)
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -1521,12 +1545,10 @@ class AvroV2Suite extends AvroSuite {
         .write
         .format("avro")
         .partitionBy("p1", "p2")
-        .option("header", true)
         .save(dir.getCanonicalPath)
       val df = spark
         .read
         .format("avro")
-        .option("header", true)
         .load(dir.getCanonicalPath)
         .where("p1 = 1 and p2 = 2 and value != \"a\"")
 

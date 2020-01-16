@@ -2535,6 +2535,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case (PROP_COMMENT, _) =>
           throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
             s" the COMMENT clause to specify it.", ctx)
+        case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+          throw new ParseException(s"$ownership is a reserved namespace property , please use" +
+            " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
         case _ =>
       }
       properties
@@ -3059,9 +3062,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DescribeColumnStatement]] or [[DescribeTableStatement]] commands.
+   * Create a [[DescribeColumnStatement]] or [[DescribeRelation]] commands.
    */
-  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
+  override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
@@ -3083,8 +3086,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       } else {
         Map.empty[String, String]
       }
-      DescribeTableStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier()),
+      DescribeRelation(
+        UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
         partitionSpec,
         isExtended)
     }
@@ -3562,4 +3565,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     CommentOnTable(UnresolvedTable(nameParts), comment)
   }
+
+  /**
+   * Create an [[AlterNamespaceSetOwner]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET OWNER (USER|ROLE|GROUP) identityName;
+   * }}}
+   */
+  override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
+    withOrigin(ctx) {
+      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+      AlterNamespaceSetOwner(
+        UnresolvedNamespace(nameParts),
+        ctx.identifier.getText,
+        ctx.ownerType.getText)
+    }
+  }
+
 }

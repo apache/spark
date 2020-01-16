@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.Column
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.annotation.{Experimental, Stable}
+import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.execution.aggregate.ScalaAggregator
 import org.apache.spark.sql.types.{AnyDataType, DataType}
 
 /**
@@ -129,6 +134,45 @@ private[sql] case class SparkUserDefinedFunction(
   }
 
   override def asNondeterministic(): SparkUserDefinedFunction = {
+    if (!deterministic) {
+      this
+    } else {
+      copy(deterministic = false)
+    }
+  }
+}
+
+private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
+    aggregator: Aggregator[IN, BUF, OUT],
+    inputEncoder: Encoder[IN],
+    name: Option[String] = None,
+    nullable: Boolean = true,
+    deterministic: Boolean = true) extends UserDefinedFunction {
+
+  @scala.annotation.varargs
+  def apply(exprs: Column*): Column = {
+    Column(AggregateExpression(scalaAggregator(exprs.map(_.expr)), Complete, isDistinct = false))
+  }
+
+  // This is also used by udf.register(...) when it detects a UserDefinedAggregator
+  def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
+    val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
+    ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)
+  }
+
+  override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
+    copy(name = Option(name))
+  }
+
+  override def asNonNullable(): UserDefinedAggregator[IN, BUF, OUT] = {
+    if (!nullable) {
+      this
+    } else {
+      copy(nullable = false)
+    }
+  }
+
+  override def asNondeterministic(): UserDefinedAggregator[IN, BUF, OUT] = {
     if (!deterministic) {
       this
     } else {

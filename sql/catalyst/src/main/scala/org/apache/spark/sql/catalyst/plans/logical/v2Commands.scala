@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
@@ -292,6 +293,16 @@ case class AlterNamespaceSetLocation(
 }
 
 /**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
+ */
+case class AlterNamespaceSetOwner(
+    child: LogicalPlan,
+    ownerName: String,
+    ownerType: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
@@ -304,12 +315,13 @@ case class ShowNamespaces(
 }
 
 /**
- * The logical plan of the DESCRIBE TABLE command that works for v2 tables.
+ * The logical plan of the DESCRIBE relation_name command that works for v2 tables.
  */
-case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
-
-  override lazy val resolved: Boolean = table.resolved
-
+case class DescribeRelation(
+    relation: LogicalPlan,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
 

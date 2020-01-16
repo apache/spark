@@ -23,8 +23,8 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetLocation, AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -197,7 +197,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
       DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
 
-    case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
+    case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+      }
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
@@ -248,6 +251,11 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case r @ ShowTableProperties(DataSourceV2Relation(table, _, _), propertyKey) =>
       ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
+
+    case AlterNamespaceSetOwner(ResolvedNamespace(catalog, namespace), name, typ) =>
+      val properties =
+        Map(SupportsNamespaces.PROP_OWNER_NAME -> name, SupportsNamespaces.PROP_OWNER_TYPE -> typ)
+      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
 
     case _ => Nil
   }

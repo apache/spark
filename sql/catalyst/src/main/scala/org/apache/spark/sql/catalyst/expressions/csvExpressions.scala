@@ -114,7 +114,7 @@ case class CsvToStructs(
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)
     new FailureSafeParser[String](
-      input => Seq(rawParser.parse(input)),
+      input => rawParser.parse(input),
       mode,
       nullableSchema,
       parsedOptions.columnNameOfCorruptRecord)

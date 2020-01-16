@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
@@ -119,6 +120,11 @@ class DataSourceV2SQLSuite
       Row("", "", ""),
       Row("# Partitioning", "", ""),
       Row("Part 0", "id", "")))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
+    }
+    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
@@ -886,7 +892,8 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) === null, "reserved properties should not have side effects")
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
         }
       }
     }
@@ -969,7 +976,9 @@ class DataSourceV2SQLSuite
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test")
+        Row("Location", "/tmp/ns_test"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", "USER")
       ))
     }
   }
@@ -984,6 +993,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", "USER"),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
     }
@@ -1012,7 +1023,8 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) === null, "reserved properties should not have side effects")
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
         }
       }
     }
@@ -1027,7 +1039,25 @@ class DataSourceV2SQLSuite
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_2")
+        Row("Location", "/tmp/ns_test_2"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", "USER")
+      ))
+    }
+  }
+
+  test("AlterNamespaceSetOwner using v2 catalog") {
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_3'")
+      sql("ALTER NAMESPACE testcat.ns1.ns2 SET OWNER ROLE adminRole")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row("Description", "test namespace"),
+        Row("Location", "/tmp/ns_test_3"),
+        Row("Owner Name", "adminRole"),
+        Row("Owner Type", "ROLE")
       ))
     }
   }

@@ -115,14 +115,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
-    case DescribeTableStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
-      }
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      DescribeTable(r, isExtended)
-
     case DescribeColumnStatement(
          NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
