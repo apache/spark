@@ -114,13 +114,6 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedV2Relation =>
         u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
@@ -420,7 +413,7 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case alter: AlterTable if alter.childrenResolved =>
-            val table = alter.table
+            val table = alter.table.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)

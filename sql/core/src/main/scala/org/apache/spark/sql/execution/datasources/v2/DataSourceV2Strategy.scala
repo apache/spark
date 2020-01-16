@@ -206,8 +206,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
 
-    case AlterTable(catalog, ident, _, changes) =>
-      AlterTableExec(catalog, ident, changes) :: Nil
+    case AlterTable(table, changes) =>
+      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
     case RenameTable(catalog, oldIdent, newIdent) =>
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil

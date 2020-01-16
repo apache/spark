@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -131,9 +131,9 @@ class PlanResolutionSuite extends AnalysisTest {
     val rules = Seq(
       CTESubstitution,
       analyzer.ResolveRelations,
+      analyzer.ResolveTables,
       new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables)
+      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")))
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -711,7 +711,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed1 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.setProperty("test", "test"),
                 TableChange.setProperty("comment", "new_comment")))
@@ -719,7 +719,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
@@ -727,7 +727,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
@@ -741,15 +741,9 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed4 = parseAndResolve(sql4)
     val parsed5 = parseAndResolve(sql5)
 
-    // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
-    parsed4 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed4.treeString)
-    }
-    parsed5 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed5.treeString)
-    }
+    // For non-existing tables, we expect `UnresolvedTable` in the resolved plan.
+    assert(parsed4.collect{ case u: UnresolvedTable => u }.length == 1)
+    assert(parsed5.collect{ case u: UnresolvedTable => u }.length == 1)
   }
 
   test("support for other types in TBLPROPERTIES") {
@@ -770,7 +764,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.setProperty("a", "1"),
                 TableChange.setProperty("b", "0.1"),
@@ -794,7 +788,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(TableChange.setProperty("location", "new location")))
             case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
@@ -1036,14 +1030,14 @@ class PlanResolutionSuite extends AnalysisTest {
           val parsed3 = parseAndResolve(sql3)
 
           parsed1 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.updateColumnType(Array("i"), LongType)))
             case _ => fail("expect AlterTable")
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.updateColumnType(Array("i"), LongType),
                 TableChange.updateColumnComment(Array("i"), "new comment")))
@@ -1051,7 +1045,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+            case AlterTable(_, changes) =>
               assert(changes == Seq(
                 TableChange.updateColumnComment(Array("i"), "new comment")))
             case _ => fail("expect AlterTable")

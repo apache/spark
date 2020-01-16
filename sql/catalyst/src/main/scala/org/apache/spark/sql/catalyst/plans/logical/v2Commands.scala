@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange, ColumnPosition}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
@@ -397,11 +397,8 @@ case class DropTable(
  * The logical plan of the ALTER TABLE command that works for v2 tables.
  */
 case class AlterTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
+    table: ResolvedTable,
     changes: Seq[TableChange]) extends Command {
-
   override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
       case add: AddColumn =>
@@ -424,6 +421,77 @@ case class AlterTable(
     }
   }
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD COLUMNS command that works for v2 tables.
+ */
+case class AlterTableAddColumns(
+    table: LogicalPlan,
+    columnsToAdd: Seq[QualifiedColType]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... CHANGE COLUMN command that works for v2 tables.
+ */
+case class AlterTableAlterColumn(
+    table: LogicalPlan,
+    column: Seq[String],
+    dataType: Option[DataType],
+    nullable: Option[Boolean],
+    comment: Option[String],
+    position: Option[ColumnPosition]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME COLUMN command that works for v2 tables.
+ */
+case class AlterTableRenameColumn(
+    table: LogicalPlan,
+    column: Seq[String],
+    newName: String) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP COLUMNS command that works for v2 tables.
+ */
+case class AlterTableDropColumns(
+    table: LogicalPlan,
+    columnsToDrop: Seq[Seq[String]]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command that works for v2 tables.
+ */
+case class AlterTableSetProperties(
+    table: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command that works for v2 tables.
+ */
+case class AlterTableUnsetProperties(
+    table: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET LOCATION command that works for v2 tables.
+ */
+case class AlterTableSetLocation(
+    table: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec],
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(table)
+}
+
 
 /**
  * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
