@@ -258,9 +258,6 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
    */
   def showHelp(): Unit = {
     if (parsed.get("help").nonEmpty) {
-      // scalastyle:off println
-//      println(usage)
-      // scalastyle:on println
       SparkSQLEnv.printStream(usage)
       sys.exit(0)
     }

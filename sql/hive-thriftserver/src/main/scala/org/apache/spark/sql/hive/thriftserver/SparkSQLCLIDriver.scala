@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import scala.collection.JavaConverters._
-import scala.io.StdIn
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -46,7 +45,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
 
   sparkSQLArgs
     .getHiveConfigs
-    .filter {case (k, v) => k.startsWith("hive.")}
+    .filter {case (k, _) => k.startsWith("hive.")}
     .foreach {
     case (k, v) =>
       sparkConf.setIfMissing("spark.hadoop." + k, v)
@@ -118,8 +117,9 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
   }
 
   /**
+   * Internal tail-rec function to read and execute user HQL lines from the InputStream.
    *
-   * @param previousLine
+   * @param previousLine Last user command added.
    */
   @scala.annotation.tailrec
   def readLines(previousLine: List[String] = Nil): Unit = {
@@ -133,6 +133,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
       " " * spaces + "> "
     }
 
+    // If execution is interrupted, it will stop gracefully.
     val promptedLine = Try(SparkSQLEnv.readStream(prompt)) match {
       case Failure(exception) => throw new InterruptedException(exception.getMessage)
       case Success(value) => value
@@ -154,6 +155,8 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
     }
   }
 
+  // Starts reading user input.
+  // If fails, will stop gracefully.
   Try(readLines()) match {
     case Failure(_) => SparkSQLEnv.stop()
     case Success(_) =>

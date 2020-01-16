@@ -39,13 +39,19 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
                                          hadoopConf: Configuration)
   extends Logging {
 
+  // Custom types to avoid nesting high dimensions.
   type RowResult = Seq[String]
   type TableResult = Seq[Seq[String]]
 
   /**
+   * Process one command line and checks for EXIT, SOURCE and ! calls.
    *
-   * @param cmd
-   * @return
+   * If command is: exit or quit, the application is stopped, gracefully.
+   * If command is: source /path/to/file.hql , executes the commands from the hsql file.
+   * If command starts with !, it's executed in the localhost as a OS command.
+   *
+   * @param cmd command to execute.
+   * @return exit code from execution.
    */
   def processCmd(cmd: String): Int = {
     val cmd_cleaned = cmd.trim
@@ -53,6 +59,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       .split("\\s+")
       .toList match {
       case ("quit" | "exit") :: _ =>
+        SparkSQLEnv.stop()
         sys.exit(0)
         0
       case "source" :: filepath :: _ =>
@@ -65,9 +72,14 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   }
 
   /**
+   * Process the SQL instruction with the SparkSQLContext.
    *
-   * @param command
-   * @return
+   * Returns an Option for TableResults. If the option is empty
+   * the query did not provide output.
+   *
+   *
+   * @param command SQL command line.
+   * @return Returns an option with TableResults.
    */
   def run(command: String): Try[Option[TableResult]] = {
     Try {
@@ -87,11 +99,13 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   }
 
   /**
+   * Process a HQL file and parses all lines for comments or non-SQL statements.
    *
-   * @param file
-   * @return
+   * @param file HQL Uri.
+   * @return exit code from execution.
    */
   def processFile(file: String): Int = {
+    // Reads from hadoop filesystem.
     val auxPath = new Path(file)
     val fs = if (auxPath.toUri.isAbsolute) {
       FileSystem.get(auxPath.toUri, hadoopConf)
@@ -106,6 +120,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
 
     lazy val br = new BufferedReader(new InputStreamReader(fs.open(path)))
 
+    // Tail-rec function to read all lines from the file.
     @scala.annotation.tailrec
     def readLines(reader: BufferedReader, outputString: List[String]): List[String] = {
       val line = reader.readLine()
@@ -116,6 +131,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       }
     }
 
+    // Checks the results from the IO read operation.
     val resultLines = Try(readLines(br, List[String]()))
     IOUtils.closeStream(br)
     resultLines match {
@@ -128,9 +144,10 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   }
 
   /**
+   * Gets the results from executing the command with the SparkContext.
    *
-   * @param cmd
-   * @return
+   * @param cmd Sql command.
+   * @return exit code from execution.
    */
   def processSQLCmd(cmd: String): Int = {
 
@@ -151,9 +168,10 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
 
 
   /**
+   * Process OS command and retrieves the output.
    *
-   * @param cmd
-   * @return
+   * @param cmd OS command.
+   * @return exit code from execution.
    */
   def processShellCmd(cmd: String): Int = {
     Try(cmd.!!) match {
@@ -168,16 +186,18 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   }
 
   /**
-   *
-   * @param cmd
-   * @return
+   * Shortcut for the processLines method.
+   * @param cmd Single line command.
+   * @return exit code from execution.
    */
   def processLine(cmd: String): Int = processLines(List[String](cmd))
 
   /**
+   * Parses each line looking for EOLs: ';'  and removes comments.
+   * Results are executed line by line.
    *
-   * @param cmd
-   * @return
+   * @param cmd List of commands to execute.
+   * @return exit code of execution.
    */
   def processLines(cmd: List[String]): Int = {
 
@@ -239,6 +259,8 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
 
     val commands = pushBack(allin, replace, List[String]())
 
+    // Executes line by line and checks the exit code from each one.
+    // If exit code is not successful, it will stop and outputs 1.
     @scala.annotation.tailrec
     def runCommands(cmd: List[String], prevResult: Int): Int = {
       if (cmd.isEmpty) {
@@ -253,9 +275,9 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   }
 
   /**
-   *
-   * @param resultRows
-   * @return
+   * Print method to generate a formatted output to show results from SQL executions.
+   * @param resultRows Results from SQL command.
+   * @return String with formatted output to be displayed.
    */
   def showQueryResults(resultRows: TableResult): String = {
 

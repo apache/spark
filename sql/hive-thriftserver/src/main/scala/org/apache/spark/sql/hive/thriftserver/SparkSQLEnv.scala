@@ -40,11 +40,14 @@ private[hive] object SparkSQLEnv extends Logging {
   def setErr(err: PrintStream): Unit = stdErr = err
   def setIn(in: InputStream): Unit = stdIn = in
 
+  // To have an standard IO handling for custom streams.
   // scalastyle:off println
   def printStream: String => Unit = (str: String) => scala.Console.withOut(stdOut)(println(str))
   def printErrStream: String => Unit = (str: String) => scala.Console.withOut(stdErr)(println(str))
   // scalastyle:on println
 
+  // Simulates the command scala.io.StaIn.readLine(prefix)
+  // for custom input streams.
   def readStream: String => String = {
     prefix =>
       scala.Console.withOut(stdOut) {
