@@ -39,7 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")

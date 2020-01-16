@@ -120,6 +120,11 @@ class DataSourceV2SQLSuite
       Row("", "", ""),
       Row("# Partitioning", "", ""),
       Row("Part 0", "id", "")))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
+    }
+    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
