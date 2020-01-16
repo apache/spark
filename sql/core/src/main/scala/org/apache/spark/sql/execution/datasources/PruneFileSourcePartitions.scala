@@ -64,8 +64,12 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
               fileIndex: InMemoryFileIndex,
               conf: SQLConf,
               tableMeta: Option[CatalogTable]): CatalogStatistics = {
+<<<<<<< HEAD
     val partNum = fileIndex.partitionSpec().partitions.size
     if (partNum <= conf.maxPartNumForStatsCalculateViaFS) {
+=======
+    if (fileIndex.partitionSpec().partitions.size <= conf.maxPartNumForStatsCalculateViaFS) {
+>>>>>>> Refine code.
       CatalogStatistics(sizeInBytes = BigInt(fileIndex.sizeInBytes))
     } else {
       if (tableMeta.isDefined && tableMeta.get.stats.isDefined) {

@@ -162,15 +162,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   override def estimateStatistics(): Statistics = {
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
-        val conf = sparkSession.sessionState.conf
-        val compressionFactor = conf.fileCompressionFactor
-        val partNum = fileIndex.partitionSpec().partitions.size
-        if (conf.maxPartNumForStatsCalculateViaFS > 0
-          && partNum <= conf.maxPartNumForStatsCalculateViaFS) {
-          fileIndex.sizeInBytes
-        } else {
-          conf.defaultSizeInBytes
-        }
+        val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
         val size = (compressionFactor * fileIndex.sizeInBytes).toLong
         OptionalLong.of(size)
       }
