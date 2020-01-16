@@ -197,7 +197,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates for this rule because aggregation
     // strategy can handle a single distinct group.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1
+    distinctAggs.size >= 1
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -213,6 +213,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
+      // Setup expand for the 'regular' aggregate expressions.
       val regularAggExprs = regularAggExpressions.filter(e => e.children.exists(!_.foldable))
       val regularFunChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
@@ -230,6 +231,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val aggExpr = ae.copy(aggregateFunction = raf, filter = filterOpt)
           (ae, aggExpr)
       }
+
+      // Setup expand for the distinct aggregate expressions.
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
       val rewriteDistinctOperatorMap = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
@@ -288,13 +291,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   }
 
   private def rewriteDistinctAggregate(a: Aggregate): Aggregate = {
-
-    // Collect all aggregate expressions.
-    val aggExpressions = a.aggregateExpressions.flatMap { e =>
-      e.collect {
-        case ae: AggregateExpression => ae
-      }
-    }
+    val aggExpressions = collectAggregateExprs(a)
 
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>

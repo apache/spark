@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,15 +40,20 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param requiredSchema The schema of the data that should be output for each row. This should be a
  *                       subset of the columns in dataSchema.
  * @param options Configuration options for a CSV parser.
+ * @param filters The pushdown filters that should be applied to converted values.
  */
 class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
-    val options: CSVOptions) extends Logging {
+    val options: CSVOptions,
+    filters: Seq[Filter]) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
 
+  def this(dataSchema: StructType, requiredSchema: StructType, options: CSVOptions) = {
+    this(dataSchema, requiredSchema, options, Seq.empty)
+  }
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
   // A `ValueConverter` is responsible for converting the given value to a desired type.
@@ -72,7 +78,11 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
-  private val row = new GenericInternalRow(requiredSchema.length)
+  // Pre-allocated Seq to avoid the overhead of the seq builder.
+  private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
+  // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
+  // We preallocate it avoid unnecessary invokes of the seq builder.
+  private val noRows = Seq.empty[InternalRow]
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
@@ -82,6 +92,8 @@ class UnivocityParser(
     options.dateFormat,
     options.zoneId,
     options.locale)
+
+  private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -194,7 +206,7 @@ class UnivocityParser(
   private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
-    (_: String) => InternalRow.empty
+    (_: String) => Seq(InternalRow.empty)
   } else {
     // parse if the columnPruning is disabled or requiredSchema is nonEmpty
     (input: String) => convert(tokenizer.parseLine(input))
@@ -204,7 +216,7 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = doParse(input)
+  def parse(input: String): Seq[InternalRow] = doParse(input)
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
@@ -212,7 +224,7 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  private def convert(tokens: Array[String]): InternalRow = {
+  private def convert(tokens: Array[String]): Seq[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
@@ -229,7 +241,7 @@ class UnivocityParser(
       }
       def getPartialResult(): Option[InternalRow] = {
         try {
-          Some(convert(checkedTokens))
+          convert(checkedTokens).headOption
         } catch {
           case _: BadRecordException => None
         }
@@ -242,12 +254,24 @@ class UnivocityParser(
         new RuntimeException("Malformed CSV record"))
     } else {
       // When the length of the returned tokens is identical to the length of the parsed schema,
-      // we just need to convert the tokens that correspond to the required columns.
-      var badRecordException: Option[Throwable] = None
+      // we just need to:
+      //  1. Convert the tokens that correspond to the required schema.
+      //  2. Apply the pushdown filters to `requiredRow`.
       var i = 0
+      val row = requiredRow.head
+      var skipRow = false
+      var badRecordException: Option[Throwable] = None
       while (i < requiredSchema.length) {
         try {
-          row(i) = valueConverters(i).apply(getToken(tokens, i))
+          if (!skipRow) {
+            row(i) = valueConverters(i).apply(getToken(tokens, i))
+            if (csvFilters.skipRow(row, i)) {
+              skipRow = true
+            }
+          }
+          if (skipRow) {
+            row.setNullAt(i)
+          }
         } catch {
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
@@ -255,11 +279,15 @@ class UnivocityParser(
         }
         i += 1
       }
-
-      if (badRecordException.isEmpty) {
-        row
+      if (skipRow) {
+        noRows
       } else {
-        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
+        if (badRecordException.isDefined) {
+          throw BadRecordException(
+            () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
+        } else {
+          requiredRow
+        }
       }
     }
   }
@@ -291,7 +319,7 @@ private[sql] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
-      input => Seq(parser.convert(input)),
+      input => parser.convert(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -344,7 +372,7 @@ private[sql] object UnivocityParser {
     val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
-      input => Seq(parser.parse(input)),
+      input => parser.parse(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
