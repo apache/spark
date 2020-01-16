@@ -562,7 +562,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
-      Limit(typedVisit(limit), child = withOffset)
+      Limit(typedVisit(limit), Literal(0), withOffset)
     }
   }
 

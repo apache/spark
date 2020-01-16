@@ -1411,7 +1411,7 @@ object RewriteOffsets extends Rule[LogicalPlan] {
     case GlobalLimit(le, oe, Offset(noe, grandChild)) =>
       GlobalLimit(le, Greatest(Seq(noe, oe)), grandChild)
     case LocalLimit(le, oe, Offset(noe, grandChild)) =>
-      Offset(oe, LocalLimit(le, Greatest(Seq(noe, oe)), grandChild))
+      Offset(noe, LocalLimit(le, Greatest(Seq(noe, oe)), grandChild))
     case Offset(oe, Offset(noe, grandChild)) =>
       Offset(Greatest(Seq(noe, oe)), grandChild)
     case Offset(oe @ Literal(v, IntegerType), child) =>
