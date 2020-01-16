@@ -78,17 +78,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("SPARK-30252: Negative scale is not allowed by default") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "false") {
-      def checkNegativeScaleDecimal(d: => Decimal): Unit = {
-        intercept[AnalysisException](d)
-          .getMessage
-          .contains("Negative scale is not allowed under ansi mode")
-      }
-      checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
-      checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
-      checkNegativeScaleDecimal(Decimal(98765L, 5, -3))
-      checkNegativeScaleDecimal(Decimal.createUnsafe(98765L, 5, -3))
+    def checkNegativeScaleDecimal(d: => Decimal): Unit = {
+      intercept[AnalysisException](d)
+        .getMessage
+        .contains("Negative scale is not allowed under ansi mode")
     }
+    checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
+    checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
+    checkNegativeScaleDecimal(Decimal(98765L, 5, -3))
+    checkNegativeScaleDecimal(Decimal.createUnsafe(98765L, 5, -3))
   }
 
   test("double and long values") {
