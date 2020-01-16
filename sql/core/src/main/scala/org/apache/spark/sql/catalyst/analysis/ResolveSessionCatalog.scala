@@ -485,8 +485,8 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowTableProperties(SessionCatalogAndResolvedTable(resolved), propertyKey) =>
-      ShowTablePropertiesCommand(getTableIdentifier(resolved), propertyKey)
+    case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
+      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case DescribeFunctionStatement(CatalogAndIdentifier(catalog, ident), extended) =>
       val functionIdent =
@@ -581,16 +581,6 @@ class ResolveSessionCatalog(
     }
   }
 
-  object SessionCatalogAndResolvedTable {
-    def unapply(resolved: ResolvedTable): Option[ResolvedTable] = {
-      if (isSessionCatalog(resolved.catalog)) {
-        Some(resolved)
-      } else {
-        None
-      }
-    }
-  }
-
   object SessionCatalogAndNamespace {
     def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
       if (isSessionCatalog(resolved.catalog)) {
@@ -598,11 +588,6 @@ class ResolveSessionCatalog(
       } else {
         None
       }
-  }
-
-  private def getTableIdentifier(resolved: ResolvedTable): TableIdentifier = {
-    assert(resolved.identifier.namespace.length < 2)
-    TableIdentifier(resolved.identifier.name, resolved.identifier.namespace.headOption)
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {

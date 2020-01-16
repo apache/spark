@@ -817,8 +817,8 @@ class Analyzer(
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => alter.copy(table = rel))
-          .getOrElse(alter)
+            .map(rel => alter.copy(table = rel))
+            .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
