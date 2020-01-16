@@ -27,6 +27,7 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -2843,16 +2844,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: HashAggregateExec => agg.aggregateExpressions
         case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(funcToResult._2) :: Nil)
+      checkAnswer(df, Row(funcToResult._2))
     }
   }
 
@@ -2860,15 +2863,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
       val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: SortAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(3) :: Nil)
+      checkAnswer(df, Row(3))
     }
   }
 
