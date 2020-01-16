@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpressi
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
-import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -55,14 +54,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters,
-        relation @ DataSourceV2ScanRelation(_, v1Scan: V1Scan, output)) =>
-      val pushedFilters = relation.getTagValue(V2ScanRelationPushDown.PUSHED_FILTERS_TAG)
-        .getOrElse(Seq.empty)
-      val v1Relation = v1Scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
-      if (v1Relation.schema != v1Scan.readSchema()) {
+        relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
+      val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
+      if (v1Relation.schema != scan.readSchema()) {
         throw new IllegalArgumentException(
           "The fallback v1 relation reports inconsistent schema:\n" +
-            "Schema of v2 scan:     " + v1Scan.readSchema() + "\n" +
+            "Schema of v2 scan:     " + scan.readSchema() + "\n" +
             "Schema of v1 relation: " + v1Relation.schema)
       }
       val rdd = v1Relation.buildScan()
@@ -72,8 +69,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val dsScan = RowDataSourceScanExec(
         output,
         requiredColumnsIndex,
-        pushedFilters.toSet,
-        pushedFilters.toSet,
+        translated.toSet,
+        pushed.toSet,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
