@@ -261,7 +261,7 @@ struct<CEIL(1234567890123456):bigint>
 -- !query 32
 select ceil(0.01)
 -- !query 32 schema
-struct<CEIL(0.01):decimal(2,0)>
+struct<CEIL(0.01):decimal(1,0)>
 -- !query 32 output
 1
 
@@ -269,7 +269,7 @@ struct<CEIL(0.01):decimal(2,0)>
 -- !query 33
 select ceiling(-0.10)
 -- !query 33 schema
-struct<CEIL(-0.10):decimal(2,0)>
+struct<CEIL(-0.10):decimal(1,0)>
 -- !query 33 output
 0
 
@@ -301,7 +301,7 @@ struct<FLOOR(1234567890123456):bigint>
 -- !query 37
 select floor(0.01)
 -- !query 37 schema
-struct<FLOOR(0.01):decimal(2,0)>
+struct<FLOOR(0.01):decimal(1,0)>
 -- !query 37 output
 0
 
@@ -309,7 +309,7 @@ struct<FLOOR(0.01):decimal(2,0)>
 -- !query 38
 select floor(-0.10)
 -- !query 38 schema
-struct<FLOOR(-0.10):decimal(2,0)>
+struct<FLOOR(-0.10):decimal(1,0)>
 -- !query 38 output
 -1
 
