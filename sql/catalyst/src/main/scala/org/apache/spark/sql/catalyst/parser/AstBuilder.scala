@@ -3062,9 +3062,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DescribeColumnStatement]] or [[DescribeTableStatement]] commands.
+   * Create a [[DescribeColumnStatement]] or [[DescribeRelation]] commands.
    */
-  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
+  override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
@@ -3086,8 +3086,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       } else {
         Map.empty[String, String]
       }
-      DescribeTableStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier()),
+      DescribeRelation(
+        UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
         partitionSpec,
         isExtended)
     }
