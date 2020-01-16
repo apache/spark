@@ -2292,7 +2292,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
         .schema(schema)
         .csv(path.getAbsolutePath)
         .filter("floats is null")
-      readback.collect().foreach(println)
+      checkAnswer(readback, Seq(Row(null, 4.0), Row(null, 6.0)))
     }
   }
 }
