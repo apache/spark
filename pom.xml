@@ -2760,12 +2760,10 @@
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
-          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <failOnWarning>false</failOnWarning>
-          <sourceDirectories>${basedir}/src/main/scala
-            <dir>${basedir}/src/main/scala</dir>
-            <dir>${basedir}/src/test/scala</dir>
-          </sourceDirectories>
+          <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
           <configLocation>scalastyle-config.xml</configLocation>
           <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>

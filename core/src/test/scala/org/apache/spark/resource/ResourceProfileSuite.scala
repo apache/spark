@@ -18,6 +18,7 @@
 package org.apache.spark.resource
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+
 import org.apache.spark.internal.config._
 
 class ResourceProfileSuite extends SparkFunSuite {
