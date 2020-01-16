@@ -367,7 +367,7 @@ The following configurations are optional:
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
@@ -539,7 +539,7 @@ The following properties are available to configure the consumer pool:
 <tr>
   <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
   <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>1m (1 minute)</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.cache.jmx.enable</td>
@@ -580,7 +580,7 @@ The following properties are available to configure the fetched data pool:
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
   <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>1m (1 minute)</td>
 </tr>
 </table>
 
@@ -802,6 +802,34 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
 </div>
 </div>
 
+### Producer Caching
+
+Given Kafka producer instance is designed to be thread-safe, Spark initializes a Kafka producer instance and co-use across tasks for same caching key.
+
+The caching key is built up from the following information:
+
+* Kafka producer configuration
+
+This includes configuration for authorization, which Spark will automatically include when delegation token is being used. Even we take authorization into account, you can expect same Kafka producer instance will be used among same Kafka producer configuration.
+It will use different Kafka producer when delegation token is renewed; Kafka producer instance for old delegation token will be evicted according to the cache policy.
+
+The following properties are available to configure the producer pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.producer.cache.timeout</td>
+  <td>The minimum amount of time a producer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>10m (10 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.producer.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for producer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minute)</td>
+</tr>
+</table>
+
+Idle eviction thread periodically removes producers which are not used longer than given timeout. Note that the producer is shared and used concurrently, so the last used timestamp is determined by the moment the producer instance is returned and reference count is 0.
 
 ## Kafka Specific Configurations
 

@@ -498,10 +498,7 @@ SELECT a, b,
        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b)
 -- !query 38 schema
-struct<a:int,b:int,sum(b) OVER (ORDER BY A ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
+struct<>
 -- !query 38 output
-1	1	1
-2	2	3
-3	NULL	2
-4	3	3
-5	4	7
+org.apache.spark.sql.AnalysisException
+failed to evaluate expression CAST('nan' AS INT): invalid input syntax for type numeric: nan; line 3 pos 6

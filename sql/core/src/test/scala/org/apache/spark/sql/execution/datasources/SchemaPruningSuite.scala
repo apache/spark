@@ -25,6 +25,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -34,7 +35,8 @@ abstract class SchemaPruningSuite
   extends QueryTest
   with FileBasedDataSourceTest
   with SchemaPruningTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)
   case class Employer(id: Int, company: Company)
@@ -468,7 +470,7 @@ abstract class SchemaPruningSuite
 
   protected def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
-      df.queryExecution.executedPlan.collect {
+      collect(df.queryExecution.executedPlan) {
         case scan: FileSourceScanExec => scan.requiredSchema
       }
     assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,

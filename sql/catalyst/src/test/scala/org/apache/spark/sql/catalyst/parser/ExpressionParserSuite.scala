@@ -645,11 +645,6 @@ class ExpressionParserSuite extends AnalysisTest {
         "-" -> UnaryMinus(expected)
       ).foreach { case (sign, expectedLiteral) =>
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
-
-        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-          assertEqual(intervalValue, expected)
-        }
       }
     }
 
@@ -687,8 +682,7 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
     // Non Existing unit
-    intercept("interval 10 nanoseconds",
-      "no viable alternative at input '10 nanoseconds'")
+    intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
@@ -730,34 +724,6 @@ class ExpressionParserSuite extends AnalysisTest {
     checkIntervals(
       "3 months 4 days 22 seconds 1 millisecond",
       Literal(new CalendarInterval(3, 4, 22001000L)))
-  }
-
-  test("SPARK-23264 Interval Compatibility tests") {
-    def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        assertEqual(intervalValue, expected)
-      }
-
-      // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-        val aliases = defaultParser.parseExpression(intervalValue).collect {
-          case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
-        }
-        assert(aliases.size === 1)
-      }
-    }
-    val forms = Seq("", "s")
-    val values = Seq("5", "1", "-11", "8")
-    intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
-      }
-    }
   }
 
   test("composed expressions") {

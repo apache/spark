@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -92,6 +92,15 @@ trait CheckAnalysis extends PredicateHelper {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedNamespace =>
+        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTable =>
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTableOrView =>
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
@@ -110,13 +119,6 @@ trait CheckAnalysis extends PredicateHelper {
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
@@ -479,6 +481,13 @@ trait CheckAnalysis extends PredicateHelper {
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
+                }
+              case update: UpdateColumnNullability =>
+                val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                if (!update.nullable && field.nullable) {
+                  throw new AnalysisException(
+                    s"Cannot change nullable column to non-nullable: $fieldName")
                 }
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)

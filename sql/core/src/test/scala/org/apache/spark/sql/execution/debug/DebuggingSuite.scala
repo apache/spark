@@ -25,11 +25,26 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
 class DebuggingSuite extends SharedSparkSession {
+
+
+  var originalValue: String = _
+  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
 
   test("DataFrame.debug()") {
     testData.debug()

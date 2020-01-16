@@ -255,3 +255,10 @@ select interval 'interval \t 1\tday';
 select interval 'interval\t1\tday';
 select interval '1\t' day;
 select interval '1 ' day;
+
+-- interval overflow if (ansi) exception else NULL
+select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a - b from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

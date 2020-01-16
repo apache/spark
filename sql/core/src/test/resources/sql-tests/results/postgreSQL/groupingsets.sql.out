@@ -528,9 +528,11 @@ select unsortable_col, count(*)
   order by string(unsortable_col)
 -- !query 38 schema
 struct<unsortable_col:int,count(1):bigint>
--- !query 38 output
-1	8
-2	8
+-- !query 37 output
+1	4
+1	4
+2	4
+2	4
 
 
 -- !query 39
