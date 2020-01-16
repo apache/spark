@@ -41,7 +41,7 @@ import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, Spa
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
+import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._

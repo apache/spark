@@ -158,7 +158,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     new HistoryServerDiskManager(conf, path, listing, clock)
   }
 
-  private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs)
+  private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs,
+    conf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN), conf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD))
 
   // Used to store the paths, which are being processed. This enable the replay log tasks execute
   // asynchronously and make sure that checkForLogs would not process a path repeatedly.
@@ -582,7 +583,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         try {
           val info = listing.read(classOf[LogInfo], reader.rootPath.toString)
           if (info.lastIndexToRunCompaction.isEmpty ||
-            info.lastIndexToRunCompaction.get < lastIndex) {
+              info.lastIndexToRunCompaction.get < lastIndex) {
             // haven't tried compaction for this index, do compaction
             val result = fileCompactor.compact(reader.listEventLogFiles)
             (result.code == CompactionResultCode.SUCCESS, Some(lastIndex))
