@@ -276,15 +276,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      // unknown means that the cluster manager isn't supported so just use the default
-      // profile which is the same as reading the spark configs
-      val rpIdToAsk = if (arguments.resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
-        DEFAULT_RESOURCE_PROFILE_ID
-      } else {
-        arguments.resourceProfileId
-      }
-
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(rpIdToAsk))
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 
@@ -326,7 +318,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
-    var resourceProfileId: Int = UNKNOWN_RESOURCE_PROFILE_ID
+    var resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID
 
     var argv = args.toList
     while (!argv.isEmpty) {
