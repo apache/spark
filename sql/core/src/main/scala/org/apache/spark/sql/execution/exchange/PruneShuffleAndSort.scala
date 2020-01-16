@@ -22,6 +22,10 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SortExec, SparkPlan}
 
+/**
+ * Removes unnecessary shuffles and sorts after new ones are introduced by [[SparkPlan] SparkPlan]]
+ * [[Rule Rules]], such as [[EnsureRequirements]].
+ */
 case class PruneShuffleAndSort() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
