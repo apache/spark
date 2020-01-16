@@ -139,7 +139,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         ignoreIfExists = c.ifNotExists)
 
     case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
@@ -165,7 +165,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         orCreate = c.orCreate)
 
     case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>

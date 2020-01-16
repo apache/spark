@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
@@ -2399,7 +2399,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   /**
    * Type to keep track of table clauses:
-   * (partitioning, bucketSpec, options, locationSpec, properties, comment).
+   * (partitioning, bucketSpec, properties, options, location, comment).
    */
   type TableClauses = (Seq[Transform], Option[BucketSpec], Map[String, String],
     Map[String, String], Option[String], Option[String])
@@ -2527,22 +2527,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       properties: Map[String, String],
       ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
     import SupportsNamespaces._
-    if (!conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)) {
-      properties.foreach {
-        case (PROP_LOCATION, _) =>
-          throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
-            s" the LOCATION clause to specify it.", ctx)
-        case (PROP_COMMENT, _) =>
-          throw new ParseException(s"$PROP_COMMENT is a reserved namespace property, please use" +
-            s" the COMMENT clause to specify it.", ctx)
-        case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+    val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
+    properties.filter {
+      case (PROP_LOCATION, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
+          s" the LOCATION clause to specify it.", ctx)
+      case (PROP_LOCATION, _) => false
+      case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+        if (legacyOn) {
+          false
+        } else {
           throw new ParseException(s"$ownership is a reserved namespace property , please use" +
             " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
-        case _ =>
-      }
-      properties
-    } else {
-      properties -- RESERVED_PROPERTIES.asScala
+        }
+      case _ => true
     }
   }
 
@@ -2669,6 +2667,41 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx.EXTENDED != null)
     }
 
+  def cleanTableProperties(
+      ctx: ParserRuleContext, properties: Map[String, String]): Map[String, String] = {
+    import TableCatalog._
+    val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
+    properties.filter {
+      case (PROP_PROVIDER, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_PROVIDER is a reserved table property, please use" +
+          s" the USING clause to specify it.", ctx)
+      case (PROP_PROVIDER, _) => false
+      case (PROP_LOCATION, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_LOCATION is a reserved table property, please use" +
+          s" the LOCATION clause to specify it.", ctx)
+      case (PROP_LOCATION, _) => false
+      case _ => true
+    }
+  }
+
+  def cleanTableOptions(
+      ctx: ParserRuleContext,
+      options: Map[String, String],
+      location: Option[String]): (Map[String, String], Option[String]) = {
+    var path = location
+    val filtered = cleanTableProperties(ctx, options).filter {
+      case (k, v) if k.equalsIgnoreCase("path") && path.nonEmpty =>
+        throw new ParseException(s"Duplicated table paths found: '${path.get}' and '$v'. LOCATION" +
+          s" and the case insensitive key 'path' in OPTIONS are all used to indicate the custom" +
+          s" table path, you can only specify one of them.", ctx)
+      case (k, v) if k.equalsIgnoreCase("path") =>
+        path = Some(v)
+        false
+      case _ => true
+    }
+    (filtered, path)
+  }
+
   override def visitCreateTableClauses(ctx: CreateTableClausesContext): TableClauses = {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
@@ -2681,10 +2714,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val cleanedProperties = cleanTableProperties(ctx, properties)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val location = visitLocationSpecList(ctx.locationSpec())
+    val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
-    (partitioning, bucketSpec, properties, options, location, comment)
+    (partitioning, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment)
   }
 
   /**
@@ -3010,18 +3045,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * For example:
    * {{{
-   *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
-   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
+   *   ALTER TABLE table SET TBLPROPERTIES ('table_property' = 'property_value');
+   *   ALTER VIEW view SET TBLPROPERTIES ('table_property' = 'property_value');
    * }}}
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
+    val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetPropertiesStatement(identifier, properties)
+      AlterViewSetPropertiesStatement(identifier, cleanedTableProperties)
     } else {
-      AlterTableSetPropertiesStatement(identifier, properties)
+      AlterTableSetPropertiesStatement(identifier, cleanedTableProperties)
     }
   }
 
@@ -3038,11 +3074,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = visitPropertyKeys(ctx.tablePropertyList)
+    val cleanedProperties = cleanTableProperties(ctx, properties.map(_ -> "").toMap).keys.toSeq
+
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetPropertiesStatement(identifier, properties, ifExists)
+      AlterViewUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
     } else {
-      AlterTableUnsetPropertiesStatement(identifier, properties, ifExists)
+      AlterTableUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
     }
   }
 
