@@ -228,7 +228,7 @@ case class Not(child: Expression)
  * Evaluates to `true` if `values` are returned in `query`'s result set.
  */
 case class InSubquery(values: Seq[Expression], query: ListQuery)
-  extends Predicate with Unevaluable {
+  extends Predicate with Unevaluable with NullIntolerant {
 
   @transient private lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
@@ -238,7 +238,6 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   } else {
     values.head
   }
-
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
@@ -305,7 +304,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        true
   """)
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with NullIntolerant {
 
   require(list != null, "list should not be null")
 
@@ -425,7 +424,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any])
+  extends UnaryExpression with Predicate with NullIntolerant {
 
   require(hset != null, "hset could not be null")
 

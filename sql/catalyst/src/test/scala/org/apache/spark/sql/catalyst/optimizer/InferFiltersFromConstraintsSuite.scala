@@ -263,4 +263,33 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.subquery('y)
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
+
+  test("add IsNotNull filter when use In, InSet and InSubQuery") {
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
+    val a = Symbol("a")
+    val b = Symbol("b")
+
+    // test In and InSet with Literal
+    Seq(In(a, Seq(Literal(1), Literal(2))),
+      InSet(a, Set(1, 2))).foreach { expr =>
+      val original = x.where(expr).analyze
+      val optimized = Optimize.execute(original)
+      val corrected = x.where(And(IsNotNull(a), expr)).analyze
+      comparePlans(optimized, corrected)
+    }
+
+    // test In with Attribute, InSet only support Literal
+    val original2 = x.where(In(a, Seq(Literal(1), b))).analyze
+    val optimized2 = Optimize.execute(original2)
+    val corrected2 =
+      x.where(And(IsNotNull(b), And(IsNotNull(a), In(a, Seq(Literal(1), b))))).analyze
+    comparePlans(optimized2, corrected2)
+
+    // test InSubQuery
+    val original3 = x.where(InSubquery(Seq(a), ListQuery(y.select(b)))).analyze
+    val optimized3 = Optimize.execute(original3)
+    val corrected3 = x.where(And(IsNotNull(a), InSubquery(Seq(a), ListQuery(y.select(b))))).analyze
+    comparePlans(optimized3, corrected3)
+  }
 }
