@@ -2270,4 +2270,29 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
       }
     }
   }
+
+  test("SPARK-30530: 'is null' filter produces incorrect results") {
+    withTempPath { path =>
+      Seq(
+        "100.0,1.0,",
+        "200.0,,",
+        "300.0,3.0,",
+        "1.0,4.0,",
+        ",4.0,",
+        "500.0,,",
+        ",6.0,",
+        "-500.0,50.5").toDF("data")
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = new StructType()
+        .add("floats", FloatType)
+        .add("more_floats", FloatType)
+      val readback = spark.read
+        .schema(schema)
+        .csv(path.getAbsolutePath)
+        .filter("floats is null")
+      readback.collect().foreach(println)
+    }
+  }
 }
