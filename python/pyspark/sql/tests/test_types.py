@@ -213,7 +213,7 @@ class TypesTests(ReusedSQLTestCase):
         finally:
             self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal.enabled=false")
 
-def test_create_dataframe_from_objects(self):
+    def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
