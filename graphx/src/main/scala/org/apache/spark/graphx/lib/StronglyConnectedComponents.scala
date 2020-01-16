@@ -39,11 +39,14 @@ object StronglyConnectedComponents {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
 
+    // the graph we update with final SCC ids, and the graph we return at the end
+    var sccGraph = graph.mapVertices { case (vid, _) => vid }
     // graph we are going to work with in our iterations
     var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
 
-    // the SCC label, and the vertices to be removed in iteration
-    var sccVertexLabel = graph.vertices.sparkContext.emptyRDD[(VertexId, VertexId)]
+    // helper variables to unpersist cached graphs
+    var prevSccGraph = sccGraph
+    var prevSccWorkGraph = sccWorkGraph
     
     var existColorVertex = false
     var numVertices = sccWorkGraph.numVertices
@@ -52,56 +55,50 @@ object StronglyConnectedComponents {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-
-        val labeledByOutDegree = if (!existColorVertex) {
-          sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
-            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)}
+        val labeledByDegree = if (!existColorVertex) {
+          val degree = sccWorkGraph.outDegrees.union(sccWorkGraph.inDegrees).mapValues(_ => 1)
+            .reduceByKey(_ + _).filter(_._2 == 2)
+          sccWorkGraph.outerJoinVertices(degree) {
+            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+          }.cache()
         } else {
           sccWorkGraph
         }
 
-        val labeledByInDegree = if (!existColorVertex) {
-          labeledByOutDegree.outerJoinVertices(sccWorkGraph.inDegrees) {
-            (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
+        if (existColorVertex) {
+          // get all color vertices to be removed
+          val finalVertices = labeledByDegree.vertices
+            .filter { case (vid, (scc, isFinal)) => isFinal }
+            .mapValues { (vid, data) => data._1 }
+
+          // write values to sccGraph
+          sccGraph = sccGraph.outerJoinVertices(finalVertices) {
+            (vid, scc, opt) => opt.getOrElse(scc)
           }.cache()
-        } else {
-          labeledByOutDegree
+          // materialize vertices and edges
+          sccGraph.vertices.count()
+          sccGraph.edges.count()
+
+          // sccGraph materialized so, unpersist can be done on previous
+          prevSccGraph.unpersist()
+          prevSccGraph.edges.unpersist()
+          prevSccGraph = sccGraph
+          existColorVertex = false
         }
 
-        // helper variables to unpersist
-        val prevSccVertexLabel = sccVertexLabel
-
-        // get all vertices to be removed
-        val finalVertices = labeledByInDegree.vertices
-          .filter { case (vid, (scc, isFinal)) => isFinal}
-          .mapValues { (vid, data) => data._1}
-
-        // combine new vertex with the SCC label
-        sccVertexLabel = finalVertices.union(sccVertexLabel).cache()
-        sccVertexLabel.count()    // materialize
-
-        prevSccVertexLabel.unpersist(blocking = false)
-
-        // helper variables to unpersist
-        val prevSccWorkGraph = sccWorkGraph
-
         // only keep vertices that are not final
-        sccWorkGraph = labeledByInDegree.subgraph(vpred = (vid, data) => !data._2).cache()
+        sccWorkGraph = labeledByDegree.subgraph(vpred = (vid, data) => !data._2).cache()
 
         // materialize vertices and edges
         sccWorkGraph.numVertices
         sccWorkGraph.numEdges
 
-        existColorVertex = false
+        prevSccWorkGraph.unpersist()
+        prevSccWorkGraph.edges.unpersist()
+        prevSccWorkGraph = sccWorkGraph
 
-        // unpersist helper variables
-        prevSccWorkGraph.unpersist(blocking = false)
-        prevSccWorkGraph.edges.unpersist(blocking = false)
-        labeledByInDegree.unpersist(blocking = false)
-        labeledByInDegree.edges.unpersist(blocking = false)
-        labeledByOutDegree.unpersist(blocking = false)
-        labeledByOutDegree.edges.unpersist(blocking = false)
-
+        labeledByDegree.unpersist()
+        labeledByDegree.edges.unpersist()
       } while (sccWorkGraph.numVertices < numVertices)
 
       // if iter < numIter at this point sccGraph that is returned
@@ -126,9 +123,6 @@ object StronglyConnectedComponents {
         // start at root of SCCs. Traverse values in reverse, notify all my neighbors
         // do not propagate if colors do not match!
 
-        sccWorkGraph.unpersist(blocking = false)
-        sccWorkGraph.edges.unpersist(blocking = false)
-
         sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
           phase2, false, activeDirection = EdgeDirection.In)(
           // vertex is final if it is the root of a color
@@ -148,28 +142,26 @@ object StronglyConnectedComponents {
             }
           },
           (final1, final2) => final1 || final2).cache()
-        phase1.unpersist(blocking = false)
-        phase1.edges.unpersist(blocking = false)
-        phase2.unpersist(blocking = false)
-        phase2.edges.unpersist(blocking = false)
+
+        // materialize vertices and edges
+        sccWorkGraph.numVertices
+        sccWorkGraph.numEdges
+
+        prevSccWorkGraph.unpersist()
+        prevSccWorkGraph.edges.unpersist()
+        prevSccWorkGraph = sccWorkGraph
+
+        phase1.unpersist()
+        phase1.edges.unpersist()
+        phase2.unpersist()
+        phase2.edges.unpersist()
 
         existColorVertex = true
       }
     }
 
-    sccWorkGraph.unpersist(blocking = false)
-    sccWorkGraph.edges.unpersist(blocking = false)
-
-    val graphWithId = graph.mapVertices{case(vid, _) => vid}
-
-    val sccGraph = graphWithId.joinVertices(sccVertexLabel) {(_, _, label) => label}.cache()
-
-    sccGraph.numVertices
-    sccGraph.numEdges
-
-    sccVertexLabel.unpersist(blocking = false)
-    graphWithId.unpersist(blocking = false)
-    graphWithId.edges.unpersist(blocking = false)
+    prevSccWorkGraph.unpersist()
+    prevSccWorkGraph.edges.unpersist()
 
     sccGraph
   }
