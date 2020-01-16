@@ -2360,7 +2360,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed(
         s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
     }
-    val cleanedTableProperties = cleanTableProperties(ctx, props)
     props.keys.toSeq
   }
 
