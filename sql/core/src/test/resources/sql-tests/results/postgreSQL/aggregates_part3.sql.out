@@ -14,7 +14,7 @@ It is not allowed to use an aggregate function in the argument of another aggreg
 -- !query 1
 select min(unique1) filter (where unique1 > 100) from tenk1
 -- !query 1 schema
-struct<min(unique1):int>
+struct<min(unique1) FILTER (WHERE (unique1 > 100)):int>
 -- !query 1 output
 101
 
@@ -22,7 +22,7 @@ struct<min(unique1):int>
 -- !query 2
 select sum(1/ten) filter (where ten > 0) from tenk1
 -- !query 2 schema
-struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))):double>
+struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))) FILTER (WHERE (ten > 0)):double>
 -- !query 2 output
 2828.9682539682954
 
