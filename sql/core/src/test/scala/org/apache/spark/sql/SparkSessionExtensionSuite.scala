@@ -332,7 +332,20 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 object MyExtensions {
 
   val myFunction = (FunctionIdentifier("myFunction"),
-    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -729,7 +742,20 @@ case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
 object MyExtensions2 {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -748,7 +774,20 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
 object MyExtensions2Duplicate {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
