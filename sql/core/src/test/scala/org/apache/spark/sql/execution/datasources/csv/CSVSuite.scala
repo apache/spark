@@ -2271,28 +2271,27 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
     }
   }
 
-  test("SPARK-30530: 'is null' filter produces incorrect results") {
-    withTempPath { path =>
-      Seq(
-        "100.0,1.0,",
-        "200.0,,",
-        "300.0,3.0,",
-        "1.0,4.0,",
-        ",4.0,",
-        "500.0,,",
-        ",6.0,",
-        "-500.0,50.5").toDF("data")
-        .repartition(1)
-        .write.text(path.getAbsolutePath)
-
-      val schema = new StructType()
-        .add("floats", FloatType)
-        .add("more_floats", FloatType)
-      val readback = spark.read
-        .schema(schema)
-        .csv(path.getAbsolutePath)
-        .filter("floats is null")
-      checkAnswer(readback, Seq(Row(null, 4.0), Row(null, 6.0)))
+  test("SPARK-30530: apply filters to malformed rows") {
+    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        Seq(
+          "100.0,1.0,",
+          "200.0,,",
+          "300.0,3.0,",
+          "1.0,4.0,",
+          ",4.0,",
+          "500.0,,",
+          ",6.0,",
+          "-500.0,50.5").toDF("data")
+          .repartition(1)
+          .write.text(path.getAbsolutePath)
+        val schema = new StructType().add("floats", FloatType).add("more_floats", FloatType)
+        val readback = spark.read
+          .schema(schema)
+          .csv(path.getAbsolutePath)
+          .filter("floats is null")
+        checkAnswer(readback, Seq(Row(null, 4.0), Row(null, 6.0)))
+      }
     }
   }
 }
