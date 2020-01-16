@@ -197,7 +197,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates for this rule because aggregation
     // strategy can handle a single distinct group.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1
+    distinctAggs.size >= 1
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
