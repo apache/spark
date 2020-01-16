@@ -191,13 +191,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
 
   errorTest(
-    "DISTINCT and FILTER cannot be used in aggregate functions at the same time",
-    CatalystSqlParser.parsePlan("SELECT sum(DISTINCT b), " +
-      "count(DISTINCT a) FILTER (WHERE c > 1) FROM TaBlE2"),
-    "When there are multiple DISTINCT aggregate expressions acting on different " +
-    "fields, any DISTINCT aggregate expression not allow use FILTER clause." :: Nil)
-
-  errorTest(
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
     CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
