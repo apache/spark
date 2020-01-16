@@ -186,7 +186,7 @@ case class StreamingExplainCommand(
 }
 
 /**
- * Used to execute users' DDL/DML command inside an external execution engine rather than Spark.
+ * Used to execute a random command inside an external execution engine rather than Spark.
  * Please check [[ExternalCommandRunnableProvider]] for details.
  */
 case class ExternalCommandExecutor(

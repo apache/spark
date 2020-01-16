@@ -162,12 +162,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Execute a random DDL/DML command inside an external execution engine rather than Spark,
-   * especially for JDBC data source. This could be useful when user has some custom commands
-   * which Spark doesn't support, need to be executed. Please note that this is not appropriate
-   * for query which returns lots of data.
+   * Execute a random command inside an external execution engine rather than Spark.
+   * This could be useful when user wants to execute some commands out of Spark. For
+   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
+   * creating cores for Solr and so on.
    *
-   * Datasource should implement <code>ExternalCommandRunnableProvider</code> to perform its
+   * Datasource should implement `ExternalCommandRunnableProvider` to perform its
    * own logic of command execution.
    *
    * @since 3.0.0
@@ -180,8 +180,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             provider.newInstance().asInstanceOf[ExternalCommandRunnableProvider]))
 
       case _ =>
-        throw new AnalysisException(s"`executeCommand` is not allowed for source: $source, " +
-          s"because it doesn't implement `ExternalCommandRunnableProvider`")
+        throw new AnalysisException(s"Command execution is not supported in source $source")
     }
   }
 
