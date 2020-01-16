@@ -56,4 +56,12 @@ parse dates from Dataset[String]                  48728          49071         3
 from_csv(timestamp)                               62294          62493         260          0.2        6229.4       0.0X
 from_csv(date)                                    44581          44665         117          0.2        4458.1       0.1X
 
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.2
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+w/o filters                                       12557          12634          78          0.0      125572.9       1.0X
+pushdown disabled                                 12449          12509          65          0.0      124486.4       1.0X
+w/ filters                                         1372           1393          18          0.1       13724.8       9.1X
+
 

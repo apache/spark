@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -38,6 +39,7 @@ case class CSVScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
+    pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
@@ -86,17 +88,21 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
   }
 
   override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters)
 
   override def equals(obj: Any): Boolean = obj match {
-    case c: CSVScan => super.equals(c) && dataSchema == c.dataSchema && options == c.options
-
+    case c: CSVScan => super.equals(c) && dataSchema == c.dataSchema && options == c.options &&
+      equivalentFilters(pushedFilters, c.pushedFilters)
     case _ => false
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def description(): String = {
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+  }
 }
