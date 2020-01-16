@@ -291,7 +291,7 @@ license: |
             yes
           </td>
           <td>
-            For tables, please use the USING clause to specify it.
+            For tables, please use the USING clause to specify it. Once set, it can't be changed.
           </td>
         </tr>
         <tr>
