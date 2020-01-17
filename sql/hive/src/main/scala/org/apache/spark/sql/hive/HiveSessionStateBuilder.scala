@@ -97,7 +97,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * Planner that takes into account Hive-specific strategies.
    */
   override protected def planner: SparkPlanner = {
-    new SparkPlanner(session.sparkContext, conf, experimentalMethods) with HiveStrategies {
+    new SparkPlanner(session, conf, experimentalMethods) with HiveStrategies {
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =

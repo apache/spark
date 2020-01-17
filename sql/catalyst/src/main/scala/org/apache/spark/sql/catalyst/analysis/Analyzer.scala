@@ -815,11 +815,6 @@ class Analyzer(
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
-      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => show.copy(table = rel))
-          .getOrElse(show)
-
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }

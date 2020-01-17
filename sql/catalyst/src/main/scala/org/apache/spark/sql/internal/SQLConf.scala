@@ -1609,15 +1609,6 @@ object SQLConf {
         "it might degrade performance. See SPARK-27870.")
       .fallbackConf(BUFFER_SIZE)
 
-  val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
-    buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
-      .internal()
-      .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
-        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
-        "deprecated in the future releases.")
-      .booleanConf
-      .createWithDefault(true)
-
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
       .internal()
@@ -2176,9 +2167,6 @@ object SQLConf {
    */
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
-      DeprecatedConfig(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE.key, "2.3",
-        "Behavior for `false` config value is considered as a bug, and " +
-        "it will be prohibited in the future releases."),
       DeprecatedConfig(
         PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
         "The config allows to switch to the behaviour before Spark 2.4 " +
@@ -2223,7 +2211,10 @@ object SQLConf {
         "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
         "The config was deprecated since Spark 2.3." +
-        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it.")
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
+      RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
+        "The non-default behavior is considered as a bug, see SPARK-22395. " +
+        "The config was deprecated since Spark 2.3.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2633,8 +2624,6 @@ class SQLConf extends Serializable with Logging {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
-
-  def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
