@@ -296,14 +296,11 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
 }
 
 private[columnar] final class IntervalColumnStats extends ColumnStats {
-  protected var upper: CalendarInterval = CalendarInterval.MIN_VALUE
-  protected var lower: CalendarInterval = CalendarInterval.MAX_VALUE
+  protected var upper: CalendarInterval = null
+  protected var lower: CalendarInterval = null
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      val value = row.getInterval(ordinal)
-      if (value.compareTo(upper) > 0) upper = value
-      if (value.compareTo(lower) < 0) lower = value
       sizeInBytes += CALENDAR_INTERVAL.actualSize(row, ordinal)
       count += 1
     } else {

@@ -984,11 +984,5 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df2.mean("b"),
       Row(0, new CalendarInterval(0, 2, 0)) ::
         Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
-    checkAnswer(df2.max("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 3, 0)) :: Nil)
-    checkAnswer(df2.min("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 1, 0)) :: Nil)
   }
 }
