@@ -434,6 +434,22 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  /**
+   * Condition for redundant null check based on intolerant expressions.
+   * @param ifNullExpr expression that takes place if checkedExpr is null
+   * @param ifNotNullExpr expression that takes place if checkedExpr is not null
+   * @param checkedExpr expression that is checked for null value
+   */
+  private def isRedundantNullCheck(
+      ifNullExpr: Expression,
+      ifNotNullExpr: Expression,
+      checkedExpr: Expression): Boolean = ifNotNullExpr match {
+    case e: NullIntolerant if (
+      (ifNullExpr == checkedExpr || ifNullExpr == Literal.create(null, checkedExpr.dataType))
+      && e.children.contains(checkedExpr)) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
@@ -441,6 +457,13 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(Literal(null, _), _, falseValue) => falseValue
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+
+      case i @ If(cond, trueValue, falseValue) => cond match {
+        // If the null-check is redundant, remove it
+        case IsNull(child) if isRedundantNullCheck(trueValue, falseValue, child) => falseValue
+        case IsNotNull(child) if isRedundantNullCheck(falseValue, trueValue, child) => trueValue
+        case _ => i
+      }
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -482,6 +505,19 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           elseValue
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+        }
+
+      case e @ CaseWhen(branches, elseValue) if branches.length == 1 =>
+        // remove redundant null checks for CaseWhen with one branch
+        branches(0)._1 match {
+          case IsNotNull(child) if isRedundantNullCheck(
+            elseValue.getOrElse(Literal.create(null, child.dataType)),
+            branches(0)._2, child) => branches(0)._2
+          case IsNull(child) if isRedundantNullCheck(
+            branches(0)._2,
+            elseValue.getOrElse(Literal.create(null, child.dataType)),
+            child) => elseValue.getOrElse(Literal.create(null, child.dataType))
+          case _ => e
         }
     }
   }
@@ -755,47 +791,5 @@ object CombineConcats extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
     case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
-  }
-}
-
-/**
- * Removes unnecessary null checks for If/CaseWhen conditions
- * with NullIntolerant expressions.
- */
-object RemoveRedundantNullChecks extends Rule[LogicalPlan] {
-  /**
-   * @param ifNullExpr expression that takes place if checkedExpr is null
-   * @param ifNotNullExpr expression that takes place if checkedExpr is not null
-   * @param checkedExpr expression that is checked for null value
-   */
-  private def isRedundant(
-      ifNullExpr: Expression,
-      ifNotNullExpr: Expression,
-      checkedExpr: Expression): Boolean = {
-    (ifNullExpr == checkedExpr || ifNullExpr == Literal.create(null, checkedExpr.dataType)) &&
-      ifNotNullExpr.isInstanceOf[NullIntolerant] &&
-      ifNotNullExpr.children.contains(checkedExpr)
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case i @ If(predicate, trueValue, falseValue) => predicate match {
-      case IsNull(child) if isRedundant(trueValue, falseValue, child) => falseValue
-      case IsNotNull(child) if isRedundant(falseValue, trueValue, child) => trueValue
-      case _ => i
-    }
-    case c @ CaseWhen(branches, Some(elseValue)) if branches.length == 1 =>
-      branches(0)._1 match {
-        case IsNotNull(child) if isRedundant(elseValue, branches(0)._2, child) => branches(0)._2
-        case IsNull(child) if isRedundant(branches(0)._2, elseValue, child) => elseValue
-        case _ => c
-      }
-    case c @ CaseWhen(branches, None) if branches.length == 1 =>
-      branches(0)._1 match {
-        case IsNotNull(child) if (
-          isRedundant(
-            Literal.create(null, child.dataType),
-            branches(0)._2, child)) => branches(0)._2
-        case _ => c
-      }
   }
 }
