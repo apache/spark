@@ -147,7 +147,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
   }
 
-  test("show tblproperties for spark temporary table - empty row") {
+  test("show tblproperties for spark temporary table - AnalysisException is thrown") {
     withTempView("parquet_temp") {
       sql(
         """
@@ -155,7 +155,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
 
-      // An empty sequence of row is returned for session temporary table.
       val message = intercept[AnalysisException] {
         sql("SHOW TBLPROPERTIES parquet_temp")
       }.getMessage
