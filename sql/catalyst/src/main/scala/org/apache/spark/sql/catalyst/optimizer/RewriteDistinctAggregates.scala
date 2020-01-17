@@ -251,7 +251,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand for the distinct aggregate expressions.
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
-      val rewriteDistinctOperatorMap = distinctAggExprs.map {
+      val (projections, expressionAttrs, aggExprPairs) = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           // Why do we need to construct the `exprId` ?
           // First, In order to reduce costs, it is better to handle the filter clause locally.
@@ -279,14 +279,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e => e
           }
           (projection, exprAttrs, (ae, aggExpr))
-      }
-      val rewriteDistinctAttrMap = rewriteDistinctOperatorMap.flatMap(_._2)
-      val distinctAggChildAttrs = rewriteDistinctAttrMap.map(_._2)
+      }..unzip3
+      val distinctAggChildAttrs = expressionAttrs.flatten.map(_._2)
       val allAggAttrs = regularAggChildAttrMap.map(_._2) ++ distinctAggChildAttrs
       // Construct the aggregate input projection.
-      val rewriteDistinctProjections = rewriteDistinctOperatorMap.flatMap(_._1)
       val rewriteAggProjections =
-        Seq(a.groupingExpressions ++ regularAggChildren ++ rewriteDistinctProjections)
+        Seq(a.groupingExpressions ++ regularAggChildren ++ projections.flatten)
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
         case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
@@ -294,7 +292,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val groupByAttrs = groupByMap.map(_._2)
       // Construct the expand operator.
       val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
-      val rewriteAggExprLookup = (rewriteDistinctOperatorMap.map(_._3) ++ regularAggMap).toMap
+      val rewriteAggExprLookup = (aggExprPairs ++ regularAggMap).toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
