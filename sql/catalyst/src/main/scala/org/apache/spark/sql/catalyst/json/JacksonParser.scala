@@ -80,7 +80,7 @@ class JacksonParser(
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters) :: Nil
+      case START_OBJECT => Some(convertObject(parser, st, fieldConverters))
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
