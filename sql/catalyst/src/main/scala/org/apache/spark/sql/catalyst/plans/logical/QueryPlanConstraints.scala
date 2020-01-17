@@ -62,11 +62,16 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
-    constraints.foreach {
+    val binaryComparisons = constraints.filter(_.isInstanceOf[BinaryComparison])
+    binaryComparisons.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = constraints - eq
+        val candidateConstraints = binaryComparisons - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualTo(l: Cast, r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, r, l)
+      case eq @ EqualTo(l: Attribute, r: Cast) =>
+        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, l, r)
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -75,7 +80,7 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: Set[Expression],
       source: Expression,
-      destination: Attribute): Set[Expression] = constraints.map(_ transform {
+      destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
 

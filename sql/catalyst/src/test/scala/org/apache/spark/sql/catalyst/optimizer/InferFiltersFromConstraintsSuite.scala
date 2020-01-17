@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.LongType
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -262,5 +263,22 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
+  }
+
+  test("Constraints should be inferred from cast equality constraint") {
+    val testRelation1 = LocalRelation('a.int)
+    val testRelation2 = LocalRelation('b.long)
+    val originalLeft = testRelation1.subquery('left)
+    val originalRight = testRelation2.where('b === 1L).subquery('right)
+
+    val left = testRelation1.where(IsNotNull('a) && 'a.cast(LongType) === 1L).subquery('left)
+    val right = testRelation2.where(IsNotNull('b) && 'b === 1L).subquery('right)
+
+    Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
+      Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
+      val optimized = Optimize.execute(originalLeft.join(originalRight, Inner, condition).analyze)
+      val correctAnswer = left.join(right, Inner, condition).analyze
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }
