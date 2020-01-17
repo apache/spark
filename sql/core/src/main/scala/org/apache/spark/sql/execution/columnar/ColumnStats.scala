@@ -296,9 +296,6 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
 }
 
 private[columnar] final class IntervalColumnStats extends ColumnStats {
-  protected var upper: CalendarInterval = null
-  protected var lower: CalendarInterval = null
-
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       sizeInBytes += CALENDAR_INTERVAL.actualSize(row, ordinal)
@@ -309,7 +306,7 @@ private[columnar] final class IntervalColumnStats extends ColumnStats {
   }
 
   override def collectedStatistics: Array[Any] =
-    Array[Any](lower, upper, nullCount, count, sizeInBytes)
+    Array[Any](null, null, nullCount, count, sizeInBytes)
 }
 
 private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
