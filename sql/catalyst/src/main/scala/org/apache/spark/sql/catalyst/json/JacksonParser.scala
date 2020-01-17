@@ -99,7 +99,7 @@ class JacksonParser(
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
-          Nil
+          Array.empty[InternalRow]
         } else {
           array.toArray[InternalRow](schema)
         }
