@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -83,7 +82,7 @@ case class CreateTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val schema = query.schema.asNullable
       catalog.createTable(
-        ident, schema, partitioning.toArray, withDefaultOwnership(properties).asJava) match {
+        ident, schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
           val info = LogicalWriteInfoImpl(
             queryId = UUID.randomUUID().toString,
@@ -135,7 +134,7 @@ case class AtomicCreateTableAsSelectExec(
       throw new TableAlreadyExistsException(ident)
     }
     val stagedTable = catalog.stageCreate(
-      ident, query.schema.asNullable, partitioning.toArray, withDefaultOwnership(properties).asJava)
+      ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
     writeToStagedTable(stagedTable, writeOptions, ident)
   }
 }
@@ -178,7 +177,7 @@ case class ReplaceTableAsSelectExec(
     }
     val schema = query.schema.asNullable
     val createdTable = catalog.createTable(
-      ident, schema, partitioning.toArray, withDefaultOwnership(properties).asJava)
+      ident, schema, partitioning.toArray, properties.asJava)
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
@@ -228,14 +227,13 @@ case class AtomicReplaceTableAsSelectExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val schema = query.schema.asNullable
-    val propertiesWithOwner = withDefaultOwnership(properties).asJava
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
-        ident, schema, partitioning.toArray, propertiesWithOwner)
+        ident, schema, partitioning.toArray, properties.asJava)
     } else if (catalog.tableExists(ident)) {
       try {
         catalog.stageReplace(
-          ident, schema, partitioning.toArray, propertiesWithOwner)
+          ident, schema, partitioning.toArray, properties.asJava)
       } catch {
         case e: NoSuchTableException =>
           throw new CannotReplaceMissingTableException(ident, Some(e))

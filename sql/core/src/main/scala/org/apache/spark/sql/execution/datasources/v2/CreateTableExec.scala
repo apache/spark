@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -39,9 +38,7 @@ case class CreateTableExec(
   override protected def run(): Seq[InternalRow] = {
     if (!catalog.tableExists(identifier)) {
       try {
-        val propertiesWithOwner = withDefaultOwnership(tableProperties)
-        catalog.createTable(identifier, tableSchema, partitioning.toArray,
-          propertiesWithOwner.asJava)
+        catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
           logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
