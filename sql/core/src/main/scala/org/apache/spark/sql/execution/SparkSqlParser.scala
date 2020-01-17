@@ -773,13 +773,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
 
     if (!path.isEmpty) {
-      val customLocation = if (ctx.LOCAL() != null) {
-        // force scheme to be file rather than fs.default.name
-        Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
-      } else {
-        Some(CatalogUtils.stringToURI(path))
-      }
+      val customLocation = Some(CatalogUtils.stringToURI(path))
       storage = storage.copy(locationUri = customLocation)
+    }
+
+    if (ctx.LOCAL() != null) {
+      // assert if directory is local when LOCAL keyword is mentioned
+      val scheme = Option(storage.locationUri.get.getScheme)
+      scheme match {
+        case None =>
+          // force scheme to be file rather than fs.default.name
+          val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
+          storage = storage.copy(locationUri = loc)
+        case Some(pathScheme) if (!pathScheme.equals("file")) =>
+          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
+      }
     }
 
     val provider = ctx.tableProvider.multipartIdentifier.getText

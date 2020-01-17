@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -834,6 +835,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("refresh table tab1")
       checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
       }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
   }
 }
 
