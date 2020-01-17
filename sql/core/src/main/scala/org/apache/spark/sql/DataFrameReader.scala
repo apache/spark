@@ -32,10 +32,9 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, Univocit
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
-import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.execution.command.{DDLUtils, ExternalCommandExecutor}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
@@ -159,29 +158,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def options(options: java.util.Map[String, String]): DataFrameReader = {
     this.options(options.asScala)
     this
-  }
-
-  /**
-   * Execute a random command inside an external execution engine rather than Spark.
-   * This could be useful when user wants to execute some commands out of Spark. For
-   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
-   * creating cores for Solr and so on.
-   *
-   * Datasource should implement `ExternalCommandRunnableProvider` to perform its
-   * own logic of command execution.
-   *
-   * @since 3.0.0
-   */
-  def executeCommand(command: String): DataFrame = {
-    DataSource.lookupDataSource(source, sparkSession.sessionState.conf) match {
-      case provider if classOf[ExternalCommandRunnableProvider].isAssignableFrom(provider) =>
-        Dataset.ofRows(sparkSession,
-          ExternalCommandExecutor(command, extraOptions.asJava,
-            provider.newInstance().asInstanceOf[ExternalCommandRunnableProvider]))
-
-      case _ =>
-        throw new AnalysisException(s"Command execution is not supported in source $source")
-    }
   }
 
   /**

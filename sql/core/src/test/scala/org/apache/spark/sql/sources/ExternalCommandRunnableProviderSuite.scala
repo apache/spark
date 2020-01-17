@@ -28,9 +28,7 @@ class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
     System.setProperty("command", "hello")
     val parameters = Map("one" -> "1", "two" -> "2").asJava
     assert(System.getProperty("command") === "hello")
-    val df = spark.read.format("cmdSource")
-      .options(parameters)
-      .executeCommand("hello")
+    val df = spark.executeCommand("hello", "cmdSource", parameters)
     // executeCommand should execute the command eagerly
     assert(System.getProperty("command") === "world")
     val output1 = df.collect()(0).getString(0)
