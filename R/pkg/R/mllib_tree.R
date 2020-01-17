@@ -602,7 +602,6 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #'                                         "error" (throw an error), "keep" (put invalid data in
 #'                                         a special additional bucket, at index numLabels). Default
 #'                                         is "error".
-#' @param bootstrap Whether bootstrap samples are used when building trees.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.decisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
