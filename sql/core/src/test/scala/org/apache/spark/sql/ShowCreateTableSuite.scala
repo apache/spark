@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
@@ -235,6 +236,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
         "last_modified_by",
         "last_modified_time",
         "Owner:",
+        TableCatalog.PROP_OWNER_TYPE,
         // The following are hive specific schema parameters which we do not need to match exactly.
         "totalNumberFiles",
         "maxFileSize",
