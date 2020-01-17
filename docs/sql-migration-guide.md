@@ -314,10 +314,10 @@ license: |
             yes
           </td>
           <td>
-            no
+            yes
           </td>
           <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it. For tables, please use the ALTER TABLE ... SET OWNER syntax to modify it.
           </td>
         </tr>
         <tr>
@@ -328,10 +328,10 @@ license: |
             yes
           </td>
           <td>
-            no
+            yes
           </td>
           <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it. For tables, please use the ALTER TABLE ... SET OWNER syntax to modify it.
           </td>
         </tr>
     </table>
