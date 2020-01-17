@@ -17,10 +17,6 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
-
-import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
-
 /**
  * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -28,16 +24,13 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * This is used to specify what the resource requirements are for an Executor and how
  * Spark can find out specific details about those resources. Not all the parameters are
- * required for every resource type. The resources names supported
- * correspond to the regular Spark configs with the prefix removed. For instance overhead
- * memory in this api is memoryOverhead, which is spark.executor.memoryOverhead with
- * spark.executor removed. Resources like GPUs are resource.gpu
- * (spark configs spark.executor.resource.gpu.*). The amount, discoveryScript, and vendor
- * parameters for resources are all the same parameters a user would specify through the
+ * required for every resource type. Resources like GPUs are supported and have same limitations
+ * as using the global spark configs spark.executor.resource.gpu.*. The amount, discoveryScript,
+ * and vendor parameters for resources are all the same parameters a user would specify through the
  * configs: spark.executor.resource.{resourceName}.{amount, discoveryScript, vendor}.
  *
  * For instance, a user wants to allocate an Executor with GPU resources on YARN. The user has
- * to specify the resource name (resource.gpu), the amount or number of GPUs per Executor,
+ * to specify the resource name (gpu), the amount or number of GPUs per Executor,
  * the discovery script would be specified so that when the Executor starts up it can
  * discovery what GPU addresses are available for it to use because YARN doesn't tell
  * Spark that, then vendor would not be used because its specific for Kubernetes.
@@ -63,15 +56,21 @@ private[spark] class ExecutorResourceRequest(
     val discoveryScript: String = "",
     val vendor: String = "") extends Serializable {
 
-  // A list of allowed Spark internal resources. Custom resources (spark.executor.resource.*)
-  // like GPUs/FPGAs are also allowed, see the check below.
-  private val allowedExecutorResources = mutable.HashSet[String](
-    ResourceProfile.MEMORY,
-    ResourceProfile.OVERHEAD_MEM,
-    ResourceProfile.PYSPARK_MEM,
-    ResourceProfile.CORES)
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ExecutorResourceRequest =>
+        that.getClass == this.getClass &&
+          that.resourceName == resourceName && that.amount == amount &&
+        that.discoveryScript == discoveryScript && that.vendor == vendor
+      case _ =>
+        false
+    }
+  }
 
-  if (!allowedExecutorResources.contains(resourceName) && !resourceName.startsWith(RESOURCE_DOT)) {
-    throw new IllegalArgumentException(s"Executor resource not allowed: $resourceName")
+  override def hashCode(): Int =
+    Seq(resourceName, amount, discoveryScript, vendor).hashCode()
+
+  override def toString(): String = {
+    s"name: $resourceName, amount: $amount, script: $discoveryScript, vendor: $vendor"
   }
 }
