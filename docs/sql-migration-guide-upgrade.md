@@ -14,6 +14,8 @@ displayTitle: Spark SQL Upgrading Guide
    `spark.sql.legacy.rdd.applyConf` to `false`: in this case, SQL configurations are ignored for operations
    performed on a RDD derived from a Dataset.
 
+ - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
