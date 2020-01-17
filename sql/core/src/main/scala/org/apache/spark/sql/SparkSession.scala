@@ -628,6 +628,7 @@ class SparkSession private(
    *
    * @since 3.0.0
    */
+  @Unstable
   def executeCommand(command: String, source: String, options: Map[String, String]): DataFrame = {
     DataSource.lookupDataSource(source, sessionState.conf) match {
       case provider if classOf[ExternalCommandRunnableProvider].isAssignableFrom(provider) =>
