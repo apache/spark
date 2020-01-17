@@ -29,7 +29,7 @@ import java.util.Objects;
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
- * The data type representing calendar intervals. The calendar interval is stored internally in
+ * The class representing calendar intervals. The calendar interval is stored internally in
  * three components:
  * <ul>
  *   <li>an integer value representing the number of `months` in this interval,</li>
