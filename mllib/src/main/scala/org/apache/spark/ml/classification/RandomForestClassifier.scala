@@ -116,6 +116,10 @@ class RandomForestClassifier @Since("1.4.0") (
   def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group setParam */
+  @Since("3.0.0")
+  def setBootstrap(value: Boolean): this.type = set(bootstrap, value)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
@@ -147,6 +151,7 @@ class RandomForestClassifier @Since("1.4.0") (
     val instances = extractInstances(dataset, numClasses)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
+    strategy.bootstrap = $(bootstrap)
 
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,

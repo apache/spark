@@ -68,8 +68,8 @@ private[spark] object BaggedPoint {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples,
         extractSampleWeight, seed)
     } else {
-      if (numSubsamples == 1 && subsamplingRate == 1.0) {
-        convertToBaggedRDDWithoutSampling(input, extractSampleWeight)
+      if (subsamplingRate == 1.0) {
+        convertToBaggedRDDWithoutSampling(input, numSubsamples, extractSampleWeight)
       } else {
         convertToBaggedRDDSamplingWithoutReplacement(input, subsamplingRate, numSubsamples,
           extractSampleWeight, seed)
@@ -125,7 +125,13 @@ private[spark] object BaggedPoint {
 
   private def convertToBaggedRDDWithoutSampling[Datum] (
       input: RDD[Datum],
+      numSubsamples: Int,
       extractSampleWeight: (Datum => Double)): RDD[BaggedPoint[Datum]] = {
-    input.map(datum => new BaggedPoint(datum, Array(1), extractSampleWeight(datum)))
+    input.mapPartitions { instances =>
+      val subsampleCounts = Array.fill(numSubsamples)(1)
+      instances.map { instance =>
+        new BaggedPoint(instance, subsampleCounts, extractSampleWeight(instance))
+      }
+    }
   }
 }
