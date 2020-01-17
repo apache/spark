@@ -66,7 +66,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 
 <dl>
   <dt><code><em>STORED AS</em></code></dt>
-  <dd>Table file format.</dd>
+    <dd>File format for table storage, could be TEXTFILE, ORC, PARQUET,etc.</dd>
 </dl>
 
 <dl>

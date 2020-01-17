@@ -24,7 +24,12 @@ The `CREATE TABLE` statement defines a new table using the definition/metadata o
 
 ### Syntax
 {% highlight sql %}
-CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier [LOCATION path]
+CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
+USING data_source
+[ ROW FORMAT row_format ]
+[ STORED AS file_format ]
+[ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+[ LOCATION path ]
 {% endhighlight %}
 
 ### Parameters
@@ -32,12 +37,34 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier [LOCA
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
     Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
+    <b>Syntax:</b>  [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
       <code>
         [ database_name. ] table_name
       </code>
   </dd>
 </dl>
+
+<dl>
+  <dt><code><em>USING data_source</em></code></dt>
+  <dd>Data Source is the input format used to create the table. Data source can be CSV, TXT, ORC, JDBC, PARQUET, etc.</dd>
+</dl> 
+
+<dl>
+  <dt><code><em>ROW FORMAT</em></code></dt>
+  <dd>SERDE is used to specify a custom SerDe or the DELIMITED clause inorder to use the native SerDe.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>STORED AS</em></code></dt>
+  <dd>File format for table storage, could be TEXTFILE, ORC, PARQUET,etc.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>TBLPROPERTIES</em></code></dt>
+  <dd>Table properties that has to be set are specified such as `created.by.user`, `owner`, etc.
+  </dd>
+</dl>
+
 <dl>
   <dt><code><em>LOCATION</em></code></dt>
   <dd>Path to the directory where table data is stored, could be filesystem, HDFS, etc. Location to create an external table.</dd>
@@ -50,8 +77,17 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier [LOCA
 --Create table using an exsisting table
 CREATE TABLE Student_Dupli like Student;
 
+--Create table like using a data source
+CREATE TABLE Student_Dupli like Student USING CSV;
+
 --Table is created as external table at the location specified
 CREATE TABLE Student_Dupli like Student location  '/root1/home';
+
+--Create table like using a rowformat
+CREATE TABLE Student_Dupli like Student
+  ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+  STORED AS TEXTFILE
+  TBLPROPERTIES ('owner'='xxxx');
 
 {% endhighlight %}
 
