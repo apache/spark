@@ -1312,17 +1312,6 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       classOf[AcidUtils.Operation],
       JBoolean.TYPE)
 
-  private lazy val getTableOwnerTypeMethod =
-    findMethod(
-      classOf[Table],
-      "getOwnerType")
-
-  private lazy val setTableOwnerTypeMethod =
-    findMethod(
-      classOf[Table],
-      "setOwnerType",
-      classOf[PrincipalType])
-
   override def loadPartition(
       hive: Hive,
       loadPath: Path,

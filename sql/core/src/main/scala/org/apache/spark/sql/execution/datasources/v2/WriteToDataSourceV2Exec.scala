@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
+
 /**
  * Deprecated logical plan for writing data into data source v2. This is being replaced by more
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].

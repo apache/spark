@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.Utils
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
