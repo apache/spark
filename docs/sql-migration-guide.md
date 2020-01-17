@@ -869,7 +869,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Sub-queries
   * Sub-queries in the FROM Clause
   
-   ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
+    ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
   * Sub-queries in WHERE Clause
     * Correlated or non-correlated IN and NOT IN statement
     
