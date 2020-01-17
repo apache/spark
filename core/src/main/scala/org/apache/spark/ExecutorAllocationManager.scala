@@ -236,8 +236,10 @@ private[spark] class ExecutorAllocationManager(
     }
     executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
 
-    client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
-      rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfileId.toMap)
+    client.requestTotalExecutors(
+      numExecutorsTargetPerResourceProfileId.toMap,
+      numLocalityAwareTasksPerResourceProfileId.toMap,
+      rpIdToHostToLocalTaskCount)
   }
 
   /**
@@ -386,8 +388,10 @@ private[spark] class ExecutorAllocationManager(
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
         testing ||
-          client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
-            rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfileId.toMap)
+          client.requestTotalExecutors(
+            numExecutorsTargetPerResourceProfileId.toMap,
+            numLocalityAwareTasksPerResourceProfileId.toMap,
+            rpIdToHostToLocalTaskCount)
       } catch {
         case NonFatal(e) =>
           // Use INFO level so the error it doesn't show up by default in shells.
@@ -551,8 +555,10 @@ private[spark] class ExecutorAllocationManager(
 
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
-    client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
-      rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfileId.toMap)
+    client.requestTotalExecutors(
+      numExecutorsTargetPerResourceProfileId.toMap,
+      numLocalityAwareTasksPerResourceProfileId.toMap,
+      rpIdToHostToLocalTaskCount)
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
@@ -633,10 +639,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToNumTasks(stageAttempt) = numTasks
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
-        // TODO - this will come in a followup jira where we assign stage a resource profile
-        // for now hardcode to default profile
-        // val profId = stageSubmitted.stageInfo.resourceProfileId
-        val profId = DEFAULT_RESOURCE_PROFILE_ID
+        val profId = stageSubmitted.stageInfo.resourceProfileId
         logDebug(s"Stage resource profile id is: $profId with numTasks: $numTasks")
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -656,9 +659,7 @@ private[spark] class ExecutorAllocationManager(
           }
         }
 
-        // TODO - this will be in the next PR of stage level scheduling, use default profile for now
-        // val rpId = stageSubmitted.stageInfo.resourceProfileId
-        val rpId = DEFAULT_RESOURCE_PROFILE_ID
+        val rpId = stageSubmitted.stageInfo.resourceProfileId
         stageAttemptToExecutorPlacementHints.put(stageAttempt,
           (numTasksPending, hostToLocalTaskCountPerStage.toMap, rpId))
 

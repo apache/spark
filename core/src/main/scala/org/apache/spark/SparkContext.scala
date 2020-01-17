@@ -1651,10 +1651,9 @@ class SparkContext(config: SparkConf) extends Logging {
         // this is being applied to the default resource profile, would need to add api to support
         // others
         val defaultProfId = resourceProfileManager.defaultResourceProfile.id
-        b.requestTotalExecutors(
+        b.requestTotalExecutors(immutable.Map(defaultProfId-> numExecutors),
           immutable.Map(localityAwareTasks -> defaultProfId),
-          immutable.Map(defaultProfId -> hostToLocalTaskCount),
-          immutable.Map(defaultProfId-> numExecutors))
+          immutable.Map(defaultProfId -> hostToLocalTaskCount))
       case _ =>
         logWarning("Requesting executors is not supported by current scheduler.")
         false

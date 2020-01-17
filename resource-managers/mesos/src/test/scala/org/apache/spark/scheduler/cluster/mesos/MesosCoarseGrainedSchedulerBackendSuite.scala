@@ -639,9 +639,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val defaultProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    backend.requestTotalExecutors(Map(defaultProfileId -> 2),
-      Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)),
-      Map(defaultProfileId -> 2))
+    backend.requestTotalExecutors(
+      Map(defaultProfileId -> 2),
+      Map(defaultProfileId -> 2),
+      Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)
@@ -657,10 +658,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResourcesAndVerify(1, true)
 
     // Update total executors
-    backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
+    backend.requestTotalExecutors(
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
-        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3))
+        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -669,10 +671,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     Thread.sleep(2000)
 
     // Update total executors
-    backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
+    backend.requestTotalExecutors(
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
-        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4))
+            Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)

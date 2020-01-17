@@ -72,13 +72,15 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty),
-            meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
-              expectedRequestedTotalExecs.get)))
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+                expectedRequestedTotalExecs.get)),
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)),
+              meq(Map.empty))
         } else {
           verify(allocationClient, never).requestTotalExecutors(
-            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty,
-            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0))}
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map.empty)}
       }
 
       /** Verify that a particular executor was killed */
@@ -144,9 +146,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
       val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-      verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(Map(defaultProfId -> 0)), meq(Map.empty),
-        meq(Map(defaultProfId -> expectedRequestedTotalExecs)))
+      verify(allocationClient, times(1)).requestTotalExecutors(meq(Map(defaultProfId -> expectedRequestedTotalExecs)), meq(Map(defaultProfId -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>
