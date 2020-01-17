@@ -609,10 +609,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @since(3.0)
     def tail(self, num):
         """
-        Returns the last `num` rows in the Dataset.
+        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
 
         Running tail requires moving data into the application's driver process, and doing so with
-        a very large `num` can crash the driver process with OutOfMemoryError.
+        a very large ``num`` can crash the driver process with OutOfMemoryError.
 
         >>> df.tail(1)
         [Row(age=5, name=u'Bob')]
