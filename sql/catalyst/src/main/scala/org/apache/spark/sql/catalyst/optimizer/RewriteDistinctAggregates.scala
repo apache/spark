@@ -164,7 +164,17 @@ import org.apache.spark.sql.types.IntegerType
  *           LocalTableScan [...]
  * }}}
  *
- * The rule does the following things here:
+ * The rule serves two purposes:
+ * 1. Expand distinct aggregates which exists filter clause.
+ * 2. Rewrite when aggregate exists at least two distinct aggregates.
+ *
+ * The first rule does the following things here:
+ * 1. Guaranteed to compute filter clause locally.
+ * 2. The attributes referenced by different distinct aggregate expressions are likely to overlap,
+ *    and if no additional processing is performed, data loss will occur. To prevent this, we
+ *    generate new attributes and replace the original ones.
+ *
+ * The second rule does the following things here:
  * 1. Expand the data. There are three aggregation groups in this query:
  *    i. the non-distinct group;
  *    ii. the distinct 'cat1 group;
@@ -205,12 +215,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) => rewrite(a)
-  }
-
-  def rewrite(a: Aggregate): Aggregate = {
-    val expandAggregate = extractFiltersInDistinctAggregate(a)
-    rewriteDistinctAggregate(expandAggregate)
+    case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) =>
+      val expandAggregate = extractFiltersInDistinctAggregate(a)
+      rewriteDistinctAggregate(expandAggregate)
   }
 
   private def extractFiltersInDistinctAggregate(a: Aggregate): Aggregate = {
@@ -228,7 +235,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggChildren = (regularFunChildren ++ regularFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
       val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
-      val regularOperatorMap = regularAggExprs.map {
+      val regularAggMap = regularAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           val newChildren = af.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
           val raf = af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
@@ -284,7 +291,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val groupByAttrs = groupByMap.map(_._2)
       // Construct the expand operator.
       val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
-      val rewriteAggExprLookup = (rewriteDistinctOperatorMap.map(_._3) ++ regularOperatorMap).toMap
+      val rewriteAggExprLookup = (rewriteDistinctOperatorMap.map(_._3) ++ regularAggMap).toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
