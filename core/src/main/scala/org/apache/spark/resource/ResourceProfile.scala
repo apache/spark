@@ -22,8 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -42,6 +43,13 @@ class ResourceProfile(
 
   // _id is only a var for testing purposes
   private var _id = ResourceProfile.getNextProfileId
+  // this is used for any resources that use fractional amounts
+  private var _executorResourceNumParts: Option[Map[String, Int]] = None
+  private var _limitingResource: Option[String] = None
+  private var _maxTasksPerExecutor: Option[Int] = None
+  private var _coresLimitKnown: Boolean = false
+  private var _internalPysparkMemoryConf: Seq[(String, String)] =
+    ResourceProfile.createPysparkMemoryInternalConfs(this)
 
   def id: Int = _id
 
@@ -57,6 +65,10 @@ class ResourceProfile(
     executorResources.asJava
   }
 
+  private[spark] def getInternalPysparkMemoryConfs: Seq[(String, String)] = {
+    _internalPysparkMemoryConf
+  }
+
   // Note that some cluster managers don't set the executor cores explicitly so
   // be sure to check the Option as required
   private[spark] def getExecutorCores: Option[Int] = {
@@ -65,6 +77,112 @@ class ResourceProfile(
 
   private[spark] def getTaskCpus: Option[Int] = {
     taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
+
+  private[spark] def getNumSlotsPerAddress(resource: String, sparkConf: SparkConf): Int = {
+    _executorResourceNumParts.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+    }
+    _executorResourceNumParts.get.getOrElse(resource,
+      throw new SparkException(s"Resource $resource doesn't existing in profile id: $id"))
+  }
+
+  // maximum tasks you could put on an executor with this profile based on the limiting resource
+  // If the executor cores config is not present this value is based on the other resources
+  // available or 1 if no other resources. You need to check the isCoresLimitKnown to
+  // calculate proper value.
+  private[spark] def maxTasksPerExecutor(sparkConf: SparkConf): Int = {
+    _maxTasksPerExecutor.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+      _maxTasksPerExecutor.get
+    }
+  }
+
+  // Returns whether the executor cores was available to use to calculate the max tasks
+  // per executor and limiting resource.
+  private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
+
+  // If the executor cores config is not present this value is based on the other resources
+  // available or 1 if no other resources. You need to check the isCoresLimitKnown to
+  // calculate proper value.
+  private[spark] def limitingResource(sparkConf: SparkConf): String = {
+    _limitingResource.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+      _limitingResource.get
+    }
+  }
+
+  /**
+   * Utility function to calculate the number of tasks you can run on a single Executor based
+   * on the task and executor resource requests in the ResourceProfile. This will be based
+   * off the resource that is most restrictive. For instance, if the executor
+   * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
+   * limiting resource is gpu, and this function will return 2.
+   */
+  private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
+    val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
+    val master = sparkConf.getOption("spark.master")
+    // executor cores config is not set for some masters by default and the default value
+    // only applies to yarn/k8s
+    val shouldCheckExecCores = sparkConf.contains(EXECUTOR_CORES) ||
+      (master.isDefined && (master.get.equalsIgnoreCase("yarn") || master.get.startsWith("k8s")))
+    val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
+    if (shouldCheckExecCores) {
+      _coresLimitKnown = true
+      ResourceUtils.validateTaskCpusLargeEnough(sparkConf, coresPerExecutor, cpusPerTask)
+    }
+    val tasksBasedOnCores = coresPerExecutor / cpusPerTask
+    val numPartsMap = new mutable.HashMap[String, Int]
+    numPartsMap(ResourceProfile.CORES) = 1
+    // Note that if the cores per executor aren't set properly
+    // this calculation could be off, we default it to just be 1 in order to allow checking
+    // of the rest of the custom resources. We set the limit based on the other resources available.
+    var (taskLimit, limitingResource) = if (shouldCheckExecCores) {
+      (tasksBasedOnCores, ResourceProfile.CPUS)
+    } else {
+      (-1, "")
+    }
+    val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
+    taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
+    val execResourceToCheck = ResourceProfile.getCustomExecutorResources(this)
+    execResourceToCheck.foreach { case (rName, execReq) =>
+      val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
+      numPartsMap(rName) = 1
+      if (taskReq > 0.0) {
+        if (taskReq > execReq.amount) {
+          throw new SparkException(s"The executor resource: $rName, amount: ${execReq.amount} " +
+            s"needs to be >= the task resource request amount of $taskReq")
+        }
+        val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
+        numPartsMap(rName) = parts
+        val numTasks = ((execReq.amount * parts) / numPerTask).toInt
+        if (taskLimit == -1 || numTasks < taskLimit) {
+          limitingResource = rName
+          taskLimit = numTasks
+        }
+        taskResourcesToCheck -= rName
+      } else {
+        logWarning(s"The executor resource config for resource: $rName was specified but " +
+          "no corresponding task resource request was specified.")
+      }
+    }
+    if (taskResourcesToCheck.nonEmpty) {
+      throw new SparkException("No executor resource configs were not specified for the " +
+        s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
+    }
+    logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
+    _executorResourceNumParts = Some(numPartsMap.toMap)
+    _maxTasksPerExecutor = if (taskLimit == -1) Some(1) else Some(taskLimit)
+    _limitingResource = Some(limitingResource)
+    if (shouldCheckExecCores) {
+      ResourceUtils.warnOnWastedResources(this, sparkConf)
+    }
+  }
+
+  // to be used only by history server for reconstruction from events
+  private[spark] def setResourceProfileId(id: Int): Unit = {
+    _id = id
   }
 
   // testing only
@@ -91,6 +209,7 @@ class ResourceProfile(
 }
 
 object ResourceProfile extends Logging {
+
   // task resources
   val CPUS = "cpus"
   // Executor resources
@@ -177,5 +296,48 @@ object ResourceProfile extends Logging {
   private[spark] def getCustomExecutorResources(
       rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
     rp.executorResources.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
+  }
+
+  private[spark] val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
+
+  private[spark] def resourceProfileIntConfPrefix(rpId: Int): String = {
+    s"$SPARK_RP_EXEC_PREFIX.$rpId."
+  }
+
+  // Helper class for constructing the resource profile internal configs. The configs look like:
+  // spark.resourceProfile.executor.[rpId].[resourceName].amount
+  private[spark] case class ResourceProfileInternalConf(prefix: String, resourceName: String) {
+    def resourceNameConf: String = s"$prefix$resourceName"
+    def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
+    def amountConf: String = s"$prefix$resourceNameAndAmount"
+  }
+
+  /**
+   * Create the ResourceProfile internal pyspark memory conf that are used by the executors.
+   * It pulls any pyspark.memory config from the profile returns a Seq of key and value
+   * where the keys get formatted as:
+   *
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   */
+  private[spark] def createPysparkMemoryInternalConfs(
+      rp: ResourceProfile
+  ): Seq[(String, String)] = {
+    rp.executorResources.get(ResourceProfile.PYSPARK_MEM).map { pysparkMem =>
+      val prefix = resourceProfileIntConfPrefix(rp.id)
+      val pysparkMemIntConf = ResourceProfileInternalConf(prefix, ResourceProfile.PYSPARK_MEM)
+      Seq((pysparkMemIntConf.amountConf, pysparkMem.amount.toString))
+    }.getOrElse(Seq.empty)
+  }
+
+  /**
+   * Get the pyspark memory from internal resource confs
+   * The config looks like: spark.resourceProfile.executor.[rpId].pyspark.memory.amount
+   */
+  private[spark] def getPysparkMemoryFromInternalConfs(
+      sparkConf: SparkConf,
+      rpId: Int): Option[Long] = {
+    val rName = ResourceProfile.PYSPARK_MEM
+    val intConf = ResourceProfileInternalConf(resourceProfileIntConfPrefix(rpId), rName)
+    sparkConf.getOption(intConf.amountConf).map(_.toLong)
   }
 }
