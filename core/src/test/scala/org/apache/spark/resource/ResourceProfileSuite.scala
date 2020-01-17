@@ -101,20 +101,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(immrprof.taskResources.get("gpu").get.amount == 0.33)
   }
 
-  test("Internal pyspark memory confs") {
-    val rprof = new ResourceProfileBuilder()
-    val gpuExecReq =
-      new ExecutorResourceRequests().cores(2).pysparkMemory("2g").resource("gpu", 2, "someScript")
-    rprof.require(gpuExecReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
-    val pysparkConfs = immrprof.getInternalPysparkMemoryConfs
-    val sparkConf = new SparkConf
-    pysparkConfs.foreach { case(key, value) => sparkConf.set(key, value) }
-    val pysparkmemory =
-      ResourceProfile.getPysparkMemoryFromInternalConfs(sparkConf, immrprof.id)
-    assert(pysparkmemory.get === 2048)
-  }
-
   test("maxTasksPerExecutor cpus") {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 1)

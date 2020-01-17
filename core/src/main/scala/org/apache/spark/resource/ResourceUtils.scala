@@ -306,7 +306,6 @@ private[spark] object ResourceUtils extends Logging {
     allAllocations
   }
 
-
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
     logInfo("==============================================================")
