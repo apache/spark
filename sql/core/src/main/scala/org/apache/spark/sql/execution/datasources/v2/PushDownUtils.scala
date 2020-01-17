@@ -34,7 +34,7 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushFilters(
       scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+      filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -62,11 +62,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        // The filters which are marked as pushed to this data source
-        val pushedFilters = r.pushedFilters().map { filter =>
-          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
-        (pushedFilters, untranslatableExprs ++ postScanFilters)
+        (r.pushedFilters(), untranslatableExprs ++ postScanFilters)
 
       case _ => (Nil, filters)
     }
@@ -75,7 +71,7 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * @return the created `ScanConfig`(since column pruning is the last step of operator pushdown),
+   * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
    *         and new output attributes after column pruning.
    */
   def pruneColumns(
