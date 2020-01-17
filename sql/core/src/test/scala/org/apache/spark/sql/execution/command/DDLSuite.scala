@@ -2779,7 +2779,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("'tmp_v' is a view not a table"))
+      assert(e.message.contains("tmp_v is a temp view not a table"))
     }
   }
 
