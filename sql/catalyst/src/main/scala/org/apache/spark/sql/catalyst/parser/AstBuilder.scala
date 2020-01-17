@@ -2680,6 +2680,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         throw new ParseException(s"$PROP_LOCATION is a reserved table property, please use" +
           s" the LOCATION clause to specify it.", ctx)
       case (PROP_LOCATION, _) => false
+      case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
+        if (legacyOn) {
+          false
+        } else {
+          throw new ParseException(s"$ownership is a reserved table property , please use" +
+            " ALTER TABLE ... SET OWNER ... to specify it.", ctx)
+        }
       case _ => true
     }
   }

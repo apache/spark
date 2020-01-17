@@ -50,7 +50,7 @@ case class DescribeNamespaceExec(
       rows += toCatalystRow("Location", _)
     }
     Option(metadata.get(PROP_OWNER_NAME)).foreach {
-      rows += toCatalystRow("Owner", _)
+      rows += toCatalystRow("Owner Name", _)
     }
     Option(metadata.get(PROP_OWNER_TYPE)).foreach {
       rows += toCatalystRow("Owner Type", _)

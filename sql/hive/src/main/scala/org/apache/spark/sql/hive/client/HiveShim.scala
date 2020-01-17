@@ -161,10 +161,6 @@ private[client] sealed abstract class Shim {
 
   def setDatabaseOwnerType(db: Database, ownerType: String): Unit
 
-  def getTableOwnerType(table: Table): String
-
-  def setTableOwnerType(table: Table, ownerType: String): Unit
-
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
@@ -475,10 +471,6 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDatabaseOwnerType(db: Database): String = ""
 
   override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {}
-
-  override def getTableOwnerType(table: Table): String = ""
-
-  override def setTableOwnerType(table: Table, ownerType: String): Unit = {}
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
@@ -1391,15 +1383,6 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       numDP: JInteger, listBucketingLevel, isAcid, writeIdInLoadTableOrPartition,
       stmtIdInLoadTableOrPartition, hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID,
       replace: JBoolean)
-  }
-
-  override def getTableOwnerType(table: Table): String = {
-    Option(getTableOwnerTypeMethod.invoke(table))
-      .map(_.asInstanceOf[PrincipalType].name()).getOrElse("")
-  }
-
-  override def setTableOwnerType(table: Table, ownerType: String): Unit = {
-    setTableOwnerTypeMethod.invoke(table, PrincipalType.valueOf(ownerType))
   }
 }
 

@@ -98,6 +98,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
+      properties = Map("ownerType" -> "USER"),
       tracksPartitionsInCatalog = true)
   }
 
@@ -440,26 +441,26 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val currentUser = Utils.getCurrentUserName()
 
       sql(s"CREATE TABLE $table1(k int)")
-      checkTblOwner(table1, currentUser, "")
+      checkTblOwner(table1, currentUser, "USER")
       sql(s"ALTER TABLE $table1 SET TBLPROPERTIES ('a'='a')")
-      checkTblOwner(table1, currentUser, "")
-//      val e = intercept[ParseException](sql(s"ALTER TABLE $table1 SET TBLPROPERTIES ('a'='a',"
-//        + s"'ownerName'='$owner','ownerType'='XXX')"))
-//      assert(e.getMessage.contains("ownerName"))
+      checkTblOwner(table1, currentUser, "USER")
+      val e = intercept[ParseException](sql(s"ALTER TABLE $table1 SET TBLPROPERTIES ('a'='a',"
+        + s"'ownerName'='$owner','ownerType'='XXX')"))
+      assert(e.getMessage.contains("ownerName"))
       sql(s"ALTER TABLE $table1 SET OWNER ROLE $owner")
-      checkTblOwner(table1, owner, "")
+      checkTblOwner(table1, owner, "ROLE")
 
-//      val e2 = intercept[ParseException](
-//        sql(s"CREATE TABLE $table2 WITH TBLPROPERTIES('ownerName'='$owner')"))
-//      assert(e2.getMessage.contains("ownerName"))
+      val e2 = intercept[ParseException](
+        sql(s"CREATE TABLE $table2 WITH TBLPROPERTIES('ownerName'='$owner')"))
+      assert(e2.getMessage.contains("ownerName"))
       sql(s"CREATE TABLE $table2(k int)")
-      checkTblOwner(table2, currentUser, "")
+      checkTblOwner(table2, currentUser, "USER")
       sql(s"ALTER TABLE $table2 SET OWNER GROUP $owner")
-      checkTblOwner(table2, owner, "")
+      checkTblOwner(table2, owner, "GROUP")
       sql(s"ALTER TABLE $table2 SET OWNER ROLE `$owner`")
-      checkTblOwner(table2, owner, "")
+      checkTblOwner(table2, owner, "ROLE")
       sql(s"ALTER TABLE $table2 SET OWNER USER OWNER")
-      checkTblOwner(table2, "OWNER", "")
+      checkTblOwner(table2, "OWNER", "USER")
     } finally {
       catalog.reset()
     }

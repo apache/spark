@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -274,6 +275,12 @@ private[sql] object CatalogV2Util {
       Map(TableCatalog.PROP_PROVIDER -> provider) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
+  }
+
+  def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
+    properties ++
+      Map(TableCatalog.PROP_OWNER_NAME -> Utils.getCurrentUserName(),
+        TableCatalog.PROP_OWNER_TYPE -> "USER")
   }
 
   def createAlterTable(

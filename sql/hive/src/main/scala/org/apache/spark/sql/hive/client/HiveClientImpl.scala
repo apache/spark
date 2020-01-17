@@ -513,7 +513,7 @@ private[hive] class HiveClientImpl(
 
     val filteredProperties = properties.filterNot {
       case (key, _) => excludedTableProperties.contains(key)
-    } ++ Option(shim.getTableOwnerType(h)).map(TableCatalog.PROP_OWNER_TYPE -> _)
+    }
     val comment = properties.get("comment")
 
     CatalogTable(
@@ -570,9 +570,10 @@ private[hive] class HiveClientImpl(
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     verifyColumnDataType(table.dataSchema)
+    val ownerType =
+      table.properties.getOrElse(TableCatalog.PROP_OWNER_TYPE, PrincipalType.USER.name())
     val hiveTable = toHiveTable(table, Some(userName))
-    shim.setTableOwnerType(hiveTable,
-      table.properties.getOrElse(TableCatalog.PROP_OWNER_TYPE, PrincipalType.USER.name))
+    hiveTable.setProperty(TableCatalog.PROP_OWNER_TYPE, ownerType)
     client.createTable(hiveTable, ignoreIfExists)
   }
 
@@ -595,7 +596,6 @@ private[hive] class HiveClientImpl(
     verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties))
-    table.properties.get(TableCatalog.PROP_OWNER_TYPE).foreach(shim.setTableOwnerType(hiveTable, _))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
