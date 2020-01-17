@@ -72,7 +72,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   test("Regression with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestRegressor()
-        .setBootstrap(false)
+      .setBootstrap(false)
     regressionTestWithContinuousFeatures(rf)
   }
 
