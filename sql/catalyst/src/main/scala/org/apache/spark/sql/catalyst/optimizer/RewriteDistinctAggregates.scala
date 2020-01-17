@@ -173,6 +173,9 @@ import org.apache.spark.sql.types.IntegerType
  * 2. The attributes referenced by different distinct aggregate expressions are likely to overlap,
  *    and if no additional processing is performed, data loss will occur. To prevent this, we
  *    generate new attributes and replace the original ones.
+ * 3. If we apply the first rule to distinct aggregate expressions which exists filter clause, the
+ *    aggregate after expand may have at least two distinct aggregates, so we need to apply the
+ *    second rule too.
  *
  * The second rule does the following things here:
  * 1. Expand the data. There are three aggregation groups in this query:
