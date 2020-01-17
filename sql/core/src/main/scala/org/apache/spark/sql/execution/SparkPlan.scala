@@ -206,11 +206,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * for visualization.
    */
   protected final def executeQuery[T](query: => T): T = {
-    val nodeNameScope = this match {
-      case plan: WholeStageCodegenExec => s"${plan.nodeName} (${plan.codegenStageId})"
-      case _ => nodeName
-    }
-    RDDOperationScope.withScope(sparkContext, nodeNameScope, false, true) {
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       waitForSubqueries()
       query
