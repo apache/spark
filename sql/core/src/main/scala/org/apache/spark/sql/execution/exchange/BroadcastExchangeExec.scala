@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.util.{Properties, UUID}
+import java.util.UUID
 import java.util.concurrent._
 
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
