@@ -263,8 +263,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // query schema is not compatible with the existing data, the write can still success but
         // following reads would fail.
         if (provider.isInstanceOf[FileDataSourceV2]) {
-          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-          provider.getTable(df.schema, partitioningAsV2, dsOptions.asCaseSensitiveMap())
+          provider.getTable(
+            df.schema.asNullable,
+            partitioningAsV2.toArray,
+            dsOptions.asCaseSensitiveMap())
         } else {
           DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema = None)
         }
