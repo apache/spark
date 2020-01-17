@@ -175,7 +175,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
         withTempDir { dir =>
-          try {
+          withTable("orc_tbl1", "orc_tbl2", "orc_tbl3") {
             val orcTblStatement1 =
               s"""
                  |CREATE EXTERNAL TABLE orc_tbl1(
@@ -232,8 +232,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               if (convertMetastore) {
                 checkAnswer(sql(topDirSqlStatement), Nil)
               } else {
-                checkAnswer(sql(topDirSqlStatement),
-                  (1 to 6).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(topDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
               val l1DirStatement =
@@ -247,11 +246,9 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(l1DirStatement)
               val l1DirSqlStatement = s"SELECT * FROM tbl2"
               if (convertMetastore) {
-                checkAnswer(sql(l1DirSqlStatement),
-                  (1 to 2).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(l1DirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
               } else {
-                checkAnswer(sql(l1DirSqlStatement),
-                  (1 to 6).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(l1DirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
               val l2DirStatement =
@@ -265,11 +262,9 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(l2DirStatement)
               val l2DirSqlStatement = s"SELECT * FROM tbl3"
               if (convertMetastore) {
-                checkAnswer(sql(l2DirSqlStatement),
-                  (3 to 4).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(l2DirSqlStatement), (3 to 4).map(i => Row(i, i, s"orc$i")))
               } else {
-                checkAnswer(sql(l2DirSqlStatement),
-                  (3 to 6).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(l2DirSqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
               val wildcardTopDirStatement =
@@ -283,8 +278,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(wildcardTopDirStatement)
               val wildcardTopDirSqlStatement = s"SELECT * FROM tbl4"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardTopDirSqlStatement),
-                  (1 to 2).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(wildcardTopDirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(wildcardTopDirSqlStatement), Nil)
               }
@@ -300,8 +294,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(wildcardL1DirStatement)
               val wildcardL1DirSqlStatement = s"SELECT * FROM tbl5"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardL1DirSqlStatement),
-                  (1 to 4).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(wildcardL1DirSqlStatement), (1 to 4).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(wildcardL1DirSqlStatement), Nil)
               }
@@ -317,16 +310,11 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(wildcardL2Statement)
               val wildcardL2SqlStatement = s"SELECT * FROM tbl6"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardL2SqlStatement),
-                  (3 to 6).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(wildcardL2SqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(wildcardL2SqlStatement), Nil)
               }
             }
-          } finally {
-            sql("DROP TABLE IF EXISTS orc_tbl1")
-            sql("DROP TABLE IF EXISTS orc_tbl2")
-            sql("DROP TABLE IF EXISTS orc_tbl3")
           }
         }
       }
