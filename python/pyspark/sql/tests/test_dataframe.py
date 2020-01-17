@@ -549,22 +549,23 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_empty_dataframe(self):
-        # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
-        import numpy as np
-        sql = """
-        SELECT CAST(1 AS TINYINT) AS tinyint,
-        CAST(1 AS SMALLINT) AS smallint,
-        CAST(1 AS INT) AS int,
-        CAST(1 AS BIGINT) AS bigint,
-        CAST(0 AS FLOAT) AS float,
-        CAST(0 AS DOUBLE) AS double,
-        CAST(1 AS BOOLEAN) AS boolean,
-        CAST('foo' AS STRING) AS string,
-        CAST('2019-01-01' AS TIMESTAMP) AS timestamp
-        """
-        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
+            import numpy as np
+            sql = """
+            SELECT CAST(1 AS TINYINT) AS tinyint,
+            CAST(1 AS SMALLINT) AS smallint,
+            CAST(1 AS INT) AS int,
+            CAST(1 AS BIGINT) AS bigint,
+            CAST(0 AS FLOAT) AS float,
+            CAST(0 AS DOUBLE) AS double,
+            CAST(1 AS BOOLEAN) AS boolean,
+            CAST('foo' AS STRING) AS string,
+            CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+            """
+            dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+            dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+            self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_null_dataframe(self):
