@@ -112,6 +112,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       "last_modified_time",
       "Owner:",
       "COLUMN_STATS_ACCURATE",
+      TableCatalog.PROP_OWNER_TYPE,
       // The following are hive specific schema parameters which we do not need to match exactly.
       "numFiles",
       "numRows",

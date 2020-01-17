@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -1022,12 +1023,14 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     } else {
       val tableMetadata = catalog.getTableMetadata(table)
 
+      val restoredTableMeta = tableMetadata.copy(
+        properties = tableMetadata.properties.filterKeys(_ != TableCatalog.PROP_OWNER_TYPE))
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
-      val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-        showCreateDataSourceTable(tableMetadata)
+      val stmt = if (DDLUtils.isDatasourceTable(restoredTableMeta)) {
+        showCreateDataSourceTable(restoredTableMeta)
       } else {
-        showCreateHiveTable(tableMetadata)
+        showCreateHiveTable(restoredTableMeta)
       }
 
       Seq(Row(stmt))
