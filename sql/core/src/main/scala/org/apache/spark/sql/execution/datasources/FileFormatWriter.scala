@@ -168,18 +168,46 @@ object FileFormatWriter extends Logging {
     committer.setupJob(job)
 
     try {
-      val rdd = if (orderingMatched) {
-        empty2NullPlan.execute()
+      val rdd = if (sparkSession.sessionState.conf.mergeSmallOutputFiles) {
+        val originRdd = empty2NullPlan.execute()
+        val maxSize = sparkSession.sessionState.conf.mergeSmallOutputFilesMaxSize
+        val coalescer = new SizeBasedCoalescer(maxSize, plan.output)
+        val coalescedRdd =
+          originRdd.coalesce(originRdd.partitions.length, shuffle = false, Some(coalescer))
+        if (orderingMatched) {
+          coalescedRdd
+        } else {
+          // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+          // the physical plan may have different attribute ids due to optimizer removing some
+          // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+          val orderingExpr = requiredOrdering
+            .map(SortOrder(_, Ascending))
+            .map(BindReferences.bindReference(_, outputSpec.outputColumns))
+          val enableRadixSort = plan.sqlContext.conf.enableRadixSort
+          coalescedRdd.mapPartitionsInternal { iter =>
+            val sorter = SortExec.createSorter(plan, enableRadixSort, orderingExpr)
+            val metrics = TaskContext.get().taskMetrics()
+            // Remember spill data size of this task before execute this operator so that we can
+            // figure out how many bytes we spilled for this operator.
+            val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+            metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
+            sortedIterator
+          }
+        }
       } else {
-        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
-        // the physical plan may have different attribute ids due to optimizer removing some
-        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = bindReferences(
-          requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
-        SortExec(
-          orderingExpr,
-          global = false,
-          child = empty2NullPlan).execute()
+        if (orderingMatched) {
+          empty2NullPlan.execute()
+        } else {
+          // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+          // the physical plan may have different attribute ids due to optimizer removing some
+          // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+          val orderingExpr = bindReferences(
+            requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
+          SortExec(
+            orderingExpr,
+            global = false,
+            child = empty2NullPlan).execute()
+        }
       }
 
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single

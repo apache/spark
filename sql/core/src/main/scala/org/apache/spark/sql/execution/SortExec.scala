@@ -24,7 +24,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -201,5 +201,44 @@ case class SortExec(
       rowSorter.cleanupResources()
     }
     super.cleanupResources()
+  }
+}
+
+object SortExec {
+
+  def createSorter(plan: SparkPlan,
+                   enableRadixSort: Boolean,
+                   sortOrder: Seq[SortOrder]): UnsafeExternalRowSorter = {
+    val ordering = GenerateOrdering.generate(sortOrder, plan.output)
+
+    // The comparator for comparing prefix
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, plan.output)
+    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort =
+      enableRadixSort &&
+        sortOrder.length == 1 &&
+        SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+    // The generator for prefix
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
+    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+
+      override def computePrefix(row: InternalRow):
+      UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
+      }
+    }
+
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    val sorter = UnsafeExternalRowSorter.create(
+      plan.schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+
+    sorter
   }
 }

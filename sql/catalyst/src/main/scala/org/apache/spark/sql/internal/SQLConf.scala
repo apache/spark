@@ -1022,6 +1022,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MERGE_SMALL_OUTPUT_FILE = buildConf("spark.sql.files.mergeSmallFile.enabled")
+    .doc("When true, we will merge final stage's partition one by one according to value" +
+      "set by spark.sql.files.mergeSmallFile.maxBytes")
+    .booleanConf
+    .createWithDefault(false)
+
+  val MERGE_SMALL_OUTPUT_FILE_MAX_BYTES = buildConf("spark.sql.files.mergeSmallFile.maxBytes")
+    .doc("Max size when we combine neighbouring small partitions")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(128 * 1024 * 1024) // parquet.block.size
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
@@ -2221,6 +2232,10 @@ class SQLConf extends Serializable with Logging {
   def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
+  def mergeSmallOutputFiles: Boolean = getConf(MERGE_SMALL_OUTPUT_FILE)
+
+  def mergeSmallOutputFilesMaxSize: Long = getConf(MERGE_SMALL_OUTPUT_FILE_MAX_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
