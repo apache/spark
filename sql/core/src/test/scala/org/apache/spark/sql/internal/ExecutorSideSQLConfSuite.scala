@@ -76,6 +76,31 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
+  test("SPARK-22590 test broadcast thread propogates the local properties to task") {
+    withSQLConf("spark.sql.broadcastExchange.maxThreadThreshold" -> "1") {
+      val df1 = Seq(true).toDF()
+      val df2 = spark.range(1).mapPartitions { _ =>
+        val conf = SQLConf.get
+        Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "b")
+      }
+      df2.hint("broadcast")
+
+      val df3 = spark.range(1).mapPartitions { _ =>
+        val conf = SQLConf.get
+        Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "c")
+      }
+      df3.hint("broadcast")
+
+      spark.sparkContext.setLocalProperty("spark.sql.y", "b")
+      val checks = df1.join(df2).collect()
+      assert(checks.forall(_.toSeq == Seq(true, true)))
+
+      spark.sparkContext.setLocalProperty("spark.sql.y", "c")
+      val checks2 = df1.join(df3).collect()
+      assert(checks2.forall(_.toSeq == Seq(true, true)))
+    }
+  }
+
   test("case-sensitive config should work for json schema inference") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>

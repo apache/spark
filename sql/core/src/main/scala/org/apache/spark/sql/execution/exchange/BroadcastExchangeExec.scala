@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.util.UUID
+import java.util.{Properties, UUID}
 import java.util.concurrent._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
@@ -75,10 +76,12 @@ case class BroadcastExchangeExec(
   private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    val localProps = BroadcastExchangeExec.getPropertiesCopy(sparkContext.getLocalProperties)
     val task = new Callable[broadcast.Broadcast[Any]]() {
       override def call(): broadcast.Broadcast[Any] = {
         // This will run in another thread. Set the execution id so that we can connect these jobs
         // with the correct execution.
+        sparkContext.setLocalProperties(localProps)
         SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
           try {
             // Setup a job group here so later it may get cancelled by groupId if necessary.
@@ -184,4 +187,12 @@ object BroadcastExchangeExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
         SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
+
+  private def getPropertiesCopy(oldProps : Properties): Properties = {
+    val newProps = new Properties()
+    oldProps
+      .asScala
+      .foreach(entry => newProps.setProperty(entry._1, entry._2))
+    newProps
+  }
 }
