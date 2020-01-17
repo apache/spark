@@ -27,7 +27,8 @@ The `CREATE TABLE` statement defines a new table using Hive format.
 CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
   [ ( col_name1[:] col_type1 [ COMMENT col_comment1 ], ... ) ]
   [ COMMENT table_comment ]
-  [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) | ( col_name1, col_name2, ... ) ]
+  [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
+      | ( col_name1, col_name2, ... ) ]
   [ ROW FORMAT row_format ]
   [ STORED AS file_format ]
   [ LOCATION path ]
@@ -118,4 +119,4 @@ CREATE TABLE Student (Id INT,name STRING)
 
 ### Related Statements
 * [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
-* [CREATE TABLE LIKE](ssql-ref-syntax-ddl-create-table-like.html)
+* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)

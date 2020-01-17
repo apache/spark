@@ -25,7 +25,7 @@ license: |
 The CREATE statements:
 * [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 * [CREATE TABLE USING HIVE FORMAT](sql-ref-syntax-ddl-create-table-hiveformat.html)
-* [CREATE TABLE LIKE](ssql-ref-syntax-ddl-create-table-like.html)
+* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)
 
 ### Related Statements
 - [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)

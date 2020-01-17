@@ -30,7 +30,9 @@ CREATE TABLE [ IF NOT EXISTS ] table_identifier
   USING data_source
   [ OPTIONS ( key1=val1, key2=val2, ... ) ]
   [ PARTITIONED BY ( col_name1, col_name2, ... ) ]
-  [ CLUSTERED BY ( col_name3, col_name4, ... ) [ SORTED BY ( col_name [ ASC | DESC ], ... ) ] INTO num_buckets BUCKETS ]
+  [ CLUSTERED BY ( col_name3, col_name4, ... ) 
+    [ SORTED BY ( col_name [ ASC | DESC ], ... ) ] 
+    INTO num_buckets BUCKETS ]
   [ LOCATION path ]
   [ COMMENT table_comment ]
   [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
@@ -110,4 +112,4 @@ CREATE TABLE Student (Id INT,name STRING ,age INT)
 
 ### Related Statements
 * [CREATE TABLE USING HIVE FORMAT](sql-ref-syntax-ddl-create-table-hiveformat.html)
-* [CREATE TABLE LIKE](ssql-ref-syntax-ddl-create-table-like.html)
+* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)
