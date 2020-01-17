@@ -228,16 +228,49 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
     Seq("true", "false").foreach { parquetConversion =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
         withTempPath { path =>
-          withTable("tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
-            val someDF1 = Seq((1, 1, "parq1"), (2, 2, "parq2")).
-              toDF("c1", "c2", "c3").repartition(1)
-            val someDF2 = Seq((3, 3, "parq3"), (4, 4, "parq4")).
-              toDF("c1", "c2", "c3").repartition(1)
-            val someDF3 = Seq((5, 5, "parq5"), (6, 6, "parq6")).
-              toDF("c1", "c2", "c3").repartition(1)
-            someDF1.write.parquet(s"${path.getCanonicalPath}/l1/")
-            someDF2.write.parquet(s"${path.getCanonicalPath}/l1/l2/")
-            someDF3.write.parquet(s"${path.getCanonicalPath}/l1/l2/l3/")
+          withTable("parq_tbl1", "parq_tbl2", "parq_tbl3",
+            "tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
+            val parquetTblStatement1 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(parquetTblStatement1)
+
+            val parquetTblInsertL1 =
+              s"INSERT INTO TABLE parq_tbl1 VALUES (1, 1, 'parq1'), (2, 2, 'parq2')".stripMargin
+            sql(parquetTblInsertL1)
+
+            val parquetTblStatement2 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl2(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(parquetTblStatement2)
+
+            val parquetTblInsertL2 =
+              s"INSERT INTO TABLE parq_tbl2 VALUES (3, 3, 'parq3'), (4, 4, 'parq4')".stripMargin
+            sql(parquetTblInsertL2)
+
+            val parquetTblStatement3 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl3(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/l3/"}'""".stripMargin
+            sql(parquetTblStatement3)
+
+            val parquetTblInsertL3 =
+              s"INSERT INTO TABLE parq_tbl3 VALUES (5, 5, 'parq5'), (6, 6, 'parq6')".stripMargin
+            sql(parquetTblInsertL3)
 
             val topDirStatement =
               s"""
