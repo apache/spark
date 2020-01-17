@@ -279,7 +279,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e => e
           }
           (projection, exprAttrs, (ae, aggExpr))
-      }..unzip3
+      }.unzip3
       val distinctAggChildAttrs = expressionAttrs.flatten.map(_._2)
       val allAggAttrs = regularAggChildAttrMap.map(_._2) ++ distinctAggChildAttrs
       // Construct the aggregate input projection.
