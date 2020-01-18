@@ -54,8 +54,15 @@ public class ShuffleIndexInformation {
    * Get index offset for a particular reducer.
    */
   public ShuffleIndexRecord getIndex(int reduceId) {
-    long offset = offsets.get(reduceId);
-    long nextOffset = offsets.get(reduceId + 1);
+    return getIndex(reduceId, reduceId + 1);
+  }
+
+  /**
+   * Get index offset for the reducer range of [startReduceId, endReduceId).
+   */
+  public ShuffleIndexRecord getIndex(int startReduceId, int endReduceId) {
+    long offset = offsets.get(startReduceId);
+    long nextOffset = offsets.get(endReduceId);
     return new ShuffleIndexRecord(offset, nextOffset - offset);
   }
 }

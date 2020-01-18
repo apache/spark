@@ -20,8 +20,9 @@ package org.apache.spark.sql.types
 import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
+import scala.util.Try
+
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.AnalysisException
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -30,6 +31,8 @@ import org.apache.spark.sql.AnalysisException
  * - _precision and _scale represent the SQL precision and scale we are looking for
  * - If decimalVal is set, it represents the whole decimal value
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
+ *
+ * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
  */
 @Unstable
 final class Decimal extends Ordered[Decimal] with Serializable {
@@ -127,12 +130,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(decimal: BigDecimal): Decimal = {
     this.decimalVal = decimal
     this.longVal = 0L
-    if (decimal.precision <= decimal.scale) {
+    if (decimal.precision < decimal.scale) {
       // For Decimal, we expect the precision is equal to or large than the scale, however,
       // in BigDecimal, the digit count starts from the leftmost nonzero digit of the exact
       // result. For example, the precision of 0.01 equals to 1 based on the definition, but
-      // the scale is 2. The expected precision should be 3.
-      this._precision = decimal.scale + 1
+      // the scale is 2. The expected precision should be 2.
+      this._precision = decimal.scale
     } else {
       this._precision = decimal.precision
     }
@@ -188,7 +191,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toScalaBigInt: BigInt = {
     if (decimalVal.ne(null)) {
-      decimalVal.toBigInt()
+      decimalVal.toBigInt
     } else {
       BigInt(toLong)
     }
@@ -220,15 +223,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toDouble: Double = toBigDecimal.doubleValue()
+  def toDouble: Double = toBigDecimal.doubleValue
 
-  def toFloat: Float = toBigDecimal.floatValue()
+  def toFloat: Float = toBigDecimal.floatValue
 
   def toLong: Long = {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      decimalVal.longValue()
+      decimalVal.longValue
     }
   }
 
@@ -239,7 +242,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def toByte: Byte = toLong.toByte
 
   private def overflowException(dataType: String) =
-    throw new ArithmeticException(s"Casting $this to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $this to $dataType causes overflow")
 
   /**
    * @return the Byte value that is equal to the rounded decimal.
@@ -622,6 +625,9 @@ object Decimal {
     override def toLong(x: Decimal): Long = x.toLong
     override def fromInt(x: Int): Decimal = new Decimal().set(x)
     override def compare(x: Decimal, y: Decimal): Int = x.compare(y)
+    // Added from Scala 2.13; don't override to work in 2.12
+    // TODO revisit once Scala 2.12 support is dropped
+    def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
   }
 
   /** A [[scala.math.Fractional]] evidence parameter for Decimals. */

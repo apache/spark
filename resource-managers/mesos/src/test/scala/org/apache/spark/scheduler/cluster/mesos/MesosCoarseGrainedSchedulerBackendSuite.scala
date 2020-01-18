@@ -28,12 +28,13 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
@@ -716,7 +717,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
     val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
-      Map.empty, Map.empty)
+      Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }
@@ -809,7 +810,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null, home: String = "/path") {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      home: String = "/path"): Unit = {
     initializeSparkConf(sparkConfVars, home)
     sc = new SparkContext(sparkConf)
 

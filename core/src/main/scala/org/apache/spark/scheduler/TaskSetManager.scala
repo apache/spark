@@ -81,6 +81,19 @@ private[spark] class TaskSetManager(
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
   val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
+  // User provided threshold for speculation regardless of whether the quantile has been reached
+  val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
+  // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
+  // number of slots on a single executor, would the task manager speculative run the tasks if
+  // their duration is longer than the given threshold. In this way, we wouldn't speculate too
+  // aggressively but still handle basic cases.
+  // SPARK-30417: #cores per executor might not be set in spark conf for standalone mode, then
+  // the value of the conf would 1 by default. However, the executor would use all the cores on
+  // the worker. Therefore, CPUS_PER_TASK is okay to be greater than 1 without setting #cores.
+  // To handle this case, we assume the minimum number of slots is 1.
+  // TODO: use the actual number of slots for standalone mode.
+  val speculationTasksLessEqToSlots =
+    numTasks <= Math.max(conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK, 1)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -474,7 +487,7 @@ private[spark] class TaskSetManager(
     }
   }
 
-  private def maybeFinishTaskSet() {
+  private def maybeFinishTaskSet(): Unit = {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
@@ -758,7 +771,7 @@ private[spark] class TaskSetManager(
    * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
    * DAG Scheduler.
    */
-  def handleFailedTask(tid: Long, state: TaskState, reason: TaskFailedReason) {
+  def handleFailedTask(tid: Long, state: TaskState, reason: TaskFailedReason): Unit = {
     val info = taskInfos(tid)
     if (info.failed || info.killed) {
       return
@@ -796,6 +809,15 @@ private[spark] class TaskSetManager(
           logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"
             .format(info.id, taskSet.id, tid, ef.description))
           abort("Task %s in stage %s (TID %d) had a not serializable result: %s".format(
+            info.id, taskSet.id, tid, ef.description))
+          return
+        }
+        if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
+          // If we can not write to output file in the task, there's no point in trying to
+          // re-execute it.
+          logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
+            .format(info.id, taskSet.id, tid, ef.description))
+          abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
             info.id, taskSet.id, tid, ef.description))
           return
         }
@@ -886,14 +908,14 @@ private[spark] class TaskSetManager(
    *
    * Used to keep track of the number of running tasks, for enforcing scheduling policies.
    */
-  def addRunningTask(tid: Long) {
+  def addRunningTask(tid: Long): Unit = {
     if (runningTasksSet.add(tid) && parent != null) {
       parent.increaseRunningTasks(1)
     }
   }
 
   /** If the given task ID is in the set of running tasks, removes it. */
-  def removeRunningTask(tid: Long) {
+  def removeRunningTask(tid: Long): Unit = {
     if (runningTasksSet.remove(tid) && parent != null) {
       parent.decreaseRunningTasks(1)
     }
@@ -903,9 +925,9 @@ private[spark] class TaskSetManager(
     null
   }
 
-  override def addSchedulable(schedulable: Schedulable) {}
+  override def addSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def removeSchedulable(schedulable: Schedulable) {}
+  override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
@@ -914,7 +936,7 @@ private[spark] class TaskSetManager(
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
-  override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
+  override def executorLost(execId: String, host: String, reason: ExecutorLossReason): Unit = {
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
@@ -923,7 +945,10 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !killedByOtherAttempt.contains(tid)) {
+        // We may have a running task whose partition has been marked as successful,
+        // this partition has another task completed in another stage attempt.
+        // We treat it as a running task and will call handleFailedTask later.
+        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -949,14 +974,40 @@ private[spark] class TaskSetManager(
   }
 
   /**
+   * Check if the task associated with the given tid has past the time threshold and should be
+   * speculative run.
+   */
+  private def checkAndSubmitSpeculatableTask(
+      tid: Long,
+      currentTimeMillis: Long,
+      threshold: Double): Boolean = {
+    val info = taskInfos(tid)
+    val index = info.index
+    if (!successful(index) && copiesRunning(index) == 1 &&
+        info.timeRunning(currentTimeMillis) > threshold && !speculatableTasks.contains(index)) {
+      addPendingTask(index, speculatable = true)
+      logInfo(
+        ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
+          " than %.0f ms(%d speculatable tasks in this taskset now)")
+          .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
+      speculatableTasks += index
+      sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
+      true
+    } else {
+      false
+    }
+  }
+
+  /**
    * Check for tasks to be speculated and return true if there are any. This is called periodically
    * by the TaskScheduler.
    *
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
-    // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie or is from a barrier stage.
-    if (isZombie || isBarrier || numTasks == 1) {
+    // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
+    // one task we don't speculate since we don't have metrics to decide whether it's taking too
+    // long or not, unless a task duration threshold is explicitly provided.
+    if (isZombie || isBarrier || (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
       return false
     }
     var foundTasks = false
@@ -974,19 +1025,14 @@ private[spark] class TaskSetManager(
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
-        val info = taskInfos(tid)
-        val index = info.index
-        if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
-            !speculatableTasks.contains(index)) {
-          addPendingTask(index, speculatable = true)
-          logInfo(
-            ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
-            " than %.0f ms(%d speculatable tasks in this taskset now)")
-            .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
-          speculatableTasks += index
-          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
-          foundTasks = true
-        }
+        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
+      }
+    } else if (speculationTaskDurationThresOpt.isDefined && speculationTasksLessEqToSlots) {
+      val time = clock.getTimeMillis()
+      val threshold = speculationTaskDurationThresOpt.get
+      logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
+      for (tid <- runningTasksSet) {
+        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }
     }
     foundTasks
@@ -1035,14 +1081,14 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  def recomputeLocality() {
+  def recomputeLocality(): Unit = {
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
   }
 
-  def executorAdded() {
+  def executorAdded(): Unit = {
     recomputeLocality()
   }
 }

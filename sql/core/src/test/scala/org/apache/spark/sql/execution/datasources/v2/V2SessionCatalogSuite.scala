@@ -24,17 +24,15 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, TableChange}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
+abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
   val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
   val schema: StructType = new StructType()
@@ -46,7 +44,7 @@ class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession wi
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
 
   def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState)
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.conf)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -54,11 +52,10 @@ class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession wi
 
 class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    // TODO: when there is a public API for v2 catalogs, use that instead
     val catalog = newCatalog()
     catalog.createNamespace(Array("db"), emptyProps)
     catalog.createNamespace(Array("db2"), emptyProps)
@@ -81,16 +78,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
-
-  test("Catalogs can load the catalog") {
-    val catalog = newCatalog()
-
-    val conf = new SQLConf
-    conf.setConfString("spark.sql.catalog.test", catalog.getClass.getName)
-
-    val loaded = Catalogs.load("test", conf)
-    assert(loaded.getClass == catalog.getClass)
-  }
 
   test("listTables") {
     val catalog = newCatalog()
@@ -404,7 +391,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(updated.schema == expectedSchema)
   }
 
-  test("alterTable: update column data type and nullability") {
+  test("alterTable: update column nullability") {
     val catalog = newCatalog()
 
     val originalSchema = new StructType()
@@ -415,25 +402,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == originalSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateColumnType(Array("id"), LongType, true))
+      TableChange.updateColumnNullability(Array("id"), true))
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
+    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     assert(updated.schema == expectedSchema)
-  }
-
-  test("alterTable: update optional column to required fails") {
-    val catalog = newCatalog()
-
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-
-    assert(table.schema == schema)
-
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType, false))
-    }
-
-    assert(exc.getMessage.contains("Cannot change optional column to required"))
-    assert(exc.getMessage.contains("id"))
   }
 
   test("alterTable: update missing column fails") {
@@ -763,13 +735,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
 class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   def checkMetadata(
       expected: scala.collection.Map[String, String],
       actual: scala.collection.Map[String, String]): Unit = {
     // remove location and comment that are automatically added by HMS unless they are expected
-    val toRemove = V2SessionCatalog.RESERVED_PROPERTIES.filter(expected.contains)
+    val toRemove =
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.filter(expected.contains)
     assert(expected -- toRemove === actual)
   }
 
@@ -1022,31 +995,18 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove location") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
 
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
+      val exc = intercept[UnsupportedOperationException] {
+        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+      }
+      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+
     }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
-
-    catalog.dropNamespace(testNs)
-  }
-
-  test("alterNamespace: fail to remove comment") {
-    val catalog = newCatalog()
-
-    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
-
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
-    }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
-
     catalog.dropNamespace(testNs)
   }
 }

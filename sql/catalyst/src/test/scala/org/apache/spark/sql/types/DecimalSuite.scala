@@ -32,15 +32,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("creating decimals") {
     checkDecimal(new Decimal(), "0", 1, 0)
-    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 3, 2)
-    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 2, 1)
-    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 3, 2)
-    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 2, 2)
+    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 1, 1)
+    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 2, 2)
+    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 1, 1)
     checkDecimal(Decimal(BigDecimal("0")), "0", 1, 0)
     checkDecimal(Decimal(BigDecimal("1.0")), "1.0", 2, 1)
-    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 3, 2)
-    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 2, 1)
-    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 2, 2)
+    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 1, 1)
+    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 2, 2)
     checkDecimal(Decimal(BigDecimal("-1.0")), "-1.0", 2, 1)
     checkDecimal(Decimal(BigDecimal("10.030")), "10.030", 5, 3)
     checkDecimal(Decimal(BigDecimal("10.030"), 4, 1), "10.0", 4, 1)
@@ -99,7 +99,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
-  private val decimalVal = PrivateMethod[BigDecimal]('decimalVal)
+  private val decimalVal = PrivateMethod[BigDecimal](Symbol("decimalVal"))
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {

@@ -17,21 +17,44 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.io.File
+import java.net.URI
+
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
-class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
+class AdaptiveQueryExecSuite
+  extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+
   import testImplicits._
 
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+    var finalPlanCnt = 0
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
+            if (sparkPlanInfo.simpleString.startsWith(
+              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              finalPlanCnt += 1
+            }
+          case _ => // ignore other events
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
@@ -42,6 +65,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(finalPlanCnt == 1)
+    spark.sparkContext.removeSparkListener(listener)
+
     val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
@@ -51,34 +79,41 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
   }
 
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
-    plan.collect {
-      case j: BroadcastHashJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelBroadcastHashJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: BroadcastHashJoinExec => j
+    }
   }
 
   private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
-    plan.collect {
-      case j: SortMergeJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelSortMergeJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: SortMergeJoinExec => j
+    }
   }
 
-  private def findReusedExchange(plan: SparkPlan): Seq[ReusedQueryStageExec] = {
-    plan.collect {
-      case e: ReusedQueryStageExec => Seq(e)
-      case a: AdaptiveSparkPlanExec => findReusedExchange(a.executedPlan)
-      case s: QueryStageExec => findReusedExchange(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedExchange)
-    }.flatten
+  private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
+    collectInPlanAndSubqueries(plan) {
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
+    }
   }
 
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
-    plan.collect {
-      case e: ReusedSubqueryExec => Seq(e)
-      case s: QueryStageExec => findReusedSubquery(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedSubquery)
-    }.flatten
+    collectInPlanAndSubqueries(plan) {
+      case e: ReusedSubqueryExec => e
+    }
+  }
+
+  private def checkNumLocalShuffleReaders(
+      plan: SparkPlan, numShufflesWithoutLocalReader: Int = 0): Unit = {
+    val numShuffles = collect(plan) {
+      case s: ShuffleQueryStageExec => s
+    }.length
+
+    val numLocalReaders = collect(plan) {
+      case reader: LocalShuffleReaderExec => reader
+    }.length
+
+    assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
   }
 
   test("Change merge join to broadcast join") {
@@ -91,30 +126,65 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
-  test("Change merge join to broadcast join and reduce number of shuffle partitions") {
+  test("Reuse the parallelism of CoalescedShuffleReaderExec in LocalShuffleReaderExec") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "150") {
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "10") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-
-      val shuffleReaders = adaptivePlan.collect {
-        case reader: CoalescedShuffleReaderExec => reader
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
       }
-      assert(shuffleReaders.length === 1)
+      assert(localReaders.length == 2)
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      // And the partitionStartIndices is [0, 3, 4], so advisoryParallelism = 3.
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
+      // and the partitions length is 1 * numMappers = 2
+      assert(localShuffleRDD0.getPartitions.length == 2)
       // The pre-shuffle partition size is [0, 72, 0, 72, 126]
-      shuffleReaders.foreach { reader =>
-        assert(reader.outputPartitioning.numPartitions === 2)
+      // And the partitionStartIndices is [0, 1, 2, 3, 4], so advisoryParallelism = 5.
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
+    }
+  }
+
+  test("Reuse the default parallelism in LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
       }
+      assert(localReaders.length == 2)
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD0.getPartitions.length == 4)
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
     }
   }
 
@@ -129,6 +199,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -143,6 +214,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -164,6 +237,30 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-LocalShuffleReader*
+      //             +- ShuffleExchange
+
+      // After applied the 'OptimizeLocalShuffleReader' rule, we can convert all the four
+      // shuffle reader to local shuffle reader in the bottom two 'BroadcastHashJoin'.
+      // For the top level 'BroadcastHashJoin', the probe side is not shuffle query stage
+      // and the build side shuffle query stage is also converted to local shuffle reader.
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -187,6 +284,28 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-HashAggregate
+      //          +- CoalescedShuffleReader
+      //             +- ShuffleExchange
+
+      // The shuffle added by Aggregate can't apply local reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -210,6 +329,29 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- Filter
+      //       +- HashAggregate
+      //          +- CoalescedShuffleReader
+      //             +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-LocalShuffleReader*
+      //           +- ShuffleExchange
+
+      // The shuffle added by Aggregate can't apply local reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -224,6 +366,9 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 2)
+      // There is still a SMJ, and its two shuffles can't apply local reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
@@ -240,6 +385,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
@@ -258,6 +405,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -277,6 +426,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.isEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -299,9 +450,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
-      assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
+      assert(ex.head.child.isInstanceOf[BroadcastExchangeExec])
       val sub = findReusedSubquery(adaptivePlan)
       assert(sub.isEmpty)
     }
@@ -359,6 +512,27 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Change merge join to broadcast join without local shuffle reader") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM testData t1 join testData2 t2
+          |ON t1.key = t2.a join testData3 t3 on t2.a = t3.a
+          |where t1.value = 1
+        """.stripMargin
+      )
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 2)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      // There is still a SMJ, and its two shuffles can't apply local reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
+    }
+  }
+
   test("Avoid changing merge join to broadcast join if too many empty partitions on build plan") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -382,6 +556,228 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
         assert(bhj.size == 1)
         assert(bhj.head.buildSide == BuildRight)
       }
+    }
+  }
+
+  test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
+    var numStages = 0
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numStages = jobStart.stageInfos.length
+      }
+    }
+    try {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        spark.sparkContext.addSparkListener(listener)
+        spark.range(0, 100, 1, numPartitions = 10).take(1)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        // Should be only one stage since there is no shuffle.
+        assert(numStages == 1)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-30524: Do not optimize skew join if introduce additional shuffle") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 2 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
+        val innerSmj = findTopLevelSortMergeJoin(innerPlan)
+        assert(innerSmj.size == 1)
+        // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
+        val innerSmjAfter = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        assert(innerSmjAfter.size == 1)
+      }
+    }
+  }
+
+  test("SPARK-29544: adaptive skew join with different join types") {
+    Seq("false", "true").foreach { reducePostShufflePartitionsEnabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+        SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> reducePostShufflePartitionsEnabled,
+        SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+        withTempView("skewData1", "skewData2") {
+          spark
+            .range(0, 1000, 1, 10)
+            .selectExpr("id % 2 as key1", "id as value1")
+            .createOrReplaceTempView("skewData1")
+          spark
+            .range(0, 1000, 1, 10)
+            .selectExpr("id % 1 as key2", "id as value2")
+            .createOrReplaceTempView("skewData2")
+          // skewed inner join optimization
+          val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
+          val innerSmj = findTopLevelSortMergeJoin(innerPlan)
+          assert(innerSmj.size == 1)
+          // left stats: [3496, 0, 0, 0, 4014]
+          // right stats:[6292, 0, 0, 0, 0]
+          // the partition 0 in both left and right side are all skewed.
+          // And divide into 5 splits both in left and right (the max splits number).
+          // So there are 5 x 5 smjs for partition 0.
+          // Partition 4 in left side is skewed and is divided into 5 splits.
+          // The right side of partition 4 is not skewed.
+          // So there are 5 smjs for partition 4.
+          // So total (25 + 5 + 1) smjs.
+          // Union
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //             .
+          //             .
+          //             .
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+
+          val innerSmjAfter = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          assert(innerSmjAfter.size == 31)
+
+          // skewed left outer join optimization
+          val (leftPlan, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
+          val leftSmj = findTopLevelSortMergeJoin(leftPlan)
+          assert(leftSmj.size == 1)
+          // left stats: [3496, 0, 0, 0, 4014]
+          // right stats:[6292, 0, 0, 0, 0]
+          // The partition 0 in both left and right are all skewed.
+          // The partition 4 in left side is skewed.
+          // But for left outer join, we don't split the right partition even skewed.
+          // So the partition 0 in left side is divided into 5 splits(the max split number).
+          // the partition 4 in left side is divided into 5 splits(the max split number).
+          // So total (5 + 5 + 1) smjs.
+          // Union
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //             .
+          //             .
+          //             .
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+
+          val leftSmjAfter = findTopLevelSortMergeJoin(leftAdaptivePlan)
+          assert(leftSmjAfter.size == 11)
+
+          // skewed right outer join optimization
+          val (rightPlan, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
+          val rightSmj = findTopLevelSortMergeJoin(rightPlan)
+          assert(rightSmj.size == 1)
+          // left stats: [3496, 0, 0, 0, 4014]
+          // right stats:[6292, 0, 0, 0, 0]
+          // The partition 0 in both left and right side are all skewed.
+          // And the partition 4 in left side is skewed.
+          // But for right outer join, we don't split the left partition even skewed.
+          // And divide right side into 5 splits(the max split number)
+          // So total 6 smjs.
+          // Union
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- CoalescedShuffleReader
+          //       +- ShuffleQueryStage
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //             .
+          //             .
+          //             .
+          // +- SortMergeJoin
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+          //   +- Sort
+          //     +- SkewedShuffleReader
+          //       +- ShuffleQueryStage
+
+          val rightSmjAfter = findTopLevelSortMergeJoin(rightAdaptivePlan)
+          assert(rightSmjAfter.size == 6)
+        }
+      }
+    }
+  }
+
+  test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("bucketed_table") {
+        val df1 =
+          (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
+        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+        val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+        val tableDir = new File(warehouseFilePath, "bucketed_table")
+        Utils.deleteRecursively(tableDir)
+        df1.write.parquet(tableDir.getAbsolutePath)
+
+        val agged = spark.table("bucketed_table").groupBy("i").count()
+        val error = intercept[Exception] {
+          agged.count()
+        }
+        assert(error.getCause().toString contains "Failed to materialize query stage")
+      }
+    }
+  }
+
+  test("SPARK-30403: AQE should handle InSubquery") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
+        " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
+      )
     }
   }
 }

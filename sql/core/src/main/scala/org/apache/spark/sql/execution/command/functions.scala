@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -222,6 +223,21 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    functionNames.sorted.map(Row(_))
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    if (showSystemFunctions) {
+      (functionNames ++
+        StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
+        .sorted.map(Row(_))
+    } else {
+      functionNames.sorted.map(Row(_))
+    }
+
   }
+}
+
+object FunctionsCommand {
+  // operators that do not have corresponding functions.
+  // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
+  val virtualOperators = Seq("!=", "<>", "between", "case")
 }

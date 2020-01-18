@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_TASK_PREFIX
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -35,19 +36,50 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * @param resourceName  gpu, fpga, etc
  */
 private[spark] case class ResourceID(componentName: String, resourceName: String) {
-  def confPrefix: String = s"$componentName.resource.$resourceName." // with ending dot
+  def confPrefix: String = s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
   def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
   def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
   def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
 }
 
+/**
+ * Case class that represents a resource request at the executor level.
+ *
+ * The class used when discovering resources (using the discovery script),
+ * or via the context as it is parsing configuration, for SPARK_EXECUTOR_PREFIX.
+ *
+ * @param id object identifying the resource
+ * @param amount integer amount for the resource. Note that for a request (executor level),
+ *               fractional resources does not make sense, so amount is an integer.
+ * @param discoveryScript optional discovery script file name
+ * @param vendor optional vendor name
+ */
 private[spark] case class ResourceRequest(
     id: ResourceID,
     amount: Int,
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
+/**
+ * Case class that represents resource requirements for a component in a
+ * an application (components are driver, executor or task).
+ *
+ * A configuration of spark.task.resource.[resourceName].amount = 4, equates to:
+ * amount = 4, and numParts = 1.
+ *
+ * A configuration of spark.task.resource.[resourceName].amount = 0.25, equates to:
+ * amount = 1, and numParts = 4.
+ *
+ * @param resourceName gpu, fpga, etc.
+ * @param amount whole units of the resource we expect (e.g. 1 gpus, 2 fpgas)
+ * @param numParts if not 1, the number of ways a whole resource is subdivided.
+ *                 This is always an integer greater than or equal to 1,
+ *                 where 1 is whole resource, 2 is divide a resource in two, and so on.
+ */
+private[spark] case class ResourceRequirement(
+    resourceName: String,
+    amount: Int,
+    numParts: Int = 1)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
@@ -79,7 +111,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
-    sparkConf.getAllWithPrefix(s"$componentName.resource.").map { case (key, _) =>
+    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
     }.toSet.toSeq.map(name => ResourceID(componentName, name))
   }
@@ -87,15 +119,60 @@ private[spark] object ResourceUtils extends Logging {
   def parseAllResourceRequests(
       sparkConf: SparkConf,
       componentName: String): Seq[ResourceRequest] = {
-    listResourceIds(sparkConf, componentName).map { id =>
-      parseResourceRequest(sparkConf, id)
+    listResourceIds(sparkConf, componentName)
+      .map(id => parseResourceRequest(sparkConf, id))
+      .filter(_.amount > 0)
+  }
+
+  // Used to take a fraction amount from a task resource requirement and split into a real
+  // integer amount and the number of parts expected. For instance, if the amount is 0.5,
+  // the we get (1, 2) back out.
+  // Returns tuple of (amount, numParts)
+  def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
+    val parts = if (amount <= 0.5) {
+      Math.floor(1.0 / amount).toInt
+    } else if (amount % 1 != 0) {
+      throw new SparkException(
+        s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
+    } else {
+      1
+    }
+    (Math.ceil(amount).toInt, parts)
+  }
+
+  // Add any task resource requests from the spark conf to the TaskResourceRequests passed in
+  def addTaskResourceRequests(
+      sparkConf: SparkConf,
+      treqs: TaskResourceRequests): Unit = {
+    listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
+      val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
+      val amountDouble = settings.getOrElse(AMOUNT,
+        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      ).toDouble
+      treqs.resource(resourceId.resourceName, amountDouble)
     }
   }
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
-    parseAllResourceRequests(sparkConf, componentName).map { request =>
-      ResourceRequirement(request.id.resourceName, request.amount)
+    val resourceIds = listResourceIds(sparkConf, componentName)
+    val rnamesAndAmounts = resourceIds.map { resourceId =>
+      val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
+      val amountDouble = settings.getOrElse(AMOUNT,
+        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      ).toDouble
+      (resourceId.resourceName, amountDouble)
+    }
+    rnamesAndAmounts.filter { case (_, amount) => amount > 0 }.map { case (rName, amountDouble) =>
+      val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
+        calculateAmountAndPartsForFraction(amountDouble)
+      } else if (amountDouble % 1 != 0) {
+        throw new SparkException(
+          s"Only tasks support fractional resources, please check your $componentName settings")
+      } else {
+        (amountDouble.toInt, 1)
+      }
+      ResourceRequirement(rName, amount, parts)
     }
   }
 
@@ -125,17 +202,28 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def parseAllocated(
+      resourcesFileOpt: Option[String],
+      componentName: String): Seq[ResourceAllocation] = {
+    resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
+      .filter(_.id.componentName == componentName)
+  }
+
   private def parseAllocatedOrDiscoverResources(
       sparkConf: SparkConf,
       componentName: String,
       resourcesFileOpt: Option[String]): Seq[ResourceAllocation] = {
-    val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
-      .filter(_.id.componentName == componentName)
+    val allocated = parseAllocated(resourcesFileOpt, componentName)
     val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))
-    allocated ++ otherResourceIds.map { id =>
+    val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
-      ResourceAllocation(id, discoverResource(request).addresses)
+      if (request.amount > 0) {
+        Some(ResourceAllocation(id, discoverResource(request).addresses))
+      } else {
+        None
+      }
     }
+    allocated ++ otherResources
   }
 
   private def assertResourceAllocationMeetsRequest(
@@ -154,9 +242,24 @@ private[spark] object ResourceUtils extends Logging {
     requests.foreach(r => assertResourceAllocationMeetsRequest(allocated(r.id), r))
   }
 
+  private def assertAllResourceAllocationsMatchResourceProfile(
+      allocations: Map[String, ResourceInformation],
+      execReqs: Map[String, ExecutorResourceRequest]): Unit = {
+    execReqs.foreach { case (rName, req) =>
+      require(allocations.contains(rName) && allocations(rName).addresses.size >= req.amount,
+        s"Resource: ${rName}, with addresses: " +
+          s"${allocations(rName).addresses.mkString(",")} " +
+          s"is less than what the user requested: ${req.amount})")
+    }
+  }
+
   /**
    * Gets all allocated resource information for the input component from input resources file and
-   * discover the remaining via discovery scripts.
+   * the application level Spark configs. It first looks to see if resource were explicitly
+   * specified in the resources file (this would include specified address assignments and it only
+   * specified in certain cluster managers) and then it looks at the Spark configs to get any
+   * others not specified in the file. The resources not explicitly set in the file require a
+   * discovery script for it to run to get the addresses of the resource.
    * It also verifies the resource allocation meets required amount for each resource.
    * @return a map from resource name to resource info
    */
@@ -171,6 +274,37 @@ private[spark] object ResourceUtils extends Logging {
     resourceInfoMap
   }
 
+  /**
+   * This function is similar to getOrDiscoverallResources, except for it uses the ResourceProfile
+   * information instead of the application level configs.
+   *
+   * It first looks to see if resource were explicitly specified in the resources file
+   * (this would include specified address assignments and it only specified in certain
+   * cluster managers) and then it looks at the ResourceProfile to get
+   * any others not specified in the file. The resources not explicitly set in the file require a
+   * discovery script for it to run to get the addresses of the resource.
+   * It also verifies the resource allocation meets required amount for each resource.
+   *
+   * @return a map from resource name to resource info
+   */
+  def getOrDiscoverAllResourcesForResourceProfile(
+      resourcesFileOpt: Option[String],
+      componentName: String,
+      resourceProfile: ResourceProfile): Map[String, ResourceInformation] = {
+    val fileAllocated = parseAllocated(resourcesFileOpt, componentName)
+    val fileAllocResMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
+    // only want to look at the ResourceProfile for resources not in the resources file
+    val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
+    val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
+    val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
+      val addrs = discoverResource(rName, Option(execRequest.discoveryScript)).addresses
+      (rName, new ResourceInformation(rName, addrs))
+    }
+    val allAllocations = fileAllocResMap ++ rpAllocations
+    assertAllResourceAllocationsMatchResourceProfile(allAllocations, execReq)
+    allAllocations
+  }
+
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
     logInfo("==============================================================")
@@ -179,9 +313,9 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   // visible for test
-  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
-    val resourceName = resourceRequest.id.resourceName
-    val script = resourceRequest.discoveryScript
+  private[spark] def discoverResource(
+      resourceName: String,
+      script: Option[String]): ResourceInformation = {
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)
       // check that script exists and try to execute
@@ -203,7 +337,16 @@ private[spark] object ResourceUtils extends Logging {
     result
   }
 
+  // visible for test
+  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
+    val resourceName = resourceRequest.id.resourceName
+    val script = resourceRequest.discoveryScript
+    discoverResource(resourceName, script)
+  }
+
   // known types of resources
   final val GPU: String = "gpu"
   final val FPGA: String = "fpga"
+
+  final val RESOURCE_PREFIX: String = "resource"
 }

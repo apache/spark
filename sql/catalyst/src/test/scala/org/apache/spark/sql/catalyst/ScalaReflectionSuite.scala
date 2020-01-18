@@ -138,6 +138,14 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
   override def hashCode: Int = x
 }
 
+/** Counter-examples to [[ScroogeLikeExample]] as a trait without a companion object constructor */
+trait TraitProductWithoutCompanion extends Product1[Int] {}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait with no-constructor companion object */
+object TraitProductWithNoConstructorCompanion {}
+
+trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
 
@@ -402,6 +410,20 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(schema === Schema(
       StructType(Seq(
         StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithoutCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithNoConstructorCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
   }
 
   test("SPARK-27625: annotated data types") {

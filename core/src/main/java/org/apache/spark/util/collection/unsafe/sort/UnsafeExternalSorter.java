@@ -447,8 +447,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
   /**
    * Merges another UnsafeExternalSorters into this one, the other one will be emptied.
-   *
-   * @throws IOException
    */
   public void merge(UnsafeExternalSorter other) throws IOException {
     other.spill();

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Properties
+import scala.collection.parallel.immutable.ParRange
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -46,7 +46,7 @@ class SQLExecutionSuite extends SparkFunSuite {
     import spark.implicits._
     try {
       // Should not throw IllegalArgumentException
-      (1 to 100).par.foreach { _ =>
+      new ParRange(1 to 100).foreach { _ =>
         spark.sparkContext.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
       }
     } finally {

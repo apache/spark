@@ -152,8 +152,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
-      val df = spark.read.parquet(path).filter('a === 0).select('b)
+      spark.range(2).select($"id" as "a", $"id" as "b").write.partitionBy("b").parquet(path)
+      val df = spark.read.parquet(path).filter($"a" === 0).select("b")
       val physicalPlan = df.queryExecution.sparkPlan
 
       assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)

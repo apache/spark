@@ -23,8 +23,8 @@ import sys
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
-    to_arrow_type, to_arrow_schema
+from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.util import _get_argspec
 
 __all__ = ["UDFRegistration"]
@@ -42,10 +42,11 @@ def _create_udf(f, returnType, evalType):
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                    PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                     PythonEvalType.SQL_MAP_PANDAS_ITER_UDF):
 
-        from pyspark.sql.utils import require_minimum_pyarrow_version
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
         require_minimum_pyarrow_version()
 
         argspec = _get_argspec(f)
@@ -65,6 +66,13 @@ def _create_udf(f, returnType, evalType):
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take either one argument (data) or two arguments (key, data).")
 
+        if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (2, 3):
+            raise ValueError(
+                "Invalid function: pandas_udfs with function type COGROUPED_MAP "
+                "must take either two arguments (left, right) "
+                "or three arguments (key, left, right).")
+
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
         f, returnType=returnType, name=None, evalType=evalType, deterministic=True, nullable=True)
@@ -76,6 +84,10 @@ class UserDefinedFunction(object):
     User defined function in Python
 
     .. versionadded:: 1.3
+
+    .. note:: The constructor of this class is not supposed to be directly called.
+        Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+        to create this instance.
     """
     def __init__(self, func,
                  returnType=StringType(),
@@ -148,6 +160,17 @@ class UserDefinedFunction(object):
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
                 raise TypeError("Invalid returnType for map iterator Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with cogrouped map Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for cogrouped map Pandas "
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
@@ -422,7 +445,8 @@ class UDFRegistration(object):
         >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.createOrReplaceTempView("df")
-        >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
+        >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name order by name desc") \
+                .collect()
         [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
         """
 

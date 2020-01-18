@@ -23,48 +23,39 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalog.v2.{Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.NamespaceChange.{RemoveProperty, SetProperty}
-import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.internal.SessionState
-import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.V1Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
+  extends TableCatalog with SupportsNamespaces {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
-
-  def this() = {
-    this(SparkSession.active.sessionState)
-  }
 
   override val defaultNamespace: Array[String] = Array("default")
 
-  private lazy val catalog: SessionCatalog = sessionState.catalog
+  override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
-  private var _name: String = _
-
-  override def name: String = _name
-
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    this._name = name
-  }
+  // This class is instantiated by Spark, so `initialize` method will not be called.
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
-        catalog.listTables(db).map(ident => Identifier.of(Array(db), ident.table)).toArray
+        catalog
+          .listTables(db)
+          .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
+          .toArray
       case _ =>
         throw new NoSuchNamespaceException(namespace)
     }
@@ -92,9 +83,9 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       properties: util.Map[String, String]): Table = {
 
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
-    val provider = properties.getOrDefault("provider", sessionState.conf.defaultDataSourceName)
+    val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
-    val location = Option(properties.get(LOCATION_TABLE_PROP))
+    val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -108,8 +99,8 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
-      tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions,
-      comment = Option(properties.get(COMMENT_TABLE_PROP)))
+      tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -133,9 +124,11 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val comment = properties.get(TableCatalog.PROP_COMMENT)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(
+        catalogTable.copy(properties = properties, schema = schema, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
@@ -236,7 +229,8 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       case Array(db) =>
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
-          case remove: RemoveProperty if RESERVED_PROPERTIES.contains(remove.property) =>
+          case remove: RemoveProperty
+            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>
@@ -271,9 +265,6 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
 }
 
 private[sql] object V2SessionCatalog {
-  val COMMENT_TABLE_PROP: String = "comment"
-  val LOCATION_TABLE_PROP: String = "location"
-  val RESERVED_PROPERTIES: Set[String] = Set(COMMENT_TABLE_PROP, LOCATION_TABLE_PROP)
 
   /**
    * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
@@ -303,12 +294,13 @@ private[sql] object V2SessionCatalog {
       defaultLocation: Option[URI] = None): CatalogDatabase = {
     CatalogDatabase(
       name = db,
-      description = metadata.getOrDefault(COMMENT_TABLE_PROP, ""),
-      locationUri = Option(metadata.get(LOCATION_TABLE_PROP))
+      description = metadata.getOrDefault(SupportsNamespaces.PROP_COMMENT, ""),
+      locationUri = Option(metadata.get(SupportsNamespaces.PROP_LOCATION))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap -- Seq("comment", "location"))
+      properties = metadata.asScala.toMap --
+        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {
@@ -318,8 +310,8 @@ private[sql] object V2SessionCatalog {
       catalogDatabase.properties.foreach {
         case (key, value) => metadata.put(key, value)
       }
-      metadata.put(LOCATION_TABLE_PROP, catalogDatabase.locationUri.toString)
-      metadata.put(COMMENT_TABLE_PROP, catalogDatabase.description)
+      metadata.put(SupportsNamespaces.PROP_LOCATION, catalogDatabase.locationUri.toString)
+      metadata.put(SupportsNamespaces.PROP_COMMENT, catalogDatabase.description)
 
       metadata.asJava
     }

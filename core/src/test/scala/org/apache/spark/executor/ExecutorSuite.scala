@@ -33,9 +33,10 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.Assertions._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -56,7 +57,7 @@ import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     // Unset any latches after each test; each test that needs them initializes new ones.
     ExecutorSuiteHelper.latches = null
     super.afterEach()
@@ -275,7 +276,7 @@ class ExecutorSuite extends SparkFunSuite
   private def heartbeatZeroAccumulatorUpdateTest(dropZeroMetrics: Boolean): Unit = {
     val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
     withHeartbeatExecutor(c) { (executor, heartbeats) =>
-      val reportHeartbeat = PrivateMethod[Unit]('reportHeartBeat)
+      val reportHeartbeat = PrivateMethod[Unit](Symbol("reportHeartBeat"))
 
       // When no tasks are running, there should be no accumulators sent in heartbeat
       executor.invokePrivate(reportHeartbeat())
@@ -528,7 +529,8 @@ class FetchFailureThrowingRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
         throw new FetchFailedException(
           bmAddress = BlockManagerId("1", "hostA", 1234),
           shuffleId = 0,
-          mapId = 0,
+          mapId = 0L,
+          mapIndex = 0,
           reduceId = 0,
           message = "fake fetch failure"
         )

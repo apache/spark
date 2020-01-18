@@ -21,8 +21,10 @@ import java.util.Arrays
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]]. A post-shuffle partition
@@ -114,13 +116,18 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
-    specifiedPartitionStartIndices: Option[Array[Int]] = None)
+    specifiedPartitionIndices: Option[Array[(Int, Int)]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
+
+  if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
+    dependency.rdd.context.setLocalProperty(
+      SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
+  }
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
-  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
-    case Some(indices) => indices
+  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionIndices match {
+    case Some(indices) => indices.map(_._1)
     case None =>
       // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
       // corresponds to a pre-shuffle partition.
@@ -135,16 +142,15 @@ class ShuffledRowRDD(
   override val partitioner: Option[Partitioner] = Some(part)
 
   override def getPartitions: Array[Partition] = {
-    assert(partitionStartIndices.length == part.numPartitions)
-    Array.tabulate[Partition](partitionStartIndices.length) { i =>
-      val startIndex = partitionStartIndices(i)
-      val endIndex =
-        if (i < partitionStartIndices.length - 1) {
-          partitionStartIndices(i + 1)
-        } else {
-          numPreShufflePartitions
+    specifiedPartitionIndices match {
+      case Some(indices) =>
+        Array.tabulate[Partition](indices.length) { i =>
+          new ShuffledRowRDDPartition(i, indices(i)._1, indices(i)._2)
         }
-      new ShuffledRowRDDPartition(i, startIndex, endIndex)
+      case None =>
+        Array.tabulate[Partition](numPreShufflePartitions) { i =>
+          new ShuffledRowRDDPartition(i, i, i + 1)
+        }
     }
   }
 
@@ -172,7 +178,7 @@ class ShuffledRowRDD(
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     dependency = null
   }

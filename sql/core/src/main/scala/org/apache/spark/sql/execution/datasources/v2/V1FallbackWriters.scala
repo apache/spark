@@ -19,18 +19,16 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SaveMode}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.SupportsWrite
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter, InsertableRelation}
-import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
-import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -100,9 +98,12 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   }
 
   protected def newWriteBuilder(): V1WriteBuilder = {
-    val writeBuilder = table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(plan.schema)
-      .withQueryId(UUID.randomUUID().toString)
+    val info = LogicalWriteInfoImpl(
+      queryId = UUID.randomUUID().toString,
+      schema = plan.schema,
+      options = writeOptions)
+    val writeBuilder = table.newWriteBuilder(info)
+
     writeBuilder.asV1Builder
   }
 }

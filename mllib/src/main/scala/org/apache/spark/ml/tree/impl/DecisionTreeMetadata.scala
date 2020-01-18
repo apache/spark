@@ -90,7 +90,7 @@ private[spark] class DecisionTreeMetadata(
    * Set number of splits for a continuous feature.
    * For a continuous feature, number of bins is number of splits plus 1.
    */
-  def setNumSplits(featureIndex: Int, numSplits: Int) {
+  def setNumSplits(featureIndex: Int, numSplits: Int): Unit = {
     require(isContinuous(featureIndex),
       s"Only number of bin for a continuous feature can be set.")
     numBins(featureIndex) = numSplits + 1
@@ -148,7 +148,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
       require(maxCategoriesPerFeature <= maxPossibleBins,
         s"DecisionTree requires maxBins (= $maxPossibleBins) to be at least as large as the " +
         s"number of values in each categorical feature, but categorical feature $maxCategory " +
-        s"has $maxCategoriesPerFeature values. Considering remove this and other categorical " +
+        s"has $maxCategoriesPerFeature values. Consider removing this and other categorical " +
         "features with a large number of values, or add more training examples.")
     }
 

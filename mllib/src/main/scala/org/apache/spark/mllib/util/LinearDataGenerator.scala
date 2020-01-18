@@ -77,7 +77,7 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
-    generateLinearInput(intercept, weights, Array.fill[Double](weights.length)(0.0),
+    generateLinearInput(intercept, weights, Array.ofDim[Double](weights.length),
       Array.fill[Double](weights.length)(1.0 / 3.0), nPoints, seed, eps)
   }
 
@@ -189,7 +189,7 @@ object LinearDataGenerator {
   }
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       // scalastyle:off println
       println("Usage: LinearDataGenerator " +

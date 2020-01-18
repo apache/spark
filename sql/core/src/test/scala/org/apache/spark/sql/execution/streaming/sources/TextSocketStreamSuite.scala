@@ -29,12 +29,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -42,7 +42,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     sqlContext.streams.active.foreach(_.stop())
     if (serverThread != null) {
       serverThread.interrupt()
@@ -318,7 +318,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
           for (i <- 0 until numRecords / 2) {
             r.next()
             offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
-            data.append(r.get().get(0, DataTypes.StringType).asInstanceOf[String].toInt)
+            data.append(r.get().getString(0).toInt)
             // commit the offsets in the middle and validate if processing continues
             if (i == 2) {
               commitOffset(t.partitionId, i + 1)
@@ -381,7 +381,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
         val r = readerFactory.createReader(t).asInstanceOf[TextSocketContinuousPartitionReader]
         for (_ <- 0 until numRecords / 2) {
           r.next()
-          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP).isInstanceOf[(_, _)])
+          assert(r.get().numFields === 2)
+          // just try to read columns one by one - it would throw error if the row is corrupted
+          r.get().getString(0)
+          r.get().getLong(1)
         }
       case _ => throw new IllegalStateException("Unexpected task type")
     }

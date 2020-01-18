@@ -36,12 +36,12 @@ private[spark] class StreamingTab(val ssc: StreamingContext, sparkUI: SparkUI)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
 
-  def attach() {
+  def attach(): Unit = {
     parent.attachTab(this)
     parent.addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
   }
 
-  def detach() {
+  def detach(): Unit = {
     parent.detachTab(this)
     parent.detachHandler("/static/streaming")
   }

@@ -29,7 +29,7 @@ class CoordinateMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   val n = 4
   var mat: CoordinateMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val entries = sc.parallelize(Seq(
       (0, 0, 1.0),

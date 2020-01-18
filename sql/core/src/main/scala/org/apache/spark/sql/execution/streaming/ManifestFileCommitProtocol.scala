@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.IOException
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
@@ -43,6 +44,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   @transient private var fileLog: FileStreamSinkLog = _
   private var batchId: Long = _
 
+  @transient private var pendingCommitFiles: ArrayBuffer[Path] = _
+
   /**
    * Sets up the manifest log output and the batch id for this job.
    * Must be called before any other function.
@@ -54,12 +57,20 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def setupJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    // Do nothing
+    pendingCommitFiles = new ArrayBuffer[Path]
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
     val fileStatuses = taskCommits.flatMap(_.obj.asInstanceOf[Seq[SinkFileStatus]]).toArray
+
+    // We shouldn't remove the files if they're written to the metadata:
+    // `fileLog.add(batchId, fileStatuses)` could fail AFTER writing files to the metadata
+    // as well as there could be race
+    // so for the safety we clean up the list before calling anything incurs exception.
+    // The case is uncommon and we do best effort instead of guarantee, so the simplicity of
+    // logic here would be OK, and safe for dealing with unexpected situations.
+    pendingCommitFiles.clear()
 
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(s"Committed batch $batchId")
@@ -70,7 +81,29 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def abortJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    // Do nothing
+    // Best effort cleanup of complete files from failed job.
+    // Since the file has UUID in its filename, we are safe to try deleting them
+    // as the file will not conflict with file with another attempt on the same task.
+    if (pendingCommitFiles.nonEmpty) {
+      pendingCommitFiles.foreach { path =>
+        try {
+          val fs = path.getFileSystem(jobContext.getConfiguration)
+          // this is to make sure the file can be seen from driver as well
+          if (fs.exists(path)) {
+            fs.delete(path, false)
+          }
+        } catch {
+          case e: IOException =>
+            logWarning(s"Fail to remove temporary file $path, continue removing next.", e)
+        }
+      }
+      pendingCommitFiles.clear()
+    }
+  }
+
+  override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
+    pendingCommitFiles ++= taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]]
+      .map(_.toFileStatus.getPath)
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {

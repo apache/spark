@@ -169,5 +169,22 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
     }
+
+    // length of data21 is 4 * length of data22
+    val data21 = data.zipWithIndex.filter(_._2 % 5 != 0).map(_._1).toSeq
+    val data22 = data.zipWithIndex.filter(_._2 % 5 == 0).map(_._1).toSeq
+
+    test(
+      s"Merging unbalanced interleaved lists with epsi=$epsi and seq=$seq_name, " +
+        s"compression=$compression") {
+      val s1 = buildSummary(data21, epsi, compression)
+      val s2 = buildSummary(data22, epsi, compression)
+      val s = s1.merge(s2)
+      // Check all quantiles
+      for (queryRank <- 1 to n) {
+        val queryQuantile = queryRank.toDouble / n.toDouble
+        checkQuantile(queryQuantile, data, s)
+      }
+    }
   }
 }

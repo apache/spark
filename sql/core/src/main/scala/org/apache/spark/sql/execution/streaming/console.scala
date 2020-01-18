@@ -22,11 +22,11 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -71,21 +71,16 @@ object ConsoleTable extends Table with SupportsWrite {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
-      private var inputSchema: StructType = _
-
-      override def withInputDataSchema(schema: StructType): WriteBuilder = {
-        this.inputSchema = schema
-        this
-      }
+      private val inputSchema: StructType = info.schema()
 
       // Do nothing for truncate. Console sink is special that it just prints all the records.
       override def truncate(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         assert(inputSchema != null)
-        new ConsoleWrite(inputSchema, options)
+        new ConsoleWrite(inputSchema, info.options)
       }
     }
   }

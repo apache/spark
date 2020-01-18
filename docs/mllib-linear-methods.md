@@ -360,57 +360,6 @@ regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) u
 regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
 known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
 
-**Examples**
-
-<div class="codetabs">
-
-<div data-lang="scala" markdown="1">
-The following example demonstrates how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
-values. We compute the mean squared error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
-
-Refer to the [`LinearRegressionWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionModel) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/LinearRegressionWithSGDExample.scala %}
-
-[`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD) can be used in a similar fashion as `LinearRegressionWithSGD`.
-
-</div>
-
-<div data-lang="java" markdown="1">
-All of MLlib's methods use Java-friendly types, so you can import and call them there the same
-way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
-Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
-the Scala snippet provided, is presented below:
-
-Refer to the [`LinearRegressionWithSGD` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html) and [`LinearRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionModel.html) for details on the API.
-
-{% include_example java/org/apache/spark/examples/mllib/JavaLinearRegressionWithSGDExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
-values. We compute the mean squared error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
-
-Note that the Python API does not yet support model save/load but will in the future.
-
-Refer to the [`LinearRegressionWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionModel) for more details on the API.
-
-{% include_example python/mllib/linear_regression_with_sgd_example.py %}
-</div>
-</div>
-
-In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
-section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
-
 ### Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online,

@@ -476,6 +476,7 @@ private[spark] object HiveUtils extends Logging {
     // Configuration. But it happens before SparkContext initialized, we need to take them from
     // system properties in the form of regular hadoop configurations.
     SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
+    SparkHadoopUtil.get.appendSparkHiveConfigs(sys.props.toMap, propMap)
 
     propMap.toMap
   }

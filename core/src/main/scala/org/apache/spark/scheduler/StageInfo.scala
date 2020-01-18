@@ -52,7 +52,7 @@ class StageInfo(
    */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
-  def stageFailed(reason: String) {
+  def stageFailed(reason: String): Unit = {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
   }

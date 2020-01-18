@@ -745,10 +745,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for internal_value, udf_type in [(scalar_internal_value, PandasUDFType.SCALAR),
                                          (iter_internal_value, PandasUDFType.SCALAR_ITER)]:
             f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType(), udf_type)
-            timezone = "America/New_York"
-            with self.sql_conf({
-                    "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                    "spark.sql.session.timeZone": timezone}):
+            timezone = "America/Los_Angeles"
+            with self.sql_conf({"spark.sql.session.timeZone": timezone}):
                 df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
                     .withColumn("internal_value", internal_value(col("timestamp")))
                 result_la = df_la.select(col("idx"), col("internal_value")).collect()
@@ -757,9 +755,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 result_la_corrected = \
                     df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
 
-            with self.sql_conf({
-                    "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                    "spark.sql.session.timeZone": timezone}):
+            timezone = "America/New_York"
+            with self.sql_conf({"spark.sql.session.timeZone": timezone}):
                 df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
                     .withColumn("internal_value", internal_value(col("timestamp")))
                 result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
@@ -1110,7 +1107,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .format("org.apache.spark.sql.connector.SimpleDataSourceV2") \
                 .load().toDF('i', 'j')
 
             c1 = pandas_udf(lambda x: x + 1, 'int')(lit(1))

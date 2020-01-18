@@ -588,7 +588,7 @@ class UDFTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .format("org.apache.spark.sql.connector.SimpleDataSourceV2") \
                 .load().toDF('i', 'j')
 
             c1 = udf(lambda x: x + 1, 'int')(lit(1))
@@ -664,6 +664,19 @@ class UDFTests(ReusedSQLTestCase):
             return iterator
 
         self.sc.parallelize(range(1), 1).mapPartitions(task).count()
+
+    def test_udf_with_256_args(self):
+        N = 256
+        data = [["data-%d" % i for i in range(N)]] * 5
+        df = self.spark.createDataFrame(data)
+
+        def f(*a):
+            return "success"
+
+        fUdf = udf(f, StringType())
+
+        r = df.select(fUdf(*df.columns))
+        self.assertEqual(r.first()[0], "success")
 
 
 class UDFInitializationTests(unittest.TestCase):

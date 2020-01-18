@@ -132,7 +132,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
     val t = new Thread() {
       setDaemon(true)
 
-      override def run() {
+      override def run(): Unit = {
         try {
           // "par" is uninterruptible. The following will keep running even if the thread is
           // interrupted. We should prefer to use "ThreadUtils.parmap".
