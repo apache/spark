@@ -871,12 +871,25 @@ Spark SQL supports the vast majority of Hive features, such as:
   
     ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
   * Sub-queries in WHERE Clause
-    * Correlated or non-correlated IN and NOT IN statement
+    * Correlated or non-correlated IN and NOT IN statement In Where Clause
     
-      ```SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)```
-    * Correlated or non-correlated EXISTS and NOT EXISTS statement
+      ```
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2 WHERE t1.id = t2.id)
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)
+      ```
+    * Correlated or non-correlated EXISTS and NOT EXISTS statement In Where Clause
     
-      ```SELECT col FROM t1 WHERE EXISTS (SELECT a FROM t2 WHERE a > 10)```
+      ```
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t1.id = t2.id AND t2.a > 10)
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t2.a > 10)
+      ```
+    * Non-correlated IN and NOT IN statement in Join Condition
+    
+      ```SELECT a.col1 FROM tbl1 a JOIN tbl2 b ON a.id = b.id AND a.id IN (SELECT id FROM tbl3 c)```
+   
+    * Non-correlated EXISTS and NOT EXISTS statement in Join Condition
+       
+      ```SELECT a.col1 FROM tbl1 a JOIN tbl2 b ON a.id = b.id AND EXISTS (SELECT * FRIM tbl3 c WHERE c.id > 10)``` 
        
 * Sampling
 * Explain
