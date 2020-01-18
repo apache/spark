@@ -163,6 +163,10 @@ object NestedColumnAliasing {
  */
 object GeneratorNestedColumnAliasing {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
+    // need to prune nested columns through Project and under Generate. The difference is
+    // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
+    // file format readers if it is supported.
     case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
