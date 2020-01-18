@@ -1582,12 +1582,10 @@ class AvroV2Suite extends AvroSuite {
         .toDF("value", "p1", "p2")
         .write
         .format("avro")
-        .option("header", true)
         .save(dir.getCanonicalPath)
       val df = spark
         .read
         .format("avro")
-        .option("header", true)
         .load(dir.getCanonicalPath)
         .where("value = 'a'")
 
