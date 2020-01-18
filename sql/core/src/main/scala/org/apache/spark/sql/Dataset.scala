@@ -3331,6 +3331,16 @@ class Dataset[T] private[sql](
     }
   }
 
+  private[sql] def tailToPython(n: Int): Array[Any] = {
+    EvaluatePython.registerPicklers()
+    withAction("tailToPython", queryExecution) { plan =>
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
+        plan.executeTail(n).iterator.map(toJava))
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
+    }
+  }
+
   private[sql] def getRowsToPython(
       _numRows: Int,
       truncate: Int): Array[Any] = {
