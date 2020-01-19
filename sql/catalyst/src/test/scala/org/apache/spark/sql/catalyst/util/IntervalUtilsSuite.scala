@@ -426,38 +426,33 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("interval overflow check") {
-    intercept[ArithmeticException](negateExact(new CalendarInterval(Int.MinValue, 0, 0)))
-    assert(negate(new CalendarInterval(Int.MinValue, 0, 0)) ===
-      new CalendarInterval(Int.MinValue, 0, 0))
-    intercept[ArithmeticException](negateExact(CalendarInterval.MIN_VALUE))
-    assert(negate(CalendarInterval.MIN_VALUE) === CalendarInterval.MIN_VALUE)
-    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(0, 0, 1)))
-    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(0, 1, 0)))
-    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(1, 0, 0)))
-    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)) ===
-      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
-    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)) ===
-      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
-    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)) ===
-      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
+    val maxMonth = new CalendarInterval(Int.MaxValue, 0, 0)
+    val minMonth = new CalendarInterval(Int.MinValue, 0, 0)
+    val oneMonth = new CalendarInterval(1, 0, 0)
+    val maxDay = new CalendarInterval(0, Int.MaxValue, 0)
+    val minDay = new CalendarInterval(0, Int.MinValue, 0)
+    val oneDay = new CalendarInterval(0, 1, 0)
+    val maxMicros = new CalendarInterval(0, 0, Long.MaxValue)
+    val minMicros = new CalendarInterval(0, 0, Long.MinValue)
+    val oneMicros = new CalendarInterval(0, 0, 1)
+    intercept[ArithmeticException](negateExact(minMonth))
+    assert(negate(minMonth) === minMonth)
 
-    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(0, 0, -1)))
-    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(0, -1, 0)))
-    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
-      new CalendarInterval(-1, 0, 0)))
-    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, -1)) ===
-      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
-    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, -1, 0)) ===
-      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
-    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(-1, 0, 0)) ===
-      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
+    intercept[ArithmeticException](addExact(maxMonth, oneMonth))
+    intercept[ArithmeticException](addExact(maxDay, oneDay))
+    intercept[ArithmeticException](addExact(maxMicros, oneMicros))
+    assert(add(maxMonth, oneMonth) === minMonth)
+    assert(add(maxDay, oneDay) === minDay)
+    assert(add(maxMicros, oneMicros) === minMicros)
 
-    intercept[ArithmeticException](multiplyExact(CalendarInterval.MAX_VALUE, 2))
-    intercept[ArithmeticException](divideExact(CalendarInterval.MAX_VALUE, 0.5))
+    intercept[ArithmeticException](subtractExact(minDay, oneDay))
+    intercept[ArithmeticException](subtractExact(minMonth, oneMonth))
+    intercept[ArithmeticException](subtractExact(minMicros, oneMicros))
+    assert(subtract(minMonth, oneMonth) === maxMonth)
+    assert(subtract(minDay, oneDay) === maxDay)
+    assert(subtract(minMicros, oneMicros) === maxMicros)
+
+    intercept[ArithmeticException](multiplyExact(maxMonth, 2))
+    intercept[ArithmeticException](divideExact(maxDay, 0.5))
   }
 }

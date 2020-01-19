@@ -44,7 +44,7 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
  * @since 1.5.0
  */
 @Unstable
-public final class CalendarInterval implements Serializable, Comparable<CalendarInterval> {
+public final class CalendarInterval implements Serializable {
   public final int months;
   public final int days;
   public final long microseconds;
@@ -72,29 +72,6 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
   @Override
   public int hashCode() {
     return Objects.hash(months, days, microseconds);
-  }
-
-  @Override
-  public int compareTo(CalendarInterval that) {
-    long thisAdjustDays =
-      this.microseconds / MICROS_PER_DAY + this.days + this.months * DAYS_PER_MONTH;
-    long thatAdjustDays =
-      that.microseconds / MICROS_PER_DAY + that.days + that.months * DAYS_PER_MONTH;
-    long daysDiff = thisAdjustDays - thatAdjustDays;
-    if (daysDiff == 0) {
-      long msDiff = (this.microseconds % MICROS_PER_DAY) - (that.microseconds % MICROS_PER_DAY);
-      if (msDiff == 0) {
-        return 0;
-      } else if (msDiff > 0) {
-        return 1;
-      } else {
-        return -1;
-      }
-    } else if (daysDiff > 0){
-      return 1;
-    } else {
-      return -1;
-    }
   }
 
   @Override
@@ -148,16 +125,4 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
    * @throws ArithmeticException if a numeric overflow occurs
    */
   public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
-
-  /**
-   * A constant holding the minimum value an {@code CalendarInterval} can have.
-   */
-  public static CalendarInterval MIN_VALUE =
-    new CalendarInterval(Integer.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
-
-  /**
-   * A constant holding the maximum value an {@code CalendarInterval} can have.
-   */
-  public static CalendarInterval MAX_VALUE =
-    new CalendarInterval(Integer.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
 }

@@ -191,11 +191,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
-
-    case ShowTablePropertiesStatement(
-      nameParts @ NonSessionCatalogAndTable(catalog, tbl), propertyKey) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      ShowTableProperties(r, propertyKey)
   }
 
   object NonSessionCatalogAndTable {
