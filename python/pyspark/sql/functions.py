@@ -30,8 +30,8 @@ if sys.version >= '3':
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal, \
-    _create_column_from_name
+from pyspark.sql.column import Column, _to_list, _to_java_column, _to_seq, \
+    _create_column_from_literal, _create_column_from_name
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -582,6 +582,50 @@ def nanvl(col1, col2):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
+
+
+@since(3.0)
+def percentile_approx(col, percentage, accuracy=10000):
+    """Returns the approximate percentile value of numeric column col at the given percentage.
+    The value of percentage must be between 0.0 and 1.0.
+
+    The accuracy parameter (default: 10000)
+    is a positive numeric literal which controls approximation accuracy at the cost of memory.
+    Higher value of accuracy yields better accuracy, 1.0/accuracy is the relative error
+    of the approximation.
+
+    When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
+    In this case, returns the approximate percentile array of column col
+    at the given percentage array.
+
+    >>> df = (spark.range(1000)
+    ...     .withColumn("id", col("id") % 3)
+    ...     .withColumn("value", randn(42) + col("id") * 10))
+    >>> (df
+    ...     .select(percentile_approx("value", [0.25, 0.5, 0.75], 1000).alias("quantiles"))
+    ...     .show(truncate=False))
+    +-----------------------------------------------------------+
+    |quantiles                                                  |
+    +-----------------------------------------------------------+
+    |[0.7400395449950132, 10.006316348168292, 19.23012305461404]|
+    +-----------------------------------------------------------+
+    >>> (df
+    ...     .groupBy("id")
+    ...     .agg(percentile_approx("value", 0.5, 10).alias("median"))
+    ...     .orderBy("id")
+    ...     .show())
+    +---+-------------------+
+    | id|             median|
+    +---+-------------------+
+    |  0|-0.1181975591779448|
+    |  1|  9.844647721345135|
+    |  2| 19.805558468630636|
+    +---+-------------------+
+    """
+    sc = SparkContext._active_spark_context
+    if isinstance(percentage, (list, tuple)):
+        percentage = _to_list(sc, list(percentage))
+    return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
 
 
 @ignore_unicode_prefix
