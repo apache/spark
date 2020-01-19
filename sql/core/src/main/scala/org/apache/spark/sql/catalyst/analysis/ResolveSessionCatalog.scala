@@ -449,7 +449,7 @@ class ResolveSessionCatalog(
              |ALTER ADD COLUMNS does not support views.
              |You must drop and re-create the views for adding the new columns. Views: $viewIdent
             """.stripMargin)
-      case AlterTableSetLocation(_: ResolvedTable, partitionSpec, _) =>
+      case AlterTableSetLocation(_, partitionSpec, _) =>
         if (partitionSpec.nonEmpty) {
           throw new AnalysisException(
             "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
