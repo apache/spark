@@ -978,11 +978,11 @@ val windowedCounts = words
 Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 // Group the data by window and word and compute the count of each group
-Dataset<Row> wordsWatermark = words.withWatermark("timestamp", "10 minutes");
-Dataset<Row> windowedCounts = wordsWatermark
+Dataset<Row> windowedCounts = words
+    .withWatermark("timestamp", "10 minutes")
     .groupBy(
-        functions.window(wordsWatermark.col("timestamp"), "10 minutes", "5 minutes"),
-        wordsWatermark.col("word"))
+        window(col("timestamp"), "10 minutes", "5 minutes"),
+        col("word"))
     .count();
 {% endhighlight %}
 
