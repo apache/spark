@@ -1963,7 +1963,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // original result task 1.0  succeed
     runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success, 42))
     assert(scheduler.activeJobs.isEmpty)
-    assert(mapStage.latestInfo.failureReason.get === "Job 0 finished.")
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {

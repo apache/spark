@@ -608,9 +608,8 @@ private[spark] class DAGScheduler(
    *
    * @param job The job whose state to cleanup.
    */
-  private def cleanupStateForJobAndIndependentStages(job: ActiveJob): HashSet[Stage] = {
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob): Unit = {
     val registeredStages = jobIdToStageIds.get(job.jobId)
-    val removedStages = new HashSet[Stage]
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError("No stages registered for job " + job.jobId)
     } else {
@@ -628,7 +627,6 @@ private[spark] class DAGScheduler(
                 if (runningStages.contains(stage)) {
                   logDebug("Removing running stage %d".format(stageId))
                   runningStages -= stage
-                  removedStages += stage
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
@@ -662,7 +660,6 @@ private[spark] class DAGScheduler(
       case r: ResultStage => r.removeActiveJob()
       case m: ShuffleMapStage => m.removeActiveJob(job)
     }
-    removedStages
   }
 
   /**
@@ -1434,28 +1431,22 @@ private[spark] class DAGScheduler(
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
-                    val removedStages = cleanupStateForJobAndIndependentStages(job)
-                    removedStages += resultStage
-                    val shouldInterrupt = shouldInterruptTaskThread(job)
-                    // removedStages are only used by this job. It's safe to kill speculative or
-                    // zombie tasks in these stages.
-                    logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
-                      "or zombie tasks for this job")
-                    removedStages.foreach { stage =>
-                      try {
-                        // killAllTaskAttempts will fail if a SchedulerBackend does not implement
-                        // killTask.
-                        if (stage == resultStage) {
-                          taskScheduler.killAllTaskAttempts(
-                            stage.id, shouldInterrupt, reason = "Stage finished")
-                        } else {
-                          markStageAsFinished(stage, Some(s"Job ${job.jobId} finished."))
-                          taskScheduler.cancelTasks(stage.id, shouldInterrupt)
-                        }
-                      } catch {
-                        case e: UnsupportedOperationException =>
-                          logInfo(s"Could not cancel tasks for stage ${stage.id}", e)
-                      }
+                    cancelRunningIndependentStages(job)
+                    cleanupStateForJobAndIndependentStages(job)
+                    try {
+                      // killAllTaskAttempts will fail if a SchedulerBackend does not implement
+                      // killTask.
+                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
+                        "or zombie tasks for this job")
+                      // ResultStage is only used by this job. It's safe to kill speculative or
+                      // zombie tasks in this stage.
+                      taskScheduler.killAllTaskAttempts(
+                        stageId,
+                        shouldInterruptTaskThread(job),
+                        reason = "Stage finished")
+                    } catch {
+                      case e: UnsupportedOperationException =>
+                        logWarning(s"Could not cancel tasks for stage $stageId", e)
                     }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
@@ -1985,15 +1976,11 @@ private[spark] class DAGScheduler(
     }
   }
 
-  /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(
+  /** Cancel all independent, running stages that are only used by this job. */
+  private def cancelRunningIndependentStages(
       job: ActiveJob,
-      failureReason: String,
-      exception: Option[Throwable] = None): Unit = {
-    val error = new SparkException(failureReason, exception.orNull)
+      reason: Option[String] = None): Boolean = {
     var ableToCancelStages = true
-
-    // Cancel all independent, running stages.
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
       logError("No stages registered for job " + job.jobId)
@@ -2013,7 +2000,7 @@ private[spark] class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
-              markStageAsFinished(stage, Some(failureReason))
+              markStageAsFinished(stage, reason)
             } catch {
               case e: UnsupportedOperationException =>
                 logWarning(s"Could not cancel tasks for stage $stageId", e)
@@ -2023,11 +2010,20 @@ private[spark] class DAGScheduler(
         }
       }
     }
+    ableToCancelStages
+  }
 
-    if (ableToCancelStages) {
+  /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
+  private def failJobAndIndependentStages(
+      job: ActiveJob,
+      failureReason: String,
+      exception: Option[Throwable] = None): Unit = {
+    if (cancelRunningIndependentStages(job, Some(failureReason))) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
+
+      val error = new SparkException(failureReason, exception.orNull)
       job.listener.jobFailed(error)
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
