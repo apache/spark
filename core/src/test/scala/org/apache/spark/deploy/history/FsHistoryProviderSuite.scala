@@ -1415,7 +1415,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       updateAndCheck(provider) { _ =>
         verifyEventLogFiles(fs, writer.logPath, None, Seq(1))
         val info = provider.listing.read(classOf[LogInfo], writer.logPath)
-        assert(info.lastIndexToRunCompaction === Some(1))
+        assert(info.lastEvaluatedForCompaction === Some(1))
       }
 
       // writing event log file 2 - compact the event log file 1 into 1.compact
@@ -1426,7 +1426,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       updateAndCheck(provider) { _ =>
         verifyEventLogFiles(fs, writer.logPath, Some(1), Seq(2))
         val info = provider.listing.read(classOf[LogInfo], writer.logPath)
-        assert(info.lastIndexToRunCompaction === Some(2))
+        assert(info.lastEvaluatedForCompaction === Some(2))
       }
 
       // writing event log file 3 - compact two files - 1.compact & 2 into one, 2.compact
@@ -1442,7 +1442,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         verifyEventLogFiles(fs, writer.logPath, Some(2), Seq(3))
 
         val info = provider.listing.read(classOf[LogInfo], writer.logPath)
-        assert(info.lastIndexToRunCompaction === Some(3))
+        assert(info.lastEvaluatedForCompaction === Some(3))
 
         val store = new InMemoryStore
         val appStore = new AppStatusStore(store)

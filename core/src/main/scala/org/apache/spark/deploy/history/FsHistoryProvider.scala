@@ -582,13 +582,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case Some(lastIndex) =>
         try {
           val info = listing.read(classOf[LogInfo], reader.rootPath.toString)
-          if (info.lastIndexToRunCompaction.isEmpty ||
-              info.lastIndexToRunCompaction.get < lastIndex) {
+          if (info.lastEvaluatedForCompaction.isEmpty ||
+              info.lastEvaluatedForCompaction.get < lastIndex) {
             // haven't tried compaction for this index, do compaction
             val result = fileCompactor.compact(reader.listEventLogFiles)
             (result.code == CompactionResultCode.SUCCESS, Some(lastIndex))
           } else {
-            (false, info.lastIndexToRunCompaction)
+            (false, info.lastEvaluatedForCompaction)
           }
         } catch {
           case _: NoSuchElementException =>
@@ -1289,7 +1289,7 @@ private[history] case class LogInfo(
     @JsonDeserialize(contentAs = classOf[JLong])
     lastIndex: Option[Long],
     @JsonDeserialize(contentAs = classOf[JLong])
-    lastIndexToRunCompaction: Option[Long],
+    lastEvaluatedForCompaction: Option[Long],
     isComplete: Boolean)
 
 private[history] class AttemptInfoWrapper(
