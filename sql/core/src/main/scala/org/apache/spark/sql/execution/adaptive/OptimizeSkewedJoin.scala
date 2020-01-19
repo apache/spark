@@ -121,22 +121,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     stage.shuffle.shuffleDependency.rdd.partitions.length
   }
 
-  private def getShuffleQueryStage(plan : SparkPlan): Option[ShuffleQueryStageExec] =
-    plan match {
-      case stage: ShuffleQueryStageExec => Some(stage)
-      case SortExec(_, _, s: ShuffleQueryStageExec, _) =>
-        Some(s)
-      case _ => None
-  }
-
-  private def reOptimizeChild(
-      skewedReader: SkewedPartitionReaderExec,
-      child: SparkPlan): SparkPlan = child match {
-    case sort @ SortExec(_, _, s: ShuffleQueryStageExec, _) =>
-      sort.copy(child = skewedReader)
-    case _: ShuffleQueryStageExec => skewedReader
-  }
-
   private def getSizeInfo(medianSize: Long, maxSize: Long): String = {
     s"median size: $medianSize, max size: ${maxSize}"
   }
@@ -153,11 +137,10 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    * 4. Finally union the above 3 split smjs and the origin smj.
    */
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case smj @ SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, leftPlan, rightPlan)
-      if (getShuffleQueryStage(leftPlan).nonEmpty && getShuffleQueryStage(rightPlan).nonEmpty) &&
-        supportedJoinTypes.contains(joinType) =>
-      val left = getShuffleQueryStage(leftPlan).get
-      val right = getShuffleQueryStage(rightPlan).get
+    case smj @ SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
+        s1 @ SortExec(_, _, left: ShuffleQueryStageExec, _),
+        s2 @ SortExec(_, _, right: ShuffleQueryStageExec, _), _)
+      if (supportedJoinTypes.contains(joinType)) =>
       val leftStats = getStatistics(left)
       val rightStats = getStatistics(right)
       val numPartitions = leftStats.bytesByPartitionId.length
@@ -209,20 +192,17 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
               left, partitionId, leftMapIdStartIndices(i), leftEndMapId)
             val rightSkewedReader = SkewedPartitionReaderExec(right, partitionId,
               rightMapIdStartIndices(j), rightEndMapId)
-            val skewedLeft = reOptimizeChild(leftSkewedReader, leftPlan)
-            val skewedRight = reOptimizeChild(rightSkewedReader, rightPlan)
             subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
-              skewedLeft, skewedRight)
+              s1.copy(child = leftSkewedReader), s2.copy(child = rightSkewedReader), true)
           }
         }
       }
       logDebug(s"number of skewed partitions is ${skewedPartitions.size}")
       if (skewedPartitions.nonEmpty) {
-        val optimizedSmj = smj.transformUp {
-          case shuffleStage: ShuffleQueryStageExec if shuffleStage.id == left.id ||
-            shuffleStage.id == right.id =>
-            PartialShuffleReaderExec(shuffleStage, skewedPartitions.toSet)
-        }
+        val optimizedSmj = smj.copy(
+          left = s1.copy(child = PartialShuffleReaderExec(left, skewedPartitions.toSet)),
+          right = s2.copy(child = PartialShuffleReaderExec(right, skewedPartitions.toSet)),
+          isPartial = true)
         subJoins += optimizedSmj
         UnionExec(subJoins)
       } else {
@@ -236,8 +216,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     }
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
-      case _: LocalShuffleReaderExec => Nil
-      case _: CoalescedShuffleReaderExec => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
     }
@@ -247,9 +225,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     if (shuffleStages.length == 2) {
       // When multi table join, there will be too many complex combination to consider.
       // Currently we only handle 2 table join like following two use cases.
-      // SMJ                    SMJ
-      //   Sort                   Shuffle
-      //     Shuffle      or      Shuffle
+      // SMJ
+      //   Sort
+      //     Shuffle
       //   Sort
       //     Shuffle
       val optimizePlan = optimizeSkewJoin(plan)
