@@ -1031,7 +1031,6 @@ Apart from these, the following properties are also available, and may be useful
     all event log files will be retained.<br/>
     Please note that compaction will happen in Spark History Server, which means this configuration
     should be set to the configuration of Spark History server, and the same value will be applied
-    should be set to the configuration of Spark History server, and the same value will be applied
     across applications which are being loaded in Spark History Server. This also means compaction
     and cleanup would require running Spark History Server.<br/>
     Please set the configuration in Spark History Server, and <code>spark.eventLog.rolling.maxFileSize</code>

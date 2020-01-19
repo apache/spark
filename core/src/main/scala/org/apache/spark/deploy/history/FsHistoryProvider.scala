@@ -534,16 +534,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       updated.foreach { entry =>
-        processing(entry.rootPath)
-        try {
-          val task: Runnable = () => mergeApplicationListing(entry, newLastScanTime, true)
-          replayExecutor.submit(task)
-        } catch {
-          // let the iteration over the updated entries break, since an exception on
-          // replayExecutor.submit (..) indicates the ExecutorService is unable
-          // to take any more submissions at this time
-          case e: Exception =>
-            logError(s"Exception while submitting event log for replay", e)
+        submitLogProcessTask(entry.rootPath) { () =>
+          mergeApplicationListing(entry, newLastScanTime, true)
         }
       }
 
@@ -693,18 +685,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       pendingReplayTasksCount.decrementAndGet()
 
       // triggering another task for compaction task
-      try {
-        processing(rootPath)
-        val task: Runnable = () => compact(reader)
-        replayExecutor.submit(task)
-      } catch {
-        // let the iteration over the updated entries break, since an exception on
-        // replayExecutor.submit (..) indicates the ExecutorService is unable
-        // to take any more submissions at this time
-        case e: Exception =>
-          logError(s"Exception while submitting task for compaction", e)
-          endProcessing(rootPath)
-      }
+      submitLogProcessTask(rootPath) { () => compact(reader) }
     }
   }
 
@@ -1255,6 +1236,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
     deleted
+  }
+
+  /** NOTE: 'task' should ensure it executes 'endProcessing' at the end */
+  private def submitLogProcessTask(rootPath: Path)(task: Runnable): Unit = {
+    try {
+      processing(rootPath)
+      replayExecutor.submit(task)
+    } catch {
+      // let the iteration over the updated entries break, since an exception on
+      // replayExecutor.submit (..) indicates the ExecutorService is unable
+      // to take any more submissions at this time
+      case e: Exception =>
+        logError(s"Exception while submitting task", e)
+        endProcessing(rootPath)
+    }
   }
 }
 
