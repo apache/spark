@@ -339,14 +339,16 @@ class FunctionsTests(ReusedSQLTestCase):
         from itertools import chain
         import re
 
-        actual = list(chain.from_iterable([re.findall("Column<b'(.*)'>", str(x)) for x in [
-            percentile_approx(col("foo"), 0.5),
-            percentile_approx(col("bar"), 0.25, 42),
-            percentile_approx(col("bar"), [0.25, 0.5, 0.75]),
-            percentile_approx(col("foo"), [0.05, 0.95], 100),
-            percentile_approx("foo", 0.5),
-            percentile_approx("bar", [0.1, 0.9], 10),
-        ]]))
+        actual = list(chain.from_iterable([
+            re.findall("(percentile_approx\\(.*\\))", str(x)) for x in [
+                percentile_approx(col("foo"), 0.5),
+                percentile_approx(col("bar"), 0.25, 42),
+                percentile_approx(col("bar"), [0.25, 0.5, 0.75]),
+                percentile_approx(col("foo"), [0.05, 0.95], 100),
+                percentile_approx("foo", 0.5),
+                percentile_approx("bar", [0.1, 0.9], 10),
+            ]
+        ]))
 
         expected = [
             "percentile_approx(foo, 0.5, 10000)",
