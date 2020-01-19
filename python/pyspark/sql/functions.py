@@ -609,6 +609,7 @@ def percentile_approx(col, percentage, accuracy=10000):
     +-----------------------------------------------------------+
     |[0.7400395449950132, 10.006316348168292, 19.23012305461404]|
     +-----------------------------------------------------------+
+
     >>> (df
     ...     .groupBy("id")
     ...     .agg(percentile_approx("value", 0.5, 10).alias("median"))
@@ -621,6 +622,7 @@ def percentile_approx(col, percentage, accuracy=10000):
     |  1|  9.844647721345135|
     |  2| 19.805558468630636|
     +---+-------------------+
+
     """
     sc = SparkContext._active_spark_context
     if isinstance(percentage, (list, tuple)):
