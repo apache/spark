@@ -843,10 +843,6 @@ unitToUnitInterval
     : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
-intervalType
-    : INTERVAL
-    ;
-
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
