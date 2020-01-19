@@ -1636,7 +1636,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
       ) {
         val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
           "cleanSource" -> "delete")
@@ -1680,7 +1681,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
       ) {
         val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
           "cleanSource" -> "archive", "sourceArchiveDir" -> archiveDir.getAbsolutePath)
@@ -1749,7 +1751,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         withSQLConf(
           SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
           // Force deleting the old logs
-          SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+          SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+          SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
         ) {
           val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
             "cleanSource" -> cleanOption, "sourceArchiveDir" -> archiveDir.getAbsolutePath)
