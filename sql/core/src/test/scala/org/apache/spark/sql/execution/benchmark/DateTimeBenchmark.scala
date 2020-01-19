@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.sql.Timestamp
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,10 +38,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
   private def doBenchmark(cardinality: Int, exprs: String*): Unit = {
     spark.range(cardinality)
       .selectExpr(exprs: _*)
-      .write
-      .format("noop")
-      .mode(Overwrite)
-      .save()
+      .noop()
   }
 
   private def run(cardinality: Int, name: String, exprs: String*): Unit = {
@@ -138,10 +134,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
         spark.range(rowsNum)
           .map(millis => new Timestamp(millis))
-          .write
-          .format("noop")
-          .mode(Overwrite)
-          .save()
+          .noop()
       }
       benchmark.addCase("Collect longs", numIters) { _ =>
         spark.range(0, rowsNum, 1, 1)

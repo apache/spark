@@ -576,11 +576,11 @@ struct<>
 -- !query 66 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '10 nanoseconds'(line 1, pos 19)
+Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'(line 1, pos 16)
 
 == SQL ==
 select interval 10 nanoseconds
--------------------^^^
+----------------^^^
 
 
 -- !query 67
@@ -628,11 +628,11 @@ struct<>
 -- !query 71 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '1 fake_unit'(line 1, pos 18)
+Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'(line 1, pos 16)
 
 == SQL ==
 select interval 1 fake_unit
-------------------^^^
+----------------^^^
 
 
 -- !query 72

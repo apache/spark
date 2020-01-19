@@ -179,6 +179,8 @@ try:
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
                   'pyspark.sql',
+                  'pyspark.sql.avro',
+                  'pyspark.sql.pandas',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',

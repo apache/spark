@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, SupportsWrite, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.SQLExecution
@@ -258,37 +258,77 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
-        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-          if (partitioningColumns.nonEmpty) {
-            throw new AnalysisException("Cannot write data to TableProvider implementation " +
-              "if partition columns are specified.")
-          }
-          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
-          mode match {
-            case SaveMode.Append =>
-              runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
-              }
+      mode match {
+        case SaveMode.Append | SaveMode.Overwrite =>
+          val table = provider match {
+            case supportsExtract: SupportsCatalogOptions =>
+              val ident = supportsExtract.extractIdentifier(dsOptions)
+              val sessionState = df.sparkSession.sessionState
+              val catalog = CatalogV2Util.getTableProviderCatalog(
+                supportsExtract, sessionState.catalogManager, dsOptions)
 
-            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-              // truncate the table
-              runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(
-                  relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+              catalog.loadTable(ident)
+            case tableProvider: TableProvider =>
+              val t = tableProvider.getTable(dsOptions)
+              if (t.supports(BATCH_WRITE)) {
+                t
+              } else {
+                // Streaming also uses the data source V2 API. So it may be that the data source
+                // implements v2, but has no v2 implementation for batch writes. In that case, we
+                // fall back to saving as though it's a V1 source.
+                return saveToV1Source()
               }
-
-            case other =>
-              throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                s"written with $other mode, please use Append or Overwrite " +
-                "modes instead.")
           }
 
-        // Streaming also uses the data source V2 API. So it may be that the data source implements
-        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
-        // as though it's a V1 source.
-        case _ => saveToV1Source()
+          val relation = DataSourceV2Relation.create(table, dsOptions)
+          checkPartitioningMatchesV2Table(table)
+          if (mode == SaveMode.Append) {
+            runCommand(df.sparkSession, "save") {
+              AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
+            }
+          } else {
+            // Truncate the table. TableCapabilityCheck will throw a nice exception if this
+            // isn't supported
+            runCommand(df.sparkSession, "save") {
+              OverwriteByExpression.byName(
+                relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+            }
+          }
+
+        case createMode =>
+          provider match {
+            case supportsExtract: SupportsCatalogOptions =>
+              val ident = supportsExtract.extractIdentifier(dsOptions)
+              val sessionState = df.sparkSession.sessionState
+              val catalog = CatalogV2Util.getTableProviderCatalog(
+                supportsExtract, sessionState.catalogManager, dsOptions)
+
+              val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
+
+              runCommand(df.sparkSession, "save") {
+                CreateTableAsSelect(
+                  catalog,
+                  ident,
+                  partitioningAsV2,
+                  df.queryExecution.analyzed,
+                  Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
+                  extraOptions.toMap,
+                  ignoreIfExists = createMode == SaveMode.Ignore)
+              }
+            case tableProvider: TableProvider =>
+              if (tableProvider.getTable(dsOptions).supports(BATCH_WRITE)) {
+                throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+                    s"written with $createMode mode, please use Append or Overwrite " +
+                    "modes instead.")
+              } else {
+                // Streaming also uses the data source V2 API. So it may be that the data source
+                // implements v2, but has no v2 implementation for batch writes. In that case, we
+                // fallback to saving as though it's a V1 source.
+                saveToV1Source()
+              }
+          }
       }
+
     } else {
       saveToV1Source()
     }
@@ -504,14 +544,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
 
   private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
-    val partitioning = partitioningColumns.map { colNames =>
-      colNames.map(name => IdentityTransform(FieldReference(name)))
-    }.getOrElse(Seq.empty[Transform])
-    val bucketing = bucketColumnNames.map { cols =>
-      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
-    }.getOrElse(Seq.empty[Transform])
-    val partitionTransforms = partitioning ++ bucketing
-
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
     }
@@ -526,13 +558,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
+        checkPartitioningMatchesV2Table(table)
         AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(
           catalog,
           ident,
-          partitionTransforms,
+          partitioningAsV2,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -545,7 +578,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         CreateTableAsSelect(
           catalog,
           ident,
-          partitionTransforms,
+          partitioningAsV2,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -621,6 +654,29 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     runCommand(df.sparkSession, "saveAsTable")(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+  }
+
+  /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */
+  private def partitioningAsV2: Seq[Transform] = {
+    val partitioning = partitioningColumns.map { colNames =>
+      colNames.map(name => IdentityTransform(FieldReference(name)))
+    }.getOrElse(Seq.empty[Transform])
+    val bucketing =
+      getBucketSpec.map(spec => CatalogV2Implicits.BucketSpecHelper(spec).asTransform).toSeq
+    partitioning ++ bucketing
+  }
+
+  /**
+   * For V2 DataSources, performs if the provided partitioning matches that of the table.
+   * Partitioning information is not required when appending data to V2 tables.
+   */
+  private def checkPartitioningMatchesV2Table(existingTable: Table): Unit = {
+    val v2Partitions = partitioningAsV2
+    if (v2Partitions.isEmpty) return
+    require(v2Partitions.sameElements(existingTable.partitioning()),
+      "The provided partitioning does not match of the table.\n" +
+      s" - provided: ${v2Partitions.mkString(", ")}\n" +
+      s" - table: ${existingTable.partitioning().mkString(", ")}")
   }
 
   /**

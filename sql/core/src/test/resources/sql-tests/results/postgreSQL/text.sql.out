@@ -62,17 +62,19 @@ struct<length(CAST(42 AS STRING)):int>
 -- !query 7
 select string('four: ') || 2+2
 -- !query 7 schema
-struct<(CAST(concat(CAST(four:  AS STRING), CAST(2 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE)):double>
+struct<>
 -- !query 7 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: four: 2
 
 
 -- !query 8
 select 'four: ' || 2+2
 -- !query 8 schema
-struct<(CAST(concat(four: , CAST(2 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE)):double>
+struct<>
 -- !query 8 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: four: 2
 
 
 -- !query 9

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.adaptive.InsertAdaptiveSparkPlan
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -275,7 +275,7 @@ object QueryExecution {
     Seq(
       // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
       // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
-      InsertAdaptiveSparkPlan(sparkSession),
+      InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession)),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),
