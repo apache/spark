@@ -17,4 +17,6 @@
 # limitations under the License.
 #
 
-./build/mvn -Pscala-2.12 mvn-scalafmt_2.12:format -Dscalafmt.skip=false
+VERSION="${@:-2.12}"
+./build/mvn -Pscala-$VERSION mvn-scalafmt_$VERSION:format -Dscalafmt.skip=false
+

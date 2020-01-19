@@ -2863,6 +2863,27 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
+        <version>1.0.3</version>
+        <configuration>
+          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <skipSources>${scalafmt.skip}</skipSources>
+          <skipTestSources>${scalafmt.skip}</skipTestSources>
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
+          <onlyChangedFiles>true</onlyChangedFiles>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <!--
         Couple of dependencies are coming in bundle format (bundle is just a normal jar which
         contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
@@ -3027,28 +3048,6 @@
       <build>
         <pluginManagement>
           <plugins>
-            <!-- SPARK-29293 currently not able to update to 1.x for Scala 2.13 -->
-            <plugin>
-              <groupId>org.antipathy</groupId>
-              <artifactId>mvn-scalafmt_2.12</artifactId>
-              <version>1.0.3</version>
-              <configuration>
-                <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-                <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
-                <skipSources>${scalafmt.skip}</skipSources>
-                <skipTestSources>${scalafmt.skip}</skipTestSources>
-                <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
-                <onlyChangedFiles>true</onlyChangedFiles>
-              </configuration>
-              <executions>
-                <execution>
-                  <phase>validate</phase>
-                  <goals>
-                    <goal>format</goal>
-                  </goals>
-                </execution>
-              </executions>
-            </plugin>
           </plugins>
         </pluginManagement>
       </build>
