@@ -98,7 +98,6 @@ private[spark] object SignalUtils extends Logging {
       // after reaching a first false predicate.
       val escalate = actions.asScala.map(action => action()).forall(_ == false)
       if (escalate) {
-        println("Escalating signal...")
         prevHandler.handle(sig)
       }
 

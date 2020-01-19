@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.lang.Thread
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
