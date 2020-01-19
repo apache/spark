@@ -330,7 +330,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // mocking the owner is empty
       val newTable2 = originalTable.copy(owner = "")
       client.alterTable(newTable2)
-      assert(client.getTable("default", "src").owner === "")
+      assert(client.getTable("default", "src").owner === originalTable.owner)
     }
 
     test(s"$version: alterTable(dbName: String, tableName: String, table: CatalogTable)") {
