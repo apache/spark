@@ -605,7 +605,6 @@ class CodegenContext extends Logging {
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
-    case CalendarIntervalType => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
@@ -630,7 +629,6 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
-    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
