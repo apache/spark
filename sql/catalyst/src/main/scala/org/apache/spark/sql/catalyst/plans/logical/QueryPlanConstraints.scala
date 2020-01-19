@@ -68,21 +68,46 @@ trait ConstraintHelper {
         val candidateConstraints = binaryComparisons - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l: Cast, r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r: Cast) =>
-        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, l, r)
+      case eq @ EqualTo(l @ Cast(lc: Attribute, _, tz), r: Attribute) =>
+        val candidateConstraints = binaryComparisons - eq
+        val bridge = Cast(r, lc.dataType, tz)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, lc, bridge)
+      case eq @ EqualTo(l: Attribute, r @ Cast(rc: Attribute, _, tz)) =>
+        val candidateConstraints = binaryComparisons - eq
+        val bridge = Cast(l, rc.dataType, tz)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, rc, bridge)
       case _ => // No inference
     }
     inferredConstraints -- constraints
   }
 
+  private def replaceConstraint(
+      constraint: Expression,
+      source: Expression,
+      destination: Expression): Expression = constraint transform {
+    case e: Expression if e.semanticEquals(source) => destination
+  }
+
   private def replaceConstraints(
       constraints: Set[Expression],
       source: Expression,
-      destination: Expression): Set[Expression] = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+      dest: Expression): Set[Expression] = {
+    constraints.map {
+      case b @ BinaryComparison(left, right) =>
+        (replaceConstraint(left, source, dest), replaceConstraint(right, source, dest)) match {
+          case (Cast(Cast(child, _, _), dt, _), replacedRight)
+            if dt == child.dataType && child.dataType == replacedRight.dataType =>
+            b.makeCopy(Array(child, replacedRight))
+          case (replacedLeft, Cast(Cast(child, _, _), dt, _))
+            if dt == child.dataType && child.dataType == replacedLeft.dataType =>
+            b.makeCopy(Array(replacedLeft, child))
+          case (replacedLeft, replacedRight) =>
+            b.makeCopy(Array(replacedLeft, replacedRight))
+        }
+    }
+  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
