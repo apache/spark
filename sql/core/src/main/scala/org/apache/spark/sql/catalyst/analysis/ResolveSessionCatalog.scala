@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
@@ -56,17 +56,6 @@ class ResolveSessionCatalog(
         }
       }
       AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
-
-    case AlterTableAddColumns(r: ResolvedTable, cols) =>
-      val changes = cols.map { col =>
-        TableChange.addColumn(
-          col.name.toArray,
-          col.dataType,
-          col.nullable,
-          col.comment.orNull,
-          col.position.orNull)
-      }
-      AlterTable(r, changes)
 
     case a @ AlterTableAlterColumn(ResolvedTable(_, ident, _: V1Table), _, _, _, _, _) =>
       if (a.column.length > 1) {
@@ -100,66 +89,21 @@ class ResolveSessionCatalog(
         builder.build())
       AlterTableChangeColumnCommand(ident.asTableIdentifier, a.column(0), newColumn)
 
-    case a @ AlterTableAlterColumn(r: ResolvedTable, _, _, _, _, _) =>
-      val colName = a.column.toArray
-      val typeChange = a.dataType.map { newDataType =>
-        TableChange.updateColumnType(colName, newDataType)
-      }
-      val nullabilityChange = a.nullable.map { nullable =>
-        TableChange.updateColumnNullability(colName, nullable)
-      }
-      val commentChange = a.comment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
-      }
-      val positionChange = a.position.map { newPosition =>
-        TableChange.updateColumnPosition(colName, newPosition)
-      }
-      AlterTable(
-        r,
-        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
-
     case AlterTableRenameColumn(ResolvedTable(_, _, _: V1Table), _, _) =>
       throw new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
-
-    case AlterTableRenameColumn(r: ResolvedTable, col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      AlterTable(r, changes)
 
     case AlterTableDropColumns(ResolvedTable(_, _, _: V1Table), _) =>
       throw new AnalysisException("DROP COLUMN is only supported with v2 tables.")
 
-    case AlterTableDropColumns(r: ResolvedTable, cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      AlterTable(r, changes)
-
     case AlterTableSetProperties(ResolvedTable(_, ident, _: V1Table), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
-
-    case AlterTableSetProperties(r: ResolvedTable, props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      AlterTable(r, changes)
 
     case AlterTableUnsetProperties(ResolvedTable(_, ident, _: V1Table), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetProperties(r: ResolvedTable, keys, ifExists) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      AlterTable(r, changes)
-
     case AlterTableSetLocation(
         ResolvedTable(_, ident, _: V1Table), partitionSpec, newLoc) =>
       AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, newLoc)
-
-    case AlterTableSetLocation(r: ResolvedTable, partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
-      AlterTable(r, changes)
 
     // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
     case AlterViewSetPropertiesStatement(SessionCatalogAndTable(_, tbl), props) =>
@@ -196,7 +140,7 @@ class ResolveSessionCatalog(
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
+    case DescribeRelation(ResolvedView(ident, _), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumnStatement(
@@ -492,6 +436,33 @@ class ResolveSessionCatalog(
         parseSessionCatalogFunctionIdentifier("CREATE FUNCTION", catalog, ident)
       CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
         replace)
+
+    case alter: AlterTable => checkAlterTable(alter)
+  }
+
+  private def checkAlterTable(alterTable: AlterTable): LogicalPlan = {
+    alterTable match {
+      case AlterTableAddColumns(UnresolvedTableWithViewExists(view), _) if !view.isTempView =>
+        val viewIdent = view.identifier.asTableIdentifier
+        throw new AnalysisException(
+          s"""
+             |ALTER ADD COLUMNS does not support views.
+             |You must drop and re-create the views for adding the new columns. Views: $viewIdent
+            """.stripMargin)
+      case AlterTableSetLocation(_: ResolvedTable, partitionSpec, _) =>
+        if (partitionSpec.nonEmpty) {
+          throw new AnalysisException(
+            "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+        }
+      case _ =>
+    }
+
+    alterTable.table match {
+      case UnresolvedTableWithViewExists(view) if !view.isTempView =>
+        throw new AnalysisException(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+      case _ => alterTable
+    }
   }
 
   private def parseSessionCatalogFunctionIdentifier(

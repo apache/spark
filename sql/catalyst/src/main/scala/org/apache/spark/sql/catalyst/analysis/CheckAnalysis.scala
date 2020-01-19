@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -104,15 +105,12 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedTableWithViewExists =>
+        val viewKind = if (u.view.isTempView) { "temp view" } else { "view" }
+        u.failAnalysis(s"${u.view.identifier.quoted} is a $viewKind not a table.")
+
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
-
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -413,63 +411,69 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case alter: AlterTable if alter.childrenResolved =>
-            val table = alter.table.table
-            def findField(operation: String, fieldName: Array[String]): StructField = {
-              // include collections because structs nested in maps and arrays may be altered
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                throw new AnalysisException(
-                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
-              }
-              field.get
-            }
-
-            alter.changes.foreach {
-              case add: AddColumn =>
-                val parent = add.fieldNames.init
-                if (parent.nonEmpty) {
-                  findField("add to", parent)
-                }
-              case update: UpdateColumnType =>
-                val field = findField("update", update.fieldNames)
-                val fieldName = update.fieldNames.quoted
-                update.newDataType match {
-                  case _: StructType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a struct by adding, deleting, or updating its fields")
-                  case _: MapType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a map by updating $fieldName.key or $fieldName.value")
-                  case _: ArrayType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update the element by updating $fieldName.element")
-                  case _: AtomicType =>
-                    // update is okay
-                }
-                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+            def check(table: Table): Unit = {
+              def findField(operation: String, fieldName: Array[String]): StructField = {
+                // include collections because structs nested in maps and arrays may be altered
+                val field = table.schema.findNestedField(fieldName, includeCollections = true)
+                if (field.isEmpty) {
                   throw new AnalysisException(
-                    s"Cannot update ${table.name} field $fieldName: " +
+                    s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+                }
+                field.get
+              }
+
+              alter.changes.foreach {
+                case add: AddColumn =>
+                  val parent = add.fieldNames.init
+                  if (parent.nonEmpty) {
+                    findField("add to", parent)
+                  }
+                case update: UpdateColumnType =>
+                  val field = findField("update", update.fieldNames)
+                  val fieldName = update.fieldNames.quoted
+                  update.newDataType match {
+                    case _: StructType =>
+                      throw new AnalysisException(
+                        s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a struct by adding, deleting, or updating its fields")
+                    case _: MapType =>
+                      throw new AnalysisException(
+                        s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a map by updating $fieldName.key or $fieldName.value")
+                    case _: ArrayType =>
+                      throw new AnalysisException(
+                        s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update the element by updating $fieldName.element")
+                    case _: AtomicType =>
+                    // update is okay
+                  }
+                  if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
-                }
-              case update: UpdateColumnNullability =>
-                val field = findField("update", update.fieldNames)
-                val fieldName = update.fieldNames.quoted
-                if (!update.nullable && field.nullable) {
-                  throw new AnalysisException(
-                    s"Cannot change nullable column to non-nullable: $fieldName")
-                }
-              case rename: RenameColumn =>
-                findField("rename", rename.fieldNames)
-              case update: UpdateColumnComment =>
-                findField("update", update.fieldNames)
-              case delete: DeleteColumn =>
-                findField("delete", delete.fieldNames)
+                  }
+                case update: UpdateColumnNullability =>
+                  val field = findField("update", update.fieldNames)
+                  val fieldName = update.fieldNames.quoted
+                  if (!update.nullable && field.nullable) {
+                    throw new AnalysisException(
+                      s"Cannot change nullable column to non-nullable: $fieldName")
+                  }
+                case rename: RenameColumn =>
+                  findField("rename", rename.fieldNames)
+                case update: UpdateColumnComment =>
+                  findField("update", update.fieldNames)
+                case delete: DeleteColumn =>
+                  findField("delete", delete.fieldNames)
+                case _ =>
+                // no validation needed for set and remove property
+              }
+            }
+
+            alter.table match {
+              case r: ResolvedTable => check(r.table)
               case _ =>
-              // no validation needed for set and remove property
             }
 
           case _ => // Fallbacks to the following checks

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
@@ -394,11 +395,15 @@ case class DropTable(
     ifExists: Boolean) extends Command
 
 /**
- * The logical plan of the ALTER TABLE command that works for v2 tables.
+ * The base class for ALTER TABLE commands that work for v2 tables.
  */
-case class AlterTable(
-    table: ResolvedTable,
-    changes: Seq[TableChange]) extends Command {
+abstract class AlterTable extends Command {
+  def table: LogicalPlan
+
+  def changes: Seq[TableChange]
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
   override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
       case add: AddColumn =>
@@ -427,8 +432,17 @@ case class AlterTable(
  */
 case class AlterTableAddColumns(
     table: LogicalPlan,
-    columnsToAdd: Seq[QualifiedColType]) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    columnsToAdd.map { col =>
+      TableChange.addColumn(
+        col.name.toArray,
+        col.dataType,
+        col.nullable,
+        col.comment.orNull,
+        col.position.orNull)
+    }
+  }
 }
 
 /**
@@ -440,8 +454,23 @@ case class AlterTableAlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[ColumnPosition]) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    position: Option[ColumnPosition]) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    val colName = column.toArray
+    val typeChange = dataType.map { newDataType =>
+      TableChange.updateColumnType(colName, newDataType)
+    }
+    val nullabilityChange = nullable.map { nullable =>
+      TableChange.updateColumnNullability(colName, nullable)
+    }
+    val commentChange = comment.map { newComment =>
+      TableChange.updateColumnComment(colName, newComment)
+    }
+    val positionChange = position.map { newPosition =>
+      TableChange.updateColumnPosition(colName, newPosition)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+  }
 }
 
 /**
@@ -450,8 +479,10 @@ case class AlterTableAlterColumn(
 case class AlterTableRenameColumn(
     table: LogicalPlan,
     column: Seq[String],
-    newName: String) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    newName: String) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    Seq(TableChange.renameColumn(column.toArray, newName))
+  }
 }
 
 /**
@@ -459,8 +490,10 @@ case class AlterTableRenameColumn(
  */
 case class AlterTableDropColumns(
     table: LogicalPlan,
-    columnsToDrop: Seq[Seq[String]]) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    columnsToDrop: Seq[Seq[String]]) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    columnsToDrop.map(col => TableChange.deleteColumn(col.toArray))
+  }
 }
 
 /**
@@ -468,18 +501,25 @@ case class AlterTableDropColumns(
  */
 case class AlterTableSetProperties(
     table: LogicalPlan,
-    properties: Map[String, String]) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    properties: Map[String, String]) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    properties.map { case (key, value) =>
+      TableChange.setProperty(key, value)
+    }.toSeq
+  }
 }
 
 /**
  * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command that works for v2 tables.
  */
+// TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
 case class AlterTableUnsetProperties(
     table: LogicalPlan,
     propertyKeys: Seq[String],
-    ifExists: Boolean) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    ifExists: Boolean) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    propertyKeys.map(key => TableChange.removeProperty(key))
+  }
 }
 
 /**
@@ -488,10 +528,11 @@ case class AlterTableUnsetProperties(
 case class AlterTableSetLocation(
     table: LogicalPlan,
     partitionSpec: Option[TablePartitionSpec],
-    location: String) extends Command {
-  override def children: Seq[LogicalPlan] = Seq(table)
+    location: String) extends AlterTable {
+  override lazy val changes: Seq[TableChange] = {
+    Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
+  }
 }
-
 
 /**
  * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.

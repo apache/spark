@@ -711,24 +711,24 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed1 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.setProperty("test", "test"),
                 TableChange.setProperty("comment", "new_comment")))
             case _ => fail("expect AlterTable")
           }
 
           parsed2 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
             case _ => fail("expect AlterTable")
           }
 
           parsed3 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.removeProperty("comment"),
                 TableChange.removeProperty("test")))
             case _ => fail("expect AlterTable")
@@ -764,8 +764,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.setProperty("a", "1"),
                 TableChange.setProperty("b", "0.1"),
                 TableChange.setProperty("c", "true")))
@@ -788,8 +788,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(TableChange.setProperty("location", "new location")))
+            case a: AlterTable =>
+              assert(a.changes == Seq(TableChange.setProperty("location", "new location")))
             case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
         }
@@ -1030,23 +1030,23 @@ class PlanResolutionSuite extends AnalysisTest {
           val parsed3 = parseAndResolve(sql3)
 
           parsed1 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.updateColumnType(Array("i"), LongType)))
             case _ => fail("expect AlterTable")
           }
 
           parsed2 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.updateColumnType(Array("i"), LongType),
                 TableChange.updateColumnComment(Array("i"), "new comment")))
             case _ => fail("expect AlterTable")
           }
 
           parsed3 match {
-            case AlterTable(_, changes) =>
-              assert(changes == Seq(
+            case a: AlterTable =>
+              assert(a.changes == Seq(
                 TableChange.updateColumnComment(Array("i"), "new comment")))
             case _ => fail("expect AlterTable")
           }
