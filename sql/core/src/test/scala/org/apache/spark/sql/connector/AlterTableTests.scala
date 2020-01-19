@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -388,6 +389,22 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(IntegerType)))
+    }
+  }
+
+  test("AlterTable: invalid schema") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<int>) USING $v2Format")
+
+      Seq("interval", "abc").foreach { typ =>
+        val e1 =
+          intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN i $typ"))
+        assert(e1.getMessage.contains(s"DataType $typ is not supported."))
+        val e2 =
+          intercept[ParseException](sql(s"ALTER TABLE $t ALTER COLUMN points.element TYPE $typ"))
+        assert(e2.getMessage.contains(s"DataType $typ is not supported."))
+      }
     }
   }
 

@@ -252,6 +252,15 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
+  test("CreateTable: invalid schema") {
+    Seq("interval", "abc").foreach { typ =>
+      val e1 = intercept[ParseException](sql(s"CREATE TABLE table_name (id $typ) USING foo"))
+      assert(e1.getMessage.contains(s"DataType $typ is not supported."))
+      val e2 = intercept[ParseException](sql(s"CREATE TABLE table_name (id array<$typ>) USING foo"))
+      assert(e2.getMessage.contains(s"DataType $typ is not supported."))
+    }
+  }
+
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
