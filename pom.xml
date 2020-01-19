@@ -141,7 +141,7 @@
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.18.v20190429</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
-    <chill.version>0.9.5</chill.version>
+    <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
