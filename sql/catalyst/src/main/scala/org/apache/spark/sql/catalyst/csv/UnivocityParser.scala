@@ -251,7 +251,7 @@ class UnivocityParser(
     //  1. Convert the tokens that correspond to the required schema.
     //  2. Apply the pushdown filters to `requiredRow`.
     var i = 0
-    val row = requiredRow.head
+    val row = requiredRow.get
     var skipRow = false
     while (i < requiredSchema.length) {
       try {
