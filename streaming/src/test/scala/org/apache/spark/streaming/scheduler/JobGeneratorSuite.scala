@@ -17,13 +17,16 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
+import org.junit.Assert
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -125,6 +128,80 @@ class JobGeneratorSuite extends TestSuiteBase {
       ssc.stop()
     }
   }
+
+  test("SPARK-30576: whatever only one batch commit") {
+    val testConf = conf
+    testConf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    testConf.set("spark.only.one.batch", "true")
+
+    withTestServer(new TestServer()) { testServer =>
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        testServer.start()
+        val batchCounter = new BatchCounter(ssc)
+        val testTimeout = timeout(10 seconds)
+
+        val longBatchNumber = 3 // 3rd batch will take a long time
+        val longBatchTime = longBatchNumber * batchDuration.milliseconds
+
+        // Set up the streaming context and input streams
+        val networkStream =
+          ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+
+        def computeFunc[T](rdd: RDD[T], time: Time): RDD[T] = {
+          if (time.milliseconds == longBatchTime) {
+            Thread.sleep(longBatchTime)
+          }
+          rdd
+        }
+
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStreamWithFunc(networkStream, outputQueue,
+          computeFunc[String])
+        outputStream.register()
+        ssc.start()
+
+        // Feed data to the server to send to the network receiver
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val input = Array(1, 2, 3, 4, 5, 6)
+
+        Thread.sleep(200)
+
+        val receiverTracker = ssc.scheduler.receiverTracker
+
+        // Wait for new blocks to be received
+        def waitForNewReceivedBlocks() {
+          eventually(testTimeout) {
+            assert(receiverTracker.hasUnallocatedBlocks)
+          }
+        }
+
+        for (i <- 0 until input.size) {
+          testServer.send(input(i).toString + "\n")
+          waitForNewReceivedBlocks()
+          Thread.sleep(200)
+          clock.advance(batchDuration.milliseconds)
+
+          // waiting for compute which will be completed in 2s
+          Thread.sleep(batchDuration.milliseconds * 2)
+          val jobSize = ssc.scheduler.jobSets.size()
+          if (ssc.scheduler.clock.getTimeMillis() >= longBatchTime) {
+            assert(jobSize <= 1, "more batch committed")
+          }
+        }
+
+        val numCompletedBatches: Int = batchCounter.getNumCompletedBatches
+        assert(numCompletedBatches < input.size, "more batch committed")
+
+        // Make sure the data is not lost
+        Assert.assertArrayEquals(input, outputQueue.asScala.toArray.flatten.map(_.toInt))
+
+        Thread.sleep(200)
+        logInfo("Stopping server")
+        testServer.stop()
+      }
+    }
+  }
+
 }
 
 object JobGeneratorSuite {

@@ -110,6 +110,29 @@ class TestOutputStream[T: ClassTag](
 }
 
 /**
+ * This is a output stream just for the testsuites.
+ * The foreachFunc is work on each rdd
+ */
+class TestOutputStreamWithFunc[T: ClassTag](
+    parent: DStream[T],
+    val output: ConcurrentLinkedQueue[Seq[T]] =
+      new ConcurrentLinkedQueue[Seq[T]](),
+    foreachFunc: (RDD[T], Time) => RDD[T]
+    ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+  val collected = foreachFunc(rdd, t).collect()
+  output.add(collected)
+}, false) {
+
+  // This is to clear the output buffer every it is read from a checkpoint
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
+    ois.defaultReadObject()
+    output.clear()
+  }
+}
+
+
+/**
  * This is a output stream just for the testsuites. All the output is collected into a
  * ConcurrentLinkedQueue. This queue is wiped clean on being restored from checkpoint.
  *

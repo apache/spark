@@ -21,7 +21,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ONLY_ONE_BATCH
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
 import org.apache.spark.streaming.api.python.PythonDStream
@@ -246,19 +248,24 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private def generateJobs(time: Time): Unit = {
     // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
     // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
-    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
-    Try {
-      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
-      graph.generateJobs(time) // generate jobs using allocated block
-    } match {
-      case Success(jobs) =>
-        val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
-      case Failure(e) =>
-        jobScheduler.reportError("Error generating jobs for time " + time, e)
-        PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
+    if (jobScheduler.jobSets.size > 0 && SparkEnv.get.conf.get(ONLY_ONE_BATCH)) {
+      logWarning("There is still a batch running, not batch job generated")
+    } else {
+      ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
+      Try {
+        // allocate received blocks to batch
+        jobScheduler.receiverTracker.allocateBlocksToBatch(time)
+        graph.generateJobs(time) // generate jobs using allocated block
+      } match {
+        case Success(jobs) =>
+          val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
+          jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
+        case Failure(e) =>
+          jobScheduler.reportError("Error generating jobs for time " + time, e)
+          PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
+      }
+      eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
     }
-    eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }
 
   /** Clear DStream metadata for the given `time`. */
