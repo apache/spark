@@ -961,8 +961,10 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       testStream(unionDf)(
         StartStream(checkpointLocation = tempDir.getAbsolutePath),
-        AddData(input1, 11, 12, 13),
-        MultiAddData(input2, 11, 12, 13, 14, 15)(input3, 13, 14, 15, 16, 17),
+        MultiAddData(
+          (input1, Seq(11, 12, 13)),
+          (input2, Seq(11, 12, 13, 14, 15)),
+          (input3, Seq(13, 14, 15, 16, 17))),
         CheckNewAnswer(Row(11, 11, 11), Row(12, 12, 12), Row(13, 13, 13), Row(13, 26, 39),
           Row(14, 28, 42), Row(15, 30, 45)),
         StopStream
@@ -980,8 +982,10 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       testStream(newUnionDf)(
         StartStream(checkpointLocation = tempDir.getAbsolutePath),
-        AddData(newInput1, 21, 22, 23),
-        MultiAddData(newInput2, 21, 22, 23, 24, 25)(newInput3, 23, 24, 25, 26, 27),
+        MultiAddData(
+          (newInput1, Seq(21, 22, 23)),
+          (newInput2, Seq(21, 22, 23, 24, 25)),
+          (newInput3, Seq(23, 24, 25, 26, 27))),
         CheckNewAnswer(Row(21, 21, 21), Row(22, 22, 22), Row(23, 23, 23), Row(23, 46, 69),
           Row(24, 48, 72), Row(25, 50, 75))
       )
