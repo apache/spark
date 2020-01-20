@@ -32,8 +32,8 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
 <dl>
   <dt><code><em>SORT BY</em></code></dt>
   <dd>
-    Specifies a comma separated list of expression along with optional parameters sort_direction 
-    and nulls_sort_order which are used to sort the rows within each partition.
+    Specifies a comma-separated list of expressions along with optional parameters <code>sort_direction</code>
+    and <code>nulls_sort_order</code> which are used to sort the rows within each partition.
   </dd>
   <dt><code><em>sort_direction</em></code></dt>
   <dd>
@@ -49,8 +49,8 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
   <dt><code><em>nulls_sort_order</em></code></dt>
   <dd>
     Optionally specifies whether NULL values are returned before/after non-NULL values, based on the 
-    sort direction. In spark, NULL values are considered to be lower than any non-NULL values. Therefore
-    the ordering of NULL values depend on the sort direction.<br><br>
+    sort direction. In Spark, NULL values are considered to be lower than any non-NULL values by default.
+    Therefore the ordering of NULL values depend on the sort direction.<br><br>
     <ol>
       <li>If the sort order is ASC, NULLS are returned first; to force NULLS to be last, use NULLS LAST</li>
       <li>If the sort order is DESC, NULLS are returned last; to force NULLS to be first, use NULLS FIRST</li>
