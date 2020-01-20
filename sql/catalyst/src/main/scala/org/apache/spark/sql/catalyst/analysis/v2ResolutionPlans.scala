@@ -73,7 +73,7 @@ case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String]
  */
 case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
   extends LeafNode {
-  override lazy val output: Seq[Attribute] = table.schema().toAttributes
+  override def output: Seq[Attribute] = Nil
 }
 
 /**
