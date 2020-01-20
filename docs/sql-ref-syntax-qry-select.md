@@ -63,7 +63,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   </dd>
   <dt><code><em>named_expression</em></code></dt>
   <dd>
-    A expression with an assigned name. In general, it denotes a column expression.<br><br>
+    An expression with an assigned name. In general, it denotes a column expression.<br><br>
     <b>Syntax:</b>
       <code>
         expression [AS] [alias]
