@@ -32,7 +32,9 @@ WHERE boolean_expression
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
     more expressions may be combined together using comparision operators 
-    ('>', '>=', ‘>’, ‘>=’, ‘=’, ‘<’ and ‘<=’, '<=>') and logical operators (AND, NOT, OR).
+    ( <code>></code>, <code>>=</code>, <code>=</code>, <code><</code> , <code><=</code> and
+    <code><=></code> ) and logical operators ( <code>AND</code>, <code>NOT</code> 
+    and <code>OR</code> ).
   </dd>
 </dl>
 
@@ -98,7 +100,7 @@ SELECT * FROM person WHERE age > (SELECT avg(age) FROM person);
   |300|Mike|80 |
   +---+----+---+
 
--- Correlated column reference in `WHERE` clause of sub query.
+-- Correlated column reference in `WHERE` clause of subquery.
 SELECT * FROM person AS parent 
 WHERE EXISTS (
               SELECT 1 FROM person AS child
