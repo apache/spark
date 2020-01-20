@@ -35,13 +35,13 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
     Groups the rows for each subset of the expressions specified in the grouping sets. For example, 
     <code>GROUP BY GROUPING SETS (warehouse, product)</code> is semantically equivalent
     to union of results of <code>GROUP BY warehouse</code> and <code>GROUP BY product</code>. This clause
-    is a shorthand for a <code>UNION ALL</code> where each leg of the <code>UNION ALL</code> 
+    is shorthand for a <code>UNION ALL</code> where each leg of the <code>UNION ALL</code> 
     operator performs aggregation of subset of the columns specified in the <code>GROUPING SETS</code> clause.
   </dd>
   <dt><code><em>grouping_sets</em></code></dt>
   <dd>
     Specifies one of more groupings based on which the <code>GROUP BY</code> clause performs aggregations. A grouping
-    set is specified by a list of comma separated expressions in parenthesis.<br><br>
+    set is specified by a list of comma-separated expressions in parentheses.<br><br>
     <b>Syntax:</b>
       <code>
         (() | (expression [ , ...]))
@@ -49,21 +49,23 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
   </dd>
   <dt><code><em>grouping_expression</em></code></dt>
   <dd>
-    Specifies the crieteria based on which the rows are grouped together. A grouping expression may be a column alias,
-    a column position or an expression.
+    Specifies the critieria based on which the rows are grouped together. The grouping of rows is performed based on
+    result values of the grouping expressions. A grouping expression may be a column alias, a column position
+    or an expression.
   </dd>
   <dt><code><em>ROLLUP</em></code></dt>
   <dd>
     Specifies multiple levels of aggregations in a single statement. This clause is used to compute aggregations 
-    based on multiple grouping sets. <code>ROLLUP</code> is a short-hand for <code>GROUPING SETS</code>. For example,
-    GROUP BY warehouse, product  WITH ROLLUP is equivalent to GROUP BY warehouse, product GROUPING SETS ((warehouse, product), (warehouse), ()).
+    based on multiple grouping sets. <code>ROLLUP</code> is shorthand for <code>GROUPING SETS</code>. For example,
+    GROUP BY warehouse, product  WITH ROLLUP is equivalent to GROUP BY <code>warehouse, product</code> GROUPING SETS
+    <code> ((warehouse, product), (warehouse), ())</code>.
     The N elements of a <code>ROLLUP</code> specification results in N+1 <code>GROUPING SETS</code>.
   </dd>
   <dt><code><em>CUBE</em></code></dt>
   <dd>
     <code>CUBE</code> clause is used to perform aggregations based on combination of grouping columns specified in the 
     <code>GROUP BY</code> clause. For example, <code>GROUP BY warehouse, product  WITH CUBE</code> is equivalent 
-    to GROUP BY warehouse, product GROUPING SETS ((warehouse, product), (warehouse), (product), ()).
+    to GROUP BY <code>warehouse, product</code> GROUPING SETS <code>((warehouse, product), (warehouse), (product), ())</code>.
     The N elements of a <code>CUBE</code> specification results in 2^N <code>GROUPING SETS</code>.
   </dd>
 </dl>
