@@ -375,8 +375,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  private def checkOwner(db: String,
-       expectedOwnerName: String, expectedOwnerType: String): Unit = {
+  private def checkOwner(db: String, expectedOwnerName: String, expectedOwnerType: String): Unit = {
     val df = sql(s"DESCRIBE DATABASE EXTENDED $db")
     val owner = df.where("database_description_item='Owner Name'")
       .collect().head.getString(1)
