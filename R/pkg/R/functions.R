@@ -1426,8 +1426,8 @@ setMethod("quarter",
 #' @aliases percentile_approx percentile_approx,Column-method
 #' @note percentile_approx since 3.0.0
 setMethod("percentile_approx",
-          signature(x = "characterOrColumn", percentage = "numeric", accuracy = "numeric"),
-          function(x, percentage, accuracy) {
+          signature(x = "characterOrColumn", percentage = "numeric", accuracy = "ANY"),
+          function(x, percentage, accuracy = 10000) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -1441,15 +1441,6 @@ setMethod("percentile_approx",
               col, percentage, as.integer(accuracy)
             )
             column(jc)
-          })
-
-#' @rdname column_aggregate_functions
-#' @aliases percentile_approx percentile_approx,Column-method
-#' @note percentile_approx since 3.0.0
-setMethod("percentile_approx",
-          signature(x = "characterOrColumn", percentage = "numeric", accuracy = "missing"),
-          function(x, percentage, accuracy) {
-            percentile_approx(x, percentage, 10000L)
           })
 
 #' @details
