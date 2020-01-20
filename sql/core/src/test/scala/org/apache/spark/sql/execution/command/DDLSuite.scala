@@ -21,8 +21,6 @@ import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
 
@@ -35,7 +33,6 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseE
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1406,12 +1403,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
-      val props = if (isUsingHiveMetastore) {
+      if (isUsingHiveMetastore) {
         normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
       } else {
         catalog.getTableMetadata(tableIdent).properties
       }
-      props -- TableCatalog.RESERVED_PROPERTIES.asScala
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")

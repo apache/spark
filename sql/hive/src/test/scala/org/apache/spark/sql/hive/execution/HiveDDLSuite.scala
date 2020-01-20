@@ -425,9 +425,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       sql(s"CREATE TABLE spark_30019(k int)")
       assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
         .collect().head.getString(1) === Utils.getCurrentUserName())
-      val e2 = intercept[ParseException](
-        sql(s"CREATE TABLE spark_30019_2 WITH TBLPROPERTIES('owner'='spark_30019')"))
-      assert(e2.getMessage.contains("owner"))
     } finally {
       catalog.reset()
     }
