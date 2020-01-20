@@ -206,13 +206,16 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  val parse: String => Option[InternalRow] = if (options.columnPruning && requiredSchema.isEmpty) {
-    // If `columnPruning` enabled and partition attributes scanned only,
-    // `schema` gets empty.
-    (_: String) => Some(InternalRow.empty)
-  } else {
-    // parse if the columnPruning is disabled or requiredSchema is nonEmpty
-    (input: String) => convert(tokenizer.parseLine(input))
+  val parse: String => Option[InternalRow] = {
+    // This is intentionally a val to create a function once and reuse.
+    if (options.columnPruning && requiredSchema.isEmpty) {
+      // If `columnPruning` enabled and partition attributes scanned only,
+      // `schema` gets empty.
+      (_: String) => Some(InternalRow.empty)
+    } else {
+      // parse if the columnPruning is disabled or requiredSchema is nonEmpty
+      (input: String) => convert(tokenizer.parseLine(input))
+    }
   }
 
   private val getToken = if (options.columnPruning) {
