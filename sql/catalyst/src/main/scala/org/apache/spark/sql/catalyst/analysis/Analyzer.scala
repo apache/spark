@@ -882,8 +882,7 @@ class Analyzer(
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView =>
-            UnresolvedTableWithViewExists(v)
+          case v: ResolvedView => UnresolvedTableWithViewExists(v)
           case table => table
         }.getOrElse(u)
 
