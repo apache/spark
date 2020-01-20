@@ -382,6 +382,9 @@ trait CheckAnalysis extends PredicateHelper {
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case write: V2WriteCommand if write.resolved =>
+            write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
           // If the view output doesn't have the same number of columns neither with the child
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
