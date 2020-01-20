@@ -158,7 +158,9 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
   // Starts reading user input.
   // If fails, will stop gracefully.
   Try(readLines()) match {
-    case Failure(_) => SparkSQLEnv.stop()
+    case Failure(_) =>
+      SparkSQLEnv.sparkContext.cancelAllJobs()
+      SparkSQLEnv.stop()
     case Success(_) =>
   }
 }
