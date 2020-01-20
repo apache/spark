@@ -25,19 +25,19 @@ of a query along with examples.
 
 ### Syntax
 {% highlight sql %}
-[WITH with_query [, ...]]
-SELECT [hints, ...] [ALL|DISTINCT] named_expression[, named_expression, ...]
-  FROM from_item [, from_item, ...]
-  [WHERE boolean_expression]
-  [GROUP BY expression [, ...] ]
-  [HAVING boolean_expression [, ...] ]
-  [ORDER BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] ]
-  [SORT  BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] ]
-  [CLUSTER BY [expression [, ...] ]
-  [DISTRIBUTE BY [expression [, ...] ]
+[ WITH with_query [ , ... ] ]
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
+  FROM { from_item [ , ...] }
+  [ WHERE boolean_expression ]
+  [ GROUP BY expression [ , ...] ]
+  [ HAVING boolean_expression ]
+  [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+  [ SORT  BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+  [ CLUSTER BY { expression [ , ...] } ]
+  [ DISTRIBUTE BY { expression [, ...] } ]
   { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select ]
-  [WINDOW named_window[, WINDOW named_window, ...]]
-  [LIMIT {ALL | expression}]
+  [ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
+  [ LIMIT { ALL | expression } ]
 {% endhighlight %}
 
 ### Parameters
@@ -46,7 +46,7 @@ SELECT [hints, ...] [ALL|DISTINCT] named_expression[, named_expression, ...]
   <dd>
     Specifies the common table expressions (CTEs) before the main <code>SELECT</code> query block.
     These table expressions are allowed to be referenced later in the main query. This is useful to abstract
-    out repeated sub query blocks in the main query and improves readability of the query.
+    out repeated subquery blocks in the main query and improves readability of the query.
   </dd>
   <dt><code><em>hints</em></code></dt>
   <dd>
@@ -71,7 +71,7 @@ SELECT [hints, ...] [ALL|DISTINCT] named_expression[, named_expression, ...]
   </dd>
   <dt><code><em>from_item</em></code></dt>
   <dd>
-    Specifies a source of input for the query. It can be one of the following.
+    Specifies a source of input for the query. It can be one of the following:
     <ol>
       <li>Table relation</li>
       <li>Join relation</li>
@@ -87,12 +87,12 @@ SELECT [hints, ...] [ALL|DISTINCT] named_expression[, named_expression, ...]
   <dt><code><em>GROUP BY</em></code></dt>
   <dd>
     Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
-    (MIN, MAX, COUNT, SUM, AVG) to group rows bsed on the grouping expressions.
+    (MIN, MAX, COUNT, SUM, AVG) to group rows based on the grouping expressions.
   </dd>
   <dt><code><em>HAVING</em></code></dt>
   <dd>
     Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
-    filter rows after the grouping is performed
+    filter rows after the grouping is performed.
   </dd>
   <dt><code><em>ORDER BY</em></code></dt>
   <dd>
