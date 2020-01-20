@@ -229,15 +229,13 @@ class UnivocityParser(
         new RuntimeException("Malformed CSV record"))
     }
 
-    var badRecordException: Option[Throwable] = None
-
-    if (tokens.length != parsedSchema.length) {
+    var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      badRecordException = Some(new RuntimeException("Malformed CSV record"))
-    }
+      Some(new RuntimeException("Malformed CSV record"))
+    } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
     //  1. Convert the tokens that correspond to the required schema.
