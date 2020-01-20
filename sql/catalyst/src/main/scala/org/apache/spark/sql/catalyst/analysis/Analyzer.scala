@@ -1327,7 +1327,9 @@ class Analyzer(
           case UpdateAction(updateCondition, assignments) =>
             val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
             // The update value can access columns from both target and source tables.
-            UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m, true))
+            UpdateAction(
+              resolvedUpdateCondition,
+              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
           case o => o
         }
         val newNotMatchedActions = m.notMatchedActions.map {
@@ -1335,7 +1337,9 @@ class Analyzer(
             val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
             // The insert action is used when not matched, so its value can only access columns
             // from the source table.
-            InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m, false))
+            InsertAction(
+              resolvedInsertCondition,
+              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
           case o => o
         }
         val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
@@ -1351,7 +1355,7 @@ class Analyzer(
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolveValueWithBothTables: Boolean): Seq[Assignment] = {
+        resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
         val expandedColumns = mergeInto.targetTable.output
         val expandedValues = mergeInto.sourceTable.output
@@ -1366,10 +1370,10 @@ class Analyzer(
           val resolvedValue = assign.value match {
             // The update values may contain target and/or source references.
             case c if !c.resolved =>
-              if (resolveValueWithBothTables) {
-                resolveExpressionTopDown(c, mergeInto)
-              } else {
+              if (resolveValuesWithSourceOnly) {
                 resolveExpressionTopDown(c, Project(Nil, mergeInto.sourceTable))
+              } else {
+                resolveExpressionTopDown(c, mergeInto)
               }
             case o => o
           }
