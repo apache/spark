@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting
 
 /**
@@ -34,10 +35,7 @@ import org.apache.spark.util.Utils.isTesting
  */
 @Evolving
 private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
-  private val resourceProfileIdToResourceProfile =
-    new ConcurrentHashMap[Int, ResourceProfile]()
-
-  private val master = sparkConf.getOption("spark.master")
+  private val resourceProfileIdToResourceProfile = new ConcurrentHashMap[Int, ResourceProfile]()
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
@@ -45,18 +43,18 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
-  private val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+  private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
+  private val master = sparkConf.getOption("spark.master")
   private val isNotYarn = master.isDefined && !master.get.equals("yarn")
+  private val errorForTesting = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
   // If we use anything except the default profile, its only supported on YARN right now.
   // Throw an exception if not supported.
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
-    // if the master isn't defined we go ahead and allow it for testing purposes
-    val shouldError = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
     val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val notYarnAndNotDefaultProfile = isNotDefaultProfile && isNotYarn
     val YarnNotDynAllocAndNotDefaultProfile = isNotDefaultProfile && !isNotYarn && !dynamicEnabled
-    if (shouldError && (notYarnAndNotDefaultProfile || YarnNotDynAllocAndNotDefaultProfile)) {
+    if (errorForTesting && (notYarnAndNotDefaultProfile || YarnNotDynAllocAndNotDefaultProfile)) {
       throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
         "allocation enabled.")
     }
