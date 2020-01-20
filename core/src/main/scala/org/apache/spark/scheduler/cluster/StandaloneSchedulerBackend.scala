@@ -58,6 +58,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   private val maxCores = conf.get(config.CORES_MAX)
   private val totalExpectedCores = maxCores.getOrElse(0)
+  private val defaultProf = sc.resourceProfileManager.defaultResourceProfile
 
   override def start(): Unit = {
     super.start()
@@ -199,7 +200,6 @@ private[spark] class StandaloneSchedulerBackend(
     // resources profiles not supported
     Option(client) match {
       case Some(c) =>
-        val defaultProf = sc.resourceProfileManager.defaultResourceProfile
         val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
         c.requestTotalExecutors(numExecs)
       case None =>

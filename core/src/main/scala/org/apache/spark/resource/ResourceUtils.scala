@@ -345,7 +345,7 @@ private[spark] object ResourceUtils extends Logging {
     discoverResource(resourceName, script)
   }
 
-  def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
+  def validateTaskCpusLargeEnough(execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
     if (execCores < taskCpus) {
       throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
@@ -354,6 +354,8 @@ private[spark] object ResourceUtils extends Logging {
     true
   }
 
+  // the option executor cores parameter is by the different local modes since it not configured
+  // via the config
   def warnOnWastedResources(
       rp: ResourceProfile,
       sparkConf: SparkConf,
@@ -371,6 +373,7 @@ private[spark] object ResourceUtils extends Logging {
     } else if (coresKnown) {
       rp.getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
     } else {
+      // can't calculate cores limit
       return
     }
     // when executor cores config isn't set, we can't calculate the real limiting resource

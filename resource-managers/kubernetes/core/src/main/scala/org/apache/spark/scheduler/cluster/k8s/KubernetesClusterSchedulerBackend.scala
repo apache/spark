@@ -56,6 +56,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
+  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
+
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     if (isExecutorActive(executorId)) {
@@ -119,8 +121,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(
-      resourceProfileToTotalExecs(scheduler.sc.resourceProfileManager.defaultResourceProfile))
+    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs(defaultProfile))
     Future.successful(true)
   }
 

@@ -137,7 +137,7 @@ private [spark] class ResourceProfile(
       assert(cpusPerTask > 0, "CPUs per task configuration has to be > 0")
       val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
       _coresLimitKnown = true
-      ResourceUtils.validateTaskCpusLargeEnough(sparkConf, coresPerExecutor, cpusPerTask)
+      ResourceUtils.validateTaskCpusLargeEnough(coresPerExecutor, cpusPerTask)
       val tasksBasedOnCores = coresPerExecutor / cpusPerTask
       // Note that if the cores per executor aren't set properly this calculation could be off,
       // we default it to just be 1 in order to allow checking of the rest of the custom
@@ -169,8 +169,8 @@ private [spark] class ResourceProfile(
             throw new IllegalArgumentException("The number of slots on an executor has to be " +
               "limited by the number of cores, otherwise you waste resources and " +
               "dynamic allocation doesn't work properly. Your configuration has " +
-              s"core/task cpu slots = ${numTasks} and " +
-              s"${execReq.resourceName} = ${taskLimit}. " +
+              s"core/task cpu slots = ${taskLimit} and " +
+              s"${execReq.resourceName} = ${numTasks}. " +
               "Please adjust your configuration so that all resources require same number " +
               "of executor slots.")
           }

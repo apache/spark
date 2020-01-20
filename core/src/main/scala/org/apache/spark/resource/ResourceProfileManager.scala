@@ -43,7 +43,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
-  private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
+  private val cEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isNotYarn = master.isDefined && !master.get.equals("yarn")
   private val errorForTesting = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)

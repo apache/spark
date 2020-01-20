@@ -182,6 +182,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private var schedulerDriver: SchedulerDriver = _
 
+  private val defaultProfile = sc.resourceProfileManager.defaultResourceProfile
+
+
   def newMesosTaskId(): String = {
     val id = nextMesosTaskId
     nextMesosTaskId += 1
@@ -597,8 +600,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
     val hostToLocalTaskCount =
-      rpHostToLocalTaskCount.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
-        Map.empty)
+      rpHostToLocalTaskCount.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Map.empty)
     if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
       return true
     }
@@ -769,8 +771,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   ): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
-    val rp = sc.resourceProfileManager.defaultResourceProfile
-    val numExecs = resourceProfileToTotalExecs.getOrElse(rp, 0)
+    val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProfile, 0)
     logInfo("Capping the total amount of executors to " + numExecs)
     executorLimitOption = Some(numExecs)
     // Update the locality wait start time to continue trying for locality.

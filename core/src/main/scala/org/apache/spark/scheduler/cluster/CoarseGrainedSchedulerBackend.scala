@@ -93,7 +93,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorsPendingLossReason = new HashSet[String]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
-  // A map to store hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var rpHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
 
@@ -224,8 +223,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
-            (info.name,
-             new ExecutorResourceInfo(info.name, info.addresses, numParts))
+            (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
@@ -538,10 +536,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private def numExistingExecutors: Int = synchronized { executorDataMap.size }
 
-  private def numExistingExecutorsForRpId(id: Int): Int = synchronized {
-    executorDataMap.filter { case (exec, info) => info.resourceProfileId == id }.size
-  }
-
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }
@@ -566,10 +560,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // this function is for testing only
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
-    val res = executorDataMap.get(executorId)
-    val ret = res.map(_.resourceProfileId)
-      .getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
-    ret
+    val execDataOption = executorDataMap.get(executorId)
+    execDataOption.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   /**
@@ -600,7 +592,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   *
    * @param resourceProfileToNumExecutors The total number of executors we'd like to have per
    *                                      ResourceProfile. The cluster manager shouldn't kill any
    *                                      running executor to reach this number, but, if all
@@ -613,7 +604,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
    *                             that would like to like to run on that host.
    *                             This includes running, pending, and completed tasks.
-   *
    * @return whether the request is acknowledged by the cluster manager.
    */
   final override def requestTotalExecutors(
