@@ -1067,6 +1067,13 @@ class Analyzer(
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
 
+      /**
+       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
+       * inherit directly from its children, we could just stop collect on it. Because we could
+       * always replace all the lower conflict attributes with the new attributes from the new
+       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
+       * it to the next batch to reduce possible overhead because this should be a corner case.
+       */
       def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
