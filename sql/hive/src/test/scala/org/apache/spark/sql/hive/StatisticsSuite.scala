@@ -193,7 +193,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("SPARK-24626 parallel file listing in Stats computation") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2",
-      SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION.key -> "True") {
+      SQLConf.PARALLEL_FILE_LISTING_IN_COMMANDS.key -> "True") {
       val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
           sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")

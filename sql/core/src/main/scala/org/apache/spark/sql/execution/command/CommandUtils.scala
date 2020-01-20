@@ -37,6 +37,17 @@ import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFile
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
+/**
+ * For the purpose of calculating total directory sizes, use this filter to
+ * ignore some irrelevant files.
+ * @param stagingDir hive staging dir
+ */
+class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = {
+    val fileName = path.getName
+    !fileName.startsWith(stagingDir) && DataSourceUtils.isDataFile(fileName)
+  }
+}
 
 object CommandUtils extends Logging {
 
@@ -65,7 +76,7 @@ object CommandUtils extends Logging {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
-      if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
+      if (spark.sessionState.conf.parallelFileListingInCommands) {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
         val pathFilter = new PathFilter with Serializable {
@@ -135,6 +146,47 @@ object CommandUtils extends Logging {
     logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
+  }
+
+  def calculateLocationsSizes(
+      sparkSession: SparkSession,
+      tid: TableIdentifier,
+      paths: Seq[Option[URI]]): Seq[Long] = {
+    if (sparkSession.sessionState.conf.parallelFileListingInCommands) {
+      calculateLocationsSizesParallel(sparkSession, paths.map(_.map(new Path(_))))
+    } else {
+      paths.map(p => calculateLocationSize(sparkSession.sessionState, tid, p))
+    }
+  }
+
+  /**
+   * Launch a Job to list all leaf files in `paths` and compute the total size
+   * for each path.
+   * @param sparkSession the [[SparkSession]]
+   * @param paths the Seq of [[Option[Path]]s
+   * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
+   *         if `paths(i)` is None
+   */
+  def calculateLocationsSizesParallel(
+      sparkSession: SparkSession,
+      paths: Seq[Option[Path]]): Seq[Long] = {
+    val stagingDir = sparkSession.sessionState.conf
+      .getConfString("hive.exec.stagingdir", ".hive-staging")
+    val filter = new PathFilterIgnoreNonData(stagingDir)
+    val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
+      case (_, files) => files.map(_.getLen).sum
+    }
+    // the result Seq is 0 where paths(i) is not defined and sizes(nextIdx-1) where it is defined
+    var nextIdx = 0
+    Seq.tabulate(paths.length) { i =>
+      if (paths(i).isDefined) {
+        nextIdx += 1
+        sizes(nextIdx - 1)
+      } else {
+        0L
+      }
+    }
   }
 
   def compareAndGetNewStats(

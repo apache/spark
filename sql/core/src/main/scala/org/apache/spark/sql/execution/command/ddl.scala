@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
@@ -481,22 +481,16 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = 100
+    val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.toIterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        def calculatePartSize(part: CatalogTablePartition) = CommandUtils.calculateLocationSize(
-          sparkSession.sessionState, table.identifier, part.storage.locationUri)
-        val threshold = sparkSession.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
-        val partSizes = if (parts.length > threshold) {
-            ThreadUtils.parmap(parts, "gatheringNewPartitionStats", 8)(calculatePartSize)
-          } else {
-            parts.map(calculatePartSize)
-          }
-        val addedSize = partSizes.sum
+        val addedSize = CommandUtils.calculateLocationsSizes(sparkSession, table.identifier,
+          parts.map(_.storage.locationUri))
+          .sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
           catalog.alterTableStats(table.identifier, Some(newStats))
