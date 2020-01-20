@@ -380,7 +380,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+      assert(exc.getMessage.contains("update a struct by updating its fields"))
 
       val table = getTableMetadata(t)
 
