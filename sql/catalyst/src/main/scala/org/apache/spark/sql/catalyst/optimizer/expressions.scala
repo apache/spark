@@ -443,11 +443,12 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
   private def isRedundantNullCheck(
       ifNullExpr: Expression,
       ifNotNullExpr: Expression,
-      checkedExpr: Expression): Boolean = ifNotNullExpr match {
-    case e: NullIntolerant if (
-      (ifNullExpr == checkedExpr || ifNullExpr == Literal.create(null, checkedExpr.dataType))
-      && e.children.contains(checkedExpr)) => true
-    case _ => false
+      checkedExpr: Expression): Boolean = {
+    ifNotNullExpr.isInstanceOf[NullIntolerant] && {
+      (ifNullExpr.semanticEquals(checkedExpr) ||
+        (ifNullExpr.foldable && ifNullExpr.eval() == null)) &&
+        ifNotNullExpr.children.contains(checkedExpr)
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
