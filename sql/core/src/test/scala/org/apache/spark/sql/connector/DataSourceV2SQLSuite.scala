@@ -252,13 +252,26 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTable: invalid schema if has interval type") {
-    val e1 = intercept[AnalysisException](
-      sql(s"CREATE TABLE table_name (id int, value interval) USING $v2Format"))
-    assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-    val e2 = intercept[AnalysisException](
-      sql(s"CREATE TABLE table_name (id array<interval>) USING $v2Format"))
-    assert(e2.getMessage.contains(s"Cannot use interval type in the  table schema."))
+  test("CreateTable/RepalceTable: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id array<interval>) USING $v2Format"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
+  }
+
+  test("CTAS/RTAS: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {

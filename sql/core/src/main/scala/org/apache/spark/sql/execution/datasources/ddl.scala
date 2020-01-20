@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -48,9 +47,6 @@ case class CreateTable(
       mode == SaveMode.ErrorIfExists || mode == SaveMode.Ignore,
       "create table without data insertion can only use ErrorIfExists or Ignore as SaveMode.")
   }
-
-  tableDesc.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-  query.foreach(_.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType)))
 
   override def children: Seq[LogicalPlan] = query.toSeq
   override def output: Seq[Attribute] = Seq.empty
