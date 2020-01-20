@@ -603,25 +603,18 @@ def percentile_approx(col, percentage, accuracy=10000):
     ...     .withColumn("value", randn(42) + col("id") * 10))
     >>> (df
     ...     .select(percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles"))
-    ...     .show(truncate=False))
-    +----------------------------------------------------------+
-    |quantiles                                                 |
-    +----------------------------------------------------------+
-    |[0.7264430125286507, 9.98975299938167, 19.335304783039014]|
-    +----------------------------------------------------------+
+    ...     .printSchema())
+    root
+    |-- quantiles: array (nullable = true)
+    |    |-- element: double (containsNull = false)
 
     >>> (df
     ...     .groupBy("id")
     ...     .agg(percentile_approx("value", 0.5, 1000000).alias("median"))
-    ...     .orderBy("id")
-    ...     .show())
-    +---+--------------------+
-    | id|              median|
-    +---+--------------------+
-    |  0|-0.03519435193070876|
-    |  1|   9.990389751837329|
-    |  2|  19.967859769284075|
-    +---+--------------------+
+    ...     .printSchema())
+    root
+    |-- id: long (nullable = true)
+    |-- median: double (nullable = true)
     """
     sc = SparkContext._active_spark_context
     if isinstance(percentage, (list, tuple)):
