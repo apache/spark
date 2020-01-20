@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.AnalysisException
 
 /**
  * Functions to help with checking for valid data types and value comparison of various types.
