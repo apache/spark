@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * The data type representing calendar intervals. The calendar interval is stored internally in
@@ -39,8 +38,6 @@ class CalendarIntervalType private() extends DataType {
   override def defaultSize: Int = 16
 
   override def simpleString: String = "interval"
-
-  val ordering: Ordering[CalendarInterval] = Ordering[CalendarInterval]
 
   private[spark] override def asNullable: CalendarIntervalType = this
 }

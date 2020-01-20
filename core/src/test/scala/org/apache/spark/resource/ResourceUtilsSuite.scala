@@ -128,11 +128,44 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
       val gpuDiscovery = createTempScriptWithExpectedOutput(
-        dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, gpuDiscovery)
       val resourcesFromBoth = getOrDiscoverAllResources(
         conf, SPARK_EXECUTOR_PREFIX, Some(resourcesFile))
+      val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
+      assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
+      assert(resourcesFromBoth(GPU) === expectedGpuInfo)
+    }
+  }
+
+  test("get from resources file and discover resource profile remaining") {
+    val conf = new SparkConf
+    val rpId = 1
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      implicit val formats = DefaultFormats
+      val fpgaAddrs = Seq("f1", "f2", "f3")
+      val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
+      val resourcesFile = createTempJsonFile(
+        dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
+      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(
+        Some(resourcesFile),
+        SPARK_EXECUTOR_PREFIX,
+        ResourceProfile.getOrCreateDefaultProfile(conf))
+      val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
+      assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
+
+      val gpuDiscovery = createTempScriptWithExpectedOutput(
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
+      val rpBuilder = new ResourceProfileBuilder()
+      val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
+      val treqs = new TaskResourceRequests().resource(GPU, 1)
+      val rp = rpBuilder.require(ereqs).require(treqs).build
+      val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
+        Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp)
       val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
       assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
@@ -148,7 +181,7 @@ class ResourceUtilsSuite extends SparkFunSuite
 
     conf.set(DRIVER_FPGA_ID.amountConf, "2")
     val resourcesMap = listResourceIds(conf, SPARK_DRIVER_PREFIX)
-      .map{ rId => (rId.resourceName, 1)}.toMap
+      .map { rId => (rId.resourceName, 1) }.toMap
     assert(resourcesMap.size === 2, "should only have GPU for resource")
     assert(resourcesMap.get(GPU).nonEmpty, "should have GPU")
     assert(resourcesMap.get(FPGA).nonEmpty, "should have FPGA")

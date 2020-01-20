@@ -220,7 +220,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.14",
+    unidocGenjavadocVersion := "0.15",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
