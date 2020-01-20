@@ -22,8 +22,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -274,17 +273,6 @@ private[sql] object CatalogV2Util {
       Map(TableCatalog.PROP_PROVIDER -> provider) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
-  }
-
-  def createAlterTable(
-      originalNameParts: Seq[String],
-      catalog: CatalogPlugin,
-      tableName: Seq[String],
-      changes: Seq[TableChange]): AlterTable = {
-    val tableCatalog = catalog.asTableCatalog
-    val ident = tableName.asIdentifier
-    val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
-    AlterTable(tableCatalog, ident, unresolved, changes)
   }
 
   def getTableProviderCatalog(
