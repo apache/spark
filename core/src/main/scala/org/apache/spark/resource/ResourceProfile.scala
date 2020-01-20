@@ -37,7 +37,7 @@ import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
  * This is meant to be immutable so user can't change it after building.
  */
 @Evolving
-class ResourceProfile(
+private [spark] class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 

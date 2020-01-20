@@ -616,11 +616,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    *
    * @return whether the request is acknowledged by the cluster manager.
    */
-   final override def requestTotalExecutors(
+  final override def requestTotalExecutors(
       resourceProfileIdToNumExecutors: Map[Int, Int],
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]]
-   ): Boolean = {
+  ): Boolean = {
     val totalExecs = resourceProfileIdToNumExecutors.values.sum
     if (totalExecs < 0) {
       throw new IllegalArgumentException(

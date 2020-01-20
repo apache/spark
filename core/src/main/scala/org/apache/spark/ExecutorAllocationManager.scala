@@ -659,10 +659,8 @@ private[spark] class ExecutorAllocationManager(
             }
           }
         }
-
-        val rpId = stageSubmitted.stageInfo.resourceProfileId
         stageAttemptToExecutorPlacementHints.put(stageAttempt,
-          (numTasksPending, hostToLocalTaskCountPerStage.toMap, rpId))
+          (numTasksPending, hostToLocalTaskCountPerStage.toMap, profId))
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -852,7 +850,6 @@ private[spark] class ExecutorAllocationManager(
 
       // ResourceProfile id => map[host, count]
       val rplocalityToCount = new mutable.HashMap[Int, mutable.HashMap[String, Int]]()
-
       stageAttemptToExecutorPlacementHints.values.foreach {
         case (numTasksPending, localities, rpId) =>
           val rpNumPending =
