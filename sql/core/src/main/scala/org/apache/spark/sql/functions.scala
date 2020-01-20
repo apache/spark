@@ -785,7 +785,6 @@ object functions {
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
-
   /**
    * Aggregate function: alias for `stddev_samp`.
    *
