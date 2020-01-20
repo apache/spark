@@ -598,31 +598,30 @@ def percentile_approx(col, percentage, accuracy=10000):
     In this case, returns the approximate percentile array of column col
     at the given percentage array.
 
-    >>> df = (spark.range(1000)
+    >>> df = (spark.range(0, 1000, 1, 1)
     ...     .withColumn("id", col("id") % 3)
     ...     .withColumn("value", randn(42) + col("id") * 10))
     >>> (df
-    ...     .select(percentile_approx("value", [0.25, 0.5, 0.75], 1000).alias("quantiles"))
+    ...     .select(percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles"))
     ...     .show(truncate=False))
-    +-----------------------------------------------------------+
-    |quantiles                                                  |
-    +-----------------------------------------------------------+
-    |[0.7400395449950132, 10.006316348168292, 19.23012305461404]|
-    +-----------------------------------------------------------+
+    +----------------------------------------------------------+
+    |quantiles                                                 |
+    +----------------------------------------------------------+
+    |[0.7264430125286507, 9.98975299938167, 19.335304783039014]|
+    +----------------------------------------------------------+
 
     >>> (df
     ...     .groupBy("id")
-    ...     .agg(percentile_approx("value", 0.5, 10).alias("median"))
+    ...     .agg(percentile_approx("value", 0.5, 1000000).alias("median"))
     ...     .orderBy("id")
     ...     .show())
-    +---+-------------------+
-    | id|             median|
-    +---+-------------------+
-    |  0|-0.1181975591779448|
-    |  1|  9.844647721345135|
-    |  2| 19.805558468630636|
-    +---+-------------------+
-
+    +---+--------------------+
+    | id|              median|
+    +---+--------------------+
+    |  0|-0.03519435193070876|
+    |  1|   9.990389751837329|
+    |  2|  19.967859769284075|
+    +---+--------------------+
     """
     sc = SparkContext._active_spark_context
     if isinstance(percentage, (list, tuple)):
