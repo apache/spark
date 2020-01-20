@@ -290,8 +290,8 @@ pagerduty = [
     'pypd>=1.1.0',
 ]
 papermill = [
-    'papermill[all]>=1.0.0',
-    'nteract-scrapbook[all]>=0.2.1',
+    'papermill[all]>=1.2.1',
+    'nteract-scrapbook[all]>=0.3.1',
 ]
 password = [
     'bcrypt>=2.0.0',
@@ -437,7 +437,7 @@ def do_setup():
         version=version,
         packages=find_packages(exclude=['tests*']),
         package_data={
-            '': ['airflow/alembic.ini', "airflow/git_version"],
+            '': ['airflow/alembic.ini', "airflow/git_version", "*.ipynb"],
             'airflow.serialization': ["*.json"],
         },
         include_package_data=True,
