@@ -19,40 +19,69 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetLocation, AlterNamespaceSetOwner, AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object DataSourceV2Strategy extends Strategy with PredicateHelper {
+class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  private def withProjectAndFilter(
+      project: Seq[NamedExpression],
+      filters: Seq[Expression],
+      scan: LeafExecNode,
+      needsUnsafeConversion: Boolean): SparkPlan = {
+    val filterCondition = filters.reduceLeftOption(And)
+    val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
+
+    if (withFilter.output != project || needsUnsafeConversion) {
+      ProjectExec(project, withFilter)
+    } else {
+      withFilter
+    }
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case PhysicalOperation(project, filters,
+        relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
+      val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
+      if (v1Relation.schema != scan.readSchema()) {
+        throw new IllegalArgumentException(
+          "The fallback v1 relation reports inconsistent schema:\n" +
+            "Schema of v2 scan:     " + scan.readSchema() + "\n" +
+            "Schema of v1 relation: " + v1Relation.schema)
+      }
+      val rdd = v1Relation.buildScan()
+      val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+      val originalOutputNames = relation.table.schema().map(_.name)
+      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
+      val dsScan = RowDataSourceScanExec(
+        output,
+        requiredColumnsIndex,
+        translated.toSet,
+        pushed.toSet,
+        unsafeRowRDD,
+        v1Relation,
+        tableIdentifier = None)
+      withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
+
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
       val batchExec = BatchScanExec(relation.output, relation.scan)
-
-      val filterCondition = filters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, batchExec)).getOrElse(batchExec)
-
-      val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
-        ProjectExec(project, withFilter)
-      } else {
-        withFilter
-      }
-
-      withProjection :: Nil
+      withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
@@ -197,7 +226,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
       DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
 
-    case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
+    case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+      }
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
@@ -246,7 +278,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(DataSourceV2Relation(table, _, _), propertyKey) =>
+    case r @ ShowTableProperties(ResolvedTable(_, _, table), propertyKey) =>
       ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
 
     case AlterNamespaceSetOwner(ResolvedNamespace(catalog, namespace), name, typ) =>

@@ -454,7 +454,7 @@ class Analyzer(
         gid: Attribute): LogicalPlan = {
       // Change the nullability of group by aliases if necessary. For example, if we have
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullabilty of b to be TRUE.
+      // should change the nullability of b to be TRUE.
       // TODO: For Cube/Rollup just set nullability to be `true`.
       val expandedAttributes = groupByAliases.map { alias =>
         if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
@@ -759,6 +759,8 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
+      case u @ UnresolvedTableOrView(ident) =>
+        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -803,25 +805,20 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .getOrElse(u)
+
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
-      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => desc.copy(table = rel))
-            .getOrElse(desc)
-
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
             .map(rel => alter.copy(table = rel))
             .getOrElse(alter)
-
-      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => show.copy(table = rel))
-          .getOrElse(show)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
@@ -889,17 +886,28 @@ class Analyzer(
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier: Seq[String]) =>
-        expandRelationName(identifier) match {
-          case SessionCatalogAndIdentifier(catalog, ident) =>
-            CatalogV2Util.loadTable(catalog, ident) match {
-              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                u.failAnalysis(s"$ident is a view not table.")
-              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
-              case None => u
-            }
-          case _ => u
-        }
+      case u @ UnresolvedTable(identifier) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView =>
+            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
+          case table => table
+        }.getOrElse(u)
+
+      case u @ UnresolvedTableOrView(identifier) =>
+        lookupTableOrView(identifier).getOrElse(u)
+    }
+
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+      expandRelationName(identifier) match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident).map {
+            case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+              ResolvedView(ident)
+            case table =>
+              ResolvedTable(catalog.asTableCatalog, ident, table)
+          }
+        case _ => None
+      }
     }
 
     // Look up a relation from the session catalog with the following logic:

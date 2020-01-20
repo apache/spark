@@ -410,37 +410,38 @@ object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
 
   private def canSimplifyComparison(
-      plan: LogicalPlan, left: Expression, right: Expression): Boolean = {
+      left: Expression,
+      right: Expression,
+      notNullExpressions: => ExpressionSet): Boolean = {
     if (left.semanticEquals(right)) {
-      if (!left.nullable && !right.nullable) {
-        true
-      } else {
-        // We do more checks for non-nullable cases
-        plan match {
-          case Filter(fc, _) =>
-            splitConjunctivePredicates(fc).exists { condition =>
-              condition.semanticEquals(IsNotNull(left))
-            }
-          case _ => false
-        }
-      }
+      (!left.nullable && !right.nullable) || notNullExpressions.contains(left)
     } else {
       false
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case l: LogicalPlan => l transformExpressionsUp {
-      // True with equality
-      case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-      case a EqualTo b if canSimplifyComparison(l, a, b) => TrueLiteral
-      case a GreaterThanOrEqual b if canSimplifyComparison(l, a, b) => TrueLiteral
-      case a LessThanOrEqual b if canSimplifyComparison(l, a, b) => TrueLiteral
+    case l: LogicalPlan =>
+      lazy val notNullExpressions = ExpressionSet(l match {
+        case Filter(fc, _) =>
+          splitConjunctivePredicates(fc).collect {
+            case i: IsNotNull => i.child
+          }
+        case _ => Seq.empty
+      })
 
-      // False with inequality
-      case a GreaterThan b if canSimplifyComparison(l, a, b) => FalseLiteral
-      case a LessThan b if canSimplifyComparison(l, a, b) => FalseLiteral
-    }
+      l transformExpressionsUp {
+        // True with equality
+        case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
+        case a EqualTo b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+        case a GreaterThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) =>
+          TrueLiteral
+        case a LessThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+
+        // False with inequality
+        case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+        case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+      }
   }
 }
 

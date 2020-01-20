@@ -31,6 +31,8 @@ import org.apache.spark.annotation.Unstable
  * - _precision and _scale represent the SQL precision and scale we are looking for
  * - If decimalVal is set, it represents the whole decimal value
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
+ *
+ * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
  */
 @Unstable
 final class Decimal extends Ordered[Decimal] with Serializable {
@@ -128,12 +130,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(decimal: BigDecimal): Decimal = {
     this.decimalVal = decimal
     this.longVal = 0L
-    if (decimal.precision <= decimal.scale) {
+    if (decimal.precision < decimal.scale) {
       // For Decimal, we expect the precision is equal to or large than the scale, however,
       // in BigDecimal, the digit count starts from the leftmost nonzero digit of the exact
       // result. For example, the precision of 0.01 equals to 1 based on the definition, but
-      // the scale is 2. The expected precision should be 3.
-      this._precision = decimal.scale + 1
+      // the scale is 2. The expected precision should be 2.
+      this._precision = decimal.scale
     } else {
       this._precision = decimal.precision
     }

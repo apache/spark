@@ -262,9 +262,93 @@ license: |
 
   - Since Spark 3.0, the function `percentile_approx` and its alias `approx_percentile` only accept integral value with range in `[1, 2147483647]` as its 3rd argument `accuracy`, fractional and string types are disallowed, e.g. `percentile_approx(10.0, 0.2, 1.8D)` will cause `AnalysisException`. In Spark version 2.4 and earlier, if `accuracy` is fractional or string value, it will be coerced to an int value, `percentile_approx(10.0, 0.2, 1.8D)` is operated as `percentile_approx(10.0, 0.2, 1)` which results in `10.0`.
 
-  - Since Spark 3.0, `location` and `comment` become reserved database properties, Commands will fail if we specify reserved properties in `CREATE DATABASE ... WITH DBPROPERTIES` and `ALTER DATABASE ... SET DBPROPERTIES`. We need their specific clauses to specify them, e.g. `CREATE DATABASE test COMMENT 'any comment' LOCATION 'some path'`. We can set `spark.sql.legacy.property.nonReserved` to `true` to ignore the `ParseException`, in this case, these properties will be silently removed, e.g `SET DBPROTERTIES('location'='/tmp')` will affect nothing. In Spark version 2.4 and earlier, these properties are neither reserved nor have side effects, e.g. `SET DBPROTERTIES('location'='/tmp')` will not change the location of the database but only create a headless property just like `'a'='b'`.
+  - Since Spark 3.0, the properties listing below become reserved, commands will fail if we specify reserved properties in places like `CREATE DATABASE ... WITH DBPROPERTIES` and `ALTER TABLE ... SET TBLPROPERTIES`. We need their specific clauses to specify them, e.g. `CREATE DATABASE test COMMENT 'any comment' LOCATION 'some path'`. We can set `spark.sql.legacy.property.nonReserved` to `true` to ignore the `ParseException`, in this case, these properties will be silently removed, e.g `SET DBPROTERTIES('location'='/tmp')` will affect nothing. In Spark version 2.4 and earlier, these properties are neither reserved nor have side effects, e.g. `SET DBPROTERTIES('location'='/tmp')` will not change the location of the database but only create a headless property just like `'a'='b'`.
+    <table class="table">
+        <tr>
+          <th>
+            <b>Property(case sensitive)</b>
+          </th>
+          <th>
+            <b>Database Reserved</b>
+          </th>
+          <th>
+            <b>Table Reserved</b>
+          </th>
+          <th>
+            <b>Remarks</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            provider
+          </td>
+          <td>
+            no
+          </td>
+          <td>
+            yes
+          </td>
+          <td>
+            For tables, please use the USING clause to specify it. Once set, it can't be changed.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            location
+          </td>
+          <td>
+            yes
+          </td>
+          <td>
+            yes
+          </td>
+          <td>
+            For databases and tables, please use the LOCATION clause to specify it.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            ownerName
+          </td>
+          <td>
+            yes
+          </td>
+          <td>
+            no
+          </td>
+          <td>
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            ownerType
+          </td>
+          <td>
+            yes
+          </td>
+          <td>
+            no
+          </td>
+          <td>
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
+          </td>
+        </tr>
+    </table>
 
   - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive` to false.
+
+  - Since Spark 3.0, `SHOW TBLPROPERTIES` will cause `AnalysisException` if the table does not exist. In Spark version 2.4 and earlier, this scenario caused `NoSuchTableException`. Also, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
+
+## Upgrading from Spark SQL 2.4.4 to 2.4.5
+
+  - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.
+
+  - Since Spark 2.4.5, `spark.sql.legacy.mssqlserver.numericMapping.enabled` configuration is added in order to support the legacy MsSQLServer dialect mapping behavior using IntegerType and DoubleType for SMALLINT and REAL JDBC types, respectively. To restore the behaviour of 2.4.3 and earlier versions, set `spark.sql.legacy.mssqlserver.numericMapping.enabled` to `true`.
+
+## Upgrading from Spark SQL 2.4.3 to 2.4.4
+
+  - Since Spark 2.4.4, according to [MsSqlServer Guide](https://docs.microsoft.com/en-us/sql/connect/jdbc/using-basic-data-types?view=sql-server-2017), MsSQLServer JDBC Dialect uses ShortType and FloatType for SMALLINT and REAL, respectively. Previously, IntegerType and DoubleType is used.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
