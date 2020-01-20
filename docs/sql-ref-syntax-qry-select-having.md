@@ -33,9 +33,8 @@ HAVING boolean_expression
   <dt><code><em>boolean_expression</em></code></dt>
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
-    more expressions may be combined together using comparision operators 
-    ( <code>></code>, <code>>=</code>, <code>=</code>, <code><</code>, <code><=</code>, <code><=></code> )
-    and logical operators ( <code>AND</code>, <code>NOT</code>, <code>OR</code> ).<br><br>
+    more expressions may be combined together using the logical 
+    operators ( <code>AND</code>, <code>OR</code> ).<br><br>
 
     <b>Note</b><br>
     The expressions specified in the <code>HAVING</code> clause can only refer to:
