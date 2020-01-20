@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
-import java.util.Locale
+import java.util.{Collections, Locale}
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLi
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +46,13 @@ class PlanResolutionSuite extends AnalysisTest {
   private val table: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int"))
+    t
+  }
+
+  private val tableWithAcceptAnySchemaCapability: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("i", "int"))
+    when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
     t
   }
 
@@ -77,6 +84,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v1Table1" => v1Table
         case "v2Table" => table
         case "v2Table1" => table
+        case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -133,7 +141,8 @@ class PlanResolutionSuite extends AnalysisTest {
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables)
+      analyzer.ResolveTables,
+      analyzer.ResolveReferences)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -1321,5 +1330,53 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
+  test("MERGE INTO TABLE - skip resolution on v2 tables that accept any schema") {
+    val sql =
+      s"""
+         |MERGE INTO v2TableWithAcceptAnySchemaCapability AS target
+         |USING v2Table AS source
+         |ON target.i = source.i
+         |WHEN MATCHED AND (target.s='delete') THEN DELETE
+         |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
+         |WHEN NOT MATCHED AND (target.s='insert')
+         |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+       """.stripMargin
+
+    parseAndResolve(sql) match {
+      case MergeIntoTable(
+          SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
+          SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
+          EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+          Seq(
+          DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+          UpdateAction(
+          Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
+          updateAssigns)),
+          Seq(
+          InsertAction(
+          Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+          insertAssigns))) =>
+        assert(l.name == "target.i" && r.name == "source.i")
+        assert(dl.name == "target.s")
+        assert(ul.name == "target.s")
+        assert(il.name == "target.s")
+        assert(updateAssigns.size == 1)
+        assert(
+          updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+            updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+        assert(
+          updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+            updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+        assert(insertAssigns.size == 2)
+        assert(
+          insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+            insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
+        assert(
+          insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+            insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+
+      case l => fail("Expected unresolved MergeIntoTable, but got:\n" + l.treeString)
+    }
+  }
   // TODO: add tests for more commands.
 }

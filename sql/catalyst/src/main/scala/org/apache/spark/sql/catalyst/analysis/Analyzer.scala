@@ -1320,25 +1320,33 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
-        val newMatchedActions = m.matchedActions.map {
-          case DeleteAction(deleteCondition) =>
-            val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
-            DeleteAction(resolvedDeleteCondition)
-          case UpdateAction(updateCondition, assignments) =>
-            val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
-          case o => o
+
+        EliminateSubqueryAliases(targetTable) match {
+          case r: NamedRelation if r.skipSchemaResolution =>
+            m
+
+          case _ =>
+            val newMatchedActions = m.matchedActions.map {
+              case DeleteAction(deleteCondition) =>
+                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+                DeleteAction(resolvedDeleteCondition)
+              case UpdateAction(updateCondition, assignments) =>
+                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+                UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
+              case o => o
+            }
+            val newNotMatchedActions = m.notMatchedActions.map {
+              case InsertAction(insertCondition, assignments) =>
+                val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
+                InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
+              case o => o
+            }
+            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            m.copy(
+              mergeCondition = resolvedMergeCondition,
+              matchedActions = newMatchedActions,
+              notMatchedActions = newNotMatchedActions)
         }
-        val newNotMatchedActions = m.notMatchedActions.map {
-          case InsertAction(insertCondition, assignments) =>
-            val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-            InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
-          case o => o
-        }
-        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-        m.copy(mergeCondition = resolvedMergeCondition,
-          matchedActions = newMatchedActions,
-          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
