@@ -436,33 +436,6 @@ class ResolveSessionCatalog(
         parseSessionCatalogFunctionIdentifier("CREATE FUNCTION", catalog, ident)
       CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
         replace)
-
-    case alter: AlterTable => checkAlterTable(alter)
-  }
-
-  private def checkAlterTable(alterTable: AlterTable): LogicalPlan = {
-    alterTable match {
-      case AlterTableAddColumns(UnresolvedTableWithViewExists(view), _) if !view.isTempView =>
-        val viewIdent = view.identifier.asTableIdentifier
-        throw new AnalysisException(
-          s"""
-             |ALTER ADD COLUMNS does not support views.
-             |You must drop and re-create the views for adding the new columns. Views: $viewIdent
-            """.stripMargin)
-      case AlterTableSetLocation(_, partitionSpec, _) =>
-        if (partitionSpec.nonEmpty) {
-          throw new AnalysisException(
-            "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-        }
-      case _ =>
-    }
-
-    alterTable.table match {
-      case UnresolvedTableWithViewExists(view) if !view.isTempView =>
-        throw new AnalysisException(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
-      case _ => alterTable
-    }
   }
 
   private def parseSessionCatalogFunctionIdentifier(

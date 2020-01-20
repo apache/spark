@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange, ColumnPosition}
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
@@ -404,27 +403,7 @@ abstract class AlterTable extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(table)
 
-  override lazy val resolved: Boolean = table.resolved && {
-    changes.forall {
-      case add: AddColumn =>
-        add.fieldNames match {
-          case Array(_) =>
-            // a top-level field can always be added
-            true
-          case _ =>
-            // the parent field must exist
-            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
-        }
-
-      case colChange: ColumnChange =>
-        // the column that will be changed must exist
-        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
-
-      case _ =>
-        // property changes require no resolution checks
-        true
-    }
-  }
+  override lazy val resolved: Boolean = table.resolved
 }
 
 /**

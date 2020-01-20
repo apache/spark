@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -87,6 +87,20 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
+    // Analysis that needs to be performed top down can be added here.
+    plan.foreach {
+      case p if p.analyzed => // Skip already analyzed sub-plans
+
+      case alter: AlterTable =>
+        alter.table match {
+          case u @ UnresolvedTableWithViewExists(view) if !view.isTempView =>
+            u.failAnalysis("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+          case _ =>
+        }
+
+      case _ => // Analysis successful!
+    }
+
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -460,6 +474,8 @@ trait CheckAnalysis extends PredicateHelper {
                     throw new AnalysisException(
                       s"Cannot change nullable column to non-nullable: $fieldName")
                   }
+                case update: UpdateColumnPosition =>
+                  findField("update", update.fieldNames)
                 case rename: RenameColumn =>
                   findField("rename", rename.fieldNames)
                 case update: UpdateColumnComment =>
