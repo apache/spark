@@ -77,21 +77,21 @@ public class BreakableService extends AbstractService {
   }
 
   @Override
-  public void init(HiveConf conf) {
+  public synchronized void init(HiveConf conf) {
     inc(STATE.INITED);
     maybeFail(failOnInit, "init");
     super.init(conf);
   }
 
   @Override
-  public void start() {
+  public synchronized void start() {
     inc(STATE.STARTED);
     maybeFail(failOnStart, "start");
     super.start();
   }
 
   @Override
-  public void stop() {
+  public synchronized void stop() {
     inc(STATE.STOPPED);
     maybeFail(failOnStop, "stop");
     super.stop();
