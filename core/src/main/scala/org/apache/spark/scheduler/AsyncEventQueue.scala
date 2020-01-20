@@ -173,9 +173,8 @@ private class AsyncEventQueue(
     val droppedCount = droppedEventsCounter.get - lastDroppedEventsCounter
     val lastReportTime = lastReportTimestamp.get
     val curTime = System.currentTimeMillis()
-    if (droppedCount > 0) {
-      // Don't log too frequently
-      if (curTime - lastReportTime >= LOGGING_INTERVAL) {
+    // Don't log too frequently
+    if (droppedCount > 0 && curTime - lastReportTime >= LOGGING_INTERVAL) {
         // There may be multiple threads trying to logging dropped events,
         // Use 'compareAndSet' to make sure only one thread can win.
         if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
@@ -184,7 +183,6 @@ private class AsyncEventQueue(
           logWarning(s"Dropped $droppedCount events from $name since " +
             s"${if (lastReportTime == 0) "the application started" else s"$previous"}.")
         }
-      }
     }
   }
 
