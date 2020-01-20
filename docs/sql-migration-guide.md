@@ -314,10 +314,10 @@ license: |
             yes
           </td>
           <td>
-            yes
+            no
           </td>
           <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it. For tables, please use the ALTER TABLE ... SET OWNER syntax to modify it.
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it
           </td>
         </tr>
         <tr>
@@ -328,10 +328,24 @@ license: |
             yes
           </td>
           <td>
+            no
+          </td>
+          <td>
+            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it
+          </td>
+        </tr>
+        <tr>
+          <td>
+            owner
+          </td>
+          <td>
+            no
+          </td>
+          <td>
             yes
           </td>
           <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it. For tables, please use the ALTER TABLE ... SET OWNER syntax to modify it.
+            For tables, it is determined by the user who runs spark and create the table.
           </td>
         </tr>
     </table>

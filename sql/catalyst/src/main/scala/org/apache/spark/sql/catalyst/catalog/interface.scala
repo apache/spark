@@ -335,8 +335,7 @@ case class CatalogTable(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val tableProperties = properties.filterKeys(_ != TableCatalog.PROP_OWNER_TYPE)
-      .map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val lastAccess = {
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
@@ -345,7 +344,6 @@ case class CatalogTable(
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner != null && owner.nonEmpty) map.put("Owner", owner)
-    properties.get(TableCatalog.PROP_OWNER_TYPE).foreach(map.put("Owner Type", _))
     map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", lastAccess)
     map.put("Created By", "Spark " + createVersion)

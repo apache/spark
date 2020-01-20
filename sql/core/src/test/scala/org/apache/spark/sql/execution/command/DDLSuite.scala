@@ -1377,12 +1377,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
-      val props = if (isUsingHiveMetastore) {
+      if (isUsingHiveMetastore) {
         normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
       } else {
         catalog.getTableMetadata(tableIdent).properties
       }
-      props -- TableCatalog.RESERVED_PROPERTIES.asScala
     }
     assert(getProps.isEmpty)
     // set table properties

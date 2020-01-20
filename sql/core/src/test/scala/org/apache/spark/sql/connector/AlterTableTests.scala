@@ -996,22 +996,4 @@ trait AlterTableTests extends SharedSparkSession {
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
-
-  test("AlterTable: set table owner") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      assert(getTableMetadata(t).properties ===
-        withDefaultOwnership(Map("provider" -> v2Format)).asJava)
-      sql(s"ALTER TABLE $t SET OWNER ROLE kent")
-      assert(getTableMetadata(t).properties ===
-        Map("provider" -> v2Format, "ownerName" -> "kent", "ownerType" -> "ROLE").asJava)
-      sql(s"ALTER TABLE $t SET OWNER GROUP yao")
-      assert(getTableMetadata(t).properties ===
-        Map("provider" -> v2Format, "ownerName" -> "yao", "ownerType" -> "GROUP").asJava)
-      sql(s"ALTER TABLE $t SET OWNER USER ming")
-      assert(getTableMetadata(t).properties ===
-        Map("provider" -> v2Format, "ownerName" -> "ming", "ownerType" -> "USER").asJava)
-    }
-  }
 }

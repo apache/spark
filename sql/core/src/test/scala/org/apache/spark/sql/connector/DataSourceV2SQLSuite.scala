@@ -162,8 +162,7 @@ class DataSourceV2SQLSuite
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
-      Array("OwnerName", defaultUser, ""),
-      Array("OwnerType", "USER", ""),
+      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
 
   }
@@ -1927,11 +1926,11 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
 
@@ -1940,11 +1939,10 @@ class DataSourceV2SQLSuite
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row("owner", owner),
-        Row("ownerName", defaultUser),
-        Row("ownerType", "USER"),
+        Row(TableCatalog.PROP_OWNER, defaultUser),
         Row("provider", provider),
-        Row("status", status))
+        Row("status", status),
+        Row("user", user))
 
       assert(properties.schema === schema)
       assert(expected === properties.collect())
@@ -1954,11 +1952,11 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES(key): v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
 
@@ -1973,7 +1971,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       val nonExistingKey = "nonExistingKey"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
-        s"TBLPROPERTIES ('owner'='andrew', 'status'='new')")
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
 

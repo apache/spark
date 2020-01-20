@@ -1356,19 +1356,6 @@ class DDLParserSuite extends AnalysisTest {
       AlterNamespaceSetOwner(UnresolvedNamespace(Seq("a", "b", "c")), "group1", "GROUP"))
   }
 
-  test("set table owner") {
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c SET OWNER USER user1"),
-      AlterTableSetOwner(UnresolvedTable(Seq("a", "b", "c")), "user1", "USER"))
-
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c SET OWNER ROLE role1"),
-      AlterTableSetOwner(UnresolvedTable(Seq("a", "b", "c")), "role1", "ROLE"))
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c SET OWNER GROUP group1"),
-      AlterTableSetOwner(UnresolvedTable(Seq("a", "b", "c")), "group1", "GROUP"))
-  }
-
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),

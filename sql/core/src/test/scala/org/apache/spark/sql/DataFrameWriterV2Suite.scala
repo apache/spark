@@ -38,9 +38,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.sessionState.catalogManager.catalog(name).asTableCatalog
   }
 
-  private val defaultOwnership =
-    Map(TableCatalog.PROP_OWNER_NAME -> Utils.getCurrentUserName(),
-      TableCatalog.PROP_OWNER_TYPE -> "USER")
+  private val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)

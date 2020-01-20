@@ -125,7 +125,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
     val comment = properties.get(TableCatalog.PROP_COMMENT)
-    val owner = properties.getOrElse(TableCatalog.PROP_OWNER_NAME, catalogTable.owner)
+    val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
 
     try {
       catalog.alterTable(

@@ -292,11 +292,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Map(SupportsNamespaces.PROP_OWNER_NAME -> name, SupportsNamespaces.PROP_OWNER_TYPE -> typ)
       AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
 
-    case AlterTableSetOwner(ResolvedTable(catalog, ident, _), name, typ) =>
-      val changes = TableChange.setProperty(TableCatalog.PROP_OWNER_NAME, name) ::
-        TableChange.setProperty(TableCatalog.PROP_OWNER_TYPE, typ) :: Nil
-      AlterTableExec(catalog, ident, changes) :: Nil
-
     case _ => Nil
   }
 }

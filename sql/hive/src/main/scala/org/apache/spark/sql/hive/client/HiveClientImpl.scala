@@ -570,11 +570,7 @@ private[hive] class HiveClientImpl(
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     verifyColumnDataType(table.dataSchema)
-    val ownerType =
-      table.properties.getOrElse(TableCatalog.PROP_OWNER_TYPE, PrincipalType.USER.name())
-    val hiveTable = toHiveTable(table, Some(userName))
-    hiveTable.setProperty(TableCatalog.PROP_OWNER_TYPE, ownerType)
-    client.createTable(hiveTable, ignoreIfExists)
+    client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
   override def dropTable(

@@ -2680,13 +2680,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         throw new ParseException(s"$PROP_LOCATION is a reserved table property, please use" +
           s" the LOCATION clause to specify it.", ctx)
       case (PROP_LOCATION, _) => false
-      case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
-        if (legacyOn) {
-          false
-        } else {
-          throw new ParseException(s"$ownership is a reserved table property , please use" +
-            " ALTER TABLE ... SET OWNER ... to specify it.", ctx)
-        }
+      case (PROP_OWNER, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_OWNER is a reserved table property , please use" +
+          " ALTER TABLE ... SET OWNER ... to specify it.", ctx)
+      case (PROP_OWNER, _) => false
       case _ => true
     }
   }
@@ -3624,24 +3621,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
       AlterNamespaceSetOwner(
         UnresolvedNamespace(nameParts),
-        ctx.identifier.getText,
-        ctx.ownerType.getText)
-    }
-  }
-
-  /**
-   * Create an [[AlterTableSetOwner]] logical plan.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableName SET OWNER (USER|ROLE|GROUP) identityName;
-   * }}}
-   */
-  override def visitSetTableOwner(ctx: SetTableOwnerContext): LogicalPlan = {
-    withOrigin(ctx) {
-      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-      AlterTableSetOwner(
-        UnresolvedTable(nameParts),
         ctx.identifier.getText,
         ctx.ownerType.getText)
     }

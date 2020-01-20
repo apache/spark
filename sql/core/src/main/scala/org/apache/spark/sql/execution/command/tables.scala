@@ -1016,14 +1016,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     } else {
       val tableMetadata = catalog.getTableMetadata(table)
 
-      val restoredTableMeta = tableMetadata.copy(
-        properties = tableMetadata.properties.filterKeys(_ != TableCatalog.PROP_OWNER_TYPE))
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
-      val stmt = if (DDLUtils.isDatasourceTable(restoredTableMeta)) {
-        showCreateDataSourceTable(restoredTableMeta)
+      val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+        showCreateDataSourceTable(tableMetadata)
       } else {
-        showCreateHiveTable(restoredTableMeta)
+        showCreateHiveTable(tableMetadata)
       }
 
       Seq(Row(stmt))

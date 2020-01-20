@@ -236,7 +236,6 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
         "last_modified_by",
         "last_modified_time",
         "Owner:",
-        TableCatalog.PROP_OWNER_TYPE,
         // The following are hive specific schema parameters which we do not need to match exactly.
         "totalNumberFiles",
         "maxFileSize",

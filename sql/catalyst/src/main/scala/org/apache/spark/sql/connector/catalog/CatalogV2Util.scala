@@ -278,9 +278,7 @@ private[sql] object CatalogV2Util {
   }
 
   def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
-    properties ++
-      Map(TableCatalog.PROP_OWNER_NAME -> Utils.getCurrentUserName(),
-        TableCatalog.PROP_OWNER_TYPE -> "USER")
+    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def createAlterTable(

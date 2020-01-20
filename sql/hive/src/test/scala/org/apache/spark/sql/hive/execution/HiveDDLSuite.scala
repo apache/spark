@@ -98,7 +98,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
-      properties = Map("ownerType" -> "USER"),
       tracksPartitionsInCatalog = true)
   }
 
@@ -112,7 +111,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       "last_modified_time",
       "Owner:",
       "COLUMN_STATS_ACCURATE",
-      TableCatalog.PROP_OWNER_TYPE,
       // The following are hive specific schema parameters which we do not need to match exactly.
       "numFiles",
       "numRows",
@@ -377,7 +375,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  private def checkDbOwner(db: String,
+  private def checkOwner(db: String,
        expectedOwnerName: String, expectedOwnerType: String): Unit = {
     val df = sql(s"DESCRIBE DATABASE EXTENDED $db")
     val owner = df.where("database_description_item='Owner Name'")
@@ -397,71 +395,40 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val currentUser = Utils.getCurrentUserName()
 
       sql(s"CREATE DATABASE $db1")
-      checkDbOwner(db1, currentUser, "USER")
+      checkOwner(db1, currentUser, "USER")
       sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
-      checkDbOwner(db1, currentUser, "USER")
+      checkOwner(db1, currentUser, "USER")
       val e = intercept[ParseException](sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a',"
         + s"'ownerName'='$owner','ownerType'='XXX')"))
       assert(e.getMessage.contains("ownerName"))
       sql(s"ALTER DATABASE $db1 SET OWNER ROLE $owner")
-      checkDbOwner(db1, owner, "ROLE")
+      checkOwner(db1, owner, "ROLE")
 
       val e2 = intercept[ParseException](
         sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')"))
       assert(e2.getMessage.contains("ownerName"))
       sql(s"CREATE DATABASE $db2")
-      checkDbOwner(db2, currentUser, "USER")
+      checkOwner(db2, currentUser, "USER")
       sql(s"ALTER DATABASE $db2 SET OWNER GROUP $owner")
-      checkDbOwner(db2, owner, "GROUP")
+      checkOwner(db2, owner, "GROUP")
       sql(s"ALTER DATABASE $db2 SET OWNER GROUP `$owner`")
-      checkDbOwner(db2, owner, "GROUP")
+      checkOwner(db2, owner, "GROUP")
       sql(s"ALTER DATABASE $db2 SET OWNER GROUP OWNER")
-      checkDbOwner(db2, "OWNER", "GROUP")
+      checkOwner(db2, "OWNER", "GROUP")
     } finally {
       catalog.reset()
     }
   }
 
-  private def checkTblOwner(table: String,
-       expectedOwnerName: String, expectedOwnerType: String): Unit = {
-    val df = sql(s"DESCRIBE TABLE EXTENDED $table")
-    val owner = df.where("col_name='Owner'")
-      .collect().head.getString(1)
-    val typ = df.where("col_name='Owner Type'")
-      .collect().head.getString(1)
-    assert(owner === expectedOwnerName)
-    assert(typ === expectedOwnerType)
-  }
-
   test("Table Ownership") {
     val catalog = spark.sessionState.catalog
     try {
-      val table1 = "spark_30019_1"
-      val table2 = "spark_30019_2"
-      val owner = "spark_30019"
-      val currentUser = Utils.getCurrentUserName()
-
-      sql(s"CREATE TABLE $table1(k int)")
-      checkTblOwner(table1, currentUser, "USER")
-      sql(s"ALTER TABLE $table1 SET TBLPROPERTIES ('a'='a')")
-      checkTblOwner(table1, currentUser, "USER")
-      val e = intercept[ParseException](sql(s"ALTER TABLE $table1 SET TBLPROPERTIES ('a'='a',"
-        + s"'ownerName'='$owner','ownerType'='XXX')"))
-      assert(e.getMessage.contains("ownerName"))
-      sql(s"ALTER TABLE $table1 SET OWNER ROLE $owner")
-      checkTblOwner(table1, owner, "ROLE")
-
+      sql(s"CREATE TABLE spark_30019(k int)")
+      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
       val e2 = intercept[ParseException](
-        sql(s"CREATE TABLE $table2 WITH TBLPROPERTIES('ownerName'='$owner')"))
-      assert(e2.getMessage.contains("ownerName"))
-      sql(s"CREATE TABLE $table2(k int)")
-      checkTblOwner(table2, currentUser, "USER")
-      sql(s"ALTER TABLE $table2 SET OWNER GROUP $owner")
-      checkTblOwner(table2, owner, "GROUP")
-      sql(s"ALTER TABLE $table2 SET OWNER ROLE `$owner`")
-      checkTblOwner(table2, owner, "ROLE")
-      sql(s"ALTER TABLE $table2 SET OWNER USER OWNER")
-      checkTblOwner(table2, "OWNER", "USER")
+        sql(s"CREATE TABLE spark_30019_2 WITH TBLPROPERTIES('owner'='spark_30019')"))
+      assert(e2.getMessage.contains("owner"))
     } finally {
       catalog.reset()
     }
@@ -472,7 +439,6 @@ class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-  private val reversedProperties = Seq("ownerName", "ownerType")
 
   override def afterEach(): Unit = {
     try {
@@ -1604,7 +1570,6 @@ class HiveDDLSuite
       "last_modified_by",
       "last_modified_time",
       "Owner:",
-      TableCatalog.PROP_OWNER_TYPE,
       "totalNumberFiles",
       "maxFileSize",
       "minFileSize"
