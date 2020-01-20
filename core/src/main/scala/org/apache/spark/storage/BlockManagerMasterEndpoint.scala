@@ -98,8 +98,11 @@ class BlockManagerMasterEndpoint(
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      context.reply(updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size))
-      listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
+      val succeed = updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      context.reply(succeed)
+      if (succeed) {
+        listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
+      }
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
