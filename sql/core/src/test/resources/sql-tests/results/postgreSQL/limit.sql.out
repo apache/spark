@@ -85,18 +85,13 @@ SELECT '' AS ten, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990
 -- !query 6 schema
-struct<ten:string,unique1:int,unique2:int,stringu1:string>
+struct<>
 -- !query 6 output
-	990	369	CMAAAA
-	991	426	DMAAAA
-	992	363	EMAAAA
-	993	661	FMAAAA
-	994	695	GMAAAA
-	995	144	HMAAAA
-	996	258	IMAAAA
-	997	21	JMAAAA
-	998	549	KMAAAA
-	999	152	LMAAAA
+org.apache.spark.sql.AnalysisException
+Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+ clause is found to be the outermost node. If you know exactly that OFFSET
+ clause does not cause excessive overhead and still want to use it, set
+ spark.sql.forceUsingOffsetWithoutLimit to true.;
 
 
 -- !query 7
