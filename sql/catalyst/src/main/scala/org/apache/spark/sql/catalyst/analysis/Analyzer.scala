@@ -1120,7 +1120,6 @@ class Analyzer(
 
       val conflictPlans = collectConflictPlans(right)
 
-
       /*
        * Note that it's possible `conflictPlans` can be empty which implies that there
        * is a logical plan node that produces new references that this rule cannot handle.
