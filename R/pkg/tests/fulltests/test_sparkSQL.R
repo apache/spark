@@ -1793,7 +1793,7 @@ test_that("column functions", {
      "percentile_approx(bar, [0.1,0.9], 10)"
   )
 
-  exepct_equal(actual, expected)
+  expect_equal(actual, expected)
 })
 
 test_that("column binary mathfunctions", {
