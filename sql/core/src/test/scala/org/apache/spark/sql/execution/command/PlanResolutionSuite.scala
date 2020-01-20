@@ -1088,7 +1088,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       deleteCondAttr.foreach(a => assert(a.sameRef(ts)))
       updateCondAttr.foreach(a => assert(a.sameRef(ts)))
-      deleteCondAttr.foreach(a => assert(a.sameRef(ts)))
+      insertCondAttr.foreach(a => assert(a.sameRef(ss)))
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
@@ -1118,7 +1118,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
-             |WHEN NOT MATCHED AND (target.s='insert')
+             |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (source.i, source.s)
            """.stripMargin
         parseAndResolve(sql1) match {
@@ -1145,7 +1145,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
-             |WHEN NOT MATCHED AND (target.s='insert') THEN INSERT *
+             |WHEN NOT MATCHED AND (source.s='insert') THEN INSERT *
            """.stripMargin
         parseAndResolve(sql2) match {
           case MergeIntoTable(
@@ -1194,7 +1194,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
-             |WHEN NOT MATCHED AND (target.s='insert')
+             |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (source.i, source.s)
            """.stripMargin
         parseAndResolve(sql4) match {
@@ -1223,7 +1223,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
-             |WHEN NOT MATCHED AND (target.s='insert')
+             |WHEN NOT MATCHED AND (source.s='insert')
              |THEN INSERT (target.i, target.s) values (source.i, source.s)
            """.stripMargin
         parseAndResolve(sql5) match {
@@ -1258,7 +1258,7 @@ class PlanResolutionSuite extends AnalysisTest {
            |ON 1 = 1
            |WHEN MATCHED THEN DELETE
            |WHEN MATCHED THEN UPDATE SET s = 1
-           |WHEN NOT MATCHED THEN INSERT (i) values (i)
+           |WHEN NOT MATCHED AND (s = 'a') THEN INSERT (i) values (i)
          """.stripMargin
 
       parseAndResolve(sql1) match {
@@ -1267,12 +1267,16 @@ class PlanResolutionSuite extends AnalysisTest {
             source: DataSourceV2Relation,
             _,
             Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
-            Seq(InsertAction(None, insertAssigns))) =>
+            Seq(InsertAction(
+              Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
+              insertAssigns))) =>
           val ti = target.output.find(_.name == "i").get
           val ts = target.output.find(_.name == "s").get
           val si = source.output.find(_.name == "i").get
           val ss = source.output.find(_.name == "s").get
 
+          // INSERT condition is resolved with source table only, so column `s` is not ambiguous.
+          assert(il.sameRef(ss))
           assert(updateAssigns.size == 1)
           // UPDATE key is resolved with target table only, so column `s` is not ambiguous.
           assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1314,12 +1318,24 @@ class PlanResolutionSuite extends AnalysisTest {
            |MERGE INTO $target
            |USING $source
            |ON 1 = 1
+           |WHEN MATCHED AND (s = 'a') THEN UPDATE SET i = 1
+         """.stripMargin
+      // update condition is resolved with both target and source tables, and we can't
+      // resolve column `s` as it's ambiguous.
+      val e4 = intercept[AnalysisException](parseAndResolve(sql4))
+      assert(e4.message.contains("Reference 's' is ambiguous"))
+
+      val sql5 =
+        s"""
+           |MERGE INTO $target
+           |USING $source
+           |ON 1 = 1
            |WHEN MATCHED THEN UPDATE SET s = s
          """.stripMargin
       // update value is resolved with both target and source tables, and we can't
       // resolve column `s` as it's ambiguous.
-      val e4 = intercept[AnalysisException](parseAndResolve(sql4))
-      assert(e4.message.contains("Reference 's' is ambiguous"))
+      val e5 = intercept[AnalysisException](parseAndResolve(sql5))
+      assert(e5.message.contains("Reference 's' is ambiguous"))
     }
 
     val sql =

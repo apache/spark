@@ -1334,9 +1334,10 @@ class Analyzer(
         }
         val newNotMatchedActions = m.notMatchedActions.map {
           case InsertAction(insertCondition, assignments) =>
-            val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-            // The insert action is used when not matched, so its value can only access columns
-            // from the source table.
+            // The insert action is used when not matched, so its condition and value can only
+            // access columns from the source table.
+            val resolvedInsertCondition =
+              insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
             InsertAction(
               resolvedInsertCondition,
               resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
