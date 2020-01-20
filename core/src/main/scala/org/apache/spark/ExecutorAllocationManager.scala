@@ -390,7 +390,7 @@ private[spark] class ExecutorAllocationManager(
     // Only call cluster manager if target has changed.
     if (updates.size > 0) {
       val requestAcknowledged = try {
-        logInfo("requesting updates: " + updates)
+        logDebug("requesting updates: " + updates)
         testing ||
           client.requestTotalExecutors(
             numExecutorsTargetPerResourceProfileId.toMap,

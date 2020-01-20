@@ -130,13 +130,12 @@ private[spark] abstract class YarnSchedulerBackend(
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
       (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
     }
-    // TODO - default everything to default profile until YARN pieces implemented
-    val hostToLocalTaskCount = filteredRPHostToLocalTaskCount.
-      getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Map.empty)
-    val localityAwareTasks = numLocalityAwareTasksPerResourceProfileId.
-      getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 0)
-    RequestExecutors(resourceProfileToTotalExecs(ResourceProfile.getOrCreateDefaultProfile(conf)),
-      localityAwareTasks, hostToLocalTaskCount, nodeBlacklist)
+    // TODO - default everything to default profile until YARN pieces
+    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
+    val hostToLocalTaskCount = filteredRPHostToLocalTaskCount.getOrElse(defaultProf.id, Map.empty)
+    val localityAwareTasks = numLocalityAwareTasksPerResourceProfileId.getOrElse(defaultProf.id, 0)
+    val numExecutors = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
+    RequestExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount, nodeBlacklist)
   }
 
   /**
