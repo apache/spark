@@ -1496,12 +1496,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    val dataType = if (ctx.castType().INTERVAL() != null) {
-      CalendarIntervalType
-    } else {
-      visitSparkDataType(ctx.castType().dataType())
-    }
-    Cast(expression(ctx.expression), dataType)
+    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
   }
 
   /**
@@ -2189,6 +2184,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         DecimalType(precision.getText.toInt, 0)
       case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
+      case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw new ParseException(s"DataType $dtStr is not supported.", ctx)

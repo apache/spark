@@ -771,7 +771,7 @@ primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
-    | CAST '(' expression AS castType ')'                                                      #cast
+    | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
     | (FIRST | FIRST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                     #first
     | (LAST | LAST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                       #last
@@ -843,10 +843,6 @@ unitToUnitInterval
     : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
-intervalType
-    : INTERVAL
-    ;
-
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
@@ -871,11 +867,6 @@ dataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
-    ;
-
-castType
-    : INTERVAL
-    | dataType
     ;
 
 qualifiedColTypeWithPositionList

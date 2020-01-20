@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite {
@@ -86,7 +85,6 @@ class StructTypeSuite extends SparkFunSuite {
 
   test("interval keyword in schema string") {
     val interval = "`a` INTERVAL"
-    val exception = intercept[ParseException](fromDDL(interval))
-    assert(exception.getMessage.contains("DataType interval is not supported."))
+    assert(fromDDL(interval).toDDL === interval)
   }
 }
