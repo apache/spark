@@ -755,12 +755,14 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
-        }
-        u
+        lookupTempView(ident)
+          .map(_ => UnresolvedTableWithViewExists(
+            ResolvedView(ident.asIdentifier, isTempView = true)))
+          .getOrElse(u)
       case u @ UnresolvedTableOrView(ident) =>
-        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
+        lookupTempView(ident)
+          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
+          .getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -814,14 +816,6 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
-
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => alter.copy(table = rel))
-            .getOrElse(alter)
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -888,8 +882,7 @@ class Analyzer(
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView =>
-            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
+          case v: ResolvedView => UnresolvedTableWithViewExists(v)
           case table => table
         }.getOrElse(u)
 
@@ -902,7 +895,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident)
+              ResolvedView(ident, isTempView = false)
             case table =>
               ResolvedTable(catalog.asTableCatalog, ident, table)
           }
