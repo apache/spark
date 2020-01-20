@@ -20,7 +20,8 @@ license: |
 ---
 The <code>HAVING</code> clause is used to filter the results produced by
 <code>GROUP BY</code> based on the specified condition. It is often used
-in the conjunction with a <code>GROUP BY</code> clause.
+in the conjunction with a [GROUP BY](sql-ref-syntax-qry-select-groupby.html)
+clause.
 
 ### Syntax
 {% highlight sql %}
@@ -33,7 +34,9 @@ HAVING boolean_expression
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
     more expressions may be combined together using comparision operators 
-    ('>', '>=', ‘>’, ‘>=’, ‘=’, ‘<’ and ‘<=’, '<=>') and logical operators (AND, NOT, OR).<br><br>
+    ( <code>></code>, <code>>=</code>, <code>=</code>, <code><</code> , <code><=</code> and
+    <code><=></code> ) and logical operators ( <code>AND</code>, <code>NOT</code> 
+    and <code>OR</code> ).<br><br>
 
     <b>Note</b><br>
     The expressions specified in the <code>HAVING</code> clause can only refer to:
@@ -108,7 +111,7 @@ SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING 1 > 0 ORDER B
   +--------+---+
 
 -- `HAVING` clause without a `GROUP BY` clause.
-SELECT  sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
+SELECT sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
   +---+
   |sum|
   +---+
