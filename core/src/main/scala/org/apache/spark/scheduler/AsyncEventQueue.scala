@@ -179,18 +179,10 @@ private class AsyncEventQueue(
         // There may be multiple threads trying to logging dropped events,
         // Use 'compareAndSet' to make sure only one thread can win.
         if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
-          val lastReportTime = lastReportTimestamp.get
           val previous = new java.util.Date(lastReportTime)
           lastDroppedEventsCounter = droppedCount
           logWarning(s"Dropped $droppedCount events from $name since " +
             s"${if (lastReportTime == 0) "the application started" else s"$previous"}.")
-          // Logging thread dump when events from appStatus was dropped
-          Utils.getThreadDumpForThread(dispatchThread.getId).foreach { thread =>
-            if (thread.threadName.contains(LiveListenerBus.APP_STATUS_QUEUE)) {
-              logWarning(s"Event dropped!!!Thread dump from dispatch thread " +
-                s"${dispatchThread.getName} :\n${thread.stackTrace}")
-            }
-          }
         }
       }
     }
