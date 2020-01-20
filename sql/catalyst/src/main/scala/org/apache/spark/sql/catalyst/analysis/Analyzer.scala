@@ -1096,8 +1096,7 @@ class Analyzer(
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput))) ++
-            oldVersion.children.flatMap(collectConflictPlans)
+          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
 
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -1114,8 +1113,7 @@ class Analyzer(
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
             .nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))) ++
-            oldVersion.children.flatMap(collectConflictPlans)
+          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
 
         case _ => plan.children.flatMap(collectConflictPlans)
       }
