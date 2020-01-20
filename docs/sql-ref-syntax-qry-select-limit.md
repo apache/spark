@@ -30,7 +30,7 @@ LIMIT { ALL | integer_expression }
 <dl>
   <dt><code><em>ALL</em></code></dt>
   <dd>
-    If specified, the query returns all the rows. In otherwords, no limit is applied if this
+    If specified, the query returns all the rows. In other words, no limit is applied if this
     option is specified.
   </dd>
   <dt><code><em>integer_expression</em></code></dt>
