@@ -1,7 +1,7 @@
 ---
 layout: global
-title: GROUPBY Clause
-displayTitle: GROUPBY Clause
+title: GROUP BY Clause
+displayTitle: GROUP BY Clause
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -35,13 +35,13 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
     Groups the rows for each subset of the expressions specified in the grouping sets. For example, 
     <code>GROUP BY GROUPING SETS (warehouse, product)</code> is semantically equivalent
     to union of results of <code>GROUP BY warehouse</code> and <code>GROUP BY product</code>. This clause
-    is a short-hand to using an <code>UNION ALL</code> where each leg of the <code>UNION ALL</code> 
+    is a shorthand for a <code>UNION ALL</code> where each leg of the <code>UNION ALL</code> 
     operator performs aggregation of subset of the columns specified in the <code>GROUPING SETS</code> clause.
   </dd>
   <dt><code><em>grouping_sets</em></code></dt>
   <dd>
     Specifies one of more groupings based on which the <code>GROUP BY</code> clause performs aggregations. A grouping
-    set is specified by a list of comma separated expressions in parenthses.<br><br>
+    set is specified by a list of comma separated expressions in parenthesis.<br><br>
     <b>Syntax:</b>
       <code>
         (() | (expression [ , ...]))
@@ -71,7 +71,7 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
 ### Examples
 {% highlight sql %}
 CREATE TABLE dealer (id INT, city STRING, car_model STRING, quantity INT);
-INSERT INTO dealer  VALUES (100, 'Fremont', 'Honda Civic', 10),
+INSERT INTO dealer VALUES (100, 'Fremont', 'Honda Civic', 10),
                           (100, 'Fremont', 'Honda Accord', 15),
                           (100, 'Fremont', 'Honda CRV', 7),
                           (200, 'Dublin', 'Honda Civic', 20),
