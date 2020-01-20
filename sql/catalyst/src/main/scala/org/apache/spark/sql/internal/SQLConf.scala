@@ -1375,8 +1375,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
-    buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
+  val PARALLEL_FILE_LISTING_IN_COMMANDS =
+    buildConf("spark.sql.parallelFileListingInCommands.enabled")
       .internal()
       .doc("When true, SQL commands use parallel file listing, " +
         "as opposed to single thread listing. " +
@@ -2148,6 +2148,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ADD_PARTITION_BATCH_SIZE =
+    buildConf("spark.sql.addPartitionInBatch.size")
+      .internal()
+      .doc("The size of partitions to be handled in one turn when use " +
+        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller" +
+        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+      .intConf
+      .createWithDefault(100)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2559,8 +2568,7 @@ class SQLConf extends Serializable with Logging {
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
-  def parallelFileListingInStatsComputation: Boolean =
-    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
+  def parallelFileListingInCommands: Boolean = getConf(SQLConf.PARALLEL_FILE_LISTING_IN_COMMANDS)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
