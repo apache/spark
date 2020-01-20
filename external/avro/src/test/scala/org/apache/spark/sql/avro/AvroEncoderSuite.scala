@@ -25,10 +25,10 @@ import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{FloatType, IntegerType, StringType}
 
-class AvroEncoderSuite extends SharedSQLContext {
+class AvroEncoderSuite extends SharedSparkSession {
   import testImplicits._
 
   test("encoder from json schema") {
@@ -322,7 +322,7 @@ class AvroEncoderSuite extends SharedSQLContext {
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.driver.allowMultipleContexts", "true")
       .set("spark.master", "local[2]")
-      .set("spark.app.name", "AvroSuite")
+      .set("spark.app.name", "AvroEncoderSuite")
     val context = new SparkContext(conf)
 
     val schema: Schema =
