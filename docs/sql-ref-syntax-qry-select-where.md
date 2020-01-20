@@ -32,9 +32,9 @@ WHERE boolean_expression
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
     more expressions may be combined together using comparision operators 
-    ( <code>></code>, <code>>=</code>, <code>=</code>, <code><</code> , <code><=</code> and
-    <code><=></code> ) and logical operators ( <code>AND</code>, <code>NOT</code> 
-    and <code>OR</code> ).
+    ( <code>></code>, <code>>=</code>, <code>=</code>, <code><</code>, <code><=</code>
+    , <code><=></code> ) and logical operators ( <code>AND</code>, <code>NOT</code>,
+    <code>OR</code> ).
   </dd>
 </dl>
 
