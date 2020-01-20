@@ -83,31 +83,14 @@ trait ConstraintHelper {
     inferredConstraints -- constraints
   }
 
-  private def replaceConstraint(
-      constraint: Expression,
-      source: Expression,
-      destination: Expression): Expression = constraint transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  }
-
   private def replaceConstraints(
       constraints: Set[Expression],
       source: Expression,
-      dest: Expression): Set[Expression] = {
-    constraints.map {
-      case b @ BinaryComparison(left, right) =>
-        (replaceConstraint(left, source, dest), replaceConstraint(right, source, dest)) match {
-          case (Cast(Cast(child, _, _), dt, _), replacedRight)
-            if dt == child.dataType && child.dataType == replacedRight.dataType =>
-            b.makeCopy(Array(child, replacedRight))
-          case (replacedLeft, Cast(Cast(child, _, _), dt, _))
-            if dt == child.dataType && child.dataType == replacedLeft.dataType =>
-            b.makeCopy(Array(replacedLeft, child))
-          case (replacedLeft, replacedRight) =>
-            b.makeCopy(Array(replacedLeft, replacedRight))
-        }
-    }
-  }
+      destination: Expression): Set[Expression] = constraints.map(_ transform {
+    case e: Expression if e.semanticEquals(source) => destination
+  }).map(_ transform {
+    case Cast(e @ Cast(child, _, _), dt, _) if e == destination && dt == child.dataType => child
+  })
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
