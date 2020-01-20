@@ -78,11 +78,11 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
-  // Pre-allocated Seq to avoid the overhead of the seq builder.
-  private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
+  // Pre-allocated Some to avoid the overhead of building Some per each-row.
+  private val requiredRow = Some(new GenericInternalRow(requiredSchema.length))
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
-  // We preallocate it avoid unnecessary invokes of the seq builder.
-  private val noRows = Seq.empty[InternalRow]
+  // We preallocate it avoid unnecessary allocations.
+  private val noRows = None
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
@@ -206,7 +206,7 @@ class UnivocityParser(
   private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
-    (_: String) => Seq(InternalRow.empty)
+    (_: String) => Some(InternalRow.empty)
   } else {
     // parse if the columnPruning is disabled or requiredSchema is nonEmpty
     (input: String) => convert(tokenizer.parseLine(input))
@@ -216,7 +216,7 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): Seq[InternalRow] = doParse(input)
+  def parse(input: String): Option[InternalRow] = doParse(input)
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
@@ -224,7 +224,7 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  private def convert(tokens: Array[String]): Seq[InternalRow] = {
+  private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
@@ -251,7 +251,7 @@ class UnivocityParser(
     //  1. Convert the tokens that correspond to the required schema.
     //  2. Apply the pushdown filters to `requiredRow`.
     var i = 0
-    val row = requiredRow.head
+    val row = requiredRow.get
     var skipRow = false
     while (i < requiredSchema.length) {
       try {
