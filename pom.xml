@@ -260,7 +260,7 @@
     <repository>
       <id>google-maven-central</id>
       <!--
-        This is used as a fallback when a mirror to `central` fail.
+        This is used as a fallback when `central` fails.
       -->
       <name>GCS Maven Central mirror</name>
       <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
