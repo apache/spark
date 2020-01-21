@@ -183,7 +183,7 @@ private [spark] class ResourceProfile(
           "no corresponding task resource request was specified.")
       }
     }
-    if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sparkConf)) {
+    if(!shouldCheckExecCores) {
       // if we can't rely on the executor cores config throw a warning for user
       logWarning("Please ensure that the number of slots available on your " +
         "executors is limited by the number of cores to task cpus and not another " +

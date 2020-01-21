@@ -2788,6 +2788,20 @@ object SparkContext extends Logging {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
       validateTaskCpusLargeEnough(executorCores, taskCores)
       val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+      // TODO - this is temporary until all of stage level scheduling feature is integrated,
+      // fail if any other resource limiting due to dynamic allocation and scheduler using
+      // slots based on cores
+      val cpuSlots = executorCores/taskCores
+      if (!defaultProf.limitingResource(sc.conf).equals(ResourceProfile.CPUS) &&
+        defaultProf.maxTasksPerExecutor(sc.conf) < cpuSlots) {
+        throw new IllegalArgumentException("The number of slots on an executor has to be " +
+          "limited by the number of cores, otherwise you waste resources and " +
+          "dynamic allocation doesn't work properly. Your configuration has " +
+          s"core/task cpu slots = ${cpuSlots} and " +
+          s"${defaultProf.limitingResource(sc.conf)} = " +
+          s"${defaultProf.maxTasksPerExecutor(sc.conf)}. Please adjust your configuration " +
+          "so that all resources require same number of executor slots.")
+      }
       ResourceUtils.warnOnWastedResources(defaultProf, sc.conf, Some(executorCores))
     }
 

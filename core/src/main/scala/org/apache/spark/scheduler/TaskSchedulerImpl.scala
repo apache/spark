@@ -384,7 +384,9 @@ private[spark] class TaskSchedulerImpl(
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
     val resourcesFree = resources.map(r => r._1 -> r._2.length)
-    ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
+    val meetsReqs = ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
+    logDebug(s"Resources meet task requirements is: $meetsReqs")
+    meetsReqs
   }
 
   /**
