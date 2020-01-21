@@ -99,6 +99,35 @@ createOrReplaceTempView(df, "table")
 df <- sql("SELECT * FROM table")
 # $example off:run_sql$
 
+# Ignore corrupt files
+# $example on:ignore_corrupt_files$
+# enable ignore corrupt files
+sql("set spark.sql.files.ignoreCorruptFiles=true")
+# dir1/file3.json is corrupt from parquet's view
+testCorruptDF <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"))
+head(testCorruptDF)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+# $example off:ignore_corrupt_files$
+# $example on:ignore_missing_files$
+# enable ignore missing files
+sql("set spark.sql.files.ignoreMissingFiles=true")
+testMissingDF <- read.parquet("examples/src/main/resources/dir1/dir2/")
+head(testMissingDF)
+#            file
+# 1 file2.parquet
+# $example off:ignore_missing_files$
+sql("set spark.sql.files.ignoreMissingFiles=false")
+
+# $example on:recursive_file_lookup$
+recursiveLoadedDF <- read.df("examples/src/main/resources/dir1", "parquet", recursiveFileLookup = "true")
+head(recursiveLoadedDF)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+# $example off:recursive_file_lookup$
+sql("set spark.sql.files.ignoreCorruptFiles=false")
 
 # $example on:generic_load_save_functions$
 df <- read.df("examples/src/main/resources/users.parquet")
