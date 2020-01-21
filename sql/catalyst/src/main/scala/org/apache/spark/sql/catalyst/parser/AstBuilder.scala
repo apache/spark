@@ -3045,7 +3045,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Parse [[AlterViewSetPropertiesStatement]] or [[AlterTableSetProperties]] commands.
+   * Parse a [[AlterTableSetProperties]] command.
    *
    * For example:
    * {{{
@@ -3059,14 +3059,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetPropertiesStatement(identifier, cleanedTableProperties)
+      AlterTableSetProperties(UnresolvedView(identifier), cleanedTableProperties)
     } else {
       AlterTableSetProperties(UnresolvedTable(identifier), cleanedTableProperties)
     }
   }
 
   /**
-   * Parse [[AlterViewUnsetPropertiesStatement]] or [[AlterTableUnsetProperties]] commands.
+   * Parse a [[AlterTableUnsetProperties]] commands.
    *
    * For example:
    * {{{
@@ -3082,7 +3082,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
+      AlterTableUnsetProperties(UnresolvedView(identifier), cleanedProperties, ifExists)
     } else {
       AlterTableUnsetProperties(UnresolvedTable(identifier), cleanedProperties, ifExists)
     }

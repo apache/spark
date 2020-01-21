@@ -32,18 +32,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case AlterViewSetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), props) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case AlterViewUnsetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
         throw new AnalysisException("Renaming view is not supported in v2 catalogs.")

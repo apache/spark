@@ -763,6 +763,10 @@ class Analyzer(
         lookupTempView(ident)
           .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
           .getOrElse(u)
+      case u @ UnresolvedView(ident) =>
+        lookupTempView(ident)
+          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
+          .getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -811,6 +815,9 @@ class Analyzer(
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
+
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(_, _)) =>
+        u.failAnalysis("View is not supported in v2 catalog yet.")
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
@@ -888,6 +895,12 @@ class Analyzer(
 
       case u @ UnresolvedTableOrView(identifier) =>
         lookupTableOrView(identifier).getOrElse(u)
+
+      case u @ UnresolvedView(identifier) =>
+        lookupTableOrView(identifier).map {
+          case t: ResolvedTable => UnresolvedViewWithTableExists(t)
+          case view => view
+        }.getOrElse(u)
     }
 
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {

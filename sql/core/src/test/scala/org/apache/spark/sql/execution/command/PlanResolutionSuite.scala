@@ -56,6 +56,13 @@ class PlanResolutionSuite extends AnalysisTest {
     V1Table(t)
   }
 
+  private val view: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int"))
+    when(t.tableType).thenReturn(CatalogTableType.VIEW)
+    V1Table(t)
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -77,6 +84,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v1Table1" => v1Table
         case "v2Table" => table
         case "v2Table1" => table
+        case "view_name" => view
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -661,16 +669,16 @@ class PlanResolutionSuite extends AnalysisTest {
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {
-    val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
+    val sql1_view = "ALTER VIEW view_name SET TBLPROPERTIES ('test' = 'test', " +
         "'comment' = 'new_comment')"
-    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val sql2_view = "ALTER VIEW view_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW view_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     val parsed1_view = parseAndResolve(sql1_view)
     val parsed2_view = parseAndResolve(sql2_view)
     val parsed3_view = parseAndResolve(sql3_view)
 
-    val tableIdent = TableIdentifier("table_name", None)
+    val tableIdent = TableIdentifier("view_name", None)
     val expected1_view = AlterTableSetPropertiesCommand(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(

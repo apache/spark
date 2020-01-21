@@ -61,6 +61,26 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
 }
 
 /**
+ * Holds the name of a view that has yet to be looked up in a catalog. It will be resolved to
+ * [[ResolvedView]] during analysis.
+ */
+case class UnresolvedView(multipartIdentifier: Seq[String]) extends LeafNode {
+  override lazy val resolved: Boolean = false
+
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * Holds the resolved table. It is used in a scenario where view is expected but the identifier
+ * is resolved to a table.
+ */
+case class UnresolvedViewWithTableExists(table: ResolvedTable) extends LeafNode {
+  override lazy val resolved: Boolean = false
+
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
  * A plan containing resolved namespace.
  */
 case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])

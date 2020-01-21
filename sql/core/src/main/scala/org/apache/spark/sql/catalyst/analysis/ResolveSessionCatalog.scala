@@ -98,19 +98,20 @@ class ResolveSessionCatalog(
     case AlterTableSetProperties(ResolvedTable(_, ident, _: V1Table), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
+    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
+    case AlterTableSetProperties(ResolvedView(ident, _), props) =>
+      AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
+
     case AlterTableUnsetProperties(ResolvedTable(_, ident, _: V1Table), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
+
+    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
+    case AlterTableUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case AlterTableSetLocation(
         ResolvedTable(_, ident, _: V1Table), partitionSpec, newLoc) =>
       AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, newLoc)
-
-    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
-    case AlterViewSetPropertiesStatement(SessionCatalogAndTable(_, tbl), props) =>
-      AlterTableSetPropertiesCommand(tbl.asTableIdentifier, props, isView = true)
-
-    case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
-      AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
       if (ns.length != 1) {

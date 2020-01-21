@@ -95,6 +95,8 @@ trait CheckAnalysis extends PredicateHelper {
         alter.table match {
           case u @ UnresolvedTableWithViewExists(view) if !view.isTempView =>
             u.failAnalysis("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+          case u @ UnresolvedViewWithTableExists(_) =>
+            u.failAnalysis("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
           case _ =>
         }
 

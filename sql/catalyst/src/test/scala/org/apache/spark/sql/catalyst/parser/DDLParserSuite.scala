@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -456,14 +456,14 @@ class DDLParserSuite extends AnalysisTest {
     val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     comparePlans(parsePlan(sql1_view),
-      AlterViewSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+      AlterTableSetProperties(
+        UnresolvedView(Seq("table_name")), Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(parsePlan(sql2_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = false))
+      AlterTableUnsetProperties(
+        UnresolvedView(Seq("table_name")), Seq("comment", "test"), ifExists = false))
     comparePlans(parsePlan(sql3_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = true))
+      AlterTableUnsetProperties(
+        UnresolvedView(Seq("table_name")), Seq("comment", "test"), ifExists = true))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
