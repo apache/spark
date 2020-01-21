@@ -1431,7 +1431,7 @@ setMethod("percentile_approx",
             col <- if (class(x) == "Column") {
               x@jc
             } else {
-              x
+              column(x)@jc
             }
             if (length(percentage) > 1) {
               percentage <- as.list(percentage)

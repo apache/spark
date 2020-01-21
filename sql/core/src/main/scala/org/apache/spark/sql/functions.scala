@@ -689,44 +689,8 @@ object functions {
    * @group agg_funcs
    * @since 3.0.0
    */
-  def percentile_approx(columnName: String, percentage: Array[Double], accuracy: Long): Column = {
-    percentile_approx(Column(columnName), percentage, accuracy)
-  }
-
-  /**
-   * Aggregate function: Returns and array of the approximate percentile values
-   * of numeric column col at the given percentages.
-   *
-   * Each value of the percentage array must be between 0.0 and 1.0.
-   *
-   * The accuracy parameter is a positive numeric literal
-   * which controls approximation accuracy at the cost of memory.
-   * Higher value of accuracy yields better accuracy, 1.0/accuracy
-   * is the relative error of the approximation.
-   *
-   * @group agg_funcs
-   * @since 3.0.0
-   */
   def percentile_approx(e: Column, percentage: Seq[Double], accuracy: Long): Column = {
     percentile_approx(e, percentage.toArray, accuracy)
-  }
-
-  /**
-   * Aggregate function: Returns and array of the approximate percentile values
-   * of numeric column col at the given percentages.
-   *
-   * Each value of the percentage array must be between 0.0 and 1.0.
-   *
-   * The accuracy parameter is a positive numeric literal
-   * which controls approximation accuracy at the cost of memory.
-   * Higher value of accuracy yields better accuracy, 1.0/accuracy
-   * is the relative error of the approximation.
-   *
-   * @group agg_funcs
-   * @since 3.0.0
-   */
-  def percentile_approx(columnName: String, percentage: Seq[Double], accuracy: Long): Column = {
-    percentile_approx(Column(columnName), percentage.toArray, accuracy)
   }
 
   /**
@@ -749,24 +713,6 @@ object functions {
         e.expr, lit(percentage).expr, lit(accuracy).expr
       )
     }
-  }
-
-  /**
-   * Aggregate function: Returns the approximate percentile value of numeric
-   * column col at the given percentage.
-   *
-   * The value of percentage must be between 0.0 and 1.0.\
-   *
-   * The accuracy parameter is a positive numeric literal
-   * which controls approximation accuracy at the cost of memory.
-   * Higher value of accuracy yields better accuracy, 1.0/accuracy
-   * is the relative error of the approximation.
-   *
-   * @group agg_funcs
-   * @since 3.0.0
-   */
-  def percentile_approx(columnName: String, percentage: Double, accuracy: Long): Column = {
-    percentile_approx(Column(columnName), percentage, accuracy)
   }
 
   /**
