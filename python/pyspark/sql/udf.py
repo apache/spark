@@ -110,7 +110,7 @@ class UserDefinedFunction(object):
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
                     raise NotImplementedError(
-                        "Invalid return type with grouped map Pandas UDFs or"
+                        "Invalid return type with grouped map Pandas UDFs or "
                         "at groupby.applyInPandas: %s is not supported" % str(
                             self._returnType_placeholder))
             else:

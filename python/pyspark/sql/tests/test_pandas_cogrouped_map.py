@@ -186,6 +186,13 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
                     lambda l, r: l, 'id long, v map<int, int>')
 
+    def test_wrong_args(self):
+        left = self.data1
+        right = self.data2
+        with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+            left.groupby('id').cogroup(right.groupby('id')) \
+                .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
+
     @staticmethod
     def _test_with_key(left, right, isLeft):
 

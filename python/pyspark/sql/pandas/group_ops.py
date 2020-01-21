@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import sys
+import warnings
 
 from pyspark import since
 from pyspark.rdd import PythonEvalType
@@ -77,6 +78,11 @@ class PandasGroupedOpsMixin(object):
         from pyspark.sql import GroupedData
 
         assert isinstance(self, GroupedData)
+
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.", UserWarning)
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
@@ -162,7 +168,7 @@ class PandasCogroupedOps(object):
         Applies a function to each cogroup using pandas and returns the result
         as a `DataFrame`.
 
-        The function should take two `pandas.DataFrame` and return another
+        The function should take two `pandas.DataFrame`\\s and return another
         `pandas.DataFrame`.  For each side of the cogroup, all columns are passed together as a
         `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
         a :class:`DataFrame`.
