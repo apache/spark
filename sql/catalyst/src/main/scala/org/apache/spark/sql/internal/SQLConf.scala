@@ -1375,8 +1375,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PARALLEL_FILE_LISTING_IN_COMMANDS =
-    buildConf("spark.sql.parallelFileListingInCommands.enabled")
+  val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
+    buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
       .doc("When true, SQL commands use parallel file listing, " +
         "as opposed to single thread listing. " +
@@ -2568,7 +2568,8 @@ class SQLConf extends Serializable with Logging {
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
-  def parallelFileListingInCommands: Boolean = getConf(SQLConf.PARALLEL_FILE_LISTING_IN_COMMANDS)
+  def parallelFileListingInStatsComputation: Boolean =
+    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
