@@ -20,9 +20,9 @@ license: |
 ---
 The <code>CLUSTER BY</code> clause is used to first repartition the data based
 on the input expressions and then sort the data within each partition. This is
-is semantically equivalent to performing <code>DISTRIBUTE BY</code> followed by
+semantically equivalent to performing <code>DISTRIBUTE BY</code> followed by
 <code>SORT BY</code>. This cause only ensures that the resultant rows are
-sorted within each partition and does not guarantee total ordering of output,
+sorted within each partition and does not guarantee total ordering of output.
 
 ### Syntax
 {% highlight sql %}
@@ -47,11 +47,11 @@ INSERT INTO person VALUES ('Zen Hui', 25),
                           ('John A', 18), 
                           ('Jack N', 16);
 -- Reduce the number of shuffle partitions to 2 to illustrate the behaviour of `CLUSTER BY`.
--- Its easier to see the clustering and sorting behaviour with less number of partitions.
+-- It's easier to see the clustering and sorting behaviour with less number of partitions.
 SET spark.sql.shuffle.partitions = 2;
                         
 -- Select the rows with no ordering. Please note that without any sort directive, the results
--- of the query is not deterministic. Its included here to show the difference in behaviour 
+-- of the query is not deterministic. It's included here to show the difference in behaviour 
 -- of a query when `CLUSTER BY` is not used vs when its used. The query below produces rows
 -- where age column is not sorted.
 SELECT age, name FROM person;
