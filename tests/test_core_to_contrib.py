@@ -256,6 +256,51 @@ HOOK = [
     (
         'airflow.providers.amazon.aws.hooks.sagemaker.SageMakerHook',
         'airflow.contrib.hooks.sagemaker_hook.SageMakerHook',
+
+    ),
+    (
+        'airflow.providers.mongo.hooks.mongo.MongoHook',
+        'airflow.contrib.hooks.mongo_hook.MongoHook',
+    ),
+    (
+        'airflow.providers.openfass.hooks.openfaas.OpenFaasHook',
+        'airflow.contrib.hooks.openfaas_hook.OpenFaasHook',
+    ),
+    (
+        'airflow.providers.redis.hooks.redis.RedisHook',
+        'airflow.contrib.hooks.redis_hook.RedisHook',
+    ),
+    (
+        'airflow.providers.docker.hooks.docker.DockerHook',
+        'airflow.hooks.docker_hook.DockerHook',
+    ),
+    (
+        'airflow.providers.microsoft.mssql.hooks.mssql.MsSqlHook',
+        'airflow.hooks.mssql_hook.MsSqlHook',
+    ),
+    (
+        'airflow.providers.mysql.hooks.mysql.MySqlHook',
+        'airflow.hooks.mysql_hook.MySqlHook',
+    ),
+    (
+        'airflow.providers.oracle.hooks.oracle.OracleHook',
+        'airflow.hooks.oracle_hook.OracleHook',
+    ),
+    (
+        'airflow.providers.postgres.hooks.postgres.PostgresHook',
+        'airflow.hooks.postgres_hook.PostgresHook',
+    ),
+    (
+        'airflow.providers.presto.hooks.presto.PrestoHook',
+        'airflow.hooks.presto_hook.PrestoHook',
+    ),
+    (
+        'airflow.providers.samba.hooks.samba.SambaHook',
+        'airflow.hooks.samba_hook.SambaHook',
+    ),
+    (
+        'airflow.providers.sqlite.hooks.sqlite.SqliteHook',
+        'airflow.hooks.sqlite_hook.SqliteHook',
     ),
 ]
 
@@ -983,6 +1028,74 @@ OPERATOR = [
         'airflow.providers.amazon.aws.operators.sagemaker_tuning.SageMakerTuningOperator',
         'airflow.contrib.operators.sagemaker_tuning_operator.SageMakerTuningOperator',
     ),
+    (
+        'airflow.providers.docker.operators.docker_swarm.DockerSwarmOperator',
+        'airflow.contrib.operators.docker_swarm_operator.DockerSwarmOperator',
+    ),
+    (
+        'airflow.providers.cncf.kubernetes.operators.kubernetes_pod.KubernetesPodOperator',
+        'airflow.contrib.operators.kubernetes_pod_operator.KubernetesPodOperator',
+    ),
+    (
+        'airflow.providers.redis.operators.redis_publish.RedisPublishOperator',
+        'airflow.contrib.operators.redis_publish_operator.RedisPublishOperator',
+    ),
+    (
+        'airflow.operators.bash.BashOperator',
+        'airflow.operators.bash_operator.BashOperator',
+    ),
+    (
+        'airflow.providers.docker.operators.docker.DockerOperator',
+        'airflow.operators.docker_operator.DockerOperator',
+    ),
+    (
+        'airflow.providers.microsoft.mssql.operators.mssql.MsSqlOperator',
+        'airflow.operators.mssql_operator.MsSqlOperator',
+    ),
+    (
+        'airflow.providers.mysql.operators.mysql.MySqlOperator',
+        'airflow.operators.mysql_operator.MySqlOperator',
+    ),
+    (
+        'airflow.providers.oracle.operators.oracle.OracleOperator',
+        'airflow.operators.oracle_operator.OracleOperator',
+    ),
+    (
+        'airflow.providers.papermill.operators.papermill.PapermillOperator',
+        'airflow.operators.papermill_operator.PapermillOperator',
+    ),
+    (
+        'airflow.providers.presto.operators.presto_check.PrestoCheckOperator',
+        'airflow.operators.presto_check_operator.PrestoCheckOperator',
+    ),
+    (
+        'airflow.providers.presto.operators.presto_check.PrestoIntervalCheckOperator',
+        'airflow.operators.presto_check_operator.PrestoIntervalCheckOperator',
+    ),
+    (
+        'airflow.providers.presto.operators.presto_check.PrestoValueCheckOperator',
+        'airflow.operators.presto_check_operator.PrestoValueCheckOperator',
+    ),
+    (
+        'airflow.operators.python.BranchPythonOperator',
+        'airflow.operators.python_operator.BranchPythonOperator',
+    ),
+    (
+        'airflow.operators.python.PythonOperator',
+        'airflow.operators.python_operator.PythonOperator',
+    ),
+    (
+        'airflow.operators.python.ShortCircuitOperator',
+        'airflow.operators.python_operator.ShortCircuitOperator',
+    ),
+    (
+        'airflow.operators.python.PythonVirtualenvOperator',
+        'airflow.operators.python_operator.PythonVirtualenvOperator',
+    ),
+    (
+        'airflow.providers.sqlite.operators.sqlite.SqliteOperator',
+        'airflow.operators.sqlite_operator.SqliteOperator',
+    ),
 ]
 
 SENSOR = [
@@ -1116,6 +1229,30 @@ SENSOR = [
     (
         'airflow.providers.amazon.aws.sensors.s3_prefix.S3PrefixSensor',
         'airflow.sensors.s3_prefix_sensor.S3PrefixSensor',
+    ),
+    (
+        'airflow.sensors.bash.BashSensor',
+        'airflow.contrib.sensors.bash_sensor.BashSensor',
+    ),
+    (
+        'airflow.providers.celery.sensors.celery_queue.CeleryQueueSensor',
+        'airflow.contrib.sensors.celery_queue_sensor.CeleryQueueSensor',
+    ),
+    (
+        'airflow.providers.mongo.sensors.mongo.MongoSensor',
+        'airflow.contrib.sensors.mongo_sensor.MongoSensor',
+    ),
+    (
+        'airflow.sensors.python.PythonSensor',
+        'airflow.contrib.sensors.python_sensor.PythonSensor',
+    ),
+    (
+        'airflow.providers.redis.sensors.redis_key.RedisKeySensor',
+        'airflow.contrib.sensors.redis_key_sensor.RedisKeySensor',
+    ),
+    (
+        'airflow.providers.redis.sensors.redis_pub_sub.RedisPubSubSensor',
+        'airflow.contrib.sensors.redis_pub_sub_sensor.RedisPubSubSensor',
     ),
 ]
 

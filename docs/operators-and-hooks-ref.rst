@@ -1036,32 +1036,32 @@ These integrations allow you to perform various operations using various softwar
      -
      -
      -
-     - :mod:`airflow.contrib.sensors.celery_queue_sensor`
+     - :mod:`airflow.providers.celery.sensors.celery_queue`
 
    * - `Docker <https://docs.docker.com/install/>`__
      -
-     - :mod:`airflow.hooks.docker_hook`
-     - :mod:`airflow.operators.docker_operator`,
-       :mod:`airflow.contrib.operators.docker_swarm_operator`
+     - :mod:`airflow.providers.docker.hooks.docker`
+     - :mod:`airflow.providers.docker.operators.docker`,
+       :mod:`airflow.providers.docker.operators.docker_swarm`
      -
 
    * - `GNU Bash <https://www.gnu.org/software/bash/>`__
      - :doc:`How to use <howto/operator/bash>`
      -
-     - :mod:`airflow.operators.bash_operator`
-     - :mod:`airflow.contrib.sensors.bash_sensor`
+     - :mod:`airflow.operators.bash`
+     - :mod:`airflow.sensors.bash`
 
    * - `Kubernetes <https://kubernetes.io/>`__
      - :doc:`How to use <howto/operator/kubernetes>`
      -
-     - :mod:`airflow.contrib.operators.kubernetes_pod_operator`
+     - :mod:`airflow.providers.cncf.kubernetes.operators.kubernetes_pod`
      -
 
    * - `Microsoft SQL Server (MSSQL) <https://www.microsoft.com/pl-pl/sql-server/sql-server-downloads>`__
      -
-     - :mod:`airflow.hooks.mssql_hook`,
+     - :mod:`airflow.providers.microsoft.mssql.hooks.mssql`,
        :mod:`airflow.providers.odbc.hooks.odbc`
-     - :mod:`airflow.operators.mssql_operator`
+     - :mod:`airflow.providers.microsoft.mssql.operators.mssql`
      -
 
 
@@ -1073,70 +1073,70 @@ These integrations allow you to perform various operations using various softwar
 
    * - `MongoDB <https://www.mongodb.com/what-is-mongodb>`__
      -
-     - :mod:`airflow.contrib.hooks.mongo_hook`
+     - :mod:`airflow.providers.mongo.hooks.mongo`
      -
-     - :mod:`airflow.contrib.sensors.mongo_sensor`
+     - :mod:`airflow.providers.mongo.sensors.mongo`
 
 
    * - `MySQL <https://www.mysql.com/products/>`__
      -
-     - :mod:`airflow.hooks.mysql_hook`
-     - :mod:`airflow.operators.mysql_operator`
+     - :mod:`airflow.providers.mysql.hooks.mysql`
+     - :mod:`airflow.providers.mssql.operators.mysql`
      -
 
    * - `OpenFaaS <https://www.openfaas.com/>`__
      -
-     - :mod:`airflow.contrib.hooks.openfaas_hook`
+     - :mod:`airflow.providers.openfass.hooks.openfaas`
      -
      -
 
    * - `Oracle <https://www.oracle.com/pl/database/>`__
      -
-     - :mod:`airflow.hooks.oracle_hook`
-     - :mod:`airflow.operators.oracle_operator`
+     - :mod:`airflow.providers.oracle.hooks.oracle`
+     - :mod:`airflow.providers.oracle.operators.oracle`
      -
 
    * - `Papermill <https://github.com/nteract/papermill>`__
      - :doc:`How to use <howto/operator/papermill>`
      -
-     - :mod:`airflow.operators.papermill_operator`
+     - :mod:`airflow.providers.papermill.operators.papermill`
      -
 
    * - `PostgresSQL <https://www.postgresql.org/>`__
      -
-     - :mod:`airflow.hooks.postgres_hook`
-     - :mod:`airflow.operators.postgres_operator`
+     - :mod:`airflow.providers.postgres.hooks.postgres`
+     - :mod:`airflow.providers.postgres.operators.postgres`
      -
 
    * - `Presto <http://prestodb.github.io/>`__
      -
-     - :mod:`airflow.hooks.presto_hook`
-     - :mod:`airflow.operators.presto_check_operator`
+     - :mod:`airflow.providers.presto.hooks.presto`
+     - :mod:`airflow.providers.presto.operators.presto_check`
      -
 
    * - `Python <https://www.python.org>`__
      -
      -
-     - :mod:`airflow.operators.python_operator`
-     - :mod:`airflow.contrib.sensors.python_sensor`
+     - :mod:`airflow.operators.python`
+     - :mod:`airflow.sensors.python`
 
    * - `Redis <https://redis.io/>`__
      -
-     - :mod:`airflow.contrib.hooks.redis_hook`
-     - :mod:`airflow.contrib.operators.redis_publish_operator`
-     - :mod:`airflow.contrib.sensors.redis_pub_sub_sensor`,
-       :mod:`airflow.contrib.sensors.redis_key_sensor`
+     - :mod:`airflow.providers.redis.hooks.redis`
+     - :mod:`airflow.providers.redis.operators.redis_publish`
+     - :mod:`airflow.providers.redis.sensors.redis_pub_sub`,
+       :mod:`airflow.providers.redis.sensors.redis_key`
 
    * - `Samba <https://www.samba.org/>`__
      -
-     - :mod:`airflow.hooks.samba_hook`
+     - :mod:`airflow.providers.samba.hooks.samba`
      -
      -
 
    * - `SQLite <https://www.sqlite.org/index.html>`__
      -
-     - :mod:`airflow.hooks.sqlite_hook`
-     - :mod:`airflow.operators.sqlite_operator`
+     - :mod:`airflow.providers.sqlite.hooks.sqlite`
+     - :mod:`airflow.providers.sqlite.operators.sqlite`
      -
 
 

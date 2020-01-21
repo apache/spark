@@ -263,20 +263,20 @@ described in the section :ref:`XComs <concepts:xcom>`
 
 Airflow provides operators for many common tasks, including:
 
-- :class:`~airflow.operators.bash_operator.BashOperator` - executes a bash command
-- :class:`~airflow.operators.python_operator.PythonOperator` - calls an arbitrary Python function
+- :class:`~airflow.operators.bash.BashOperator` - executes a bash command
+- :class:`~airflow.operators.python.PythonOperator` - calls an arbitrary Python function
 - :class:`~airflow.operators.email_operator.EmailOperator` - sends an email
 - :class:`~airflow.operators.http_operator.SimpleHttpOperator` - sends an HTTP request
-- :class:`~airflow.operators.mysql_operator.MySqlOperator`,
-  :class:`~airflow.operators.sqlite_operator.SqliteOperator`,
-  :class:`~airflow.operators.postgres_operator.PostgresOperator`,
-  :class:`~airflow.operators.mssql_operator.MsSqlOperator`,
-  :class:`~airflow.operators.oracle_operator.OracleOperator`,
+- :class:`~airflow.providers.mysql.operators.mysql.MySqlOperator`,
+  :class:`~airflow.providers.sqlite.operators.sqlite.SqliteOperator`,
+  :class:`~airflow.providers.postgres.operators.postgres.PostgresOperator`,
+  :class:`~airflow.providers.microsoft.mssql.operators.mssql.MsSqlOperator`,
+  :class:`~airflow.providers.oracle.operators.oracle.OracleOperator`,
   :class:`~airflow.operators.jdbc_operator.JdbcOperator`, etc. - executes a SQL command
 - ``Sensor`` - an Operator that waits (polls) for a certain time, file, database row, S3 key, etc...
 
 In addition to these basic building blocks, there are many more specific
-operators: :class:`~airflow.operators.docker_operator.DockerOperator`,
+operators: :class:`~airflow.providers.docker.operators.docker.DockerOperator`,
 :class:`~airflow.providers.apache.hive.operators.hive.HiveOperator`, :class:`~airflow.providers.amazon.aws.operators.s3_file_transform.S3FileTransformOperator`,
 :class:`~airflow.operators.presto_to_mysql.PrestoToMySqlTransfer`,
 :class:`~airflow.operators.slack_operator.SlackAPIOperator`... you get the idea!
@@ -591,7 +591,7 @@ before it starts to search in metadata database).
 
 Many hooks have a default ``conn_id``, where operators using that hook do not
 need to supply an explicit connection ID. For example, the default
-``conn_id`` for the :class:`~airflow.hooks.postgres_hook.PostgresHook` is
+``conn_id`` for the :class:`~airflow.providers.postgres.hooks.postgres.PostgresHook` is
 ``postgres_default``.
 
 See :doc:`howto/connection/index` for how to create and manage connections.
@@ -955,7 +955,7 @@ For example, consider the following DAG:
 
   from airflow.models import DAG
   from airflow.operators.dummy_operator import DummyOperator
-  from airflow.operators.python_operator import BranchPythonOperator
+  from airflow.operators.python import BranchPythonOperator
 
   dag = DAG(
       dag_id='branch_without_trigger',
