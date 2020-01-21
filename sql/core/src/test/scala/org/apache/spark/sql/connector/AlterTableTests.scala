@@ -117,6 +117,19 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column with interval type") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e1 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
+      assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
+      val e2 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
+      assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
+    }
+  }
+
   test("AlterTable: add column with position") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -311,6 +324,15 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: update column type to interval") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE interval"))
+      assert(e.getMessage.contains("id to interval type"))
+    }
+  }
+
   test("AlterTable: SET/DROP NOT NULL") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -359,7 +381,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+      assert(exc.getMessage.contains("update a struct by updating its fields"))
 
       val table = getTableMetadata(t)
 
