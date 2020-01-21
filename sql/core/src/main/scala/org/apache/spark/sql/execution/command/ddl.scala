@@ -180,8 +180,7 @@ case class DescribeDatabaseCommand(
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner Name", allDbProperties.getOrElse(PROP_OWNER_NAME, "")) ::
-        Row("Owner Type", allDbProperties.getOrElse(PROP_OWNER_TYPE, "")) :: Nil
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
 
     if (extended) {
       val properties = allDbProperties -- RESERVED_PROPERTIES.asScala

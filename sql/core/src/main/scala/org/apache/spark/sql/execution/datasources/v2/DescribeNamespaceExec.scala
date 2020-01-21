@@ -49,11 +49,8 @@ case class DescribeNamespaceExec(
     Option(metadata.get(PROP_LOCATION)).foreach {
       rows += toCatalystRow("Location", _)
     }
-    Option(metadata.get(PROP_OWNER_NAME)).foreach {
-      rows += toCatalystRow("Owner Name", _)
-    }
-    Option(metadata.get(PROP_OWNER_TYPE)).foreach {
-      rows += toCatalystRow("Owner Type", _)
+    Option(metadata.get(PROP_OWNER)).foreach {
+      rows += toCatalystRow("Owner", _)
     }
 
     if (isExtended) {

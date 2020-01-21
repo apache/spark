@@ -1062,9 +1062,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
-        Row("Owner Name", defaultUser),
-        Row("Owner Type", "USER")
-      ))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
   }
 
@@ -1078,10 +1077,9 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
-        Row("Owner Name", defaultUser),
-        Row("Owner Type", "USER"),
-        Row("Properties", "((a,b),(b,a),(c,c))")
-      ))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", "((a,b),(b,a),(c,c))"))
+      )
     }
   }
 
@@ -1126,25 +1124,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test_2"),
-        Row("Owner Name", defaultUser),
-        Row("Owner Type", "USER")
-      ))
-    }
-  }
-
-  test("AlterNamespaceSetOwner using v2 catalog") {
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test_3'")
-      sql("ALTER NAMESPACE testcat.ns1.ns2 SET OWNER ROLE adminRole")
-      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
-      assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_3"),
-        Row("Owner Name", "adminRole"),
-        Row("Owner Type", "ROLE")
-      ))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
   }
 

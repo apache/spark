@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -228,7 +228,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
-  protected val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+  protected val reversedProperties = Seq(PROP_OWNER)
 
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
