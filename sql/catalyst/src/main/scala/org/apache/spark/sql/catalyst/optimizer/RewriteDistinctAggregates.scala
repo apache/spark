@@ -221,10 +221,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
-      // Constructs a pair between old and new expressions for regular aggregates. Because we will construct a new
-      // aggregate, the children of the distinct aggregates will be changed to the generate
-      // ones, so we need creates new references to avoid collisions between distinct and
-      // regular aggregate children.
+      // Constructs a pair between old and new expressions for regular aggregates. Because we
+      // will construct a new aggregate, the children of the distinct aggregates will be
+      // changed to the generate ones, so we need creates new references to avoid collisions
+      // between distinct and regular aggregate children.
       val regularAggExprs = regularAggExpressions.filter(_.children.exists(!_.foldable))
       val regularFunChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
