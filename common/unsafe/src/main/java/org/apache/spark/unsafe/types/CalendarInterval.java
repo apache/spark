@@ -41,7 +41,7 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
  * they are two separated fields from microseconds. One month may be equal to 28, 29, 30 or 31 days
  * and one day may be equal to 23, 24 or 25 hours (daylight saving).
  *
- * @since 1.5.0
+ * @since 3.0.0
  */
 @Unstable
 public final class CalendarInterval implements Serializable {
