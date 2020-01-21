@@ -37,7 +37,8 @@ case class AvroScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    partitionFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -53,8 +54,9 @@ case class AvroScan(
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
   }
 
-  override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters)
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case a: AvroScan => super.equals(a) && dataSchema == a.dataSchema && options == a.options
