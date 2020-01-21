@@ -1055,34 +1055,43 @@ class Analyzer(
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
 
-      val conflictPlans = right.collect {
+      /**
+       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
+       * inherit directly from its children, we could just stop collect on it. Because we could
+       * always replace all the lower conflict attributes with the new attributes from the new
+       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
+       * it to the next batch to reduce possible overhead because this should be a corner case.
+       */
+      def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
-          (oldVersion, newVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion: SerializeFromObject
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(
+            serializer = oldVersion.serializer.map(_.newInstance()))))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
             if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+          Seq((oldVersion, oldVersion.copy(
+            aggregateExpressions = newAliases(aggregateExpressions))))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(output = output.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
 
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -1094,13 +1103,17 @@ class Analyzer(
               attr
             }
           }
-          (oldVersion, oldVersion.copy(output = newOutput))
+          Seq((oldVersion, oldVersion.copy(output = newOutput)))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
-          (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
+            .nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+
+        case _ => plan.children.flatMap(collectConflictPlans)
       }
+
+      val conflictPlans = collectConflictPlans(right)
 
       /*
        * Note that it's possible `conflictPlans` can be empty which implies that there
