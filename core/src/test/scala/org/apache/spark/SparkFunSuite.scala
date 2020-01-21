@@ -189,7 +189,7 @@ abstract class SparkFunSuite
     }
   }
 
-  class LogAppender(msg: String = "", maxEvents: Int = 100) extends AppenderSkeleton {
+  class LogAppender(msg: String = "", maxEvents: Int = 1000) extends AppenderSkeleton {
     val loggingEvents = new ArrayBuffer[LoggingEvent]()
 
     override def append(loggingEvent: LoggingEvent): Unit = {
