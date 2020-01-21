@@ -36,20 +36,21 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
     withTable("test", "temp") {
       sql(
         s"""
-           |CREATE TABLE test(i int)
-           |PARTITIONED BY (p int)
-           |STORED AS textfile""".stripMargin)
+          |CREATE TABLE test(i int)
+          |PARTITIONED BY (p int)
+          |STORED AS textfile""".stripMargin)
       spark.range(0, 1000, 1).selectExpr("id as col")
         .createOrReplaceTempView("temp")
 
       for (part <- Seq(1, 2, 3, 4)) {
-        sql(s"""
-               |INSERT OVERWRITE TABLE test PARTITION (p='$part')
-               |select col from temp""".stripMargin)
+        sql(
+          s"""
+            |INSERT OVERWRITE TABLE test PARTITION (p='$part')
+            |select col from temp""".stripMargin)
       }
-      val analyzed1 = sql("select i from test where p>0").queryExecution.analyzed
-      val analyzed2 = sql("select i from test where p=1").queryExecution.analyzed
-      assert(Optimize.execute(analyzed1).stats.sizeInBytes/4 ===
+      val analyzed1 = sql("select i from test where p > 0").queryExecution.analyzed
+      val analyzed2 = sql("select i from test where p = 1").queryExecution.analyzed
+      assert(Optimize.execute(analyzed1).stats.sizeInBytes / 4 ===
         Optimize.execute(analyzed2).stats.sizeInBytes)
     }
   }

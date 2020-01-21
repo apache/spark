@@ -84,7 +84,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         0L
       }
     }
-    if (sizeOfPartitions.forall(s => s>0)) {
+    if (sizeOfPartitions.forall(_ > 0)) {
       val sizeInBytes = sizeOfPartitions.sum
       tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
     } else {
