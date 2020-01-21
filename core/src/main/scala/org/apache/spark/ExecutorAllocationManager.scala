@@ -67,8 +67,8 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * There is no retry logic in either case because we make the assumption that the cluster manager
  * will eventually fulfill all requests it receives asynchronously.
  *
- * The relevant Spark properties are below. Each of these properties applies to all
- * ResourceProfiles. So if you set a minimum number of executors, that is a minimum
+ * The relevant Spark properties are below. Each of these properties applies separately to
+ * every ResourceProfile. So if you set a minimum number of executors, that is a minimum
  * for each ResourceProfile.
  *
  *   spark.dynamicAllocation.enabled - Whether this feature is enabled
@@ -462,7 +462,7 @@ private[spark] class ExecutorAllocationManager(
    *
    * @param maxNumExecutorsNeeded the maximum number of executors all currently running or pending
    *                              tasks could fill
-   * @param rp                    the ResourceProfile of the executors
+   * @param rpId                  the ResourceProfile id of the executors
    * @return the number of additional executors actually requested.
    */
   private def addExecutors(maxNumExecutorsNeeded: Int, rpId: Int): Int = {
@@ -887,7 +887,8 @@ private[spark] class ExecutorAllocationManager(
       })
     }
 
-    // the metrics are going to return the numbers for the default ResourceProfile
+    // The metrics are going to return the numbers for the default ResourceProfile.
+    // It would be nice to do include each profile somehow in the future.
     registerGauge("numberExecutorsToAdd",
       numExecutorsToAddPerResourceProfileId(defaultProfileId), 0)
     registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
