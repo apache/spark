@@ -245,7 +245,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand for the distinct aggregate expressions.
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
-      val (projections, expressionAttrs, dintinctAggPair) = distinctAggExprs.map {
+      val (projections, expressionAttrs, distinctAggPair) = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           // Why do we need to construct the `exprId` ?
           // First, In order to reduce costs, it is better to handle the filter clause locally.
