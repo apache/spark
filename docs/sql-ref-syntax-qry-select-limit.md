@@ -73,7 +73,7 @@ SELECT name, age FROM person ORDER BY name LIMIT ALL;
   |Zen Hui|25 |
   +-------+---+
 
--- A function expression as a input to limit.
+-- A function expression as an input to limit.
 SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
 
   +-------+---+
