@@ -25,8 +25,8 @@ import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
 
 import org.scalatest.BeforeAndAfter
-import org.apache.spark._
 
+import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
@@ -152,8 +152,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // Start a job with 2 stages / 4 tasks each
     time += 1
     val stages = Seq(
-      new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1", resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
-      new StageInfo(2, 0, "stage2", 4, Nil, Seq(1), "details2", resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+      new StageInfo(2, 0, "stage2", 4, Nil, Seq(1), "details2",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     val jobProps = new Properties()
     jobProps.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, "jobDescription")

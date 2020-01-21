@@ -146,7 +146,10 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
       val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-      verify(allocationClient, times(1)).requestTotalExecutors(meq(Map(defaultProfId -> expectedRequestedTotalExecs)), meq(Map(defaultProfId -> 0)), meq(Map.empty))
+      verify(allocationClient, times(1)).
+        requestTotalExecutors(
+          meq(Map(defaultProfId -> expectedRequestedTotalExecs)),
+          meq(Map(defaultProfId -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>

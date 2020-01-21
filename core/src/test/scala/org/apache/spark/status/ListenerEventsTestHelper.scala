@@ -98,13 +98,15 @@ object ListenerEventsTestHelper {
   /** Create a stage submitted event for the specified stage Id. */
   def createStageSubmittedEvent(stageId: Int): SparkListenerStageSubmitted = {
     SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details", resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   /** Create a stage completed event for the specified stage Id. */
   def createStageCompletedEvent(stageId: Int): SparkListenerStageCompleted = {
     SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details", resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   def createExecutorAddedEvent(executorId: Int): SparkListenerExecutorAdded = {

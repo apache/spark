@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import org.apache.spark.{SparkFunSuite, Success, TaskResultLost, TaskState}
-
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._

@@ -30,7 +30,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{StageData, StageStatus, AccumulableInfo => UIAccumulableInfo}
+import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
 import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {

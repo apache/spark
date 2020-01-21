@@ -29,8 +29,8 @@ import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar._
-import org.apache.spark._
 
+import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
