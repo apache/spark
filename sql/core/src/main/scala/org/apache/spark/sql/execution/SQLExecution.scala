@@ -168,7 +168,8 @@ object SQLExecution {
   }
 
   /**
-   * Wrap passed function to ensure sparkContext local properties are forwarded to execution thread
+   * Wrap passed function to ensure necessary thread-local variables like
+   * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](sparkSession: SparkSession)(body: => T)(
     exec: ExecutionContext): Future[T] = {
