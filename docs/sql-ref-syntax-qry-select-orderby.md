@@ -31,7 +31,7 @@ ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
 <dl>
   <dt><code><em>ORDER BY</em></code></dt>
   <dd>
-    Specifies a comma separated list of expressions along with optional parameters <code>sort_direction</code>
+    Specifies a comma-separated list of expressions along with optional parameters <code>sort_direction</code>
     and <code>nulls_sort_order</code> which are used to sort the rows.
   </dd>
   <dt><code><em>sort_direction</em></code></dt>
