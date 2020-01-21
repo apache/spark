@@ -101,6 +101,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))
+        // Keep partition filters so that they are visible in physical planning
         Project(projections, Filter(filters.reduceLeft(And), newRelation))
       } else {
         op
