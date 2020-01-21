@@ -17,10 +17,18 @@
 # limitations under the License.
 #
 
-SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_PROFILES=${1:-"-Pmesos -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
 
-SPARK_PROFILES=${1:-"-Pmesos -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive -Pdocker-integration-tests -Pkubernetes-integration-tests"}
-ERRORS=$($SCRIPT_DIR/../build/mvn $SPARK_PROFILES scalastyle:check | grep "^error file")
+# NOTE: echo "q" is needed because SBT prompts the user for input on encountering a build file
+# with failure (either resolution or compilation); the "q" makes SBT quit.
+ERRORS=$(echo -e "q\n" \
+    | build/sbt \
+        ${SPARK_PROFILES} \
+        -Pdocker-integration-tests \
+        -Pkubernetes-integration-tests \
+        scalastyle test:scalastyle \
+    | awk '{if($1~/error/)print}' \
+)
 
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
