@@ -76,20 +76,8 @@ object CommandUtils extends Logging {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
-      if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
-        val paths = partitions.map(x => new Path(x.storage.locationUri.get))
-        val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
-        val pathFilter = new PathFilter with Serializable {
-          override def accept(path: Path): Boolean = isDataPath(path, stagingDir)
-        }
-        val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
-          paths, sessionState.newHadoopConf(), pathFilter, spark, areRootPaths = true)
-        fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
-      } else {
-        partitions.map { p =>
-          calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
-        }.sum
-      }
+      val paths = partitions.map(_.storage.locationUri)
+      calculateLocationsSizes(spark, catalogTable.identifier, paths).sum
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
