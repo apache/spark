@@ -19,8 +19,8 @@ license: |
   limitations under the License.
 ---
 The <code>SORT BY</code> clause is used to return the result rows sorted
-within each partition in the user specified order. When there are more than one partition
-<code>SORT BY</code> may return results that is partially ordered. This is different
+within each partition in the user specified order. When there is more than one partition
+<code>SORT BY</code> may return result that is partially ordered. This is different
 than <code>ORDER BY</code> clause which guarantees total ordering of the output.
 
 ### Syntax
