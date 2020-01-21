@@ -49,7 +49,7 @@ class CatalogManager(
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
-      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+      catalogs.getOrElseUpdate(name, loadSessionCatalog(name))
     }
   }
 
@@ -62,8 +62,8 @@ class CatalogManager(
     }
   }
 
-  private def loadV2SessionCatalog(): CatalogPlugin = {
-    Catalogs.load(SESSION_CATALOG_NAME, conf) match {
+  private def loadSessionCatalog(name: String): CatalogPlugin = {
+    Catalogs.load(name, conf) match {
       case extension: CatalogExtension =>
         extension.setDelegateCatalog(defaultSessionCatalog)
         extension
@@ -83,7 +83,7 @@ class CatalogManager(
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadSessionCatalog(SESSION_CATALOG_NAME))
       } catch {
         case NonFatal(_) =>
           logError(
