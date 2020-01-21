@@ -222,7 +222,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case (xs, ys) => for { x <- xs; y <- ys } yield (x, y)
       }
 
-      val joinKeys = (explicitJoinKeys.toSet ++ implicitJoinKeys).toSeq
+      val joinKeys = (explicitJoinKeys.toSet ++ implicitJoinKeys).toList
 
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
