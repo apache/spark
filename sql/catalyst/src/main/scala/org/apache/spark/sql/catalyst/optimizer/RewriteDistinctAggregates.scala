@@ -121,8 +121,8 @@ import org.apache.spark.sql.types.IntegerType
  * Third example: single distinct aggregate function with filter clauses (in sql):
  * {{{
  *   SELECT
- *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt1,
- *     COUNT(DISTINCT cat1) as cat1_cnt2,
+ *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt,
+ *     COUNT(DISTINCT cat2) as cat2_cnt,
  *     SUM(value) AS total
  *  FROM
  *    data
@@ -135,9 +135,9 @@ import org.apache.spark.sql.types.IntegerType
  * Aggregate(
  *    key = ['key]
  *    functions = [COUNT(DISTINCT 'cat1) with FILTER('id > 1),
- *                 COUNT(DISTINCT 'cat1),
+ *                 COUNT(DISTINCT 'cat2),
  *                 sum('value)]
- *    output = ['key, 'cat1_cnt1, 'cat1_cnt2, 'total])
+ *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   LocalTableScan [...]
  * }}}
  *
@@ -148,7 +148,7 @@ import org.apache.spark.sql.types.IntegerType
  *      functions = [count(if (('gid = 1)) '_gen_distinct_1 else null),
  *                   count(if (('gid = 2)) '_gen_distinct_2 else null),
  *                   first(if (('gid = 0)) 'total else null) ignore nulls]
- *      output = ['key, 'cat1_cnt, 'cat1_cnt2, 'total])
+ *      output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *     Aggregate(
  *        key = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid]
  *        functions = [sum('value)]
@@ -159,25 +159,23 @@ import org.apache.spark.sql.types.IntegerType
  *                         ('key, null, '_gen_distinct_2, 2, null)]
  *           output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
  *         Expand(
- *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat1, cast('value as bigint))]
+ *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat2, cast('value as bigint))]
  *            output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'value])
  *           LocalTableScan [...]
  * }}}
  *
- * The rule serves two purposes:
- * 1. Expand distinct aggregates which exists filter clause.
- * 2. Rewrite when aggregate exists at least two distinct aggregates.
+ * The rule consists of the two phases as follows.
  *
- * The first child rule does the following things here:
- * 1. Guaranteed to compute filter clause locally.
+ * In the first phase, expands distinct aggregates which exists filter clause:
+ * 1. Guaranteed to compute filter clauses in the first aggregate locally.
  * 2. The attributes referenced by different distinct aggregate expressions are likely to overlap,
  *    and if no additional processing is performed, data loss will occur. To prevent this, we
  *    generate new attributes and replace the original ones.
- * 3. If we apply the first child rule to distinct aggregate expressions which exists filter
+ * 3. If we apply the first phase to distinct aggregate expressions which exists filter
  *    clause, the aggregate after expand may have at least two distinct aggregates, so we need to
- *    apply the second child rule too.
+ *    apply the second phase too. Please refer to the second phase for more details.
  *
- * The second child rule does the following things here:
+ * In the second phase, rewrite when aggregate exists at least two distinct aggregates:
  * 1. Expand the data. There are three aggregation groups in this query:
  *    i. the non-distinct group;
  *    ii. the distinct 'cat1 group;
@@ -207,27 +205,23 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val distinctAggs = exprs.flatMap { _.collect {
       case ae: AggregateExpression if ae.isDistinct => ae
     }}
-    // This rule serves two purposes:
-    // One is to rewrite when there exists at least two distinct aggregates. We need at least
-    // two distinct aggregates for this rule because aggregation strategy can handle a single
-    // distinct group.
-    // Another is to expand distinct aggregates which exists filter clause so that we can
-    // evaluate the filter locally.
+    // We need at least two distinct aggregates or a single distinct aggregate with a filter for
+    // this rule because aggregation strategy can handle a single distinct group without a filter.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
     distinctAggs.size >= 1 || distinctAggs.exists(_.filter.isDefined)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) =>
-      val expandAggregate = extractFiltersInDistinctAggregate(a)
-      rewriteDistinctAggregate(expandAggregate)
+      val expandAggregate = extractFiltersInDistinctAggregates(a)
+      rewriteDistinctAggregates(expandAggregate)
   }
 
-  private def extractFiltersInDistinctAggregate(a: Aggregate): Aggregate = {
+  private def extractFiltersInDistinctAggregates(a: Aggregate): Aggregate = {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
-      // Setup expand for the 'regular' aggregate expressions. Because we will construct a new
+      // Constructs a pair between old and new expressions for regular aggregates. Because we will construct a new
       // aggregate, the children of the distinct aggregates will be changed to the generate
       // ones, so we need creates new references to avoid collisions between distinct and
       // regular aggregate children.
@@ -238,7 +232,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggChildren = (regularFunChildren ++ regularFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
       val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
-      val regularAggMap = regularAggExprs.map {
+      val regularAggPair = regularAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           val newChildren = af.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
           val raf = af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
@@ -251,7 +245,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand for the distinct aggregate expressions.
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
-      val (projections, expressionAttrs, aggExprPairs) = distinctAggExprs.map {
+      val (projections, expressionAttrs, dintinctAggPair) = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           // Why do we need to construct the `exprId` ?
           // First, In order to reduce costs, it is better to handle the filter clause locally.
@@ -292,7 +286,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val groupByAttrs = groupByMap.map(_._2)
       // Construct the expand operator.
       val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
-      val rewriteAggExprLookup = (aggExprPairs ++ regularAggMap).toMap
+      val rewriteAggExprLookup = (distinctAggPair ++ regularAggPair).toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
@@ -305,7 +299,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
   }
 
-  private def rewriteDistinctAggregate(a: Aggregate): Aggregate = {
+  private def rewriteDistinctAggregates(a: Aggregate): Aggregate = {
     val aggExpressions = collectAggregateExprs(a)
 
     // Extract distinct aggregate expressions.
@@ -473,11 +467,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   }
 
   private def collectAggregateExprs(a: Aggregate): Seq[AggregateExpression] = {
-    a.aggregateExpressions.flatMap { e =>
-      e.collect {
+    a.aggregateExpressions.flatMap { _.collect {
         case ae: AggregateExpression => ae
-      }
-    }
+    }}
   }
 
   private def nullify(e: Expression) = Literal.create(null, e.dataType)
