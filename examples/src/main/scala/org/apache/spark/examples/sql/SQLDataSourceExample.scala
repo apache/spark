@@ -32,12 +32,61 @@ object SQLDataSourceExample {
       .getOrCreate()
 
     runBasicDataSourceExample(spark)
+    runGenericFileSourceOptionsExample(spark)
     runBasicParquetExample(spark)
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
     runJdbcDatasetExample(spark)
 
     spark.stop()
+  }
+
+  private def runGenericFileSourceOptionsExample(spark: SparkSession): Unit = {
+    // $example on:ignore_corrupt_files$
+    // enable ignore corrupt files
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    // dir1/file3.json is corrupt from parquet's view
+    val testCorruptDF = spark.read.parquet(
+      "examples/src/main/resources/dir1/",
+      "examples/src/main/resources/dir1/dir2/")
+    testCorruptDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:ignore_corrupt_files$
+    // $example on:ignore_missing_files$
+    // enable ignore missing files
+    spark.sql("set spark.sql.files.ignoreMissingFiles=true")
+    val testMissingDF = spark.read.parquet("examples/src/main/resources/dir1/dir2/")
+    testMissingDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file2.parquet|
+    // +-------------+
+    // $example off:ignore_missing_files$
+    spark.sql("set spark.sql.files.ignoreMissingFiles=false")
+    // $example on:load_with_path_glob_filter$
+    val partitionedUsersDF = spark.read.format("orc")
+      .option("pathGlobFilter", "*.orc")
+      .load("examples/src/main/resources/partitioned_users.orc")
+    // $example off:load_with_path_glob_filter$
+    // $example on:recursive_file_lookup$
+    val recursiveLoadedDF = spark.read.format("parquet")
+      .option("recursiveFileLookup", "true")
+      .load("examples/src/main/resources/dir1")
+    recursiveLoadedDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
   }
 
   private def runBasicDataSourceExample(spark: SparkSession): Unit = {
@@ -56,11 +105,6 @@ object SQLDataSourceExample {
       .option("header", "true")
       .load("examples/src/main/resources/people.csv")
     // $example off:manual_load_options_csv$
-    // $example on:load_with_path_glob_filter$
-    val partitionedUsersDF = spark.read.format("orc")
-      .option("pathGlobFilter", "*.orc")
-      .load("examples/src/main/resources/partitioned_users.orc")
-    // $example off:load_with_path_glob_filter$
     // $example on:manual_save_options_orc$
     usersDF.write.format("orc")
       .option("orc.bloom.filter.columns", "favorite_color")

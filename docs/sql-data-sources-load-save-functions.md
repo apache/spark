@@ -102,27 +102,6 @@ To load a CSV file you can use:
 </div>
 </div>
 
-To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
-you can use:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example load_with_path_glob_filter scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example load_with_path_glob_filter java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example load_with_path_glob_filter python/sql/datasource.py %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example load_with_path_glob_filter r/RSparkSQLExample.R %}
-</div>
-</div>
-
 The extra options are also used during write operation.
 For example, you can control bloom filters and dictionary encodings for ORC data sources.
 The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
