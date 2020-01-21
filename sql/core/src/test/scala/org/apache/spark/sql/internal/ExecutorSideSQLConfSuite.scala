@@ -125,6 +125,39 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     val e = intercept[SparkException](dummyQueryExecution1.toRdd.collect())
     assert(e.getCause.isInstanceOf[NoSuchElementException])
   }
+
+  test("SPARK-30556 propagate local properties to subquery execution thread") {
+    withSQLConf("spark.sql.subquery.maxThreadThreshold" -> "1") {
+      spark.sparkContext.setLocalProperty("spark.sql.y", "e")
+      Seq(true)
+        .toDF()
+        .createOrReplaceTempView("l")
+      Seq(true)
+        .toDF()
+        .mapPartitions { _ =>
+          val conf = SQLConf.get
+          conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "e" match {
+            case true => Iterator(true)
+            case false => Iterator.empty
+          }
+        }
+        .createOrReplaceTempView("m")
+      assert(sql("select * from l where exists (select * from m )").collect.size == 1)
+
+      spark.sparkContext.setLocalProperty("spark.sql.y", "f")
+      Seq(true)
+        .toDF()
+        .mapPartitions { _ =>
+          val conf = SQLConf.get
+          conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "f" match {
+            case true => Iterator(true)
+            case false => Iterator.empty
+          }
+        }
+        .createOrReplaceTempView("n")
+      assert(sql("select value from l where exists (select * from n )").collect().size == 1)
+    }
+  }
 }
 
 case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExecNode {
