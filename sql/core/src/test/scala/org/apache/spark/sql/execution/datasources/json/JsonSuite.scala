@@ -92,7 +92,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     checkTypePromotion(
       Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.SYSTEM_DEFAULT))
 
-    val doubleNumber: Double = 1.7976931348623157E308d
+    val doubleNumber: Double = 1.7976931348623157d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
 
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber * 1000L)),
@@ -284,7 +284,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         null,
@@ -624,7 +624,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -656,7 +656,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable"),
       Row("92233720368547758070",
       "true",
-      "1.7976931348623157E308",
+      "1.7976931348623157",
       "10",
       "21474836470",
       null,
@@ -768,7 +768,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType(20, 0), true) ::
         StructField("boolean", BooleanType, true) ::
-        StructField("double", DecimalType(17, -292), true) ::
+        StructField("double", DecimalType(17, 16), true) ::
         StructField("integer", LongType, true) ::
         StructField("long", LongType, true) ::
         StructField("null", StringType, true) ::
@@ -782,7 +782,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable"),
       Row(BigDecimal("92233720368547758070"),
         true,
-        BigDecimal("1.7976931348623157E308"),
+        BigDecimal("1.7976931348623157"),
         10,
         21474836470L,
         null,
@@ -875,7 +875,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTableSQL"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         null,
@@ -908,7 +908,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable1"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -925,7 +925,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       sql("select * from jsonTable2"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -1274,7 +1274,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         sql("select * from primitiveTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         "this is a simple string.")

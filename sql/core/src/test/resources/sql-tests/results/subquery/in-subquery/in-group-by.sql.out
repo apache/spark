@@ -172,7 +172,7 @@ WHERE  t1b IN (SELECT Max(t2b)
                FROM   t2
                GROUP  BY t2a)
 -- !query 9 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query 9 output
 t1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
 t1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
