@@ -1060,8 +1060,8 @@ class DataSourceV2SQLSuite
       val description = descriptionDf.collect()
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
       )
     }
@@ -1075,8 +1075,8 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", "((a,b),(b,a),(c,c))"))
       )
@@ -1122,8 +1122,8 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
       )
     }
@@ -2149,7 +2149,7 @@ class DataSourceV2SQLSuite
       Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
-      .where("k='Description'")
+      .where(s"k='${SupportsNamespaces.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
@@ -2187,7 +2187,7 @@ class DataSourceV2SQLSuite
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where("k='Comment'")
+      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 

@@ -178,7 +178,7 @@ case class DescribeDatabaseCommand(
     val allDbProperties = dbMetadata.properties
     val result =
       Row("Database Name", dbMetadata.name) ::
-        Row("Description", dbMetadata.description) ::
+        Row("Comment", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
         Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
 
