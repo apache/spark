@@ -519,7 +519,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
-    val appender = new LogAppender
+    val appender = new LogAppender("huge method limit")
     withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
