@@ -21,7 +21,7 @@ import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -133,6 +133,18 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         .createOrReplaceTempView("l")
       val confKey = "spark.sql.y"
 
+      def createDataframe(confKey: String, confValue: String): Dataset[Boolean] = {
+        Seq(true)
+          .toDF()
+          .mapPartitions { _ =>
+            val conf = SQLConf.get
+            conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString(confKey) == confValue match {
+              case true => Iterator(true)
+              case false => Iterator.empty
+            }
+          }
+      }
+
       // set local configuration and assert
       val confValue1 = "e"
       createDataframe(confKey, confValue1)
@@ -147,18 +159,6 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
       spark.sparkContext.setLocalProperty(confKey, confValue2)
       assert(sql("select value from l where exists (select * from n )").collect().size == 1)
     }
-  }
-
-  private def createDataframe(confKey: String, confValue: String) = {
-    Seq(true)
-      .toDF()
-      .mapPartitions { _ =>
-        val conf = SQLConf.get
-        conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString(confKey) == confValue match {
-          case true => Iterator(true)
-          case false => Iterator.empty
-        }
-      }
   }
 }
 
