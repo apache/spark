@@ -221,7 +221,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
-      // Constructs a pair between old and new expressions for regular aggregates. Because we
+      // Constructs pairs between old and new expressions for regular aggregates. Because we
       // will construct a new aggregate, the children of the distinct aggregates will be
       // changed to the generate ones, so we need creates new references to avoid collisions
       // between distinct and regular aggregate children.
@@ -232,7 +232,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggChildren = (regularFunChildren ++ regularFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
       val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
-      val regularAggPair = regularAggExprs.map {
+      val regularAggPairs = regularAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           val newChildren = af.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
           val raf = af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
@@ -245,7 +245,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand for the distinct aggregate expressions.
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
-      val (projections, expressionAttrs, distinctAggPair) = distinctAggExprs.map {
+      val (projections, expressionAttrs, distinctAggPairs) = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           // Why do we need to construct the `exprId` ?
           // First, In order to reduce costs, it is better to handle the filter clause locally.
@@ -286,7 +286,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val groupByAttrs = groupByMap.map(_._2)
       // Construct the expand operator.
       val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
-      val rewriteAggExprLookup = (distinctAggPair ++ regularAggPair).toMap
+      val rewriteAggExprLookup = (distinctAggPairs ++ regularAggPairs).toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
