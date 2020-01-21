@@ -185,7 +185,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val joinKeys = predicates.flatMap {
+      val explicitJoinKeys = predicates.flatMap {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
@@ -203,6 +203,27 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
           )
         case other => None
       }
+
+      val literalEqualities = predicates.collect {
+        case EqualTo(l, r: Literal) if canEvaluate(l, left) && l.deterministic =>
+          r -> (Some(l), None)
+        case EqualTo(l, r: Literal) if canEvaluate(l, right) && l.deterministic =>
+          r -> (None, Some(l))
+        case EqualTo(l: Literal, r) if canEvaluate(r, left) && r.deterministic =>
+          l -> (Some(r), None)
+        case EqualTo(l: Literal, r) if canEvaluate(r, right) && r.deterministic =>
+          l -> (None, Some(r))
+      }.groupBy(_._1).mapValues { v =>
+        val (l, r) = v.map(_._2).unzip
+        (l.flatten, r.flatten)
+      }
+
+      val implicitJoinKeys = literalEqualities.values.flatMap {
+        case (xs, ys) => for { x <- xs; y <- ys } yield (x, y)
+      }
+
+      val joinKeys = (explicitJoinKeys.toSet ++ implicitJoinKeys).toSeq
+
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>

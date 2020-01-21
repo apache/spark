@@ -1082,4 +1082,33 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assert(df2.join(df1, "id").collect().isEmpty)
     }
   }
+
+  test("Detect equijoins better") {
+    val df1 = Seq((1, 1), (2, 2)).toDF("c1", "c2")
+    val df2 = Seq((2, 2), (3, 3)).toDF("c1", "c2")
+
+    val explicitConstraints = df1("c1") === 2 && df2("c1") === 2
+    val implicitConstraints = df1("c1") === df2("c1")
+
+    val explicitDF = df1.join(df2, explicitConstraints && implicitConstraints, "FullOuter")
+    val implicitDF = df1.join(df2, explicitConstraints, "FullOuter")
+
+    checkAnswer(explicitDF, implicitDF)
+    assert(
+      explicitDF.queryExecution.sparkPlan === implicitDF.queryExecution.sparkPlan,
+      "Explicit and implicit plans should match.")
+
+    val explicitConstraints2 =
+      df1("c1") === 2 && df1("c2") === 2 && df2("c1") === 2 && df2("c2") === 2
+    val implicitConstraints2 = df1("c1") === df2("c1") && df1("c1") === df2("c2") &&
+      df1("c2") === df2("c1") && df1("c2") === df2("c2")
+
+    val explicitDF2 = df1.join(df2, explicitConstraints2 && implicitConstraints2, "FullOuter")
+    val implicitDF2 = df1.join(df2, explicitConstraints2, "FullOuter")
+
+    checkAnswer(explicitDF2, implicitDF2)
+    assert(
+      explicitDF2.queryExecution.sparkPlan === implicitDF2.queryExecution.sparkPlan,
+      "Explicit and implicit plans should match.")
+  }
 }
