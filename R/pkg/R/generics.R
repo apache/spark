@@ -1192,7 +1192,7 @@ setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_ra
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("percentile_approx",
-           function(x, percentage, accuracy = 10000) { standardGeneric("percentile_approx") })
+           function(x, percentage, ...) { standardGeneric("percentile_approx") })
 
 #' @rdname column_math_functions
 #' @name NULL

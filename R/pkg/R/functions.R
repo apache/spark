@@ -1426,7 +1426,7 @@ setMethod("quarter",
 #' @aliases percentile_approx percentile_approx,Column-method
 #' @note percentile_approx since 3.0.0
 setMethod("percentile_approx",
-          signature(x = "characterOrColumn", percentage = "numeric", accuracy = "ANY"),
+          signature(x = "characterOrColumn", percentage = "numeric"),
           function(x, percentage, accuracy = 10000) {
             col <- if (class(x) == "Column") {
               x@jc
