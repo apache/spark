@@ -598,23 +598,22 @@ def percentile_approx(col, percentage, accuracy=10000):
     In this case, returns the approximate percentile array of column col
     at the given percentage array.
 
-    >>> df = (spark.range(0, 1000, 1, 1)
-    ...     .withColumn("id", col("id") % 3)
-    ...     .withColumn("value", randn(42) + col("id") * 10))
-    >>> (df
-    ...     .select(percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles"))
-    ...     .printSchema())
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
+    ... ).printSchema()
     root
-    |-- quantiles: array (nullable = true)
-    |    |-- element: double (containsNull = false)
+     |-- quantiles: array (nullable = true)
+     |    |-- element: double (containsNull = false)
 
-    >>> (df
-    ...     .groupBy("id")
-    ...     .agg(percentile_approx("value", 0.5, 1000000).alias("median"))
-    ...     .printSchema())
+    >>> df.groupBy("key").agg(
+    ...     percentile_approx("value", 0.5, 1000000).alias("median")
+    ... ).printSchema()
     root
-    |-- id: long (nullable = true)
-    |-- median: double (nullable = true)
+     |-- key: long (nullable = true)
+     |-- median: double (nullable = true)
     """
     sc = SparkContext._active_spark_context
     if isinstance(percentage, (list, tuple)):
