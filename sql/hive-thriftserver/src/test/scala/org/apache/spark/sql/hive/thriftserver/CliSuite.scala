@@ -402,17 +402,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-30049 Should not complaint for quotes in commented lines") {
-    runCliWithin(1.minute, errorResponses = Seq("^^^"))(
-      """SELECT 'test' -- someone's comment here
-        |;""".stripMargin -> "test"
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here
+        |;""".stripMargin -> "testcomment"
     )
   }
 
-  test("SPARK-30049 Should not complaint for quotes in commented lines ") {
-    runCliWithin(1.minute, errorResponses = Seq("^^^"))(
-      """SELECT 'test' -- someone's comment here \\
-        |comment continues here with single ' quote
-        |;""".stripMargin -> "test"
+  test("SPARK-30049 Should not complaint for quotes in commented with multi-lines") {
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here \\
+        |comment continues here with single ' quote \\
+        | extra ' \\
+        |;""".stripMargin -> "testcomment"
     )
   }
 }

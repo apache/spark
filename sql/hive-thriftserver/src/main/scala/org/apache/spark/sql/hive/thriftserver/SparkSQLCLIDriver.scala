@@ -560,7 +560,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
     }
     ret.add(line.substring(beginIndex, endIndex))
-    println(ret)
     ret
   }
 }
