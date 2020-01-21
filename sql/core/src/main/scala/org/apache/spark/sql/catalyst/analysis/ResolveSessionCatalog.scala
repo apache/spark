@@ -98,14 +98,14 @@ class ResolveSessionCatalog(
     case AlterTableSetProperties(ResolvedTable(_, ident, _: V1Table), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
-    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
+    // View is supported only in session catalog, thus ResolvedView always uses v1 command.
     case AlterTableSetProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
     case AlterTableUnsetProperties(ResolvedTable(_, ident, _: V1Table), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
-    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
+    // View is supported only in session catalog, thus ResolvedView always uses v1 command.
     case AlterTableUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
