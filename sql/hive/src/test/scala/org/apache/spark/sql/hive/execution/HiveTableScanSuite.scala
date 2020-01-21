@@ -93,12 +93,12 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
     }
   }
 
-  private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
+  private def checkNumScannedPartitions(stmt: String, expected: Boolean): Unit = {
     val plan = sql(stmt).queryExecution.sparkPlan
-    val numPartitions = plan.collectFirst {
-      case p: HiveTableScanExec => p.prunedPartitionsViaHiveMetastore.length
-    }.getOrElse(0)
-    assert(numPartitions == expectedNumParts)
+    val pushedDown = plan.collectFirst {
+      case p: HiveTableScanExec => p.prunedPartitionsViaHiveMetaStore().isDefined
+    }.getOrElse(false)
+    assert(pushedDown == expected)
   }
 
   test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
@@ -125,20 +125,15 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
-            // If the pruning predicate is used, getHiveQlPartitions should only return the
-            // qualified partition; Otherwise, it return all the partitions.
-            val expectedNumPartitions = if (hivePruning == "true") 1 else 2
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expected = hivePruning.toBoolean)
           }
         }
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
-            // If the pruning predicate does not exist, getHiveQlPartitions should always
-            // return all the partitions.
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expected = hivePruning.toBoolean)
           }
         }
       }

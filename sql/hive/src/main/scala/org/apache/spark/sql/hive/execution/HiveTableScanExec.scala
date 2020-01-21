@@ -163,39 +163,31 @@ case class HiveTableScanExec(
   }
 
   @transient lazy val partitions: Seq[HivePartition] = {
-    if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-      partitionPruningPred.nonEmpty) {
-      val normalizedFilters = partitionPruningPred.map(_.transform {
-        case a: AttributeReference => originalAttributes(a)
-      })
-      sparkSession.sessionState.catalog
-        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
-        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
-    } else {
-      val hivePartitions =
-        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
-          .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
-      if (partitionPruningPred.nonEmpty) {
-        prunePartitions(hivePartitions)
+    if (partitionPruningPred.nonEmpty) {
+      val prunedPartitions = prunedPartitionsViaHiveMetaStore()
+      if (prunedPartitions.isDefined) {
+        prunedPartitions.get
       } else {
-        hivePartitions
+        prunePartitions(
+          sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+            .map(HiveClientImpl.toHivePartition(_, hiveQlTable)))
       }
-    }
-  }
-
-  // Only for tests
-  @transient lazy val prunedPartitionsViaHiveMetastore: Seq[HivePartition] = {
-    if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-      partitionPruningPred.nonEmpty) {
-      val normalizedFilters = partitionPruningPred.map(_.transform {
-        case a: AttributeReference => originalAttributes(a)
-      })
-      sparkSession.sessionState.catalog
-        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
-        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
     } else {
       sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
         .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    }
+  }
+
+  def prunedPartitionsViaHiveMetaStore(): Option[Seq[HivePartition]] = {
+    if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+      val normalizedFilters = partitionPruningPred.map(_.transform {
+        case a: AttributeReference => originalAttributes(a)
+      })
+      Some(sparkSession.sessionState.catalog
+        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+        .map(HiveClientImpl.toHivePartition(_, hiveQlTable)))
+    } else {
+      None
     }
   }
 
