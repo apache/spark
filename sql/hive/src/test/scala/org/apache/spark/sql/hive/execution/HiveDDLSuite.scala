@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
@@ -418,13 +418,23 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       catalog.reset()
     }
   }
+
+  test("Table Ownership") {
+    val catalog = spark.sessionState.catalog
+    try {
+      sql(s"CREATE TABLE spark_30019(k int)")
+      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
+    }
+  }
 }
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-  private val reversedProperties = Seq("ownerName", "ownerType")
 
   override def afterEach(): Unit = {
     try {
