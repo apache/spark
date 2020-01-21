@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.concurrent.{ExecutionContext, Future}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
@@ -163,5 +165,18 @@ object SQLExecution {
         sc.setLocalProperty(key, value)
       }
     }
+  }
+
+  /**
+   * Wrap passed function to ensure sparkContext local properties are forwarded to execution thread
+   */
+  def withThreadLocalCaptured[T](sparkContext: SparkContext)
+                                (body: => T)
+                                (exec: ExecutionContext): Future[T] = {
+    val localProps = Utils.cloneProperties(sparkContext.getLocalProperties)
+    Future {
+      sparkContext.setLocalProperties(localProps)
+      body
+    }(exec)
   }
 }
