@@ -100,6 +100,10 @@ class BlockManagerMasterEndpoint(
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
       val succeed = updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
       context.reply(succeed)
+      // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
+      // returns false, which may causes negative memory usage in UI(see SPARK-30465). In
+      // this case, that BlockManager will re-register and report all blocks to driver later.
+      // So, we should avoid to post the same block for two times.
       if (succeed) {
         listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
       }
