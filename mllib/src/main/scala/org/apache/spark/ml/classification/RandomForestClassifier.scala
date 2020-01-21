@@ -156,7 +156,7 @@ class RandomForestClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,
       maxMemoryInMB, minInfoGain, minInstancesPerNode, minWeightFractionPerNode, seed,
-      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
+      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
