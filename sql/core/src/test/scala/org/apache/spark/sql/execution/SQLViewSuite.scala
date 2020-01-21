@@ -145,13 +145,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
       assertAnalysisError(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
-        s"$viewName is a temp view not a table")
+        "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
 
       // For the following v2 ALERT TABLE statements, relations are first resolved before
       // unsupported operations are checked.
       assertAnalysisError(
         s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
-        s"$viewName is a temp view not a table")
+        "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
     }
   }
 

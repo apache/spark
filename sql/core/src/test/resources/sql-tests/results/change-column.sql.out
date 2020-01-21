@@ -195,7 +195,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT COMMENT 'this is column a'
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-temp_view is a temp view not a table.; line 1 pos 0
+Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead; line 1 pos 0
 
 
 -- !query 21
@@ -212,7 +212,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT COMMENT 'this is colu
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-global_temp.global_temp_view is a temp view not a table.; line 1 pos 0
+Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead; line 1 pos 0
 
 
 -- !query 23
