@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{IntegerType, NullType}
 
+
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -36,23 +37,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, LocalRelation('a.int)).analyze
-    val actual = Optimize.execute(
-      Project(Alias(e1, "out")() :: Nil, LocalRelation('a.int)).analyze)
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, LocalRelation('a.int)).analyze)
     comparePlans(actual, correctAnswer)
   }
 
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
+  private val nullBranch = (Literal.create(null, NullType), Literal(30))
+
   private val nullValue = Literal.create(null, IntegerType)
-  private val nullBranch = (nullValue, Literal(30))
   private val colA = UnresolvedAttribute(Seq("a"))
   private val nullIntolerantExp = Abs(colA)
-  private val nullTolerantExp = Coalesce(Seq(nullValue, colA, Literal(5)))
+  private val nullTolerantExp = Coalesce(Seq(colA, Literal(5)))
 
   val isNullCondA = IsNull(colA)
   val isNotNullCond = IsNotNull(colA)
-  val isNullCondB = IsNull(UnresolvedAttribute("b"))
+  val isNullCond = IsNull(UnresolvedAttribute("b"))
   val notCond = Not(UnresolvedAttribute("c"))
 
   test("simplify if") {
@@ -103,6 +104,11 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       If(isNotNullCond, nullIntolerantExp, colA),
       nullIntolerantExp)
 
+    // Try also more complex case
+    assertEquivalent(
+      If(isNotNullCond, Abs(nullIntolerantExp), colA),
+      Abs(nullIntolerantExp))
+
     // We do not remove the null check if the expression is not null-intolerant
     assertEquivalent(
       If(isNullCondA, nullValue, nullTolerantExp),
@@ -111,6 +117,11 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     assertEquivalent(
       If(isNotNullCond, nullTolerantExp, nullValue),
       If(isNotNullCond, nullTolerantExp, nullValue))
+
+    // Try also more complex case
+    assertEquivalent(
+      If(isNotNullCond, Abs(nullTolerantExp), nullValue),
+      If(isNotNullCond, Abs(nullTolerantExp), nullValue))
   }
 
   test("remove redundant null-check for CaseWhen based on null-Intolerant expressions") {
@@ -192,7 +203,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
       CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
-        (isNullCondB, Literal(1)) ::
+        (isNullCond, Literal(1)) ::
         (notCond, Add(Literal(6), Literal(-5))) ::
         Nil,
         Add(Literal(2), Literal(-1))),

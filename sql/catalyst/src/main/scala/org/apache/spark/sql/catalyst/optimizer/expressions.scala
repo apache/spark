@@ -444,10 +444,14 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       ifNullExpr: Expression,
       ifNotNullExpr: Expression,
       checkedExpr: Expression): Boolean = {
-    ifNotNullExpr.isInstanceOf[NullIntolerant] && {
+    val isNullIntolerant = ifNotNullExpr.find { x =>
+      !x.isInstanceOf[NullIntolerant] && x.find(e => e.semanticEquals(checkedExpr)).nonEmpty
+    }.isEmpty
+
+    isNullIntolerant && {
       (ifNullExpr.semanticEquals(checkedExpr) ||
         (ifNullExpr.foldable && ifNullExpr.eval() == null)) &&
-        ifNotNullExpr.children.contains(checkedExpr)
+        ifNotNullExpr.find(x => x.semanticEquals(checkedExpr)).nonEmpty
     }
   }
 
@@ -461,8 +465,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 
       case i @ If(cond, trueValue, falseValue) => cond match {
         // If the null-check is redundant, remove it
-        case IsNull(child) if isRedundantNullCheck(trueValue, falseValue, child) => falseValue
-        case IsNotNull(child) if isRedundantNullCheck(falseValue, trueValue, child) => trueValue
+        case IsNull(child)
+          if isRedundantNullCheck(trueValue, falseValue, child) => falseValue
+        case IsNotNull(child)
+          if isRedundantNullCheck(falseValue, trueValue, child) => trueValue
         case _ => i
       }
 
@@ -508,17 +514,19 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
 
-      case e @ CaseWhen(branches, elseValue) if branches.length == 1 =>
-        // remove redundant null checks for CaseWhen with one branch
-        branches(0)._1 match {
-          case IsNotNull(child) if isRedundantNullCheck(
-            elseValue.getOrElse(Literal.create(null, child.dataType)),
-            branches(0)._2, child) => branches(0)._2
-          case IsNull(child) if isRedundantNullCheck(
-            branches(0)._2,
-            elseValue.getOrElse(Literal.create(null, child.dataType)),
-            child) => elseValue.getOrElse(Literal.create(null, child.dataType))
-          case _ => e
+      // remove redundant null checks for CaseWhen with one branch
+      case CaseWhen(Seq((IsNotNull(child), trueValue)), Some(falseValue))
+        if isRedundantNullCheck(falseValue, trueValue, child) => trueValue
+      case CaseWhen(Seq((IsNull(child), trueValue)), Some(falseValue))
+        if isRedundantNullCheck(trueValue, falseValue, child) => falseValue
+      case CaseWhen(Seq((IsNotNull(child), trueValue)), None)
+        if isRedundantNullCheck(Literal.create(null, child.dataType), trueValue, child) => trueValue
+      case e @ CaseWhen(Seq((IsNull(child), trueValue)), None) =>
+        val nullValue = Literal.create(null, child.dataType)
+        if (isRedundantNullCheck(trueValue, nullValue, child)) {
+          nullValue
+        } else {
+          e
         }
     }
   }
