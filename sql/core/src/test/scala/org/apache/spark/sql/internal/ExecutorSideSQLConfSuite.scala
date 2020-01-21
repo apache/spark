@@ -128,35 +128,37 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
   test("SPARK-30556 propagate local properties to subquery execution thread") {
     withSQLConf("spark.sql.subquery.maxThreadThreshold" -> "1") {
-      spark.sparkContext.setLocalProperty("spark.sql.y", "e")
       Seq(true)
         .toDF()
         .createOrReplaceTempView("l")
-      Seq(true)
-        .toDF()
-        .mapPartitions { _ =>
-          val conf = SQLConf.get
-          conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "e" match {
-            case true => Iterator(true)
-            case false => Iterator.empty
-          }
-        }
+      val confKey = "spark.sql.y"
+
+      // set local configuration and assert
+      val confValue1 = "e"
+      createDataframe(confKey, confValue1)
         .createOrReplaceTempView("m")
+      spark.sparkContext.setLocalProperty(confKey, confValue1)
       assert(sql("select * from l where exists (select * from m )").collect.size == 1)
 
-      spark.sparkContext.setLocalProperty("spark.sql.y", "f")
-      Seq(true)
-        .toDF()
-        .mapPartitions { _ =>
-          val conf = SQLConf.get
-          conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "f" match {
-            case true => Iterator(true)
-            case false => Iterator.empty
-          }
-        }
+      // change the conf value and assert again
+      val confValue2 = "f"
+      createDataframe(confKey, confValue2)
         .createOrReplaceTempView("n")
+      spark.sparkContext.setLocalProperty(confKey, confValue2)
       assert(sql("select value from l where exists (select * from n )").collect().size == 1)
     }
+  }
+
+  private def createDataframe(confKey: String, confValue: String) = {
+    Seq(true)
+      .toDF()
+      .mapPartitions { _ =>
+        val conf = SQLConf.get
+        conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString(confKey) == confValue match {
+          case true => Iterator(true)
+          case false => Iterator.empty
+        }
+      }
   }
 }
 
