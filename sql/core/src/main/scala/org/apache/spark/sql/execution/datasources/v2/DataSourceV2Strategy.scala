@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -114,31 +114,37 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
-      CreateTableExec(catalog, ident, schema, parts, props, ifNotExists) :: Nil
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      CreateTableExec(catalog, ident, schema, parts, propsWithOwner, ifNotExists) :: Nil
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(
-            staging, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(
-            catalog, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(catalog, ident) =>
       RefreshTableExec(catalog, ident) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate = orCreate) :: Nil
+          AtomicReplaceTableExec(
+            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
         case _ =>
-          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate = orCreate) :: Nil
+          ReplaceTableExec(
+            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
       }
 
     case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
@@ -148,7 +154,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            props,
+            propsWithOwner,
             writeOptions,
             orCreate = orCreate) :: Nil
         case _ =>
@@ -158,7 +164,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            props,
+            propsWithOwner,
             writeOptions,
             orCreate = orCreate) :: Nil
       }
