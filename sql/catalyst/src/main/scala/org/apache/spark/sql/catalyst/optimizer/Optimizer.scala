@@ -1407,7 +1407,7 @@ object CombineLimits extends Rule[LogicalPlan] {
  *  merging the expressions into one single expression.
  */
 object RewriteOffsets extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case GlobalLimit(le, oe, Offset(noe, grandChild)) =>
       GlobalLimit(le, Greatest(Seq(noe, oe)), grandChild)
     case LocalLimit(le, oe, Offset(noe, grandChild)) =>

@@ -733,7 +733,7 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   /**
-   * Validates that the root plan is [[Offset]].
+   * Validate that the root node of query or subquery is [[Offset]].
    */
   private def checkOutermostOffset(plan: LogicalPlan): Unit = {
     plan match {
