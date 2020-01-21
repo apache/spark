@@ -750,7 +750,7 @@ case class SubqueryExec(name: String, child: SparkPlan)
   private lazy val relationFuture: Future[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](sparkContext) {
+    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](sqlContext.sparkSession) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {

@@ -170,11 +170,13 @@ object SQLExecution {
   /**
    * Wrap passed function to ensure sparkContext local properties are forwarded to execution thread
    */
-  def withThreadLocalCaptured[T](sparkContext: SparkContext)(body: => T)(
+  def withThreadLocalCaptured[T](sparkSession: SparkSession)(body: => T)(
     exec: ExecutionContext): Future[T] = {
-    val localProps = Utils.cloneProperties(sparkContext.getLocalProperties)
+    val activeSession = sparkSession
+    val localProps = Utils.cloneProperties(sparkSession.sparkContext.getLocalProperties)
     Future {
-      sparkContext.setLocalProperties(localProps)
+      SparkSession.setActiveSession(activeSession)
+      sparkSession.sparkContext.setLocalProperties(localProps)
       body
     }(exec)
   }
