@@ -817,7 +817,7 @@ class Analyzer(
           .getOrElse(u)
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(_, _)) =>
-        u.failAnalysis("View is not supported in v2 catalog yet.")
+        u.failAnalysis("Views are not supported in v2 catalog yet.")
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)

@@ -1754,6 +1754,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("AlterTable: set/unset properties are not supported in v2 catalogs") {
+    val e1 = intercept[AnalysisException] {
+      sql(s"ALTER VIEW testcat.view SET TBLPROPERTIES ('key' = 'val')")
+    }
+    assert(e1.getMessage.contains("Views are not supported in v2 catalog yet"))
+
+    val e2 = intercept[AnalysisException] {
+      sql(s"ALTER VIEW testcat.view UNSET TBLPROPERTIES ('key')")
+    }
+    assert(e2.getMessage.contains("Views are not supported in v2 catalog yet"))
+  }
+
   test("AlterTable: renaming views are not supported") {
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
