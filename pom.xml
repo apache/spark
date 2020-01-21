@@ -258,14 +258,12 @@
       </snapshots>
     </repository>
     <repository>
-      <id>central_without_mirror</id>
+      <id>google-maven-central</id>
       <!--
         This is used as a fallback when a mirror to `central` fail.
-        For example, when we use Google Maven Central in GitHub Action as a mirror of `central`,
-        this will be used when Google Maven Central is out of sync due to its late sync cycle.
       -->
-      <name>Maven Repository</name>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -278,6 +276,17 @@
     <pluginRepository>
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>google-maven-central</id>
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
       <releases>
         <enabled>true</enabled>
       </releases>
