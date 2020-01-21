@@ -65,7 +65,8 @@ private[spark] object BaggedPoint {
       seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
     // TODO: implement weighted bootstrapping
     if (withReplacement) {
-      convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
+      convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples,
+        extractSampleWeight, seed)
     } else {
       if (numSubsamples == 1 && subsamplingRate == 1.0) {
         convertToBaggedRDDWithoutSampling(input, extractSampleWeight)
@@ -104,6 +105,7 @@ private[spark] object BaggedPoint {
       input: RDD[Datum],
       subsample: Double,
       numSubsamples: Int,
+      extractSampleWeight: (Datum => Double),
       seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
@@ -116,7 +118,7 @@ private[spark] object BaggedPoint {
           subsampleCounts(subsampleIndex) = poisson.sample()
           subsampleIndex += 1
         }
-        new BaggedPoint(instance, subsampleCounts)
+        new BaggedPoint(instance, subsampleCounts, extractSampleWeight(instance))
       }
     }
   }

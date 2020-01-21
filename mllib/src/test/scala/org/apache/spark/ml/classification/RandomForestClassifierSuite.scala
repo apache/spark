@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -41,6 +42,8 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
+  private var binaryDataset: DataFrame = _
+  private val seed = 42
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -50,6 +53,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     orderedLabeledPoints5_20 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20))
         .map(_.asML)
+    binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -257,6 +261,37 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       assert(i.getSeed === model.getSeed)
       assert(i.getImpurity === model.getImpurity)
     })
+  }
+
+  test("training with sample weights") {
+    val df = binaryDataset
+    val numClasses = 2
+    // (numTrees, maxDepth, subsamplingRate, fractionInTol)
+    val testParams = Seq(
+      (20, 5, 1.0, 0.96),
+      (20, 10, 1.0, 0.96),
+      (20, 10, 0.95, 0.96)
+    )
+
+    for ((numTrees, maxDepth, subsamplingRate, tol) <- testParams) {
+      val estimator = new RandomForestClassifier()
+        .setNumTrees(numTrees)
+        .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol))
+      MLTestingUtils.testOutliersWithSmallWeights[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ == _, tol),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

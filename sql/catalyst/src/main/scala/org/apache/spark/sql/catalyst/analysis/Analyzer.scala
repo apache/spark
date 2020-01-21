@@ -454,7 +454,7 @@ class Analyzer(
         gid: Attribute): LogicalPlan = {
       // Change the nullability of group by aliases if necessary. For example, if we have
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullabilty of b to be TRUE.
+      // should change the nullability of b to be TRUE.
       // TODO: For Cube/Rollup just set nullability to be `true`.
       val expandedAttributes = groupByAliases.map { alias =>
         if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
@@ -755,10 +755,14 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
-        }
-        u
+        lookupTempView(ident)
+          .map(_ => UnresolvedTableWithViewExists(
+            ResolvedView(ident.asIdentifier, isTempView = true)))
+          .getOrElse(u)
+      case u @ UnresolvedTableOrView(ident) =>
+        lookupTempView(ident)
+          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
+          .getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -803,28 +807,15 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .getOrElse(u)
+
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
-
-      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => desc.copy(table = rel))
-            .getOrElse(desc)
-
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => alter.copy(table = rel))
-            .getOrElse(alter)
-
-      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => show.copy(table = rel))
-          .getOrElse(show)
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -889,17 +880,27 @@ class Analyzer(
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier: Seq[String]) =>
-        expandRelationName(identifier) match {
-          case SessionCatalogAndIdentifier(catalog, ident) =>
-            CatalogV2Util.loadTable(catalog, ident) match {
-              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                u.failAnalysis(s"$ident is a view not table.")
-              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
-              case None => u
-            }
-          case _ => u
-        }
+      case u @ UnresolvedTable(identifier) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView => UnresolvedTableWithViewExists(v)
+          case table => table
+        }.getOrElse(u)
+
+      case u @ UnresolvedTableOrView(identifier) =>
+        lookupTableOrView(identifier).getOrElse(u)
+    }
+
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+      expandRelationName(identifier) match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident).map {
+            case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+              ResolvedView(ident, isTempView = false)
+            case table =>
+              ResolvedTable(catalog.asTableCatalog, ident, table)
+          }
+        case _ => None
+      }
     }
 
     // Look up a relation from the session catalog with the following logic:
@@ -1054,34 +1055,43 @@ class Analyzer(
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
 
-      val conflictPlans = right.collect {
+      /**
+       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
+       * inherit directly from its children, we could just stop collect on it. Because we could
+       * always replace all the lower conflict attributes with the new attributes from the new
+       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
+       * it to the next batch to reduce possible overhead because this should be a corner case.
+       */
+      def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
-          (oldVersion, newVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion: SerializeFromObject
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(
+            serializer = oldVersion.serializer.map(_.newInstance()))))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
             if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+          Seq((oldVersion, oldVersion.copy(
+            aggregateExpressions = newAliases(aggregateExpressions))))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(output = output.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
 
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -1093,13 +1103,17 @@ class Analyzer(
               attr
             }
           }
-          (oldVersion, oldVersion.copy(output = newOutput))
+          Seq((oldVersion, oldVersion.copy(output = newOutput)))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
-          (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
+            .nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+
+        case _ => plan.children.flatMap(collectConflictPlans)
       }
+
+      val conflictPlans = collectConflictPlans(right)
 
       /*
        * Note that it's possible `conflictPlans` can be empty which implies that there

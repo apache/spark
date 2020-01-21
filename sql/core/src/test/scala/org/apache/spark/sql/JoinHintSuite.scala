@@ -17,34 +17,24 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.log4j.{AppenderSkeleton, Level}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class JoinHintSuite extends PlanTest with SharedSparkSession {
+class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   lazy val df = spark.range(10)
   lazy val df1 = df.selectExpr("id as a1", "id as a2")
   lazy val df2 = df.selectExpr("id as b1", "id as b2")
   lazy val df3 = df.selectExpr("id as c1", "id as c2")
-
-  class MockAppender extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
-  }
 
   def msgNoHintRelationFound(relation: String, hint: String): String =
     s"Count not find relation '$relation' specified in hint '$hint'."
@@ -59,7 +49,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
       df: => DataFrame,
       expectedHints: Seq[JoinHint],
       warnings: Seq[String]): Unit = {
-    val logAppender = new MockAppender()
+    val logAppender = new LogAppender("join hints")
     withLogAppender(logAppender) {
       verifyJoinHint(df, expectedHints)
     }
@@ -352,7 +342,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertBroadcastHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val broadcastHashJoins = executedPlan.collect {
+    val broadcastHashJoins = collect(executedPlan) {
       case b: BroadcastHashJoinExec => b
     }
     assert(broadcastHashJoins.size == 1)
@@ -361,7 +351,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertBroadcastNLJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val broadcastNLJoins = executedPlan.collect {
+    val broadcastNLJoins = collect(executedPlan) {
       case b: BroadcastNestedLoopJoinExec => b
     }
     assert(broadcastNLJoins.size == 1)
@@ -370,7 +360,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleHashJoin(df: DataFrame, buildSide: BuildSide): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleHashJoins = executedPlan.collect {
+    val shuffleHashJoins = collect(executedPlan) {
       case s: ShuffledHashJoinExec => s
     }
     assert(shuffleHashJoins.size == 1)
@@ -379,7 +369,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleMergeJoin(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleMergeJoins = executedPlan.collect {
+    val shuffleMergeJoins = collect(executedPlan) {
       case s: SortMergeJoinExec => s
     }
     assert(shuffleMergeJoins.size == 1)
@@ -387,7 +377,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   private def assertShuffleReplicateNLJoin(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
-    val shuffleReplicateNLJoins = executedPlan.collect {
+    val shuffleReplicateNLJoins = collect(executedPlan) {
       case c: CartesianProductExec => c
     }
     assert(shuffleReplicateNLJoins.size == 1)

@@ -39,7 +39,6 @@ class ResourceProfileSuite extends SparkFunSuite {
       super.afterEach()
     }
   }
-
   test("Default ResourceProfile") {
     val rprof = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
     assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -206,7 +205,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
     assert(immrprof.isCoresLimitKnown == true)
   }
-
 
   test("Create ResourceProfile") {
     val rprof = new ResourceProfileBuilder()

@@ -87,6 +87,10 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, context.subqueryCache),
+    // Here the 'OptimizeSkewedJoin' rule should be executed
+    // before 'ReduceNumShufflePartitions', as the skewed partition handled
+    // in 'OptimizeSkewedJoin' rule, should be omitted in 'ReduceNumShufflePartitions'.
+    OptimizeSkewedJoin(conf),
     ReduceNumShufflePartitions(conf),
     // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
     // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
@@ -176,7 +180,8 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
             errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}", ex))
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}." +
+                s" and the cause is ${ex.getMessage}", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -506,7 +511,8 @@ case class AdaptiveSparkPlanExec(
       }
     } finally {
       val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures.", errors.head)
+        "Adaptive execution failed due to stage materialization failures." +
+          s" and the cause is ${errors.head.getMessage}", errors.head)
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex

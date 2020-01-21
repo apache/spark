@@ -257,14 +257,6 @@ case class AlterTableAddColumnsCommand(
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
-    if (catalogTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"""
-          |ALTER ADD COLUMNS does not support views.
-          |You must drop and re-create the views for adding the new columns. Views: $table
-         """.stripMargin)
-    }
-
     if (DDLUtils.isDatasourceTable(catalogTable)) {
       DataSource.lookupDataSource(catalogTable.provider.get, conf).
         getConstructor().newInstance() match {
@@ -900,22 +892,15 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      Seq.empty[Row]
-    } else {
-      val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
-
-      propertyKey match {
-        case Some(p) =>
-          val propValue = catalogTable
-            .properties
-            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-          Seq(Row(propValue))
-        case None =>
-          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
-      }
+    val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
+    propertyKey match {
+      case Some(p) =>
+        val propValue = catalogTable
+          .properties
+          .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+        Seq(Row(propValue))
+      case None =>
+        catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
     }
   }
 }

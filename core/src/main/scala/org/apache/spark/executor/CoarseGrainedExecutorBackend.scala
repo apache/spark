@@ -57,6 +57,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     resourceProfile: ResourceProfile)
   extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
+  import CoarseGrainedExecutorBackend._
+
   private implicit val formats = DefaultFormats
 
   private[this] val stopping = new AtomicBoolean(false)
@@ -84,9 +86,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
-      // This is a very fast action so we can use "ThreadUtils.sameThread"
-      case Success(msg) =>
-        // Always receive `true`. Just ignore it
+      case Success(_) =>
+        self.send(RegisteredExecutor)
       case Failure(e) =>
         exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
     }(ThreadUtils.sameThread)
@@ -95,8 +96,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     logDebug(s"Resource profile id is: ${resourceProfile.id}")
-    val resources = getOrDiscoverAllResourcesForResourceProfile(resourcesFileOpt,
-      SPARK_EXECUTOR_PREFIX, resourceProfile)
+    val resources = getOrDiscoverAllResourcesForResourceProfile(
+      resourcesFileOpt,
+      SPARK_EXECUTOR_PREFIX,
+      resourceProfile)
     logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
     resources
   }
@@ -123,9 +126,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
-
-    case RegisterExecutorFailed(message) =>
-      exitExecutor(1, "Slave registration failed: " + message)
 
     case LaunchTask(data) =>
       if (executor == null) {
@@ -218,6 +218,10 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
+  // Message used internally to start the executor when the driver successfully accepted the
+  // registration request.
+  case object RegisteredExecutor
+
   case class Arguments(
       driverUrl: String,
       executorId: String,
@@ -276,15 +280,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      // unknown means that the cluster manager isn't supported so just use the default
-      // profile which is the same as reading the spark configs
-      val rpIdToAsk = if (arguments.resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
-        DEFAULT_RESOURCE_PROFILE_ID
-      } else {
-        arguments.resourceProfileId
-      }
 
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(rpIdToAsk))
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
       // we have to add the pyspark memory conf into SparkConfs so the PythonRunner can
       // pick it up properly
       val pysparkMemoryConf = cfg.resourceProfile.getInternalPysparkMemoryConfs
@@ -330,7 +327,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
-    var resourceProfileId: Int = UNKNOWN_RESOURCE_PROFILE_ID
+    var resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID
 
     var argv = args.toList
     while (!argv.isEmpty) {

@@ -70,9 +70,8 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments,
-      SparkEnv, ResourceProfile) => CoarseGrainedExecutorBackend = {
-      case (rpcEnv, arguments, env, resourceProfile) =>
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv, ResourceProfile) =>
+      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
         new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
           arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
           arguments.resourcesFileOpt, resourceProfile)
