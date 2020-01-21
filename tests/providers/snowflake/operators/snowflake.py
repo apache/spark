@@ -22,14 +22,14 @@ import unittest
 import mock
 
 from airflow import DAG
-from airflow.contrib.operators.snowflake_operator import SnowflakeOperator
+from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
 from airflow.utils import timezone
 
 DEFAULT_DATE = timezone.datetime(2015, 1, 1)
 DEFAULT_DATE_ISO = DEFAULT_DATE.isoformat()
 DEFAULT_DATE_DS = DEFAULT_DATE_ISO[:10]
 TEST_DAG_ID = 'unit_test_dag'
-LONG_MOCK_PATH = 'airflow.contrib.operators.snowflake_operator.'
+LONG_MOCK_PATH = "airflow.providers.snowflake.operators.snowflake."
 LONG_MOCK_PATH += 'SnowflakeOperator.get_hook'
 
 
@@ -48,8 +48,9 @@ class TestSnowflakeOperator(unittest.TestCase):
             dummy VARCHAR(50)
         );
         """
-        op = SnowflakeOperator(
+        operator = SnowflakeOperator(
             task_id='basic_snowflake',
             sql=sql,
             dag=self.dag)
-        op.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+        operator.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
+                     ignore_ti_state=True)

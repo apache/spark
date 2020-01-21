@@ -451,6 +451,11 @@ These integrations allow you to copy data from/to Amazon Web Services.
      - :mod:`airflow.operators.s3_to_redshift_operator`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
+     - `Snowflake <https://snowflake.com/>`__
+     -
+     - :mod:`airflow.providers.snowflake.operators.s3_to_snowflake`
+
+   * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `Apache Hive <https://hive.apache.org/>`__
      -
      - :mod:`airflow.operators.s3_to_hive_operator`
@@ -964,8 +969,8 @@ These integrations allow you to perform various operations within various servic
 
    * - `Snowflake <https://www.snowflake.com/>`__
      -
-     - :mod:`airflow.contrib.hooks.snowflake_hook`
-     - :mod:`airflow.contrib.operators.snowflake_operator`
+     - :mod:`airflow.providers.snowflake.hooks.snowflake`
+     - :mod:`airflow.providers.snowflake.operators.snowflake`
      -
 
    * - `Vertica <https://www.vertica.com/>`__
