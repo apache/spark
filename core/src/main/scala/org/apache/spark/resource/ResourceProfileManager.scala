@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting

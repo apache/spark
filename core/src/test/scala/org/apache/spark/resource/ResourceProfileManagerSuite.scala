@@ -20,7 +20,6 @@ package org.apache.spark.resource
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.scheduler.LiveListenerBus
 
 class ResourceProfileManagerSuite extends SparkFunSuite {
 

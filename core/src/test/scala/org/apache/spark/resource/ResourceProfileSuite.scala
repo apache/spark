@@ -18,7 +18,7 @@
 package org.apache.spark.resource
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config.{EXECUTOR_CORES, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.{EXECUTOR_CORES, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.resource.TestResourceIDs._
 
@@ -112,51 +112,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
     assert(immrprof.limitingResource(sparkConf) == "cpus")
     assert(immrprof.maxTasksPerExecutor(sparkConf) == 1)
-  }
-
-  test("maxTasksPerExecutor gpus") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfileBuilder()
-    val taskReq = new TaskResourceRequests().resource("gpu", 2)
-    val execReq =
-      new ExecutorResourceRequests().resource("gpu", 4, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "gpu")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
-    assert(immrprof.getNumSlotsPerAddress("gpu", sparkConf) == 1)
-  }
-
-  test("maxTasksPerExecutor gpus fractional") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfileBuilder()
-    val taskReq = new TaskResourceRequests().resource("gpu", 0.5)
-    val execReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "gpu")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
-    assert(immrprof.getNumSlotsPerAddress("gpu", sparkConf) == 2)
-  }
-
-  test("maxTasksPerExecutor multiple resources") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfileBuilder()
-    val taskReqs = new TaskResourceRequests()
-    val execReqs = new ExecutorResourceRequests()
-    taskReqs.resource("gpu", 1)
-    execReqs.resource("gpu", 6, "myscript", "nvidia")
-    taskReqs.resource("fpga", 1)
-    execReqs.resource("fpga", 4, "myscript", "nvidia")
-    rprof.require(taskReqs).require(execReqs)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "fpga")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
-    assert(immrprof.getNumSlotsPerAddress("gpu", sparkConf) == 1)
-    assert(immrprof.getNumSlotsPerAddress("fpga", sparkConf) == 1)
   }
 
   test("maxTasksPerExecutor/limiting no executor cores") {

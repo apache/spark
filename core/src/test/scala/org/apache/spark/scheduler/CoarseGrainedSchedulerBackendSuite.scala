@@ -187,11 +187,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("extra resources from executor") {
-    import TestUtils._
-
-    val execCores = 3
     val conf = new SparkConf()
-      .set(EXECUTOR_CORES, execCores)
+      .set(EXECUTOR_CORES, 1)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .set(EXECUTOR_INSTANCES, 0) // avoid errors about duplicate executor registrations
       .setMaster(
