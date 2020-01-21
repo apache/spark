@@ -1499,7 +1499,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
   }
 
   test("log a warning of ignoreExtension deprecation") {
-    val logAppender = new LogAppender
+    val logAppender = new LogAppender("deprecated Avro option 'ignoreExtension'")
     withTempPath { dir =>
       Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1), ("d", 2, 1))
         .toDF("value", "p1", "p2")

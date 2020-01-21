@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -41,6 +42,7 @@ class DataSourceV2SQLSuite
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
   override protected val catalogAndNamespace = "testcat.ns1.ns2."
+  private val defaultUser: String = Utils.getCurrentUserName()
 
   private def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
@@ -94,7 +96,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
       .add("id", LongType, nullable = false)
       .add("data", StringType))
@@ -160,6 +162,7 @@ class DataSourceV2SQLSuite
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
+      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
 
   }
@@ -172,7 +175,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -187,7 +190,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // run a second create query that should fail
@@ -201,7 +204,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -218,7 +221,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     spark.sql("CREATE TABLE IF NOT EXISTS testcat.table_name (id bigint, data string) USING bar")
@@ -227,7 +230,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -244,7 +247,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is empty
@@ -266,7 +269,7 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType()
           .add("id", LongType)
           .add("data", StringType))
@@ -293,7 +296,7 @@ class DataSourceV2SQLSuite
         assert(replacedTable != originalTable, "Table should have been replaced.")
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
-        assert(replacedTable.properties == Map("provider" -> "foo").asJava)
+        assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
@@ -431,7 +434,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -448,7 +451,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -468,7 +471,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -486,7 +489,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -517,7 +520,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -557,7 +560,7 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType().add("i", "int"))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -1059,7 +1062,7 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
-        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Name", defaultUser),
         Row("Owner Type", "USER")
       ))
     }
@@ -1075,7 +1078,7 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
-        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Name", defaultUser),
         Row("Owner Type", "USER"),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
@@ -1123,7 +1126,7 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test_2"),
-        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Name", defaultUser),
         Row("Owner Type", "USER")
       ))
     }
@@ -1923,22 +1926,23 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t")
+      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row("owner", owner),
+        Row(TableCatalog.PROP_OWNER, defaultUser),
+        Row("provider", provider),
         Row("status", status),
-        Row("provider", provider))
+        Row("user", user))
 
       assert(properties.schema === schema)
       assert(expected === properties.collect())
@@ -1948,11 +1952,11 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES(key): v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
 
@@ -1967,7 +1971,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       val nonExistingKey = "nonExistingKey"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
-        s"TBLPROPERTIES ('owner'='andrew', 'status'='new')")
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
 
@@ -2194,7 +2198,7 @@ class DataSourceV2SQLSuite
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL"))
-      assert(e.getMessage.contains("global_temp.v is a temp view not table."))
+      assert(e.getMessage.contains("global_temp.v is a temp view not a table."))
     }
   }
 

@@ -22,12 +22,12 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -276,15 +276,8 @@ private[sql] object CatalogV2Util {
       location.map(TableCatalog.PROP_LOCATION -> _)
   }
 
-  def createAlterTable(
-      originalNameParts: Seq[String],
-      catalog: CatalogPlugin,
-      tableName: Seq[String],
-      changes: Seq[TableChange]): AlterTable = {
-    val tableCatalog = catalog.asTableCatalog
-    val ident = tableName.asIdentifier
-    val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
-    AlterTable(tableCatalog, ident, unresolved, changes)
+  def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
+    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def getTableProviderCatalog(

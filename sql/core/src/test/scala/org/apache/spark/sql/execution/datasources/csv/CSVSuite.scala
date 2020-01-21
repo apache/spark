@@ -1761,7 +1761,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
-    val testAppender1 = new LogAppender
+    val testAppender1 = new LogAppender("CSV header matches to schema")
     withLogAppender(testAppender1) {
       val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
       val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
@@ -1771,7 +1771,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
     assert(testAppender1.loggingEvents
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
 
-    val testAppender2 = new LogAppender
+    val testAppender2 = new LogAppender("CSV header matches to schema w/ enforceSchema")
     withLogAppender(testAppender2) {
       withTempPath { path =>
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)

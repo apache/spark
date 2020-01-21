@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -32,71 +32,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case AlterTableAddColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      val changes = cols.map { col =>
-        TableChange.addColumn(
-          col.name.toArray,
-          col.dataType,
-          col.nullable,
-          col.comment.orNull,
-          col.position.orNull)
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      val colName = a.column.toArray
-      val typeChange = a.dataType.map { newDataType =>
-        TableChange.updateColumnType(colName, newDataType)
-      }
-      val nullabilityChange = a.nullable.map { nullable =>
-        TableChange.updateColumnNullability(colName, nullable)
-      }
-      val commentChange = a.comment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
-      }
-      val positionChange = a.position.map { newPosition =>
-        TableChange.updateColumnPosition(colName, newPosition)
-      }
-      createAlterTable(
-        nameParts,
-        catalog,
-        tbl,
-        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
-
-    case AlterTableRenameColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableDropColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
     case AlterViewSetPropertiesStatement(
          NonSessionCatalogAndTable(catalog, tbl), props) =>
       throw new AnalysisException(

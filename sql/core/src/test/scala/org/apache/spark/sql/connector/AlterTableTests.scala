@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -945,7 +946,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(table.name === fullTableName(t))
       assert(table.properties ===
-        Map("provider" -> v2Format, "location" -> "s3://bucket/path").asJava)
+        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
     }
   }
 
@@ -971,7 +972,8 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
     }
   }
 
@@ -983,15 +985,15 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
 
       val updated = getTableMetadata(t)
 
       assert(updated.name === fullTableName(t))
-      assert(updated.properties === Map("provider" -> v2Format).asJava)
+      assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
-
 }
