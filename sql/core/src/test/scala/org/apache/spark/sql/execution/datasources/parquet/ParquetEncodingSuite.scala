@@ -126,12 +126,13 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     )
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
       ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/test.parquet"
         val data = (1 to 3).map { i =>
-          (i, i.toLong, s"test_${i}")
+          (i, i.toLong, Array[Byte](i.toByte), s"test_${i}")
         }
 
         spark.createDataFrame(data).write.options(extraOptions).mode("overwrite").parquet(path)
@@ -140,12 +141,15 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         val columnChunkMetadataList = blockMetadata.getColumns.asScala
 
         // Verify that indeed delta encoding is used for each column
-        assert(columnChunkMetadataList.length === 3)
+        assert(columnChunkMetadataList.length === 4)
         assert(columnChunkMetadataList(0).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
         assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        // Both fixed-length byte array and variable-length byte array (also called BINARY)
+        // are use DELTA_BYTE_ARRAY for encoding
         assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+        assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
 
-        val actual = spark.read.parquet(path).collect
+        val actual = spark.read.parquet(path).collect()
         assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
       }
     }
