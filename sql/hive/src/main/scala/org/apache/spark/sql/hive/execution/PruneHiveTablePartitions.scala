@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.common.StatsSetupConst
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, ExternalCatalogUtils, HiveTableRelation}
@@ -26,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression,
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 
@@ -73,19 +73,30 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   private def updateTableMeta(
       tableMeta: CatalogTable,
       prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
-    val sizeOfPartitions = prunedPartitions.map { partition =>
+    val partitionsWithSize = prunedPartitions.map { partition =>
       val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
       val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
       if (rawDataSize.isDefined && rawDataSize.get > 0) {
-        rawDataSize.get
+        (partition, rawDataSize.get)
       } else if (totalSize.isDefined && totalSize.get > 0L) {
-        totalSize.get
+        (partition, totalSize.get)
       } else {
-        0L
+        (partition, 0L)
       }
     }
-    if (sizeOfPartitions.forall(_ > 0)) {
-      val sizeInBytes = sizeOfPartitions.sum
+    if (partitionsWithSize.forall(_._2 > 0)) {
+      val sizeInBytes = partitionsWithSize.map(_._2).sum
+      tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+    } else if (partitionsWithSize.count(_._2 == 0) <= conf.maxPartNumForStatsCalculateViaFS) {
+      val sizeInBytes =
+        partitionsWithSize.map(pair => {
+          if (pair._2 == 0) {
+            CommandUtils.calculateLocationSize(
+              session.sessionState, tableMeta.identifier, pair._1.storage.locationUri)
+          } else {
+            pair._2
+          }
+        }).sum
       tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
     } else {
       tableMeta
