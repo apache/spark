@@ -1377,14 +1377,14 @@ class PlanResolutionSuite extends AnalysisTest {
           SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
           EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
           Seq(
-          DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
-          UpdateAction(
-          Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
-          updateAssigns)),
+            DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+            UpdateAction(
+              Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
+              updateAssigns)),
           Seq(
-          InsertAction(
-          Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
-          insertAssigns))) =>
+            InsertAction(
+              Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+              insertAssigns))) =>
         assert(l.name == "target.i" && r.name == "source.i")
         assert(dl.name == "target.s")
         assert(ul.name == "target.s")
