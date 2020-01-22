@@ -1326,6 +1326,7 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+<<<<<<< HEAD
 
         EliminateSubqueryAliases(targetTable) match {
           // Do not resolve the expression if the target table accepts any schema.

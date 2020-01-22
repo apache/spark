@@ -53,7 +53,6 @@ class PlanResolutionSuite extends AnalysisTest {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int"))
     when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
-    t
   }
 
   private val v1Table: V1Table = {
