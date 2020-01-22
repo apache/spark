@@ -27,7 +27,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -314,6 +314,55 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 2), (2, 3, 2))
     )
+  }
+
+  testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead streaming aggregation to use" +
+    " shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input2 = MemoryStream[Int]
+      val df1 = input1.toDF()
+        .select($"value", $"value" + 1, $"value" + 2)
+      val df2 = input2.toDF()
+        .groupBy($"value", $"value" + 1)
+        .agg(count("*"))
+
+      // Unioned DF would have columns as (Int, Int, Int)
+      (input1, input2, df1.union(df2))
+    }
+
+    withTempDir { checkpointDir =>
+      val (input1, input2, unionDf) = constructUnionDf(2)
+      testStream(unionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(
+          (input1, Seq(11, 12)),
+          (input2, Seq(11, 12, 13))),
+        CheckNewAnswer(Row(11, 12, 13), Row(12, 13, 14), Row(11, 12, 1), Row(12, 13, 1),
+          Row(13, 14, 1)),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
+      // TaskContext.partitionId()). This test will verify streaming aggregation doesn't have
+      // such issue.
+
+      val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData(11, 12)
+      newInput2.addData(11, 12, 13)
+
+      testStream(newUnionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(
+          (newInput1, Seq(21, 22)),
+          (newInput2, Seq(21, 22, 23))),
+        CheckNewAnswer(Row(21, 22, 23), Row(22, 23, 24), Row(21, 22, 1), Row(22, 23, 1),
+          Row(23, 24, 1))
+      )
+    }
   }
 
   testQuietlyWithAllStateVersions("midbatch failure") {
