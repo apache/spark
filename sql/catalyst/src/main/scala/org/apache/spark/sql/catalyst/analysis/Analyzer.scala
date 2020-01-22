@@ -1358,6 +1358,10 @@ class Analyzer(
                   resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
         }
+        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)  
+        m.copy(mergeCondition = resolvedMergeCondition, 
+          matchedActions = newMatchedActions, 
+          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
