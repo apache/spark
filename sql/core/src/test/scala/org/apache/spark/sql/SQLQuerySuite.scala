@@ -193,7 +193,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
                 val actual = unindentAndTrim(
                   hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
                 val expected = unindentAndTrim(output)
-                assert(actual.sorted === expected.sorted)
+                assert(actual === expected)
               case _ =>
             })
           }
