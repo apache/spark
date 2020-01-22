@@ -1799,23 +1799,6 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  object IntervalStyle extends Enumeration {
-    type IntervalStyle = Value
-    val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
-  }
-
-  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
-    .doc("When converting interval values to strings (i.e. for display), this config decides the" +
-      " interval string format. The value SQL_STANDARD will produce output matching SQL standard" +
-      " interval literals (i.e. '+3-2 +10 -00:00:01'). The value ISO_8601 will produce output" +
-      " matching the ISO 8601 standard (i.e. 'P3Y2M10DT-1S'). The value MULTI_UNITS (which is the" +
-      " default) will produce output in form of value unit pairs, (i.e. '3 year 2 months 10 days" +
-      " -1 seconds'")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(IntervalStyle.values.map(_.toString))
-    .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
-
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
       "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
@@ -1967,6 +1950,15 @@ object SQLConf {
       .internal()
       .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be parsed " +
         "as Decimal rather than Double.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED =
+    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal.enabled")
+      .internal()
+      .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
+        "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
+        "Decimal(11, 0) in non legacy mode.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2667,8 +2659,6 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
-
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
@@ -2699,6 +2689,9 @@ class SQLConf extends Serializable with Logging {
 
   def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
+
+  def allowNegativeScaleOfDecimalEnabled: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
   def createHiveTableByDefaultEnabled: Boolean =
     getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)

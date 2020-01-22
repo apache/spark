@@ -982,8 +982,8 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 Dataset<Row> windowedCounts = words
     .withWatermark("timestamp", "10 minutes")
     .groupBy(
-        functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
-        words.col("word"))
+        window(col("timestamp"), "10 minutes", "5 minutes"),
+        col("word"))
     .count();
 {% endhighlight %}
 

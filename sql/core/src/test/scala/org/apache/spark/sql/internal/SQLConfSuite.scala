@@ -329,7 +329,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("log deprecation warnings") {
-    val logAppender = new LogAppender
+    val logAppender = new LogAppender("deprecated SQL configs")
     def check(config: String): Unit = {
       assert(logAppender.loggingEvents.exists(
         e => e.getLevel == Level.WARN &&

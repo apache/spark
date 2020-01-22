@@ -1048,14 +1048,8 @@ class CastSuite extends CastSuiteBase {
     assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
     assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
 
-    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
-    assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
-    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
-    assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
-
     assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
     assert(cast(true, DecimalType(1, 1)).nullable)
-
 
     checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
     checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
@@ -1095,17 +1089,9 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(Decimal("1003"), DecimalType.SYSTEM_DEFAULT), Decimal(1003))
     checkEvaluation(cast(Decimal("1003"), DecimalType(4, 0)), Decimal(1003))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
     checkEvaluation(cast(Decimal("1003"), DecimalType(3, 0)), null)
 
     checkEvaluation(cast(Decimal("995"), DecimalType(3, 0)), Decimal(995))
-    checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
-    checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
 
     checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
@@ -1119,6 +1105,23 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(true, DecimalType(2, 1)), Decimal(1))
     checkEvaluation(cast(true, DecimalType(1, 1)), null)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
+      assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
+      assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
+      assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
+
+      checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
+      checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
+      checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
+      checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
+
+      checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
+      checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
+      checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
+      checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
+    }
   }
 
   test("SPARK-28470: Cast should honor nullOnOverflow property") {

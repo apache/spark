@@ -257,14 +257,6 @@ case class AlterTableAddColumnsCommand(
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
-    if (catalogTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"""
-          |ALTER ADD COLUMNS does not support views.
-          |You must drop and re-create the views for adding the new columns. Views: $table
-         """.stripMargin)
-    }
-
     if (DDLUtils.isDatasourceTable(catalogTable)) {
       DataSource.lookupDataSource(catalogTable.provider.get, conf).
         getConstructor().newInstance() match {

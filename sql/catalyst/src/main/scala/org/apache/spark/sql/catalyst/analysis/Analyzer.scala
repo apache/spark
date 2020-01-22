@@ -755,12 +755,14 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
-        }
-        u
+        lookupTempView(ident)
+          .map(_ => UnresolvedTableWithViewExists(
+            ResolvedView(ident.asIdentifier, isTempView = true)))
+          .getOrElse(u)
       case u @ UnresolvedTableOrView(ident) =>
-        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
+        lookupTempView(ident)
+          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
+          .getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -814,14 +816,6 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
-
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => alter.copy(table = rel))
-            .getOrElse(alter)
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -888,8 +882,7 @@ class Analyzer(
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView =>
-            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
+          case v: ResolvedView => UnresolvedTableWithViewExists(v)
           case table => table
         }.getOrElse(u)
 
@@ -902,7 +895,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident)
+              ResolvedView(ident, isTempView = false)
             case table =>
               ResolvedTable(catalog.asTableCatalog, ident, table)
           }
@@ -1062,34 +1055,43 @@ class Analyzer(
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
 
-      val conflictPlans = right.collect {
+      /**
+       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
+       * inherit directly from its children, we could just stop collect on it. Because we could
+       * always replace all the lower conflict attributes with the new attributes from the new
+       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
+       * it to the next batch to reduce possible overhead because this should be a corner case.
+       */
+      def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
-          (oldVersion, newVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion: SerializeFromObject
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(
+            serializer = oldVersion.serializer.map(_.newInstance()))))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
             if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+          Seq((oldVersion, oldVersion.copy(
+            aggregateExpressions = newAliases(aggregateExpressions))))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(output = output.map(_.newInstance())))
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
 
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -1101,13 +1103,17 @@ class Analyzer(
               attr
             }
           }
-          (oldVersion, oldVersion.copy(output = newOutput))
+          Seq((oldVersion, oldVersion.copy(output = newOutput)))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
-          (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
+            .nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+
+        case _ => plan.children.flatMap(collectConflictPlans)
       }
+
+      val conflictPlans = collectConflictPlans(right)
 
       /*
        * Note that it's possible `conflictPlans` can be empty which implies that there
@@ -1322,6 +1328,9 @@ class Analyzer(
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
         EliminateSubqueryAliases(targetTable) match {
+          // Do not resolve the expression if the target table accepts any schema.
+          // This allows data sources to customize their own resolution logic using 
+          // custom resolution rules.
           case r: NamedRelation if r.skipSchemaResolution =>
             m
 
@@ -1332,20 +1341,22 @@ class Analyzer(
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments) =>
                 val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-                UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
+                // The update value can access columns from both target and source tables.
+                UpdateAction(
+                  resolvedUpdateCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
               case InsertAction(insertCondition, assignments) =>
-                val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-                InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition =
+                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
-            }
-            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-            m.copy(
-              mergeCondition = resolvedMergeCondition,
-              matchedActions = newMatchedActions,
-              notMatchedActions = newNotMatchedActions)
         }
 
       case q: LogicalPlan =>
@@ -1355,7 +1366,8 @@ class Analyzer(
 
     def resolveAssignments(
         assignments: Seq[Assignment],
-        mergeInto: MergeIntoTable): Seq[Assignment] = {
+        mergeInto: MergeIntoTable,
+        resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
         val expandedColumns = mergeInto.targetTable.output
         val expandedValues = mergeInto.sourceTable.output
@@ -1363,12 +1375,18 @@ class Analyzer(
       } else {
         assignments.map { assign =>
           val resolvedKey = assign.key match {
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto.targetTable)
+            case c if !c.resolved =>
+              resolveExpressionTopDown(c, Project(Nil, mergeInto.targetTable))
             case o => o
           }
           val resolvedValue = assign.value match {
             // The update values may contain target and/or source references.
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto)
+            case c if !c.resolved =>
+              if (resolveValuesWithSourceOnly) {
+                resolveExpressionTopDown(c, Project(Nil, mergeInto.sourceTable))
+              } else {
+                resolveExpressionTopDown(c, mergeInto)
+              }
             case o => o
           }
           Assignment(resolvedKey, resolvedValue)

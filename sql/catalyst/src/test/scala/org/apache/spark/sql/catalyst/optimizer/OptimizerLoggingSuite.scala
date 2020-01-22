@@ -37,7 +37,7 @@ class OptimizerLoggingSuite extends PlanTest {
   }
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
-    val logAppender = new LogAppender
+    val logAppender = new LogAppender("optimizer rules")
     withLogAppender(logAppender,
         loggerName = Some(Optimize.getClass.getName.dropRight(1)), level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
