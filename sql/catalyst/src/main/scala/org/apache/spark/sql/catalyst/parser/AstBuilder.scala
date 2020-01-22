@@ -2533,13 +2533,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
           s" the LOCATION clause to specify it.", ctx)
       case (PROP_LOCATION, _) => false
-      case (ownership, _) if ownership == PROP_OWNER_NAME || ownership == PROP_OWNER_TYPE =>
-        if (legacyOn) {
-          false
-        } else {
-          throw new ParseException(s"$ownership is a reserved namespace property , please use" +
-            " ALTER NAMESPACE ... SET OWNER ... to specify it.", ctx)
-        }
+      case (PROP_OWNER, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_OWNER is a reserved namespace property, it will be" +
+          s" set to the current user.", ctx)
+      case (PROP_OWNER, _) => false
       case _ => true
     }
   }
@@ -2682,7 +2679,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case (PROP_LOCATION, _) => false
       case (PROP_OWNER, _) if !legacyOn =>
         throw new ParseException(s"$PROP_OWNER is a reserved table property, it will be" +
-          s" set to the current user by default.", ctx)
+          s" set to the current user", ctx)
       case (PROP_OWNER, _) => false
       case _ => true
     }
@@ -3607,23 +3604,4 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     CommentOnTable(UnresolvedTable(nameParts), comment)
   }
-
-  /**
-   * Create an [[AlterNamespaceSetOwner]] logical plan.
-   *
-   * For example:
-   * {{{
-   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET OWNER (USER|ROLE|GROUP) identityName;
-   * }}}
-   */
-  override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
-    withOrigin(ctx) {
-      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-      AlterNamespaceSetOwner(
-        UnresolvedNamespace(nameParts),
-        ctx.identifier.getText,
-        ctx.ownerType.getText)
-    }
-  }
-
 }
