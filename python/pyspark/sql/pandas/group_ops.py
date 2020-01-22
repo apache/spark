@@ -32,20 +32,9 @@ class PandasGroupedOpsMixin(object):
     @since(2.3)
     def apply(self, udf):
         """
-        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
-        as a `DataFrame`.
-
-        The user-defined function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a
-        :class:`DataFrame`.
-
-        The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
-        returnType of the pandas udf.
-
-        .. note:: This function requires a full shuffle. All the data of a group will be loaded
-            into memory, so the user should be aware of the potential OOM risk if data is skewed
-            and certain groups are too large to fit in memory.
+        It is an alias of :meth:`pyspark.sql.GroupedData.applyInPandas`; however, it takes a
+        :meth:`pyspark.sql.functions.pandas_udf` whereas
+        :meth:`pyspark.sql.GroupedData.applyInPandas` takes a Python native function.
 
         .. note:: It is preferred to use :meth:`pyspark.sql.GroupedData.applyInPandas` over this
             API. This API will be deprecated in the future releases.
@@ -75,30 +64,36 @@ class PandasGroupedOpsMixin(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-        from pyspark.sql import GroupedData
-
-        assert isinstance(self, GroupedData)
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+                or udf.evalType != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "GROUPED_MAP.")
 
         warnings.warn(
             "It is preferred to use 'applyInPandas' over this "
             "API. This API will be deprecated in the future releases. See SPARK-28264 for "
             "more details.", UserWarning)
 
-        # Columns are special because hasattr always return True
-        if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.evalType != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "GROUPED_MAP.")
-        df = self._df
-        udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
-        return DataFrame(jdf, self.sql_ctx)
+        return self.applyInPandas(udf.func, schema=udf.returnType)
 
     @since(3.0)
     def applyInPandas(self, func, schema):
         """
-        It is an alias :meth:`pyspark.sql.GroupedData.apply`; however, it takes a Python
-        native function directly.
+        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
+        as a `DataFrame`.
+
+        The function should take a `pandas.DataFrame` and return another
+        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        to the user-function and the returned `pandas.DataFrame` are combined as a
+        :class:`DataFrame`.
+
+        The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
+        returnType of the pandas udf.
+
+        .. note:: This function requires a full shuffle. All the data of a group will be loaded
+            into memory, so the user should be aware of the potential OOM risk if data is skewed
+            and certain groups are too large to fit in memory.
 
         :param func: a Python native function that takes a `pandas.DataFrame`, and outputs a
             `pandas.DataFrame`.
@@ -129,9 +124,17 @@ class PandasGroupedOpsMixin(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
+        from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        return self.apply(pandas_udf(
-            func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP))
+
+        assert isinstance(self, GroupedData)
+
+        udf = pandas_udf(
+            func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
     @since(3.0)
     def cogroup(self, other):

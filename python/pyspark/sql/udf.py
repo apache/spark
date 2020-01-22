@@ -19,15 +19,12 @@ User-defined function related classes and functions
 """
 import functools
 import sys
-import warnings
 
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.util import _get_argspec
 
 __all__ = ["UDFRegistration"]
 

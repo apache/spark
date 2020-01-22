@@ -36,7 +36,7 @@ python_requirement_message = "pandas UDF with type hints are supported with Pyth
     not have_pandas or not have_pyarrow or sys.version_info[:2] < (3, 6),
     pandas_requirement_message or pyarrow_requirement_message or python_requirement_message)
 class PandasUDFTypeHintsTests(ReusedSQLTestCase):
-    # Note that, we should not remove `exec` once we drop Python 2 in this class.
+    # Note that, we should remove `exec` once we drop Python 2 in this class.
 
     def setUp(self):
         self.local = {'pd': pd}

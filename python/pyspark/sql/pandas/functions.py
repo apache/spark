@@ -450,6 +450,7 @@ def _create_pandas_udf(f, returnType, evalType):
                 "in the future releases. See SPARK-28264 for more details.", UserWarning)
         elif len(argspec.annotations) > 0:
             evalType = infer_eval_type(signature(f))
+            assert evalType is not None
 
     if evalType is None:
         # Set default is scalar UDF.
