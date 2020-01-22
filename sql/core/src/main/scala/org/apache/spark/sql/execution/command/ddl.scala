@@ -490,7 +490,6 @@ case class AlterTableAddPartitionCommand(
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
         val addedSize = CommandUtils.calculateLocationsSizes(sparkSession, table.identifier,
           parts.map(_.storage.locationUri))
-          .sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
           catalog.alterTableStats(table.identifier, Some(newStats))

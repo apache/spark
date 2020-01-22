@@ -77,7 +77,7 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateLocationsSizes(spark, catalogTable.identifier, paths).sum
+      calculateLocationsSizes(spark, catalogTable.identifier, paths)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -139,11 +139,11 @@ object CommandUtils extends Logging {
   def calculateLocationsSizes(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Seq[Long] = {
+      paths: Seq[Option[URI]]): Long = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
       calculateLocationsSizesParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
-      paths.map(p => calculateLocationSize(sparkSession.sessionState, tid, p))
+      paths.map(p => calculateLocationSize(sparkSession.sessionState, tid, p)).sum
     }
   }
 
@@ -152,12 +152,11 @@ object CommandUtils extends Logging {
    * for each path.
    * @param sparkSession the [[SparkSession]]
    * @param paths the Seq of [[Option[Path]]s
-   * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
-   *         if `paths(i)` is None
+   * @return total size of all partitions
    */
   def calculateLocationsSizesParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Seq[Long] = {
+      paths: Seq[Option[Path]]): Long = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
@@ -165,16 +164,8 @@ object CommandUtils extends Logging {
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
       case (_, files) => files.map(_.getLen).sum
     }
-    // the result Seq is 0 where paths(i) is not defined and sizes(nextIdx-1) where it is defined
-    var nextIdx = 0
-    Seq.tabulate(paths.length) { i =>
-      if (paths(i).isDefined) {
-        nextIdx += 1
-        sizes(nextIdx - 1)
-      } else {
-        0L
-      }
-    }
+    // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
+    paths.zipWithIndex.filter(_._1.isDefined).map(i => sizes(i._2)).sum
   }
 
   def compareAndGetNewStats(
