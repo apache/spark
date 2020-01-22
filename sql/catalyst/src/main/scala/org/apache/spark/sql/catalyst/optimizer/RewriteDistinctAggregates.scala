@@ -155,8 +155,8 @@ import org.apache.spark.sql.types.IntegerType
  *        output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'total])
  *       Expand(
  *           projections = [('key, null, null, 0, 'value),
- *                         ('key, '_gen_distinct_1, null, 1, null),
- *                         ('key, null, '_gen_distinct_2, 2, null)]
+ *                          ('key, '_gen_distinct_1, null, 1, null),
+ *                          ('key, null, '_gen_distinct_2, 2, null)]
  *           output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
  *         Expand(
  *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat2, cast('value as bigint))]
@@ -166,7 +166,7 @@ import org.apache.spark.sql.types.IntegerType
  *
  * The rule consists of the two phases as follows.
  *
- * In the first phase, expands distinct aggregates which exists filter clause:
+ * In the first phase, expands data for the distinct aggregates where filter clauses exist:
  * 1. Guaranteed to compute filter clauses in the first aggregate locally.
  * 2. The attributes referenced by different distinct aggregate expressions are likely to overlap,
  *    and if no additional processing is performed, data loss will occur. To prevent this, we
@@ -175,7 +175,7 @@ import org.apache.spark.sql.types.IntegerType
  *    clause, the aggregate after expand may have at least two distinct aggregates, so we need to
  *    apply the second phase too. Please refer to the second phase for more details.
  *
- * In the second phase, rewrite when aggregate exists at least two distinct aggregates:
+ * In the second phase, rewrites a query with two or more distinct groups:
  * 1. Expand the data. There are three aggregation groups in this query:
  *    i. the non-distinct group;
  *    ii. the distinct 'cat1 group;
@@ -208,7 +208,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates or a single distinct aggregate with a filter for
     // this rule because aggregation strategy can handle a single distinct group without a filter.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size >= 1 || distinctAggs.exists(_.filter.isDefined)
+    distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -222,8 +222,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
       // Constructs pairs between old and new expressions for regular aggregates. Because we
-      // will construct a new aggregate, the children of the distinct aggregates will be
-      // changed to the generate ones, so we need creates new references to avoid collisions
+      // will construct a new `Aggregate` and the children of the distinct aggregates will be
+      // changed to the generate ones, we need creates new references to avoid collisions
       // between distinct and regular aggregate children.
       val regularAggExprs = regularAggExpressions.filter(_.children.exists(!_.foldable))
       val regularFunChildren = regularAggExprs
@@ -256,8 +256,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // lost. e.g. SUM (DISTINCT a), COUNT (DISTINCT a) FILTER (WHERE id > 1) will output
           // attribute '_gen_distinct-1 and attribute '_gen_distinct-2 instead of two 'a.
           // Note: We just need to illusion the expression with filter clause.
-          // The illusionary mechanism may result in multiple distinct aggregations uses
-          // different column, so we still need to call `rewrite`.
+          // The extension mechanism may expand one distinct group into two or more distinct
+          // group, so we still need to call `rewriteDistinctAggregates`.
           val exprId = NamedExpression.newExprId.id
           val unfoldableChildren = af.children.filter(!_.foldable)
           val exprAttrs = unfoldableChildren.map { e =>
@@ -367,7 +367,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           (projection, operators)
       }
 
-      // Setup expand for the 'regular' aggregate expressions.
+      // Constructs pairs between old and new expressions for distinct aggregates, too.
       // only expand unfoldable children
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
