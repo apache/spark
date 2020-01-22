@@ -180,6 +180,11 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
+    case CalendarIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
+      }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 

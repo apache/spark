@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -250,6 +250,12 @@ class JacksonParser(
         case VALUE_STRING if parser.getTextLength >= 1 =>
           val bigDecimal = decimalParser(parser.getText)
           Decimal(bigDecimal, dt.precision, dt.scale)
+      }
+
+    case CalendarIntervalType => (parser: JsonParser) =>
+      parseJsonToken[CalendarInterval](parser, dataType) {
+        case VALUE_STRING =>
+          IntervalUtils.safeStringToInterval(UTF8String.fromString(parser.getText))
       }
 
     case st: StructType =>
