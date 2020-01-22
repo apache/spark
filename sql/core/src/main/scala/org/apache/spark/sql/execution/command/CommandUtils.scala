@@ -71,7 +71,8 @@ object CommandUtils extends Logging {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
+      calculateSingleLocationSize(sessionState, catalogTable.identifier,
+        catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
