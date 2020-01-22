@@ -73,7 +73,7 @@ CREATE TABLE [ IF NOT EXISTS ] table_identifier
 
 <dl>
   <dt><code><em>LOCATION</em></code></dt>
-  <dd>Path to the directory where table data is stored, could be filesystem, HDFS, etc.</dd>
+  <dd>Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.</dd>
 </dl>
 
 <dl>
@@ -83,7 +83,7 @@ CREATE TABLE [ IF NOT EXISTS ] table_identifier
 
 <dl>
   <dt><code><em>TBLPROPERTIES</em></code></dt>
-  <dd>Table properties that has to be set are specified such as `created.by.user`, `owner`, etc.
+  <dd>Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
   </dd>
 </dl>
 
