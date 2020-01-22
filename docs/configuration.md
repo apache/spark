@@ -1624,6 +1624,42 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.eventLog.logStageExecutorProcessTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists and <code>spark.eventLog.logStageExecutorMetrics.enabled</code> is true as well.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics.
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval).
+    If positive, the polling is done at this interval.
+  </td>
+</tr>
+</table>
+
 ### Networking
 
 <table class="table">
