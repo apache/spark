@@ -127,7 +127,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SPARK-30556 propagate local properties to subquery execution thread") {
-    withSQLConf("spark.sql.subquery.maxThreadThreshold" -> "1") {
+    withSQLConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD.key -> "1") {
       withTempView("l", "m", "n") {
         Seq(true).toDF().createOrReplaceTempView("l")
         val confKey = "spark.sql.y"
@@ -147,13 +147,13 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         val confValue1 = "e"
         createDataframe(confKey, confValue1).createOrReplaceTempView("m")
         spark.sparkContext.setLocalProperty(confKey, confValue1)
-        assert(sql("select * from l where exists (select * from m)").collect.size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM m)").collect.size == 1)
 
         // change the conf value and assert again
         val confValue2 = "f"
         createDataframe(confKey, confValue2).createOrReplaceTempView("n")
         spark.sparkContext.setLocalProperty(confKey, confValue2)
-        assert(sql("select value from l where exists (select * from n)").collect().size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().size == 1)
       }
     }
   }
