@@ -1320,6 +1320,35 @@ setMethod("negate",
           })
 
 #' @details
+#' \code{overlay}:
+#'
+#' @param replace a Column with replacement.
+#' @param pos a Column with start postiton.
+#' @param len a Column with the number of bytes to replace.
+#'
+#' @rdname column_string_functions
+#' @aliases overlay overlay,Column-method,numericOrColumn-method
+#' @note overlay since 3.0.0
+setMethod("overlay",
+  signature(x = "Column", replace = "Column", pos = "numericOrColumn"),
+  function(x, replace, pos, len = -1) {
+    if (is.numeric(pos)) {
+      pos <- lit(as.integer(pos))
+    }
+
+    if (is.numeric(len)) {
+      len <- lit(as.integer(len))
+    }
+
+    jc <- callJStatic(
+      "org.apache.spark.sql.functions", "overlay",
+      x@jc, replace@jc, pos@jc, len@jc
+    )
+
+    column(jc)
+  })
+
+#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
