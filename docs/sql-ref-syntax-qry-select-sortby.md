@@ -40,7 +40,7 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
     Optionally specifies whether to sort the rows in ascending (lowest to highest) or descending
     (highest to lowest) order. The valid values for sort direction are <code>ASC</code> for ascending
     and <code>DESC</code> for descending. If sort direction is not explicitly specified then by default
-    rows are sorted in ascending manner. <br><br>
+    rows are sorted ascending. <br><br>
     <b>Syntax:</b>
     <code>
        [ ASC | DESC ]
@@ -48,16 +48,20 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
   </dd>
   <dt><code><em>nulls_sort_order</em></code></dt>
   <dd>
-    Optionally specifies whether NULL values are returned before/after non-NULL values, based on the 
+    Optionally specifies whether NULL values are returned before/after non-NULL values, based on the
     sort direction. In Spark, NULL values are considered to be lower than any non-NULL values by default.
-    Therefore the ordering of NULL values depend on the sort direction.<br><br>
+    Therefore the ordering of NULL values depend on the sort direction. If <code>null_sort_order</code> is
+    not specified then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
+    sort order is <code>DESC</code>.<br><br>
     <ol>
-      <li>If the sort order is ASC, NULLS are returned first; to force NULLS to be last, use NULLS LAST</li>
-      <li>If the sort order is DESC, NULLS are returned last; to force NULLS to be first, use NULLS FIRST</li>
+      <li> If <code>NULLS FIRST</code> (the default) is specified, then NULL values are returned first
+           regardless of the sort order.</li>
+      <li>If <code>NULLS LAST</code> is specified, then NULL values are returned last regardless of 
+           the sort order. </li>
     </ol><br>
     <b>Syntax:</b>
     <code>
-       [ NULLS { FIRST | LAST } ] 
+       [ NULLS { FIRST | LAST } ]
     </code>
   </dd>
 </dl>
