@@ -1332,13 +1332,21 @@ class Analyzer(
             DeleteAction(resolvedDeleteCondition)
           case UpdateAction(updateCondition, assignments) =>
             val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
+            // The update value can access columns from both target and source tables.
+            UpdateAction(
+              resolvedUpdateCondition,
+              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
           case o => o
         }
         val newNotMatchedActions = m.notMatchedActions.map {
           case InsertAction(insertCondition, assignments) =>
-            val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-            InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
+            // The insert action is used when not matched, so its condition and value can only
+            // access columns from the source table.
+            val resolvedInsertCondition =
+              insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+            InsertAction(
+              resolvedInsertCondition,
+              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
           case o => o
         }
         val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
@@ -1353,7 +1361,8 @@ class Analyzer(
 
     def resolveAssignments(
         assignments: Seq[Assignment],
-        mergeInto: MergeIntoTable): Seq[Assignment] = {
+        mergeInto: MergeIntoTable,
+        resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
         val expandedColumns = mergeInto.targetTable.output
         val expandedValues = mergeInto.sourceTable.output
@@ -1361,12 +1370,18 @@ class Analyzer(
       } else {
         assignments.map { assign =>
           val resolvedKey = assign.key match {
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto.targetTable)
+            case c if !c.resolved =>
+              resolveExpressionTopDown(c, Project(Nil, mergeInto.targetTable))
             case o => o
           }
           val resolvedValue = assign.value match {
             // The update values may contain target and/or source references.
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto)
+            case c if !c.resolved =>
+              if (resolveValuesWithSourceOnly) {
+                resolveExpressionTopDown(c, Project(Nil, mergeInto.sourceTable))
+              } else {
+                resolveExpressionTopDown(c, mergeInto)
+              }
             case o => o
           }
           Assignment(resolvedKey, resolvedValue)
