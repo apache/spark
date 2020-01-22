@@ -151,7 +151,7 @@ object CommandUtils extends Logging {
    * Launch a Job to list all leaf files in `paths` and compute the total size
    * for each path.
    * @param sparkSession the [[SparkSession]]
-   * @param paths the Seq of [[Option[Path]]s
+   * @param paths the Seq of [[Option[Path]]]s
    * @return total size of all partitions
    */
   def calculateLocationsSizesParallel(
