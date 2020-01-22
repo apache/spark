@@ -63,9 +63,9 @@ def generic_file_source_options_example(spark):
     # $example off:load_with_path_glob_filter$
 
     # $example on:recursive_file_lookup$
-    recursive_loaded_df = (spark.read.format("parquet")
-        .option("recursiveFileLookup", "true")
-        .load("examples/src/main/resources/dir1"))
+    recursive_loaded_df = spark.read.format("parquet")\
+        .option("recursiveFileLookup", "true")\
+        .load("examples/src/main/resources/dir1")
     recursive_loaded_df.show()
     # +-------------+
     # |         file|
