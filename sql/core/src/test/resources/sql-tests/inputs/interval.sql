@@ -220,9 +220,3 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
-
-SELECT cast(from_csv('1, "1 day"', 'a INT, b string').b as interval);
-SELECT cast(from_csv('1, 1 day', 'a INT, b string').b as interval);
-SELECT from_csv('1, 1 day', 'a INT, b interval');
-SELECT to_csv(named_struct('a', interval 32 month, 'b', interval 70 minute));
-select from_json('{"a":"1 days"}', 'a interval');
