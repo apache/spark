@@ -256,7 +256,7 @@ class JacksonParser(
       parseJsonToken[CalendarInterval](parser, dataType) {
         case VALUE_STRING =>
           IntervalUtils.safeStringToInterval(UTF8String.fromString(parser.getText))
-    }
+      }
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray

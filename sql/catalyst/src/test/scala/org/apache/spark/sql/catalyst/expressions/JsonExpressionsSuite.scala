@@ -678,14 +678,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       output)
   }
 
-  test("from_json - interval support") {
+  test("from/to json - interval support") {
     val schema = StructType(StructField("i", CalendarIntervalType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType)),
       InternalRow(new CalendarInterval(12, 1, 0)))
-  }
 
-  test("to_json - interval support") {
     Seq(MapType(CalendarIntervalType, IntegerType), MapType(IntegerType, CalendarIntervalType))
       .foreach { dt =>
         val schema = StructField("a", dt) :: Nil
