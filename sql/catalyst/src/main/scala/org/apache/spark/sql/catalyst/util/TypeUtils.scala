@@ -103,7 +103,7 @@ object TypeUtils {
   def failWithIntervalType(dataType: DataType): Unit = {
     dataType match {
       case CalendarIntervalType =>
-        throw new AnalysisException("Cannot use interval type as a field of schema.")
+        throw new AnalysisException("Cannot use interval type in the table schema.")
       case ArrayType(et, _) => failWithIntervalType(et)
       case MapType(kt, vt, _) =>
         failWithIntervalType(kt)

@@ -37,7 +37,7 @@ class CalendarIntervalType private() extends DataType {
 
   override def defaultSize: Int = 16
 
-  override def typeName: String = "interval"
+  override def simpleString: String = "interval"
 
   private[spark] override def asNullable: CalendarIntervalType = this
 }

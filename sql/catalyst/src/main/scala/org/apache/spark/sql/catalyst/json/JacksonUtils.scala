@@ -41,9 +41,9 @@ object JacksonUtils {
 
       case at: ArrayType => verifyType(name, at.elementType)
 
-      case mt: MapType =>
-        verifyType(name, mt.keyType)
-        verifyType(name, mt.valueType)
+      // For MapType, its keys are treated as a string (i.e. calling `toString`) basically when
+      // generating JSON, so we only care if the values are valid for JSON.
+      case mt: MapType => verifyType(name, mt.valueType)
 
       case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
 

@@ -259,10 +259,10 @@ class DataSourceV2SQLSuite
     Seq("CREATE", "REPLACE").foreach { action =>
       val e1 = intercept[AnalysisException](
         sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
-      assert(e1.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
       val e2 = intercept[AnalysisException](
         sql(s"$action TABLE table_name (id array<interval>) USING $v2Format"))
-      assert(e2.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
     }
   }
 
@@ -270,10 +270,10 @@ class DataSourceV2SQLSuite
     Seq("CREATE", "REPLACE").foreach { action =>
       val e1 = intercept[AnalysisException](
         sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
-      assert(e1.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
       val e2 = intercept[AnalysisException](
         sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
-      assert(e2.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
     }
   }
 

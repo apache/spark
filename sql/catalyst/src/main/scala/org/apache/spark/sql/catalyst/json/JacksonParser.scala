@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._

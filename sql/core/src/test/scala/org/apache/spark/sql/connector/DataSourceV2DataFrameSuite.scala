@@ -179,11 +179,11 @@ class DataSourceV2DataFrameSuite
       val df = sql("select interval 1 day as i")
       val v2Writer = df.writeTo("testcat.table_name")
       val e1 = intercept[AnalysisException](v2Writer.append())
-      assert(e1.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
       val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-      assert(e2.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
       val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-      assert(e3.getMessage.contains(s"Cannot use interval type as a field of schema."))
+      assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
     }
   }
 }
