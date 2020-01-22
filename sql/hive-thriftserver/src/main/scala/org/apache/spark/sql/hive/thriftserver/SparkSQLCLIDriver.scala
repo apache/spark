@@ -532,7 +532,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         val hasNext: Boolean = index + 1 < line.length
         if (insideDoubleQuote || insideSingleQuote || insideComment) {
           // ignore
-        } else if (hasNext && line.charAt(index+1) == '-') {
+        } else if (hasNext && line.charAt(index + 1) == '-') {
           // ignore quotes and ;
           insideComment = true
           // ignore eol
