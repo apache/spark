@@ -174,10 +174,11 @@ object SQLExecution {
   def withThreadLocalCaptured[T](sparkSession: SparkSession, exec: ExecutionContext)(
     body: => T): Future[T] = {
     val activeSession = sparkSession
-    val localProps = Utils.cloneProperties(sparkSession.sparkContext.getLocalProperties)
+    val sc = sparkSession.sparkContext
+    val localProps = Utils.cloneProperties(sc.getLocalProperties)
     Future {
       SparkSession.setActiveSession(activeSession)
-      sparkSession.sparkContext.setLocalProperties(localProps)
+      sc.setLocalProperties(localProps)
       body
     }(exec)
   }
