@@ -50,7 +50,7 @@ class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListe
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     activeQueryStatus.putIfAbsent(event.runId,
-      new StreamingQueryUIData(event.name, event.id, event.runId, event.submitTime))
+      new StreamingQueryUIData(event.name, event.id, event.runId, event.submissionTime))
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
@@ -62,20 +62,19 @@ class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListe
     queryStatus.updateProcess(event.progress, streamingProgressRetention)
   }
 
-  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+  override def onQueryTerminated(
+      event: StreamingQueryListener.QueryTerminatedEvent): Unit = synchronized {
     val queryStatus = activeQueryStatus.remove(event.runId)
     if (queryStatus != null) {
       queryStatus.queryTerminated(event)
-      inactiveQueryStatus.synchronized {
-        inactiveQueryStatus += queryStatus
-        while (inactiveQueryStatus.length >= inactiveQueryStatusRetention) {
-          inactiveQueryStatus.dequeue()
-        }
+      inactiveQueryStatus += queryStatus
+      while (inactiveQueryStatus.length >= inactiveQueryStatusRetention) {
+        inactiveQueryStatus.dequeue()
       }
     }
   }
 
-  def allQueryStatus: Seq[StreamingQueryUIData] = inactiveQueryStatus.synchronized {
+  def allQueryStatus: Seq[StreamingQueryUIData] = synchronized {
     activeQueryStatus.values().asScala.toSeq ++ inactiveQueryStatus
   }
 }
@@ -88,7 +87,7 @@ private[ui] class StreamingQueryUIData(
     val name: String,
     val id: UUID,
     val runId: UUID,
-    val submitTime: Long) {
+    val submissionTime: Long) {
 
   /** Holds the most recent query progress updates. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
