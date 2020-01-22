@@ -617,7 +617,7 @@ def percentile_approx(col, percentage, accuracy=10000):
     """
     sc = SparkContext._active_spark_context
     if isinstance(percentage, (list, tuple)):
-        percentage = _to_list(sc, list(percentage))
+        percentage = sc._jvm.PythonUtils.doubleJListToArray([float(x) for x in percentage])
     return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
 
 
