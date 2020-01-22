@@ -2155,13 +2155,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val LEGACY_TO_JOSN_VERIFY_MAP_KEY_TYPE =
-    buildConf("spark.sql.legacy.to_json.verifyMapKeyType.enabled")
-      .internal()
-      .doc("When false, do not check key type if the input is a map value.")
-      .booleanConf
-      .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *

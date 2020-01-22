@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -43,9 +42,7 @@ object JacksonUtils {
       case at: ArrayType => verifyType(name, at.elementType)
 
       case mt: MapType =>
-        if (SQLConf.get.getConf(SQLConf.LEGACY_TO_JOSN_VERIFY_MAP_KEY_TYPE)) {
-          verifyType(name, mt.keyType)
-        }
+        verifyType(name, mt.keyType)
         verifyType(name, mt.valueType)
 
       case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
