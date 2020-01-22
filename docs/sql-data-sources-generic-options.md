@@ -69,27 +69,6 @@ from files. Here, missing file really means the deleted file under directory aft
 `DataFrame`. When set to true, the Spark jobs will continue to run when encountering missing files and
 the contents that have been read will still be returned.
 
-To ignore missing files while reading data files, you can use:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example ignore_missing_files scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example ignore_missing_files java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example ignore_missing_files python/sql/datasource.py %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example ignore_missing_files r/RSparkSQLExample.R %}
-
-</div>
-</div>
-
 ### Path Global Filter
 
 `pathGlobFilter` is used to only include files with paths matching the pattern.
