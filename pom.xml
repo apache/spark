@@ -246,10 +246,10 @@
   </properties>
   <repositories>
     <repository>
-      <id>central</id>
-      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
-      <name>Maven Repository</name>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <id>google-maven-central</id>
+      <!-- This should be at top, it makes maven try this central repo first and then others and hence faster dep resolution -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -258,12 +258,12 @@
       </snapshots>
     </repository>
     <repository>
-      <id>google-maven-central</id>
       <!--
-        This is used as a fallback when `central` fails.
+        This is used as a fallback when the first try fails.
       -->
-      <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
+      <id>central</id>
+      <name>Maven Repository</name>
+      <url>https://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -274,8 +274,9 @@
   </repositories>
   <pluginRepositories>
     <pluginRepository>
-      <id>central</id>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <id>google-maven-central</id>
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -284,9 +285,8 @@
       </snapshots>
     </pluginRepository>
     <pluginRepository>
-      <id>google-maven-central</id>
-      <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data</url>
+      <id>central</id>
+      <url>https://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
