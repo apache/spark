@@ -53,7 +53,8 @@ To ignore corrupt files while reading data files, you can use:
 ### Ignore Missing Files
 
 Spark allows you to use `spark.sql.files.ignoreMissingFiles` to ignore missing files while reading data
-from files. When set to true, the Spark jobs will continue to run when encountering missing files and
+from files. Here, missing file really means the deleted file under directory after you construct the
+`DataFrame`. When set to true, the Spark jobs will continue to run when encountering missing files and
 the contents that have been read will still be returned.
 
 To ignore missing files while reading data files, you can use:
@@ -79,7 +80,7 @@ To ignore missing files while reading data files, you can use:
 
 ### Path Global Filter
 
-`pathGlobFilter` used to only include files with paths matching the pattern.
+`pathGlobFilter` is used to only include files with paths matching the pattern.
 The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
 It does not change the behavior of partition discovery.
 
@@ -105,7 +106,7 @@ you can use:
 </div>
 
 ### Recursive File Lookup
-`recursiveFileLookup` used to recursively load files and it disables partition inferring. Its default value is `false`.
+`recursiveFileLookup` is used to recursively load files and it disables partition inferring. Its default value is `false`.
 If data source explicitly specify the `partitionSpec` when `recursiveFileLookup` is true, exception will be thrown.
 
 To load all files recursively, you can use:
