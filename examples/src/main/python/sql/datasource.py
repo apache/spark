@@ -27,14 +27,14 @@ from pyspark.sql import SparkSession
 from pyspark.sql import Row
 # $example off:schema_merging$
 
+
 def generic_file_source_options_example(spark):
     # $example on:ignore_corrupt_files$
     # enable ignore corrupt files
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
     # dir1/file3.json is corrupt from parquet's view
-    test_corrupt_df = spark.read.parquet(
-        "examples/src/main/resources/dir1/",
-        "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df = spark.read.parquet("examples/src/main/resources/dir1/",
+                                         "examples/src/main/resources/dir1/dir2/")
     test_corrupt_df.show()
     # +-------------+
     # |         file|
