@@ -226,7 +226,9 @@ case class StructsToCsv(
 
   @transient
   lazy val inputSchema: StructType = child.dataType match {
-    case st: StructType => st
+    case st: StructType =>
+      TypeUtils.failWithIntervalType(st)
+      st
     case other =>
       throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
   }

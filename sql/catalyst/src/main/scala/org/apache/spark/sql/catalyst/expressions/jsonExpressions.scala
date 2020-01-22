@@ -543,6 +543,7 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
+      TypeUtils.failWithIntervalType(nullableSchema)
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
@@ -694,10 +695,8 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case map: MapType =>
-      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", map) :: Nil)
-        JacksonUtils.verifySchema(st)
+        JacksonUtils.verifyType(prettyName, map)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
