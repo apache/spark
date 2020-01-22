@@ -95,8 +95,8 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('Spark', 'S%');
-      Spark
+      > SELECT _FUNC_('Spark', '_park');
+      true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
@@ -113,8 +113,10 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   since = "1.0.0")
 // scalastyle:on line.contains.tab
-case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
+case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
+
+  def this(left: Expression, right: Expression) = this(left, right, '\\')
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
