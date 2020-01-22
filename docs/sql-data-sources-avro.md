@@ -230,7 +230,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>ignoreExtension</code></td>
     <td>true</td>
-    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <code>pathGlobFilter</code> for filtering file names.</td>
+    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-global-filter">pathGlobFilter</a> for filtering file names.</td>
     <td>read</td>
   </tr>
   <tr>
