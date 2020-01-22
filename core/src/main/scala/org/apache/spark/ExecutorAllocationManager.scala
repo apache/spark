@@ -436,8 +436,7 @@ private[spark] class ExecutorAllocationManager(
       } else {
         // request was for all profiles so we have to go through all to reset to old num
         updates.foreach { case (rpId, targetNum) =>
-          logWarning(
-            s"Unable to reach the cluster manager to request more executors!")
+          logWarning("Unable to reach the cluster manager to request more executors!")
           numExecutorsTargetPerResourceProfileId(rpId) = targetNum.oldNumExecutorsTarget
         }
         0
@@ -470,30 +469,27 @@ private[spark] class ExecutorAllocationManager(
     // Do not request more executors if it would put our target over the upper bound
     // this is doing a max check per ResourceProfile
     if (oldNumExecutorsTarget >= maxNumExecutors) {
-      logDebug(s"Not adding executors because our current target total " +
+      logDebug("Not adding executors because our current target total " +
         s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
       numExecutorsToAddPerResourceProfileId(rpId) = 1
       return 0
     }
     // There's no point in wasting time ramping up to the number of executors we already have, so
     // make sure our target is at least as much as our current allocation:
-    numExecutorsTargetPerResourceProfileId(rpId) =
-      math.max(numExecutorsTargetPerResourceProfileId(rpId),
+    var numExecutorsTarget = math.max(numExecutorsTargetPerResourceProfileId(rpId),
         executorMonitor.executorCountWithResourceProfile(rpId))
 
     // Boost our target with the number to add for this round:
-    numExecutorsTargetPerResourceProfileId(rpId) +=
-      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rpId, 1)
+    numExecutorsTarget += numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rpId, 1)
 
     // Ensure that our target doesn't exceed what we need at the present moment:
-    numExecutorsTargetPerResourceProfileId(rpId) =
-      math.min(numExecutorsTargetPerResourceProfileId(rpId), maxNumExecutorsNeeded)
+    numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
 
     // Ensure that our target fits within configured bounds:
-    numExecutorsTargetPerResourceProfileId(rpId) = math.max(
-      math.min(numExecutorsTargetPerResourceProfileId(rpId), maxNumExecutors), minNumExecutors)
+    numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
 
-    val delta = numExecutorsTargetPerResourceProfileId(rpId) - oldNumExecutorsTarget
+    val delta = numExecutorsTarget - oldNumExecutorsTarget
+    numExecutorsTargetPerResourceProfileId(rpId) = numExecutorsTarget
 
     // If our target has not changed, do not send a message
     // to the cluster manager and reset our exponential growth
@@ -675,7 +671,6 @@ private[spark] class ExecutorAllocationManager(
         // do NOT remove stageAttempt from stageAttemptToNumRunningTask
         // because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
-        val numTasks = stageAttemptToNumTasks(stageAttempt)
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToNumSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
@@ -777,40 +772,40 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingTasksPerResourceProfile(rpId: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
+      getPendingTaskSum(attempts)
+    }
+
+    def hasPendingRegularTasks: Boolean = {
+      val attempts = resourceProfileIdToStageAttempt.values.flatten.toSeq
+      val pending = getPendingTaskSum(attempts)
+      (pending > 0)
+    }
+
+    private def getPendingTaskSum(attempts: Seq[StageAttempt]): Int = {
       attempts.map { attempt =>
         val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
         val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
         numTotalTasks - numRunning
       }.sum
-    }
-
-    def hasPendingRegularTasks: Boolean = {
-      val attempts = resourceProfileIdToStageAttempt.values.flatten
-      val pending = attempts.map { attempt =>
-        val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
-        val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
-        numTotalTasks - numRunning
-      }.sum
-      (pending > 0)
     }
 
     def pendingSpeculativeTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
+      getPendingSpeculativeTaskSum(attempts)
+    }
+
+    def hasPendingSpeculativeTasks: Boolean = {
+      val attempts = resourceProfileIdToStageAttempt.values.flatten.toSeq
+      val pending = getPendingSpeculativeTaskSum(attempts)
+      (pending > 0)
+    }
+
+    private def getPendingSpeculativeTaskSum(attempts: Seq[StageAttempt]): Int = {
       attempts.map { attempt =>
         val numTotalTasks = stageAttemptToNumSpeculativeTasks.getOrElse(attempt, 0)
         val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
         numTotalTasks - numRunning
       }.sum
-    }
-
-    def hasPendingSpeculativeTasks: Boolean = {
-      val attempts = resourceProfileIdToStageAttempt.values.flatten
-      val pending = attempts.map { attempt =>
-        val numTotalTasks = stageAttemptToNumSpeculativeTasks.getOrElse(attempt, 0)
-        val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
-        numTotalTasks - numRunning
-      }.sum
-      (pending > 0)
     }
 
     def hasPendingTasks(): Boolean = {

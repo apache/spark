@@ -397,7 +397,7 @@ private[spark] object ResourceUtils extends Logging {
           s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
           s"result in wasted resources due to resource ${limitingResource} limiting the " +
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          s"your configuration."
+          "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
           throw new SparkException(message)
         } else {
@@ -419,7 +419,7 @@ private[spark] object ResourceUtils extends Logging {
           s"runnable tasks = ${resourceNumSlots}) will " +
           s"result in wasted resources due to resource ${limitingResource} limiting the " +
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          s"your configuration."
+          "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
           throw new SparkException(message)
         } else {
