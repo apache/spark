@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
@@ -59,6 +60,22 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     Project(projects, withFilter)
   }
 
+  private def getNewStatistics(
+              fileIndex: InMemoryFileIndex,
+              conf: SQLConf,
+              tableMeta: Option[CatalogTable]): CatalogStatistics = {
+    val partNum = fileIndex.partitionSpec().partitions.size
+    if (partNum <= conf.maxPartNumForStatsCalculateViaFS) {
+      CatalogStatistics(sizeInBytes = BigInt(fileIndex.sizeInBytes))
+    } else {
+      if (tableMeta.isDefined && tableMeta.get.stats.isDefined) {
+        tableMeta.get.stats.get
+      } else {
+        CatalogStatistics(sizeInBytes = BigInt(conf.defaultSizeInBytes))
+      }
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case op @ PhysicalOperation(projects, filters,
         logicalRelation @
@@ -73,18 +90,19 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _,
             _))
-        if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
+      if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
         fsRelation.sparkSession, logicalRelation, partitionSchema, filters, logicalRelation.output)
+      val tableMeta = logicalRelation.catalogTable
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
         // Change table stats based on the sizeInBytes of pruned files
-        val withStats = logicalRelation.catalogTable.map(_.copy(
-          stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
+        val newStats = getNewStatistics(prunedFileIndex, fsRelation.sparkSession.sessionState.conf, tableMeta)
+        val newTableMeta = tableMeta.map(_.copy(stats = Some(newStats)))
         val prunedLogicalRelation = logicalRelation.copy(
-          relation = prunedFsRelation, catalogTable = withStats)
+          relation = prunedFsRelation, catalogTable = newTableMeta)
         // Keep partition-pruning predicates so that they are visible in physical planning
         rebuildPhysicalOperation(projects, filters, prunedLogicalRelation)
       } else {

@@ -1403,6 +1403,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MAX_PARTITION_NUMBER_FOR_STATS_CALCULATION_VIA_FS =
+    buildConf("spark.sql.statistics.statisticViaFileSystem.maxPartitionNumber")
+      .doc("If the number of table (can be either hive table or data source table ) partitions " +
+        "exceed this value, statistic calculation via file system is not allowed. This is to " +
+        "avoid calculating size of large number of partitions via file system, eg. HDFS, which " +
+        "is very time consuming. Setting this value to negative will disable statistic " +
+        "calculation via file system.")
+      .intConf
+      .createWithDefault(1000)
+
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
@@ -2563,6 +2573,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def maxPartNumForStatsCalculateViaFS: Int =
+    getConf(MAX_PARTITION_NUMBER_FOR_STATS_CALCULATION_VIA_FS)
 
   def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
