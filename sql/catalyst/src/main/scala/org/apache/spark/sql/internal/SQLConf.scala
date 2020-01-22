@@ -2159,7 +2159,7 @@ object SQLConf {
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
       .doc("The size of partitions to be handled in one turn when use " +
-        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller" +
+        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
         "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
       .intConf
       .createWithDefault(100)
