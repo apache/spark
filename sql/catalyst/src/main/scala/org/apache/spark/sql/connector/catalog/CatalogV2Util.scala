@@ -33,6 +33,48 @@ private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
+   * A property to specify the location of the table or namespace
+   */
+  val PROP_LOCATION = "location"
+
+  /**
+   * A property to specify the description of the table.
+   */
+  val PROP_COMMENT = "comment"
+
+  /**
+   * A property to specify the provider of the table.
+   */
+  val PROP_PROVIDER = "provider"
+
+  /**
+   * A property to specify the owner of the table.
+   */
+  val PROP_OWNER = "owner"
+
+  /**
+   * The list of reserved table properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER TABLE ... SET TBLPROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val TABLE_RESERVED_PROPERTIES = Seq(PROP_COMMENT, PROP_LOCATION, PROP_PROVIDER, PROP_OWNER)
+
+  /**
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val NAMESPACE_RESERVED_PROPERTIES = Seq(PROP_COMMENT, PROP_LOCATION, PROP_OWNER)
+
+  /**
    * Apply properties changes to a map and return the result.
    */
   def applyNamespaceChanges(
@@ -271,13 +313,13 @@ private[sql] object CatalogV2Util {
       provider: String): Map[String, String] = {
     properties ++
       options ++
-      Map(TableCatalog.PROP_PROVIDER -> provider) ++
-      comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      location.map(TableCatalog.PROP_LOCATION -> _)
+      Map(PROP_PROVIDER -> provider) ++
+      comment.map(PROP_COMMENT -> _) ++
+      location.map(PROP_LOCATION -> _)
   }
 
   def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
-    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
+    properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def getTableProviderCatalog(

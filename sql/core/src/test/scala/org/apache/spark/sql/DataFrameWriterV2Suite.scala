@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
@@ -38,7 +38,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.sessionState.catalogManager.catalog(name).asTableCatalog
   }
 
-  private val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
+  private val defaultOwnership = Map(CatalogV2Util.PROP_OWNER -> Utils.getCurrentUserName())
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
