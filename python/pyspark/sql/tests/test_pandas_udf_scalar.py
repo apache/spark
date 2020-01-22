@@ -381,7 +381,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
-                        'Invalid returnType with scalar Pandas UDFs'):
+                        'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
 
     def test_vectorized_udf_complex(self):
@@ -509,7 +509,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*MapType'):
+                        'Invalid return type.*scalar Pandas UDF.*MapType'):
                     pandas_udf(lambda x: x, MapType(LongType(), LongType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
@@ -582,11 +582,11 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*MapType'):
+                        'Invalid return type.*scalar Pandas UDF.*MapType'):
                     pandas_udf(lambda x: x, MapType(StringType(), IntegerType()), udf_type)
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*ArrayType.StructType'):
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):
                     pandas_udf(lambda x: x,
                                ArrayType(StructType([StructField('a', IntegerType())])), udf_type)
 
