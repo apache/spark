@@ -22,7 +22,19 @@ license: |
 * Table of contents
 {:toc}
 
-These generic options/configurations are effective only when using file-based sources such as parquet, orc, avro, json, csv, text.
+These generic options/configurations are effective only when using file-based sources: parquet, orc, avro, json, csv, text.
+
+Please note that the hierarchy of directory used in examples below is:
+
+{% highlight text %}
+
+dir1/
+ ├── dir2/
+ │    └── file2.parquet (schema: <file, string>, content: "file2.parquet")
+ └── file1.parquet (schema: <file, string>, content: "file1.parquet")
+ └── file3.json (schema: <file, string>, content: "{'file':'corrupt.json'}")
+ 
+{% endhighlight %}
 
 ### Ignore Corrupt Files
 
