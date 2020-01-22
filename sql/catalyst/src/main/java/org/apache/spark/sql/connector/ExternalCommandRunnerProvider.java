@@ -25,9 +25,9 @@ import java.util.Map;
  * @since 3.0.0
  */
 @Unstable
-public interface ExternalCommandRunnableProvider {
+public interface ExternalCommandRunnerProvider {
   /**
-   * Execute a random command inside an external execution engine rather than Spark.
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
    * This could be useful when user wants to execute some commands out of Spark. For
    * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
    * creating cores for Solr and so on.

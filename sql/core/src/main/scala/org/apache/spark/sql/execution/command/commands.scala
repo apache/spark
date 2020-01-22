@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
+import org.apache.spark.sql.connector.ExternalCommandRunnerProvider
 import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -186,13 +186,13 @@ case class StreamingExplainCommand(
 }
 
 /**
- * Used to execute a random command inside an external execution engine rather than Spark.
- * Please check [[ExternalCommandRunnableProvider]] for details.
+ * Used to execute an arbitrary string command inside an external execution engine
+ * rather than Spark. Please check [[ExternalCommandRunnerProvider]] for more details.
  */
 case class ExternalCommandExecutor(
     command: String,
     parameters: java.util.Map[String, String],
-    provider: ExternalCommandRunnableProvider) extends RunnableCommand {
+    provider: ExternalCommandRunnerProvider) extends RunnableCommand {
 
   override def output: Seq[Attribute] =
     Seq(AttributeReference("command_output", StringType)())

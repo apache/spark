@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
-import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
+import org.apache.spark.sql.connector.ExternalCommandRunnerProvider
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -611,7 +611,7 @@ class SparkSession private(
   }
 
   /**
-   * Execute a random command inside an external execution engine rather than Spark.
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
    * This could be useful when user wants to execute some commands out of Spark. For
    * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
    * creating cores for Solr and so on.
@@ -631,10 +631,10 @@ class SparkSession private(
   @Unstable
   def executeCommand(command: String, source: String, options: Map[String, String]): DataFrame = {
     DataSource.lookupDataSource(source, sessionState.conf) match {
-      case provider if classOf[ExternalCommandRunnableProvider].isAssignableFrom(provider) =>
+      case provider if classOf[ExternalCommandRunnerProvider].isAssignableFrom(provider) =>
         Dataset.ofRows(self,
           ExternalCommandExecutor(command, options,
-            provider.newInstance().asInstanceOf[ExternalCommandRunnableProvider]))
+            provider.newInstance().asInstanceOf[ExternalCommandRunnerProvider]))
 
       case _ =>
         throw new AnalysisException(s"Command execution is not supported in source $source")

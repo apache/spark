@@ -19,11 +19,11 @@ package org.apache.spark.sql.sources
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.connector.ExternalCommandRunnableProvider
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.connector.ExternalCommandRunnerProvider
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
-
+class ExternalCommandRunnerProviderSuite extends QueryTest with SharedSparkSession {
   test("execute command") {
     System.setProperty("command", "hello")
     val parameters = Map("one" -> "1", "two" -> "2").asJava
@@ -31,15 +31,12 @@ class ExternalCommandRunnableProviderSuite extends SharedSparkSession {
     val df = spark.executeCommand("hello", "cmdSource", parameters)
     // executeCommand should execute the command eagerly
     assert(System.getProperty("command") === "world")
-    val output1 = df.collect()(0).getString(0)
-    val output2 = df.collect()(1).getString(0)
-    assert(output1 === "hello".reverse)
-    assert(output2 === parameters.toString)
+    checkAnswer(df, Seq(Row("hello".reverse), Row(parameters.toString)))
     System.clearProperty("command")
   }
 }
 
-class CommandRunnableDataSource extends DataSourceRegister with ExternalCommandRunnableProvider {
+class CommandRunnableDataSource extends DataSourceRegister with ExternalCommandRunnerProvider {
   override def shortName(): String = "cmdSource"
 
   override def executeCommand(command: String, parameters: java.util.Map[String, String])
