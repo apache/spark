@@ -1078,7 +1078,7 @@ class PlanResolutionSuite extends AnalysisTest {
       mergeCondition match {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
           assert(l.sameRef(ti) && r.sameRef(si))
-        case other => fail("unexpected merge condition" + other)
+        case other => fail("unexpected merge condition " + other)
       }
 
       deleteCondAttr.foreach(a => assert(a.sameRef(ts)))
@@ -1333,7 +1333,7 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(e5.message.contains("Reference 's' is ambiguous"))
     }
 
-    val sql =
+    val sql6 =
       s"""
          |MERGE INTO non_exist_target
          |USING non_exist_source
@@ -1342,7 +1342,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *
          |WHEN NOT MATCHED THEN INSERT *
        """.stripMargin
-    val parsed = parseAndResolve(sql)
+    val parsed = parseAndResolve(sql6)
     parsed match {
       case u: MergeIntoTable =>
         assert(u.targetTable.isInstanceOf[UnresolvedRelation])
