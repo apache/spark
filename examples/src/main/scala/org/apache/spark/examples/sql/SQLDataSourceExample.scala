@@ -57,17 +57,6 @@ object SQLDataSourceExample {
     // |file2.parquet|
     // +-------------+
     // $example off:ignore_corrupt_files$
-    // $example on:ignore_missing_files$
-    // enable ignore missing files
-    spark.sql("set spark.sql.files.ignoreMissingFiles=true")
-    val testMissingDF = spark.read.parquet("examples/src/main/resources/dir1/dir2/")
-    testMissingDF.show()
-    // +-------------+
-    // |         file|
-    // +-------------+
-    // |file2.parquet|
-    // +-------------+
-    // $example off:ignore_missing_files$
     spark.sql("set spark.sql.files.ignoreMissingFiles=false")
     // $example on:load_with_path_glob_filter$
     val partitionedUsersDF = spark.read.format("orc")

@@ -110,14 +110,6 @@ head(testCorruptDF)
 # 1 file1.parquet
 # 2 file2.parquet
 # $example off:ignore_corrupt_files$
-# $example on:ignore_missing_files$
-# enable ignore missing files
-sql("set spark.sql.files.ignoreMissingFiles=true")
-testMissingDF <- read.parquet("examples/src/main/resources/dir1/dir2/")
-head(testMissingDF)
-#            file
-# 1 file2.parquet
-# $example off:ignore_missing_files$
 sql("set spark.sql.files.ignoreMissingFiles=false")
 
 # $example on:recursive_file_lookup$
