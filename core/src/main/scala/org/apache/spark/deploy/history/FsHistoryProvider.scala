@@ -822,7 +822,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             val info = listing.read(classOf[LogInfo], reader.rootPath.toString)
             if (info.lastEvaluatedForCompaction.isEmpty ||
-              info.lastEvaluatedForCompaction.get < lastIndex) {
+                info.lastEvaluatedForCompaction.get < lastIndex) {
               // haven't tried compaction for this index, do compaction
               fileCompactor.compact(reader.listEventLogFiles)
               listing.write(info.copy(lastEvaluatedForCompaction = Some(lastIndex)))
