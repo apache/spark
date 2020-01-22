@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-These generic options/configurations are effective only when using file-based sources such as Parquet, JSON and ORC.
+These generic options/configurations are effective only when using file-based sources such as parquet, orc, avro, json, csv, text.
 
 ### Ignore Corrupt Files
 
