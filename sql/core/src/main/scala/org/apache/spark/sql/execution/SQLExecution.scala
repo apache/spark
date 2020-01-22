@@ -171,8 +171,8 @@ object SQLExecution {
    * Wrap passed function to ensure necessary thread-local variables like
    * SparkContext local properties are forwarded to execution thread
    */
-  def withThreadLocalCaptured[T](sparkSession: SparkSession, exec: ExecutionContext)(
-    body: => T): Future[T] = {
+  def withThreadLocalCaptured[T](
+      sparkSession: SparkSession, exec: ExecutionContext)(body: => T): Future[T] = {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)

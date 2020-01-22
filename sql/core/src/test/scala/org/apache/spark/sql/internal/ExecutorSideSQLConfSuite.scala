@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 
 import org.scalatest.Assertions._
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -129,18 +129,14 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   test("SPARK-30556 propagate local properties to subquery execution thread") {
     withSQLConf("spark.sql.subquery.maxThreadThreshold" -> "1") {
       withTempView("l", "m", "n") {
-        Seq(true)
-          .toDF()
-          .createOrReplaceTempView("l")
+        Seq(true).toDF().createOrReplaceTempView("l")
         val confKey = "spark.sql.y"
 
         def createDataframe(confKey: String, confValue: String): Dataset[Boolean] = {
           Seq(true)
             .toDF()
             .mapPartitions { _ =>
-              val conf = SQLConf.get
-              conf
-                .isInstanceOf[ReadOnlySQLConf] && conf.getConfString(confKey) == confValue match {
+              TaskContext.get.getLocalProperty(confKey) == confValue match {
                 case true => Iterator(true)
                 case false => Iterator.empty
               }
@@ -149,15 +145,13 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
         // set local configuration and assert
         val confValue1 = "e"
-        createDataframe(confKey, confValue1)
-          .createOrReplaceTempView("m")
+        createDataframe(confKey, confValue1).createOrReplaceTempView("m")
         spark.sparkContext.setLocalProperty(confKey, confValue1)
         assert(sql("select * from l where exists (select * from m)").collect.size == 1)
 
         // change the conf value and assert again
         val confValue2 = "f"
-        createDataframe(confKey, confValue2)
-          .createOrReplaceTempView("n")
+        createDataframe(confKey, confValue2).createOrReplaceTempView("n")
         spark.sparkContext.setLocalProperty(confKey, confValue2)
         assert(sql("select value from l where exists (select * from n)").collect().size == 1)
       }
