@@ -310,44 +310,16 @@ license: |
         </tr>
         <tr>
           <td>
-            ownerName
-          </td>
-          <td>
-            yes
-          </td>
-          <td>
-            no
-          </td>
-          <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it
-          </td>
-        </tr>
-        <tr>
-          <td>
-            ownerType
-          </td>
-          <td>
-            yes
-          </td>
-          <td>
-            no
-          </td>
-          <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it
-          </td>
-        </tr>
-        <tr>
-          <td>
             owner
           </td>
           <td>
-            no
+            yes
           </td>
           <td>
             yes
           </td>
           <td>
-            For tables, it is determined by the user who runs spark and create the table.
+            For databases and tables, it is determined by the user who runs spark and create the table.
           </td>
         </tr>
     </table>

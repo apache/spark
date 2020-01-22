@@ -297,11 +297,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r @ ShowTableProperties(ResolvedTable(_, _, table), propertyKey) =>
       ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
 
-    case AlterNamespaceSetOwner(ResolvedNamespace(catalog, namespace), name, typ) =>
-      val properties =
-        Map(SupportsNamespaces.PROP_OWNER_NAME -> name, SupportsNamespaces.PROP_OWNER_TYPE -> typ)
-      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
-
     case _ => Nil
   }
 }

@@ -43,17 +43,9 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    Option(metadata.get(PROP_COMMENT)).foreach {
-      rows += toCatalystRow("Description", _)
-    }
-    Option(metadata.get(PROP_LOCATION)).foreach {
-      rows += toCatalystRow("Location", _)
-    }
-    Option(metadata.get(PROP_OWNER_NAME)).foreach {
-      rows += toCatalystRow("Owner Name", _)
-    }
-    Option(metadata.get(PROP_OWNER_TYPE)).foreach {
-      rows += toCatalystRow("Owner Type", _)
+
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
+      rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
     }
 
     if (isExtended) {
