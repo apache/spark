@@ -1375,6 +1375,7 @@ test_that("column operators", {
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
   c7 <- !c6
+  expect_true(TRUE)
 })
 
 test_that("column functions", {

@@ -60,11 +60,10 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     # set random seed for predictable results. mostly for base's sample() in tree and classification
     set.seed(42)
-    # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-    testthat:::run_tests("SparkR",
+    testthat:::test_package_dir("SparkR",
                          file.path(sparkRDir, "pkg", "tests", "fulltests"),
                          NULL,
-                         "summary")
+                         testthat::default_reporter())
   }
 
   SparkR:::uninstallDownloadedSpark()
