@@ -95,6 +95,8 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark', 'S%');
+      Spark
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
