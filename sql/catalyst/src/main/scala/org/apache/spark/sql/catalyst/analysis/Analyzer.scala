@@ -1328,10 +1328,10 @@ class Analyzer(
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
         EliminateSubqueryAliases(targetTable) match {
-          // Do not resolve the expression if the target table accepts any schema.
-          // This allows data sources to customize their own resolution logic using 
-          // custom resolution rules.
           case r: NamedRelation if r.skipSchemaResolution =>
+            // Do not resolve the expression if the target table accepts any schema.
+            // This allows data sources to customize their own resolution logic using
+            // custom resolution rules.
             m
 
           case _ =>
@@ -1357,11 +1357,12 @@ class Analyzer(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
+            }
+            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            m.copy(mergeCondition = resolvedMergeCondition,
+              matchedActions = newMatchedActions,
+              notMatchedActions = newNotMatchedActions)
         }
-        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)  
-        m.copy(mergeCondition = resolvedMergeCondition, 
-          matchedActions = newMatchedActions, 
-          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")

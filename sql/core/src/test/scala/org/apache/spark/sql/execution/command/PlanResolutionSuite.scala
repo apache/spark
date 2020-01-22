@@ -1389,19 +1389,11 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ul.name == "target.s")
         assert(il.name == "target.s")
         assert(updateAssigns.size == 1)
-        assert(
-          updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
-            updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
-        assert(
-          updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
-            updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+        assert(updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+        assert(updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
         assert(insertAssigns.size == 2)
-        assert(
-          insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
-            insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
-        assert(
-          insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
-            insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+        assert(insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
+        assert(insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
 
       case l => fail("Expected unresolved MergeIntoTable, but got:\n" + l.treeString)
     }
