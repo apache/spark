@@ -449,6 +449,20 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
+
+  /**
+   * Whether bootstrap samples are used when building trees.
+   * @group expertParam
+   */
+  @Since("3.0.0")
+  final val bootstrap: BooleanParam = new BooleanParam(this, "bootstrap",
+    "Whether bootstrap samples are used when building trees.")
+
+  setDefault(bootstrap -> true)
+
+  /** @group getParam */
+  @Since("3.0.0")
+  final def getBootstrap: Boolean = $(bootstrap)
 }
 
 private[ml] trait RandomForestClassifierParams
