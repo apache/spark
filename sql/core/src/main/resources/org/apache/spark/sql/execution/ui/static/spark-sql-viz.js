@@ -20,6 +20,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
+function shouldRenderPlanViz() {
+  return planVizContainer().selectAll("svg").empty();
+}
+
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
