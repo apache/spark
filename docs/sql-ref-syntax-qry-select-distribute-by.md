@@ -46,13 +46,13 @@ INSERT INTO person VALUES
     ('John A', 18), 
     ('Jack N', 16);
 
--- Reduce the number of shuffle partitions to 2 to illustrate the behaviour of `DISTRIBUTE BY`.
--- It's easier to see the clustering and sorting behaviour with less number of partitions.
+-- Reduce the number of shuffle partitions to 2 to illustrate the behavior of `DISTRIBUTE BY`.
+-- It's easier to see the clustering and sorting behavior with less number of partitions.
 SET spark.sql.shuffle.partitions = 2;
                         
 -- Select the rows with no ordering. Please note that without any sort directive, the result
 -- of the query is not deterministic. It's included here to just contrast it with the 
--- behaviour of `DISTRIBUTE BY`. The query below produces rows where age columns are not
+-- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
 -- clustered together.
 SELECT age, name FROM person;
 
