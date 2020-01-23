@@ -58,4 +58,18 @@ public interface CatalogPlugin {
    * called to pass the catalog's name.
    */
   String name();
+
+  /**
+   * Return a default namespace for the catalog.
+   * <p>
+   * When this catalog is set as the current catalog, the namespace returned by this method will be
+   * set as the current namespace.
+   * <p>
+   * The namespace returned by this method is not required to exist.
+   *
+   * @return a multi-part namespace
+   */
+  default String[] defaultNamespace() {
+    return new String[0];
+  }
 }
