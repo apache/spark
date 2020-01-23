@@ -112,9 +112,6 @@ class PlanResolutionSuite extends AnalysisTest {
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
-    when(manager.catalogIdentifier(testCat)).thenReturn(Some("testcat"))
-    when(manager.catalogIdentifier(v2SessionCatalog))
-      .thenReturn(Some(CatalogManager.SESSION_CATALOG_NAME))
     when(manager.currentCatalog).thenReturn(testCat)
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
@@ -131,10 +128,7 @@ class PlanResolutionSuite extends AnalysisTest {
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
-    when(manager.catalogIdentifier(testCat)).thenReturn(Some("testcat"))
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
-    when(manager.catalogIdentifier(v2SessionCatalog))
-      .thenReturn(Some(CatalogManager.SESSION_CATALOG_NAME))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -1099,29 +1093,24 @@ class PlanResolutionSuite extends AnalysisTest {
   DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catlogIdent = if (isSessionCatlog) CatalogManager.SESSION_CATALOG_NAME else "testcat"
+      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
       parsed match {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalogIdentifier.exists(_ == catlogIdent))
-          assert(r.identifiers.size == 1)
-          assert(r.identifiers.head.name() == tableIdent)
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
         case Project(_, r: DataSourceV2Relation) =>
-          assert(r.catalogIdentifier.exists(_ == catlogIdent))
-          assert(r.identifiers.size == 1)
-          assert(r.identifiers.head.name() == tableIdent)
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
         case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
-          assert(r.catalogIdentifier.exists(_ == catlogIdent))
-          assert(r.identifiers.size == 1)
-          assert(r.identifiers.head.name() == tableIdent)
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
         case DescribeTable(r: DataSourceV2Relation, _) =>
-          assert(r.catalogIdentifier.exists(_ == catlogIdent))
-          assert(r.identifiers.size == 1)
-          assert(r.identifiers.head.name() == tableIdent)
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: DataSourceV2Relation, _) =>
-          assert(r.catalogIdentifier.exists(_ == catlogIdent))
-          assert(r.identifiers.size == 1)
-          assert(r.identifiers.head.name() == tableIdent)
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
           assert(t.identifier == tableIdent)
       }

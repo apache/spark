@@ -254,13 +254,12 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   private def checkV2Identifiers(
       plan: LogicalPlan,
-      identifiers: Seq[String] = Seq("t1"),
-      catalogName: String = catalogName): Unit = {
+      identifier: String = "t1",
+      catalogPlugin: TableCatalog = catalog(catalogName)): Unit = {
     assert(plan.isInstanceOf[DataSourceV2Relation])
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
-    assert(v2.identifiers.length == identifiers.length)
-    assert(identifiers.forall(t => v2.identifiers.exists(_.name() == t)))
-    assert(v2.catalogIdentifier.exists(_ == catalogName))
+    assert(v2.identifier.name() == identifier)
+    assert(v2.catalog == catalogPlugin)
   }
 
   private def load(name: String, catalogOpt: Option[String]): DataFrame = {
@@ -270,9 +269,9 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   private def save(name: String, mode: SaveMode, catalogOpt: Option[String]): Unit = {
-    val df = spark.range(10)
-    df.write.format(format).option("name", name).option("catalog", catalogName)
-      .mode(mode).save()
+    val df = spark.range(10).write.format(format).option("name", name)
+    catalogOpt.foreach(cName => df.option("catalog", catalogName))
+    df.mode(mode).save()
   }
 }
 

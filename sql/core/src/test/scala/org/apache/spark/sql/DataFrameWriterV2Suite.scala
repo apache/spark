@@ -86,13 +86,12 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   private def checkV2Identifiers(
       plan: LogicalPlan,
-      identifiers: Seq[String] = Seq("table_name"),
-      catalogName: String = "testcat"): Unit = {
+      identifier: String = "table_name",
+      catalogPlugin: TableCatalog = catalog("testcat")): Unit = {
     assert(plan.isInstanceOf[DataSourceV2Relation])
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
-    assert(v2.identifiers.length == identifiers.length)
-    assert(identifiers.forall(t => v2.identifiers.exists(_.name() == t)))
-    assert(v2.catalogIdentifier.exists(_ == catalogName))
+    assert(v2.identifier.name() == identifier)
+    assert(v2.catalog == catalogPlugin)
   }
 
   test("Append: basic append") {

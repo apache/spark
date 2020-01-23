@@ -30,7 +30,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     val table = mock(classOf[Table])
     when(table.schema()).thenReturn(mock(classOf[StructType]))
     when(testCatalog.loadTable(ident)).thenReturn(table)
-    val r = CatalogV2Util.loadRelation(testCatalog, Some("dummy"), ident)
+    val r = CatalogV2Util.loadRelation(testCatalog, ident)
     assert(r.isDefined)
     assert(r.get.isInstanceOf[DataSourceV2Relation])
     val v2Relation = r.get.asInstanceOf[DataSourceV2Relation]
