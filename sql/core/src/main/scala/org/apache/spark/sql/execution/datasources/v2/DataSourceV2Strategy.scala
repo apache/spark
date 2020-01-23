@@ -241,18 +241,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
 
-    case a @ AlterTableSetLocation(r: ResolvedTable, partitionSpec, _) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-      }
-      AlterTableExec(r.catalog, r.identifier, a.changes) :: Nil
-
-    case a: AlterTable =>
-      a.table match {
-        case r: ResolvedTable => AlterTableExec(r.catalog, r.identifier, a.changes) :: Nil
-        case _ => Nil
-      }
+    case AlterTable(catalog, ident, _, changes) =>
+      AlterTableExec(catalog, ident, changes) :: Nil
 
     case RenameTable(catalog, oldIdent, newIdent) =>
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil

@@ -150,6 +150,62 @@ case class QualifiedColType(
     position: Option[ColumnPosition])
 
 /**
+ * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
+ */
+case class AlterTableAddColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
+ */
+case class AlterTableAlterColumnStatement(
+    tableName: Seq[String],
+    column: Seq[String],
+    dataType: Option[DataType],
+    nullable: Option[Boolean],
+    comment: Option[String],
+    position: Option[ColumnPosition]) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
+ */
+case class AlterTableRenameColumnStatement(
+    tableName: Seq[String],
+    column: Seq[String],
+    newName: String) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
+ */
+case class AlterTableDropColumnsStatement(
+    tableName: Seq[String],
+    columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... SET TBLPROPERTIES command, as parsed from SQL.
+ */
+case class AlterTableSetPropertiesStatement(
+    tableName: Seq[String],
+    properties: Map[String, String]) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... UNSET TBLPROPERTIES command, as parsed from SQL.
+ */
+case class AlterTableUnsetPropertiesStatement(
+    tableName: Seq[String],
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... SET LOCATION command, as parsed from SQL.
+ */
+case class AlterTableSetLocationStatement(
+    tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec],
+    location: String) extends ParsedStatement
+
+/**
  * ALTER TABLE ... RECOVER PARTITIONS command, as parsed from SQL.
  */
 case class AlterTableRecoverPartitionsStatement(

@@ -158,7 +158,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message = intercept[AnalysisException] {
         sql("SHOW TBLPROPERTIES parquet_temp")
       }.getMessage
-      assert(message.contains("parquet_temp is a temp view not a table"))
+      assert(message.contains("parquet_temp is a temp view not table"))
     }
   }
 
