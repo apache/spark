@@ -2863,6 +2863,13 @@ private[spark] object Utils extends Logging {
   def stringHalfWidth(str: String): Int = {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
   }
+
+  /** Create a new properties object with the same values as `props` */
+  def cloneProperties(props: Properties): Properties = {
+    val resultProps = new Properties()
+    props.asScala.foreach(entry => resultProps.put(entry._1, entry._2))
+    resultProps
+  }
 }
 
 private[util] object CallerContext extends Logging {
