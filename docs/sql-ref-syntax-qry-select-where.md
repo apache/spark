@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 The <code>WHERE</code> clause is used to limit the results of the <code>FROM</code>
-clause of query or subquery based on the specified condition.
+clause of a query or a subquery based on the specified condition.
 
 ### Syntax
 {% highlight sql %}
@@ -62,7 +62,7 @@ SELECT * FROM person WHERE id = 200 OR id = 300 ORDER BY id;
   |300|Mike|80  |
   +---+----+----+
 
--- ISNULL expression in `WHERE` clause.
+-- IS NULL expression in `WHERE` clause.
 SELECT * FROM person WHERE id > 300 OR age IS NULL ORDER BY id;
   +---+----+----+
   |id |name|age |
