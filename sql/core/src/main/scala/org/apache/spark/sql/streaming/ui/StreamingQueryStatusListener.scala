@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryPro
  * UI data for both active and inactive query.
  * TODO: Add support for history server.
  */
-class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListener {
+private[sql] class StreamingQueryStatusListener(sqlConf: SQLConf) extends StreamingQueryListener {
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
