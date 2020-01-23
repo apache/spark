@@ -38,29 +38,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         TableChange.addColumn(
           col.name.toArray,
           col.dataType,
-          true,
+          col.nullable,
           col.comment.orNull,
           col.position.orNull)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
-      val colNameArray = colName.toArray
-      val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colNameArray, newDataType, true)
+    case a @ AlterTableAlterColumnStatement(
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
+      val colName = a.column.toArray
+      val typeChange = a.dataType.map { newDataType =>
+        TableChange.updateColumnType(colName, newDataType)
       }
-      val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colNameArray, newComment)
+      val nullabilityChange = a.nullable.map { nullable =>
+        TableChange.updateColumnNullability(colName, nullable)
       }
-      val positionChange = pos.map { newPosition =>
-        TableChange.updateColumnPosition(colNameArray, newPosition)
+      val commentChange = a.comment.map { newComment =>
+        TableChange.updateColumnComment(colName, newComment)
+      }
+      val positionChange = a.position.map { newPosition =>
+        TableChange.updateColumnPosition(colName, newPosition)
       }
       createAlterTable(
         nameParts,
         catalog,
         tbl,
-        typeChange.toSeq ++ commentChange ++ positionChange)
+        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
 
     case AlterTableRenameColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
@@ -112,14 +115,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
-    case DescribeTableStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
-      }
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      DescribeTable(r, isExtended)
-
     case DescribeColumnStatement(
          NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
@@ -144,7 +139,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         ignoreIfExists = c.ifNotExists)
 
     case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
@@ -170,7 +165,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         orCreate = c.orCreate)
 
     case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>
@@ -196,11 +191,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
-
-    case ShowTablePropertiesStatement(
-      nameParts @ NonSessionCatalogAndTable(catalog, tbl), propertyKey) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      ShowTableProperties(r, propertyKey)
   }
 
   object NonSessionCatalogAndTable {

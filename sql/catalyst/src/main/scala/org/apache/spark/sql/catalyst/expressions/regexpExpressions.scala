@@ -95,6 +95,8 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark', '_park');
+      true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
@@ -111,8 +113,10 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   since = "1.0.0")
 // scalastyle:on line.contains.tab
-case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
+case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
+
+  def this(left: Expression, right: Expression) = this(left, right, '\\')
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
@@ -152,8 +156,6 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
         """)
       }
     } else {
-      val pattern = ctx.freshName("pattern")
-      val rightStr = ctx.freshName("rightStr")
       // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
       // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
       // '\"' will cause exception 'Line break in literal not allowed'.
@@ -162,10 +164,17 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
       } else {
         escapeChar
       }
+      val rightStr = ctx.freshName("rightStr")
+      val pattern = ctx.addMutableState(patternClass, "pattern")
+      val lastRightStr = ctx.addMutableState(classOf[String].getName, "lastRightStr")
+
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
+          if (!$rightStr.equals($lastRightStr)) {
+            $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
+            $lastRightStr = $rightStr;
+          }
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
@@ -240,11 +249,16 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       }
     } else {
       val rightStr = ctx.freshName("rightStr")
-      val pattern = ctx.freshName("pattern")
+      val pattern = ctx.addMutableState(patternClass, "pattern")
+      val lastRightStr = ctx.addMutableState(classOf[String].getName, "lastRightStr")
+
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($rightStr);
+          if (!$rightStr.equals($lastRightStr)) {
+            $pattern = $patternClass.compile($rightStr);
+            $lastRightStr = $rightStr;
+          }
           ${ev.value} = $pattern.matcher($eval1.toString()).find(0);
         """
       })

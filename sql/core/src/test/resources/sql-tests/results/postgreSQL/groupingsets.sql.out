@@ -510,8 +510,10 @@ select unsortable_col, count(*)
 -- !query 37 schema
 struct<unsortable_col:int,count(1):bigint>
 -- !query 37 output
-1	8
-2	8
+1	4
+1	4
+2	4
+2	4
 
 
 -- !query 38

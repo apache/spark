@@ -137,10 +137,11 @@ case class AggregateExpression(
 
   @transient
   override lazy val references: AttributeSet = {
-    mode match {
-      case Partial | Complete => aggregateFunction.references ++ filterAttributes
+    val aggAttributes = mode match {
+      case Partial | Complete => aggregateFunction.references
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
+    aggAttributes ++ filterAttributes
   }
 
   override def toString: String = {
@@ -149,10 +150,20 @@ case class AggregateExpression(
       case PartialMerge => "merge_"
       case Final | Complete => ""
     }
-    prefix + aggregateFunction.toAggString(isDistinct)
+    val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE $predicate)"
+      case _ => aggFuncStr
+    }
   }
 
-  override def sql: String = aggregateFunction.sql(isDistinct)
+  override def sql: String = {
+    val aggFuncStr = aggregateFunction.sql(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE ${predicate.sql})"
+      case _ => aggFuncStr
+    }
+  }
 }
 
 /**

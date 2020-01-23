@@ -35,6 +35,7 @@ case class DescribeNamespaceExec(
     namespace: Seq[String],
     isExtended: Boolean) extends V2CommandExec {
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
+  import SupportsNamespaces._
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -42,14 +43,15 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(SupportsNamespaces.PROP_COMMENT))
-    rows += toCatalystRow("Location", metadata.get(SupportsNamespaces.PROP_LOCATION))
+
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
+      rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
+    }
+
     if (isExtended) {
-      val properties =
-        metadata.asScala.toSeq.filter(p =>
-          !SupportsNamespaces.RESERVED_PROPERTIES.contains(p._1))
+      val properties = metadata.asScala -- RESERVED_PROPERTIES.asScala
       if (properties.nonEmpty) {
-        rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+        rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
     rows

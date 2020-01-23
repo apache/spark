@@ -508,6 +508,13 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.master</code></td>
+  <td><code>https://kubernetes.default.svc</code></td>
+  <td>
+    The internal Kubernetes master (API server) address to be used for driver to request executors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.namespace</code></td>
   <td><code>default</code></td>
   <td>

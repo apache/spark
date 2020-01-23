@@ -145,6 +145,7 @@ case class ReplaceTableAsSelectStatement(
 case class QualifiedColType(
     name: Seq[String],
     dataType: DataType,
+    nullable: Boolean,
     comment: Option[String],
     position: Option[ColumnPosition])
 
@@ -162,6 +163,7 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
+    nullable: Option[Boolean],
     comment: Option[String],
     position: Option[ColumnPosition]) extends ParsedStatement
 
@@ -289,14 +291,6 @@ case class DropTableStatement(
 case class DropViewStatement(
     viewName: Seq[String],
     ifExists: Boolean) extends ParsedStatement
-
-/**
- * A DESCRIBE TABLE tbl_name statement, as parsed from SQL.
- */
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
 
 /**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
@@ -443,13 +437,6 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
- */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
 
 /**
  * A DESCRIBE FUNCTION statement, as parsed from SQL

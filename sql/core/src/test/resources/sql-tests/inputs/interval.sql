@@ -1,47 +1,5 @@
 -- test for intervals
 
--- greater than or equal
-select interval '1 day' > interval '23 hour';
-select interval '-1 day' >= interval '-23 hour';
-select interval '-1 day' > null;
-select null > interval '-1 day';
-
--- less than or equal
-select interval '1 minutes' < interval '1 hour';
-select interval '-1 day' <= interval '-23 hour';
-
--- equal
-select interval '1 year' = interval '360 days';
-select interval '1 year 2 month' = interval '420 days';
-select interval '1 year' = interval '365 days';
-select interval '1 month' = interval '30 days';
-select interval '1 minutes' = interval '1 hour';
-select interval '1 minutes' = null;
-select null = interval '-1 day';
-
--- null safe equal
-select interval '1 minutes' <=> null;
-select null <=> interval '1 minutes';
-
--- complex interval representation
-select INTERVAL '9 years 1 months -1 weeks -4 days -10 hours -46 minutes' > interval '1 minutes';
-
--- ordering
-select cast(v as interval) i from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v) order by i;
-
--- unlimited days
-select interval '1 month 120 days' > interval '2 month';
-select interval '1 month 30 days' = interval '2 month';
-
--- unlimited microseconds
-select interval '1 month 29 days 40 hours' > interval '2 month';
-
--- max
-select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
-
--- min
-select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
-
 -- multiply and divide an interval by a number
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
 select interval 4 month 2 weeks 3 microseconds * 1.5;
@@ -262,3 +220,9 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+
+-- interval support for csv and json functions
+SELECT from_csv('1, 1 day', 'a INT, b interval');
+SELECT to_csv(named_struct('a', interval 32 month, 'b', interval 70 minute));
+SELECT from_json('{"a":"1 days"}', 'a interval');
+SELECT to_json(map('a', interval 25 month 100 day 130 minute));

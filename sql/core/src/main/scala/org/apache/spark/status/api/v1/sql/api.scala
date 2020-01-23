@@ -14,20 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1.sql
 
-package org.apache.spark.sql.catalyst.analysis
+import java.util.Date
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+class ExecutionData private[spark] (
+    val id: Long,
+    val status: String,
+    val description: String,
+    val planDescription: String,
+    val metrics: Seq[Metrics],
+    val submissionTime: Date,
+    val duration: Long,
+    val runningJobIds: Seq[Int],
+    val successJobIds: Seq[Int],
+    val failedJobIds: Seq[Int])
 
-case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])
-  extends LeafNode {
-  override def output: Seq[Attribute] = Nil
-}
-
-case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
+case class Metrics private[spark] (metricName: String, metricValue: String)

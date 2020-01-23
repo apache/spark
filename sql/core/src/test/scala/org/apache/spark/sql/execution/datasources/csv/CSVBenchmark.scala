@@ -21,9 +21,9 @@ import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -43,10 +43,6 @@ import org.apache.spark.sql.types._
 object CSVBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  private def toNoop(ds: Dataset[_]): Unit = {
-    ds.write.format("noop").mode(Overwrite).save()
-  }
-
   private def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark(s"Parsing quoted values", rowsNum, output = output)
 
@@ -62,7 +58,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val ds = spark.read.option("header", true).schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"One quoted string", numIters) { _ =>
-        toNoop(ds)
+        ds.noop()
       }
 
       benchmark.run()
@@ -87,14 +83,14 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"Select $colsNum columns", numIters) { _ =>
-        toNoop(ds.select("*"))
+        ds.select("*").noop()
       }
       val cols100 = columnNames.take(100).map(Column(_))
       benchmark.addCase(s"Select 100 columns", numIters) { _ =>
-        toNoop(ds.select(cols100: _*))
+        ds.select(cols100: _*).noop()
       }
       benchmark.addCase(s"Select one column", numIters) { _ =>
-        toNoop(ds.select($"col1"))
+        ds.select($"col1").noop()
       }
       benchmark.addCase(s"count()", numIters) { _ =>
         ds.count()
@@ -104,7 +100,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
-        toNoop(dsErr1.select(cols100: _*))
+        dsErr1.select(cols100: _*).noop()
       }
 
       val badRecColName = "badRecord"
@@ -113,7 +109,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
-        toNoop(dsErr2.select((Column(badRecColName) +: cols100): _*))
+        dsErr2.select((Column(badRecColName) +: cols100): _*).noop()
       }
 
       benchmark.run()
@@ -170,11 +166,11 @@ object CSVBenchmark extends SqlBasedBenchmark {
 
       val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
       writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
-        toNoop(timestamps)
+        timestamps.noop()
       }
 
       writeBench.addCase("to_csv(timestamp)", numIters) { _ =>
-        toNoop(timestamps.select(to_csv(struct($"timestamp"))))
+        timestamps.select(to_csv(struct($"timestamp"))).noop()
       }
 
       writeBench.addCase("write timestamps to files", numIters) { _ =>
@@ -182,11 +178,11 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       writeBench.addCase("Create a dataset of dates", numIters) { _ =>
-        toNoop(dates)
+        dates.noop()
       }
 
       writeBench.addCase("to_csv(date)", numIters) { _ =>
-        toNoop(dates.select(to_csv(struct($"date"))))
+        dates.select(to_csv(struct($"date"))).noop()
       }
 
       writeBench.addCase("write dates to files", numIters) { _ =>
@@ -199,7 +195,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val tsSchema = new StructType().add("timestamp", TimestampType)
 
       readBench.addCase("read timestamp text from files", numIters) { _ =>
-        toNoop(spark.read.text(timestampDir))
+        spark.read.text(timestampDir).noop()
       }
 
       readBench.addCase("read timestamps from files", numIters) { _ =>
@@ -207,7 +203,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", true)
           .schema(tsSchema)
           .csv(timestampDir)
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.addCase("infer timestamps from files", numIters) { _ =>
@@ -215,13 +211,13 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", true)
           .option("inferSchema", true)
           .csv(timestampDir)
-        toNoop(ds)
+        ds.noop()
       }
 
       val dateSchema = new StructType().add("date", DateType)
 
       readBench.addCase("read date text from files", numIters) { _ =>
-        toNoop(spark.read.text(dateDir))
+        spark.read.text(dateDir).noop()
       }
 
       readBench.addCase("read date from files", numIters) { _ =>
@@ -229,7 +225,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", true)
           .schema(dateSchema)
           .csv(dateDir)
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.addCase("infer date from files", numIters) { _ =>
@@ -237,7 +233,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", true)
           .option("inferSchema", true)
           .csv(dateDir)
-        toNoop(ds)
+        ds.noop()
       }
 
       def timestampStr: Dataset[String] = {
@@ -247,7 +243,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("timestamp strings", numIters) { _ =>
-        toNoop(timestampStr)
+        timestampStr.noop()
       }
 
       readBench.addCase("parse timestamps from Dataset[String]", numIters) { _ =>
@@ -255,7 +251,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", false)
           .schema(tsSchema)
           .csv(timestampStr)
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
@@ -263,7 +259,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", false)
           .option("inferSchema", true)
           .csv(timestampStr)
-        toNoop(ds)
+        ds.noop()
       }
 
       def dateStr: Dataset[String] = {
@@ -273,7 +269,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("date strings", numIters) { _ =>
-        toNoop(dateStr)
+        dateStr.noop()
       }
 
       readBench.addCase("parse dates from Dataset[String]", numIters) { _ =>
@@ -281,20 +277,64 @@ object CSVBenchmark extends SqlBasedBenchmark {
           .option("header", false)
           .schema(dateSchema)
           .csv(dateStr)
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.addCase("from_csv(timestamp)", numIters) { _ =>
         val ds = timestampStr.select(from_csv($"timestamp", tsSchema, Map.empty[String, String]))
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.addCase("from_csv(date)", numIters) { _ =>
         val ds = dateStr.select(from_csv($"date", dateSchema, Map.empty[String, String]))
-        toNoop(ds)
+        ds.noop()
       }
 
       readBench.run()
+    }
+  }
+
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark(s"Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", IntegerType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      spark.range(rowsNum).select(columns(): _*)
+        .write.option("header", true)
+        .csv(path.getAbsolutePath)
+      def readback = {
+        spark.read
+          .option("header", true)
+          .schema(schema)
+          .csv(path.getAbsolutePath)
+      }
+
+      benchmark.addCase(s"w/o filters", numIters) { _ =>
+        readback.noop()
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase(s"pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
+      benchmark.addCase(s"w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
     }
   }
 
@@ -305,6 +345,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       multiColumnsBenchmark(rowsNum = 1000 * 1000, numIters)
       countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
     }
   }
 }

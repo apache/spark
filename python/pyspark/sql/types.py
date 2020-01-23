@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -25,6 +26,7 @@ import re
 import base64
 from array import array
 import ctypes
+import warnings
 
 if sys.version >= "3":
     long = int
@@ -865,8 +867,6 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
-    >>> # Decimal with negative scale.
-    >>> check_datatype(DecimalType(1,-1))
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
@@ -1432,10 +1432,23 @@ class Row(tuple):
 
     ``key in row`` will search through row keys.
 
-    Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names. It is not allowed to omit
-    a named argument to represent the value is None or missing. This should be
-    explicitly set to None in this case.
+    Row can be used to create a row object by using named arguments.
+    It is not allowed to omit a named argument to represent the value is
+    None or missing. This should be explicitly set to None in this case.
+
+    NOTE: As of Spark 3.0.0, Rows created from named arguments no longer have
+    field names sorted alphabetically and will be ordered in the position as
+    entered. To enable sorting for Rows compatible with Spark 2.x, set the
+    environment variable "PYSPARK_ROW_FIELD_SORTING_ENABLED" to "true". This
+    option is deprecated and will be removed in future versions of Spark. For
+    Python versions < 3.6, the order of named arguments is not guaranteed to
+    be the same as entered, see https://www.python.org/dev/peps/pep-0468. In
+    this case, a warning will be issued and the Row will fallback to sort the
+    field names automatically.
+
+    NOTE: Examples with Row in pydocs are run with the environment variable
+    "PYSPARK_ROW_FIELD_SORTING_ENABLED" set to "true" which results in output
+    where fields are sorted.
 
     >>> row = Row(name="Alice", age=11)
     >>> row
@@ -1474,21 +1487,40 @@ class Row(tuple):
     True
     """
 
-    def __new__(self, *args, **kwargs):
+    # Remove after Python < 3.6 dropped, see SPARK-29748
+    _row_field_sorting_enabled = \
+        os.environ.get('PYSPARK_ROW_FIELD_SORTING_ENABLED', 'false').lower() == 'true'
+
+    if _row_field_sorting_enabled:
+        warnings.warn("The environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' "
+                      "is deprecated and will be removed in future versions of Spark")
+
+    def __new__(cls, *args, **kwargs):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
-            # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
-            return row
+            if not Row._row_field_sorting_enabled and sys.version_info[:2] < (3, 6):
+                warnings.warn("To use named arguments for Python version < 3.6, Row fields will be "
+                              "automatically sorted. This warning can be skipped by setting the "
+                              "environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
+                Row._row_field_sorting_enabled = True
 
+            # create row objects
+            if Row._row_field_sorting_enabled:
+                # Remove after Python < 3.6 dropped, see SPARK-29748
+                names = sorted(kwargs.keys())
+                row = tuple.__new__(cls, [kwargs[n] for n in names])
+                row.__fields__ = names
+                row.__from_dict__ = True
+            else:
+                row = tuple.__new__(cls, list(kwargs.values()))
+                row.__fields__ = list(kwargs.keys())
+
+            return row
         else:
             # create row class or objects
-            return tuple.__new__(self, args)
+            return tuple.__new__(cls, args)
 
     def asDict(self, recursive=False):
         """

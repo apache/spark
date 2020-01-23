@@ -32,17 +32,15 @@ import com.univocity.parsers.common.TextParsingException
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.apache.log4j.{AppenderSkeleton, LogManager}
-import org.apache.log4j.spi.LoggingEvent
 
-import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
+abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -1763,24 +1761,17 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
-    class TestAppender extends AppenderSkeleton {
-      var events = new java.util.ArrayList[LoggingEvent]
-      override def close(): Unit = {}
-      override def requiresLayout: Boolean = false
-      protected def append(event: LoggingEvent): Unit = events.add(event)
-    }
-
-    val testAppender1 = new TestAppender
+    val testAppender1 = new LogAppender("CSV header matches to schema")
     withLogAppender(testAppender1) {
       val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
       val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
 
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
     }
-    assert(testAppender1.events.asScala
+    assert(testAppender1.loggingEvents
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
 
-    val testAppender2 = new TestAppender
+    val testAppender2 = new LogAppender("CSV header matches to schema w/ enforceSchema")
     withLogAppender(testAppender2) {
       withTempPath { path =>
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
@@ -1795,7 +1786,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
           .collect()
       }
     }
-    assert(testAppender2.events.asScala
+    assert(testAppender2.loggingEvents
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
@@ -2204,4 +2195,117 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
       checkAnswer(resultDF, Row("a", 2, "e", "c"))
     }
   }
+
+  test("filters push down") {
+    Seq(true, false).foreach { filterPushdown =>
+      Seq(true, false).foreach { columnPruning =>
+        withSQLConf(
+          SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString,
+          SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> columnPruning.toString) {
+
+          withTempPath { path =>
+            val t = "2019-12-17 00:01:02"
+            Seq(
+              "c0,c1,c2",
+              "abc,1,2019-11-14 20:35:30",
+              s"def,2,$t").toDF("data")
+              .repartition(1)
+              .write.text(path.getAbsolutePath)
+            Seq(true, false).foreach { multiLine =>
+              Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
+                val readback = spark.read
+                  .option("mode", mode)
+                  .option("header", true)
+                  .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+                  .option("multiLine", multiLine)
+                  .schema("c0 string, c1 integer, c2 timestamp")
+                  .csv(path.getAbsolutePath)
+                  .where($"c1" === 2)
+                  .select($"c2")
+                // count() pushes empty schema. This checks handling of a filter
+                // which refers to not existed field.
+                assert(readback.count() === 1)
+                checkAnswer(readback, Row(Timestamp.valueOf(t)))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("filters push down - malformed input in PERMISSIVE mode") {
+    val invalidTs = "2019-123-14 20:35:30"
+    val invalidRow = s"0,$invalidTs,999"
+    val validTs = "2019-12-14 20:35:30"
+    Seq(true, false).foreach { filterPushdown =>
+      withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+        withTempPath { path =>
+          Seq(
+            "c0,c1,c2",
+            invalidRow,
+            s"1,$validTs,999").toDF("data")
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+          def checkReadback(condition: Column, expected: Seq[Row]): Unit = {
+            val readback = spark.read
+              .option("mode", "PERMISSIVE")
+              .option("columnNameOfCorruptRecord", "c3")
+              .option("header", true)
+              .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+              .schema("c0 integer, c1 timestamp, c2 integer, c3 string")
+              .csv(path.getAbsolutePath)
+              .where(condition)
+              .select($"c0", $"c1", $"c3")
+            checkAnswer(readback, expected)
+          }
+
+          checkReadback(
+            condition = $"c2" === 999,
+            expected = Seq(Row(0, null, invalidRow), Row(1, Timestamp.valueOf(validTs), null)))
+          checkReadback(
+            condition = $"c2" === 999 && $"c1" > "1970-01-01 00:00:00",
+            expected = Seq(Row(1, Timestamp.valueOf(validTs), null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30530: apply filters to malformed rows") {
+    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        Seq(
+          "100.0,1.0,",
+          "200.0,,",
+          "300.0,3.0,",
+          "1.0,4.0,",
+          ",4.0,",
+          "500.0,,",
+          ",6.0,",
+          "-500.0,50.5").toDF("data")
+          .repartition(1)
+          .write.text(path.getAbsolutePath)
+        val schema = new StructType().add("floats", FloatType).add("more_floats", FloatType)
+        val readback = spark.read
+          .schema(schema)
+          .csv(path.getAbsolutePath)
+          .filter("floats is null")
+        checkAnswer(readback, Seq(Row(null, 4.0), Row(null, 6.0)))
+      }
+    }
+  }
+}
+
+class CSVv1Suite extends CSVSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "csv")
+}
+
+class CSVv2Suite extends CSVSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

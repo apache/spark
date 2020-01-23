@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningSubquery, ListQuery, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,11 +41,26 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = adaptiveExecutionContext.session.sessionState.conf
 
+  def containShuffle(plan: SparkPlan): Boolean = {
+    plan.find {
+      case _: Exchange => true
+      case s: SparkPlan => !s.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
+    }.isDefined
+  }
+
+  def containSubQuery(plan: SparkPlan): Boolean = {
+    plan.find(_.expressions.exists(_.find {
+      case _: SubqueryExpression => true
+      case _ => false
+    }.isDefined)).isDefined
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
-    case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan) =>
+    case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan)
+      && (isSubquery || containShuffle(plan) || containSubQuery(plan)) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.

@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Uns
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.LocalShuffledRowRDD
+import org.apache.spark.sql.execution.adaptive.{LocalShuffledRowRDD, SkewedShuffledRowRDD}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -90,13 +90,22 @@ case class ShuffleExchangeExec(
       writeMetrics)
   }
 
-  def createShuffledRDD(partitionStartIndices: Option[Array[Int]]): ShuffledRowRDD = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
+  def createShuffledRDD(
+      partitionRanges: Option[Array[(Int, Int)]]): ShuffledRowRDD = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionRanges)
   }
 
   def createLocalShuffleRDD(
       partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
     new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
+  }
+
+  def createSkewedShuffleRDD(
+      partitionIndex: Int,
+      startMapIndex: Int,
+      endMapIndex: Int): SkewedShuffledRowRDD = {
+    new SkewedShuffledRowRDD(shuffleDependency,
+      partitionIndex, startMapIndex, endMapIndex, readMetrics)
   }
 
   /**
