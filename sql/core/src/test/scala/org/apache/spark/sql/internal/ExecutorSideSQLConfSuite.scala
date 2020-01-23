@@ -164,8 +164,8 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     withSQLConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD.key -> "1") {
       val df1 = Seq(true).toDF()
       val confKey = "spark.sql.y"
-      val confValue1 = "b"
-      val confValue2 = "c"
+      val confValue1 = UUID.randomUUID().toString()
+      val confValue2 = UUID.randomUUID().toString()
 
       def generateBroadcastDataFrame(confKey: String, confValue: String): Dataset[Boolean] = {
         val df = spark.range(1).mapPartitions { _ =>
