@@ -34,6 +34,35 @@ private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
+   * The list of reserved table properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER TABLE ... SET TBLPROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val TABLE_RESERVED_PROPERTIES =
+    Seq(TableCatalog.PROP_COMMENT,
+      TableCatalog.PROP_LOCATION,
+      TableCatalog.PROP_PROVIDER,
+      TableCatalog.PROP_OWNER)
+
+  /**
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val NAMESPACE_RESERVED_PROPERTIES =
+    Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_LOCATION,
+      SupportsNamespaces.PROP_OWNER)
+
+  /**
    * Apply properties changes to a map and return the result.
    */
   def applyNamespaceChanges(
