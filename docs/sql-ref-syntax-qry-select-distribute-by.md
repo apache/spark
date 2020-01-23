@@ -24,7 +24,7 @@ sort the data within each partition.
 
 ### Syntax
 {% highlight sql %}
-DISTRIBUTE BY { expression [ , ...] }
+DISTRIBUTE BY { expression [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
@@ -38,12 +38,14 @@ DISTRIBUTE BY { expression [ , ...] }
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (name STRING, age INT);
-INSERT INTO person VALUES ('Zen Hui', 25), 
-                          ('Anil B', 18), 
-                          ('Shone S', 16), 
-                          ('Mike A', 25),
-                          ('John A', 18), 
-                          ('Jack N', 16);
+INSERT INTO person VALUES
+    ('Zen Hui', 25), 
+    ('Anil B', 18), 
+    ('Shone S', 16), 
+    ('Mike A', 25),
+    ('John A', 18), 
+    ('Jack N', 16);
+
 -- Reduce the number of shuffle partitions to 2 to illustrate the behaviour of `DISTRIBUTE BY`.
 -- It's easier to see the clustering and sorting behaviour with less number of partitions.
 SET spark.sql.shuffle.partitions = 2;
