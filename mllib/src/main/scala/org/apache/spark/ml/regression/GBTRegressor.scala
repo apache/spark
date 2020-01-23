@@ -300,10 +300,15 @@ class GBTRegressionModel private[ml](
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
-  /** Number of trees in ensemble */
+  /**
+   * Number of trees in ensemble
+   *
+   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 3.1.0
+   */
+  @deprecated("Use getNumTrees instead. This method will be removed in 3.1.0.", "3.0.0")
   val numTrees: Int = trees.length
 
   @Since("1.4.0")
@@ -314,7 +319,7 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTRegressionModel: uid=$uid, numTrees=$numTrees, numFeatures=$numFeatures"
+    s"GBTRegressionModel: uid=$uid, numTrees=$getNumTrees, numFeatures=$numFeatures"
   }
 
   /**
