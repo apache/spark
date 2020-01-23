@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
+import org.mockito.Mockito.mock
+
+import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -113,6 +117,16 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(
       plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
+  }
+
+  test("command should report a dummy stats") {
+    val plan = CommentOnNamespace(
+      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
+    val stats = Statistics(Long.MaxValue)
+    checkStats(
+      plan,
+      expectedStatsCboOn = stats,
+      expectedStatsCboOff = stats)
   }
 
   /** Check estimated stats when cbo is turned on/off. */
