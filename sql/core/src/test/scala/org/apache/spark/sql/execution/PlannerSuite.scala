@@ -943,7 +943,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("df1", "df2") {
         spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
-        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+        spark.range(20).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
         val planned = sql(
           """
             |SELECT * FROM
@@ -953,7 +953,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
             |ON t1.k = t2.k
           """.stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
-        assert(exchanges.size == 1)
+        assert(exchanges.size == 2)
       }
     }
   }
@@ -962,7 +962,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("df1", "df2") {
         spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
-        spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+        spark.range(20).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
         val planned = sql(
           """
             |SELECT * FROM
@@ -987,7 +987,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   test("aliases in the aggregate expressions should not introduce extra shuffle") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
-      val t2 = spark.range(10).selectExpr("floor(id/4) as k2")
+      val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
 
       val agg1 = t1.groupBy("k1").agg(count(lit("1")).as("cnt1"))
       val agg2 = t2.groupBy("k2").agg(count(lit("1")).as("cnt2")).withColumnRenamed("k2", "k3")
@@ -1006,7 +1006,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       Seq(true, false).foreach { useObjectHashAgg =>
         withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> useObjectHashAgg.toString) {
           val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
-          val t2 = spark.range(10).selectExpr("floor(id/4) as k2")
+          val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
 
           val agg1 = t1.groupBy("k1").agg(collect_list("k1"))
           val agg2 = t2.groupBy("k2").agg(collect_list("k2")).withColumnRenamed("k2", "k3")
