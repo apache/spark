@@ -66,10 +66,15 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   /** No-arg constructor for kryo. */
   protected def this() = this(null, false)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(
-      s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
-    DataType.buildFormattedString(elementType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      builder: StringBuilder,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      builder.append(
+        s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
+      DataType.buildFormattedString(elementType, s"$prefix    |", builder, maxDepth)
+    }
   }
 
   override private[sql] def jsonValue =

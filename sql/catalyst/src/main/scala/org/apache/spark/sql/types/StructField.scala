@@ -43,9 +43,14 @@ case class StructField(
   /** No-arg constructor for kryo. */
   protected def this() = this(null, null)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
-    DataType.buildFormattedString(dataType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      builder: StringBuilder,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
+      DataType.buildFormattedString(dataType, s"$prefix    |", builder, maxDepth)
+    }
   }
 
   // override the default toString to be compatible with legacy parquet files.

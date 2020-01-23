@@ -224,16 +224,17 @@ object DataType {
   }
 
   protected[types] def buildFormattedString(
-    dataType: DataType,
-    prefix: String,
-    builder: StringBuilder): Unit = {
+      dataType: DataType,
+      prefix: String,
+      builder: StringBuilder,
+      maxDepth: Int): Unit = {
     dataType match {
       case array: ArrayType =>
-        array.buildFormattedString(prefix, builder)
+        array.buildFormattedString(prefix, builder, maxDepth - 1)
       case struct: StructType =>
-        struct.buildFormattedString(prefix, builder)
+        struct.buildFormattedString(prefix, builder, maxDepth - 1)
       case map: MapType =>
-        map.buildFormattedString(prefix, builder)
+        map.buildFormattedString(prefix, builder, maxDepth - 1)
       case _ =>
     }
   }
