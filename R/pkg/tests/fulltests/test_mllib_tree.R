@@ -130,7 +130,7 @@ test_that("spark.randomForest", {
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
-                              numTrees = 1, seed = 1)
+                              numTrees = 1, seed = 1, bootstrap = FALSE)
 
   predictions <- collect(predict(model, data))
   expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
