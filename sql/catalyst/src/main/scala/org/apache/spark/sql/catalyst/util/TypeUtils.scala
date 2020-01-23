@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
@@ -71,7 +72,6 @@ object TypeUtils {
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case c: CalendarIntervalType => c.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
@@ -98,5 +98,19 @@ object TypeUtils {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
+  }
+
+  def failWithIntervalType(dataType: DataType): Unit = {
+    dataType match {
+      case CalendarIntervalType =>
+        throw new AnalysisException("Cannot use interval type in the table schema.")
+      case ArrayType(et, _) => failWithIntervalType(et)
+      case MapType(kt, vt, _) =>
+        failWithIntervalType(kt)
+        failWithIntervalType(vt)
+      case s: StructType => s.foreach(f => failWithIntervalType(f.dataType))
+      case u: UserDefinedType[_] => failWithIntervalType(u.sqlType)
+      case _ =>
+    }
   }
 }

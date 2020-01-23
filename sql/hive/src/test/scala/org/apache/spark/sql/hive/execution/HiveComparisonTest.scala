@@ -376,7 +376,7 @@ abstract class HiveComparisonTest
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 
