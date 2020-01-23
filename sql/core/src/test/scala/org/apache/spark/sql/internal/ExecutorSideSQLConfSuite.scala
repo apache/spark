@@ -76,31 +76,6 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
-  test("SPARK-22590 test broadcast thread propogates the local properties to task") {
-    withSQLConf("spark.sql.broadcastExchange.maxThreadThreshold" -> "1") {
-      val df1 = Seq(true).toDF()
-      val df2 = spark.range(1).mapPartitions { _ =>
-        val conf = SQLConf.get
-        Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "b")
-      }
-      df2.hint("broadcast")
-
-      val df3 = spark.range(1).mapPartitions { _ =>
-        val conf = SQLConf.get
-        Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.y") == "c")
-      }
-      df3.hint("broadcast")
-
-      spark.sparkContext.setLocalProperty("spark.sql.y", "b")
-      val checks = df1.join(df2).collect()
-      assert(checks.forall(_.toSeq == Seq(true, true)))
-
-      spark.sparkContext.setLocalProperty("spark.sql.y", "c")
-      val checks2 = df1.join(df3).collect()
-      assert(checks2.forall(_.toSeq == Seq(true, true)))
-    }
-  }
-
   test("case-sensitive config should work for json schema inference") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>
@@ -182,6 +157,35 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         spark.sparkContext.setLocalProperty(confKey, confValue2)
         assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().length == 1)
       }
+    }
+  }
+
+  test("SPARK-22590 propagate local properties to broadcast execution thread") {
+    withSQLConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD.key -> "1") {
+      val df1 = Seq(true).toDF()
+      val confKey = "spark.sql.y"
+      val confValue1 = "b"
+      val confValue2 = "c"
+
+      def generateBroadcastDataFrame(confKey: String, confValue: String): Dataset[Boolean] = {
+        val df = spark.range(1).mapPartitions { _ =>
+          Iterator(TaskContext.get.getLocalProperty(confKey) == confValue)
+        }
+        df.hint("broadcast")
+        df
+      }
+
+      // set local propert and assert
+      val df2 = generateBroadcastDataFrame(confKey, confValue1)
+      spark.sparkContext.setLocalProperty(confKey, confValue1)
+      val checks = df1.join(df2).collect()
+      assert(checks.forall(_.toSeq == Seq(true, true)))
+
+      // change local property and re-assert
+      val df3 = generateBroadcastDataFrame(confKey, confValue2)
+      spark.sparkContext.setLocalProperty(confKey, confValue2)
+      val checks2 = df1.join(df3).collect()
+      assert(checks2.forall(_.toSeq == Seq(true, true)))
     }
   }
 }
