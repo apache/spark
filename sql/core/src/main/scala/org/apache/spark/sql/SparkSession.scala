@@ -1079,6 +1079,12 @@ object SparkSession extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
+      case other => conf.getOption(s"spark.sql.catalogImplementation.$other.builder")
+          .getOrElse {
+        throw new IllegalArgumentException(
+          "You need to configure spark.sql.catalogImplementation.xx.builder when xx configured by" +
+              "spark.sql.catalogImplementation is not in-memory nor hive")
+      }
     }
   }
 
