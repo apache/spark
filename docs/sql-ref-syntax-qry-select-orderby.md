@@ -24,7 +24,7 @@ a total order in the output.
 
 ### Syntax
 {% highlight sql %}
-ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
+ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
@@ -38,7 +38,7 @@ ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
   <dd>
     Optionally specifies whether to sort the rows in ascending or descending
     order. The valid values for the sort direction are <code>ASC</code> for ascending
-    and <code>DESC</code> for descending. If sort direction is not explicitly specified then by default
+    and <code>DESC</code> for descending. If sort direction is not explicitly specified, then by default
     rows are sorted ascending. <br><br>
     <b>Syntax:</b>
     <code>
@@ -50,7 +50,7 @@ ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
     Optionally specifies whether NULL values are returned before/after non-NULL values, based on the 
     sort direction. In Spark, NULL values are considered to be lower than any non-NULL values by default.
     Therefore the ordering of NULL values depend on the sort direction. If <code>null_sort_order</code> is
-    not specified then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
+    not specified, then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
     sort order is <code>DESC</code>.<br><br>
     <ol>
       <li> If <code>NULLS FIRST</code> (the default) is specified, then NULL values are returned first 
