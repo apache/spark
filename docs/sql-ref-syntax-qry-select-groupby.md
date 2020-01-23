@@ -44,7 +44,7 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
     set is specified by a list of comma-separated expressions in parentheses.<br><br>
     <b>Syntax:</b>
       <code>
-        (() | (expression [ , ...]))
+        ( () | ( expression [ , ... ] ) )
       </code>
   </dd>
   <dt><code><em>grouping_expression</em></code></dt>

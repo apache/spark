@@ -20,7 +20,7 @@ license: |
 ---
 The <code>HAVING</code> clause is used to filter the results produced by
 <code>GROUP BY</code> based on the specified condition. It is often used
-in the conjunction with a [GROUP BY](sql-ref-syntax-qry-select-groupby.html)
+in conjunction with a [GROUP BY](sql-ref-syntax-qry-select-groupby.html)
 clause.
 
 ### Syntax
@@ -49,7 +49,7 @@ HAVING boolean_expression
 ### Examples
 {% highlight sql %}
 CREATE TABLE dealer (id INT, city STRING, car_model STRING, quantity INT);
-INSERT INTO dealer  VALUES (100, 'Fremont', 'Honda Civic', 10),
+INSERT INTO dealer VALUES (100, 'Fremont', 'Honda Civic', 10),
                           (100, 'Fremont', 'Honda Accord', 15),
                           (100, 'Fremont', 'Honda CRV', 7),
                           (200, 'Dublin', 'Honda Civic', 20),
