@@ -1328,7 +1328,9 @@ setMethod("negate",
           })
 
 #' @details
-#' \code{overlay}:
+#' \code{overlay}: Overlay the specified portion of \code{x} with \code{replace},
+#' starting from byte position \code{pos} of \code{src} and proceeding for
+#' \code{len} bytes.
 #'
 #' @param replace a Column with replacement.
 #'
