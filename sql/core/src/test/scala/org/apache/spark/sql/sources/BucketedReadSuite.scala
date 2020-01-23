@@ -608,16 +608,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withTable("t") {
         withView("v") {
-          val df = (0 until 20).map(i => (i, i)).toDF("i", "j").as("df")
-          df.write.format("parquet").bucketBy(8, "i").saveAsTable("t")
-
+          spark.range(20).selectExpr("id as i").write.bucketBy(8, "i").saveAsTable("t")
           sql("CREATE VIEW v AS SELECT * FROM t").collect()
 
-          val plan1 = sql("SELECT * FROM t a JOIN t b ON a.i = b.i").queryExecution.executedPlan
-          assert(plan1.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
-
-          val plan2 = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
-          assert(plan2.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+          val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
         }
       }
     }

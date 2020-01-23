@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 
 /**
@@ -27,14 +27,21 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
   final override def outputPartitioning: Partitioning = {
-    child.outputPartitioning match {
-      case HashPartitioning(expressions, numPartitions) =>
-        val newExpressions = expressions.map {
-          case a: AttributeReference =>
-            replaceAlias(a).getOrElse(a)
-          case other => other
-        }
-        HashPartitioning(newExpressions, numPartitions)
+    if (hasAlias) {
+      child.outputPartitioning match {
+        case h: HashPartitioning => h.copy(expressions = replaceAliases(h.expressions))
+        case other => other
+      }
+    } else {
+      child.outputPartitioning
+    }
+  }
+
+  private def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
+
+  private def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.map {
+      case a: AttributeReference => replaceAlias(a).getOrElse(a)
       case other => other
     }
   }

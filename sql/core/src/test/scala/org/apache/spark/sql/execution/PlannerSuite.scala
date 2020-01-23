@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
@@ -990,9 +991,38 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val agg1 = t1.groupBy("k1").agg(count(lit("1")).as("cnt1"))
       val agg2 = t2.groupBy("k2").agg(count(lit("1")).as("cnt2")).withColumnRenamed("k2", "k3")
+
       val planned = agg1.join(agg2, $"k1" === $"k3").queryExecution.executedPlan
+
+      assert(planned.collect { case h: HashAggregateExec => h }.nonEmpty)
+
       val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
       assert(exchanges.size == 2)
+    }
+  }
+
+  test("aliases in the object hash/sort aggregate expressions should not introduce extra shuffle") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(true, false).foreach { useObjectHashAgg =>
+        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> useObjectHashAgg.toString) {
+          val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+          val t2 = spark.range(10).selectExpr("floor(id/4) as k2")
+
+          val agg1 = t1.groupBy("k1").agg(collect_list("k1"))
+          val agg2 = t2.groupBy("k2").agg(collect_list("k2")).withColumnRenamed("k2", "k3")
+
+          val planned = agg1.join(agg2, $"k1" === $"k3").queryExecution.executedPlan
+
+          if (useObjectHashAgg) {
+            assert(planned.collect { case o: ObjectHashAggregateExec => o }.nonEmpty)
+          } else {
+            assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+          }
+
+          val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+          assert(exchanges.size == 2)
+        }
+      }
     }
   }
 }
