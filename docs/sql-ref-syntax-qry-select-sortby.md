@@ -25,7 +25,7 @@ than <code>ORDER BY</code> clause which guarantees a total order of the output.
 
 ### Syntax
 {% highlight sql %}
-SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
+SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
@@ -39,7 +39,7 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
   <dd>
     Optionally specifies whether to sort the rows in ascending or descending order. The valid values for
     sort direction are <code>ASC</code> for ascending and <code>DESC</code> for descending. If the
-    sort direction is not explicitly specified then by default rows are sorted ascending. <br><br>
+    sort direction is not explicitly specified, then by default rows are sorted ascending. <br><br>
     <b>Syntax:</b>
     <code>
        [ ASC | DESC ]
@@ -50,7 +50,7 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
     Optionally specifies whether NULL values are returned before/after non-NULL values, based on the
     sort direction. In Spark, NULL values are considered to be lower than any non-NULL values by default.
     Therefore the ordering of NULL values depend on the sort direction. If <code>null_sort_order</code> is
-    not specified then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
+    not specified, then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
     sort order is <code>DESC</code>.<br><br>
     <ol>
       <li> If <code>NULLS FIRST</code> (the default) is specified, then NULL values are returned first
@@ -79,7 +79,7 @@ INSERT INTO person VALUES
 
 -- Use `REPARTITION` hint to partition the data by `zip_code` to 
 -- examine the `SORT BY` behavior. This is used in rest of the
--- example.
+-- examples.
 
 -- Sort rows by `name` within each partition in ascending manner
 SELECT /*+ REPARTITION(zip_code) */ name, age, zip_code FROM person SORT BY name;
@@ -156,7 +156,7 @@ SELECT /*+ REPARTITION(zip_code) */ age, name, zip_code FROM person SORT BY age 
   |18  |Aryan B.|94511   |
   +----+--------+--------+
 
--- Sort rows within each partition  based on more than one column with each column having
+-- Sort rows within each partition based on more than one column with each column having
 -- different sort direction.
 SELECT /*+ REPARTITION(zip_code) */ name, age, zip_code FROM person
    SORT BY name ASC, age DESC;
