@@ -25,7 +25,7 @@ than <code>ORDER BY</code> clause which guarantees a total order of the output.
 
 ### Syntax
 {% highlight sql %}
-SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
+SORT BY { expression [ sort_direction | nulls_sort_order ] [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
