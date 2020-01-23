@@ -901,7 +901,7 @@ class DataSourceV2SQLSuite
   test("CreateNameSpace: reserved properties") {
     import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         val exception = intercept[ParseException] {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
         }
@@ -909,7 +909,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
@@ -928,7 +928,7 @@ class DataSourceV2SQLSuite
   test("create/replace/alter table - reserved properties") {
     import TableCatalog._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           Seq("CREATE", "REPLACE").foreach { action =>
             val e = intercept[ParseException] {
@@ -950,7 +950,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           withTable("testcat.reservedTest") {
             Seq("CREATE", "REPLACE").foreach { action =>
@@ -1108,7 +1108,7 @@ class DataSourceV2SQLSuite
   test("AlterNamespaceSetProperties: reserved properties") {
     import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql("CREATE NAMESPACE testcat.reservedTest")
           val exception = intercept[ParseException] {
@@ -1119,7 +1119,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest")
           sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
