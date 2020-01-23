@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -993,9 +993,9 @@ object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
     )
   }
 
-  def unwrapAlias(ex: Expression): Expression = {
-    if (ex.isInstanceOf[Alias]) ex.children.head
-    else ex
+  def unwrapAlias(ex: Expression): Expression = ex match {
+    case Alias(c, _) => c
+    case _ => ex
   }
 
   /**
@@ -1037,12 +1037,15 @@ object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.conf.combineAggregates) {
+      return plan
+    }
     plan transform {
       // The query execution/optimization does not guarantee the expressions are evaluated in order.
       // We only can combine them if and only if both are deterministic.
-      case agg@Aggregate(groupExprs: Seq[Expression],
-                         projectionsOfAggregateNode: Seq[NamedExpression],
-                         childAgg@Aggregate(childGroupExprs, childAggExprs, grandChild)) =>
+      case agg @ Aggregate(groupExprs,
+                         projectionsOfAggregateNode,
+                         childAgg @ Aggregate(childGroupExprs, childAggExprs, grandChild)) =>
 
       var collapsible = true
       val collapsibleNestedAggs = projectionsOfAggregateNode.map(aggEx => {
@@ -1051,10 +1054,11 @@ object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
         //
         // The or condition is kind of a hack for "early exit" of this loop, so later iterations
         // don't overwrite the value to again declare this collapsible
-        if (groupExprs.exists(ex => ex.semanticEquals(aggEx)) || !collapsible) aggEx
-        else {
+        if (groupExprs.exists(ex => ex.semanticEquals(aggEx)) || !collapsible) {
+          aggEx
+        } else {
           aggEx match {
-            case a@Alias(outerAggExpr: AggregateExpression, _) =>
+            case a @ Alias(outerAggExpr: AggregateExpression, _) =>
               outerAggExpr.aggregateFunction match {
                 case _: Max | _: Min | _: Sum =>
                   // look for the expressions in the inner aggregate that produce
@@ -1073,7 +1077,7 @@ object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
                     val resolvedInnerExpression = resolvedInnerExprs.iterator.next()
                     var newExpr: NamedExpression = null
                     unwrapAlias(resolvedInnerExpression) match {
-                      case childAggExpr@AggregateExpression(_, _, _, _, _) =>
+                      case childAggExpr: AggregateExpression =>
                         collapsible = childAggExpr.aggregateFunction.prettyName ==
                           outerAggExpr.aggregateFunction.prettyName
                         if (collapsible) {
@@ -1082,7 +1086,7 @@ object CombineAggregates extends Rule[LogicalPlan] with PredicateHelper {
                           newExpr = aggEx.withNewChildren(
                             Seq(newChild)).asInstanceOf[NamedExpression]
                         }
-                      case att@AttributeReference(ex: String, _, _, _) =>
+                      case att @ AttributeReference(ex: String, _, _, _) =>
                         outerAggExpr.aggregateFunction match {
                           case _: Min | _: Max =>
                             // min and max are a special case that can be computed successfully
