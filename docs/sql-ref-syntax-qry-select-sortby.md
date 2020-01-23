@@ -37,10 +37,9 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
   </dd>
   <dt><code><em>sort_direction</em></code></dt>
   <dd>
-    Optionally specifies whether to sort the rows in ascending (lowest to highest) or descending
-    (highest to lowest) order. The valid values for sort direction are <code>ASC</code> for ascending
-    and <code>DESC</code> for descending. If sort direction is not explicitly specified then by default
-    rows are sorted ascending. <br><br>
+    Optionally specifies whether to sort the rows in ascending or descending order. The valid values for
+    sort direction are <code>ASC</code> for ascending and <code>DESC</code> for descending. If the
+    sort direction is not explicitly specified then by default rows are sorted ascending. <br><br>
     <b>Syntax:</b>
     <code>
        [ ASC | DESC ]
