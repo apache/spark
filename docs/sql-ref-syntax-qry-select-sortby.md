@@ -21,7 +21,7 @@ license: |
 The <code>SORT BY</code> clause is used to return the result rows sorted
 within each partition in the user specified order. When there is more than one partition
 <code>SORT BY</code> may return result that is partially ordered. This is different
-than <code>ORDER BY</code> clause which guarantees total ordering of the output.
+than <code>ORDER BY</code> clause which guarantees a total order of the output.
 
 ### Syntax
 {% highlight sql %}
@@ -69,14 +69,14 @@ SORT BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (zip_code INT, name STRING, age INT);
-INSERT INTO person VALUES (94588, 'Zen Hui', 50), 
-                          (94588, 'Dan Li', 18), 
-                          (94588, 'Anil K', 27),
-                          (94588, 'John V', NULL),
-                          (94511, 'David K', 42),
-                          (94511, 'Aryan B.', 18),
-                          (94511, 'Lalit B.', NULL);
-                          
+INSERT INTO person VALUES
+    (94588, 'Zen Hui', 50), 
+    (94588, 'Dan Li', 18), 
+    (94588, 'Anil K', 27),
+    (94588, 'John V', NULL),
+    (94511, 'David K', 42),
+    (94511, 'Aryan B.', 18),
+    (94511, 'Lalit B.', NULL);
 
 -- Use `REPARTITION` hint to partition the data by `zip_code` to 
 -- examine the `SORT BY` behavior. This is used in rest of the
