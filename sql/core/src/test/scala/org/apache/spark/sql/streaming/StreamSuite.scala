@@ -976,24 +976,49 @@ class StreamSuite extends StreamTest {
       CheckAnswer(1 to 3: _*))
   }
 
-  test("streaming limit in complete mode") {
+  test("streaming limit before agg in complete mode") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(5).groupBy("value").count()
     testStream(limited, OutputMode.Complete())(
       AddData(inputData, 1 to 3: _*),
       CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
       AddData(inputData, 1 to 9: _*),
-      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
+      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 1)))
   }
 
-  test("streaming limits in complete mode") {
+  test("streaming limits before and after agg in complete mode (after limit < before limit)") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
     testStream(limited, OutputMode.Complete())(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
       AddData(inputData, 1 to 9: _*),
+      // only 1 to 4 should be allowed to aggregate, and counts for only 1 to 3 should be output
       CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
       AddData(inputData, 2 to 6: _*),
-      CheckAnswer(Row(1, 1), Row(2, 2), Row(3, 2)))
+      // None of the new values should be allowed to aggregate, same 3 counts should be output
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)))
+  }
+
+  test("streaming limits before and after agg in complete mode (before limit < after limit)") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(2).groupBy("value").count().orderBy("value").limit(3)
+    testStream(limited, OutputMode.Complete())(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1)),
+      AddData(inputData, 2 to 6: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1)))
+  }
+
+
+  test("streaming limit after streaming dedup in append mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().dropDuplicates().limit(1)
+    testStream(limited)(
+      AddData(inputData, 1, 2),
+      CheckAnswer(Row(1)),
+      AddData(inputData, 3, 4),
+      CheckAnswer(Row(1)))
   }
 
   test("streaming limit in update mode") {

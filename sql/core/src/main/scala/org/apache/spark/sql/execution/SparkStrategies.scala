@@ -456,16 +456,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Limit is unsupported for streams in Update mode.
    */
   case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
-    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), child)
-            if plan.isStreaming && outputMode == InternalOutputModes.Append =>
-          StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
-        case _ => Nil
+
+    private def generatesStreamingAppends(plan: LogicalPlan): Boolean = {
+
+      def hasNoStreamingAgg: Boolean = {
+        plan.collectFirst { case a: Aggregate if a.isStreaming => a }.isEmpty
       }
-      case Limit(IntegerLiteral(limit), child)
-          if plan.isStreaming && outputMode == InternalOutputModes.Append =>
-        StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
+      plan.isStreaming && (
+        outputMode == InternalOutputModes.Append ||
+        outputMode == InternalOutputModes.Complete && hasNoStreamingAgg)
+    }
+
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReturnAnswer(Limit(IntegerLiteral(limit), child)) if generatesStreamingAppends(child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+
+      case Limit(IntegerLiteral(limit), child) if generatesStreamingAppends (child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+
       case _ => Nil
     }
   }

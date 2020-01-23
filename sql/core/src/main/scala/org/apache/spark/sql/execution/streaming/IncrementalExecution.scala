@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Express
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{LeafExecNode, LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -105,6 +105,27 @@ class IncrementalExecution(
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
+    private def hasNoStatefulOp(plan: SparkPlan): Boolean = {
+      var statefulOpFound = false
+
+      def findStatefulOp(planToCheck: SparkPlan): Unit = {
+        planToCheck match {
+          case s: StatefulOperator =>
+            statefulOpFound = true
+
+          case e: ShuffleExchangeExec =>
+            // Don't search recursively any further as any child stateful operator will have
+            // its iterator fully consumed by ShuffleExchangeExec
+
+          case p: SparkPlan =>
+            p.children.foreach(findStatefulOp)
+        }
+      }
+
+      findStatefulOp(plan)
+      !statefulOpFound
+    }
+
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
@@ -149,6 +170,12 @@ class IncrementalExecution(
         l.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           outputMode = Some(outputMode))
+
+      case StreamingLocalLimitExec(limit, child) if hasNoStatefulOp(child) =>
+        // Optimize limit execution by replacing StreamingLocalLimitExec (consumes the iterator
+        // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
+        // no stateful operator (i.e., consuming the iterator is not needed).
+        LocalLimitExec(limit, child)
     }
   }
 
