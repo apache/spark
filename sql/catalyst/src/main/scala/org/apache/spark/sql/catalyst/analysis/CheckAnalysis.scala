@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -87,20 +87,6 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    // Analysis that needs to be performed top down can be added here.
-    plan.foreach {
-      case p if p.analyzed => // Skip already analyzed sub-plans
-
-      case alter: AlterTable =>
-        alter.table match {
-          case u @ UnresolvedTableWithViewExists(view) if !view.isTempView =>
-            u.failAnalysis("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
-          case _ =>
-        }
-
-      case _ => // Analysis successful!
-    }
-
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -119,12 +105,22 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
-      case u: UnresolvedTableWithViewExists =>
-        val viewKind = if (u.view.isTempView) { "temp view" } else { "view" }
-        u.failAnalysis(s"${u.view.identifier.quoted} is a $viewKind not a table.")
-
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case u: UnresolvedV2Relation =>
+        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -429,9 +425,8 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
-          case alter: AlterTable
-              if alter.childrenResolved && alter.table.isInstanceOf[ResolvedTable] =>
-            val table = alter.table.asInstanceOf[ResolvedTable].table
+          case alter: AlterTable if alter.childrenResolved =>
+            val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)
@@ -484,8 +479,6 @@ trait CheckAnalysis extends PredicateHelper {
                   throw new AnalysisException(
                     s"Cannot change nullable column to non-nullable: $fieldName")
                 }
-              case update: UpdateColumnPosition =>
-                findField("update", update.fieldNames)
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
               case update: UpdateColumnComment =>

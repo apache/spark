@@ -755,14 +755,12 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident)
-          .map(_ => UnresolvedTableWithViewExists(
-            ResolvedView(ident.asIdentifier, isTempView = true)))
-          .getOrElse(u)
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
       case u @ UnresolvedTableOrView(ident) =>
-        lookupTempView(ident)
-          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
-          .getOrElse(u)
+        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -816,6 +814,14 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
+
+      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+            .map(rel => alter.copy(table = rel))
+            .getOrElse(alter)
+
+      case u: UnresolvedV2Relation =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -882,7 +888,8 @@ class Analyzer(
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView => UnresolvedTableWithViewExists(v)
+          case v: ResolvedView =>
+            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
           case table => table
         }.getOrElse(u)
 
@@ -895,7 +902,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident, isTempView = false)
+              ResolvedView(ident)
             case table =>
               ResolvedTable(catalog.asTableCatalog, ident, table)
           }
@@ -1326,25 +1333,43 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
-        val newMatchedActions = m.matchedActions.map {
-          case DeleteAction(deleteCondition) =>
-            val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
-            DeleteAction(resolvedDeleteCondition)
-          case UpdateAction(updateCondition, assignments) =>
-            val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
-          case o => o
+
+        EliminateSubqueryAliases(targetTable) match {
+          case r: NamedRelation if r.skipSchemaResolution =>
+            // Do not resolve the expression if the target table accepts any schema.
+            // This allows data sources to customize their own resolution logic using
+            // custom resolution rules.
+            m
+
+          case _ =>
+            val newMatchedActions = m.matchedActions.map {
+              case DeleteAction(deleteCondition) =>
+                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+                DeleteAction(resolvedDeleteCondition)
+              case UpdateAction(updateCondition, assignments) =>
+                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+                // The update value can access columns from both target and source tables.
+                UpdateAction(
+                  resolvedUpdateCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+              case o => o
+            }
+            val newNotMatchedActions = m.notMatchedActions.map {
+              case InsertAction(insertCondition, assignments) =>
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition =
+                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+              case o => o
+            }
+            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            m.copy(mergeCondition = resolvedMergeCondition,
+              matchedActions = newMatchedActions,
+              notMatchedActions = newNotMatchedActions)
         }
-        val newNotMatchedActions = m.notMatchedActions.map {
-          case InsertAction(insertCondition, assignments) =>
-            val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-            InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
-          case o => o
-        }
-        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-        m.copy(mergeCondition = resolvedMergeCondition,
-          matchedActions = newMatchedActions,
-          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
@@ -1353,7 +1378,8 @@ class Analyzer(
 
     def resolveAssignments(
         assignments: Seq[Assignment],
-        mergeInto: MergeIntoTable): Seq[Assignment] = {
+        mergeInto: MergeIntoTable,
+        resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
         val expandedColumns = mergeInto.targetTable.output
         val expandedValues = mergeInto.sourceTable.output
@@ -1361,12 +1387,18 @@ class Analyzer(
       } else {
         assignments.map { assign =>
           val resolvedKey = assign.key match {
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto.targetTable)
+            case c if !c.resolved =>
+              resolveExpressionTopDown(c, Project(Nil, mergeInto.targetTable))
             case o => o
           }
           val resolvedValue = assign.value match {
             // The update values may contain target and/or source references.
-            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto)
+            case c if !c.resolved =>
+              if (resolveValuesWithSourceOnly) {
+                resolveExpressionTopDown(c, Project(Nil, mergeInto.sourceTable))
+              } else {
+                resolveExpressionTopDown(c, mergeInto)
+              }
             case o => o
           }
           Assignment(resolvedKey, resolvedValue)
