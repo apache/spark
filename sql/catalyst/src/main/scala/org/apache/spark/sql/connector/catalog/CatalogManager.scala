@@ -44,33 +44,13 @@ class CatalogManager(
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
-  // Map from catalog back to it's original name for easy name look up, we don't use the
-  // CatalogPlugin's name as it might be different from the catalog name depending on
-  // implementation. Catalog name <-> CatalogPlugin instance is a 1:1 mapping.
-  private val catalogIdentifiers = mutable.HashMap.empty[CatalogPlugin, String]
-  catalogIdentifiers(defaultSessionCatalog) = SESSION_CATALOG_NAME
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
-      catalogs.getOrElseUpdate(name, {
-        val catalog = Catalogs.load(name, conf)
-        catalogIdentifiers(catalog) = name
-        catalog
-      })
+      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
     }
-  }
-
-  /**
-   * Returns the identifier string for the given catalog
-   *
-   * @param catalog catalog to look up
-   * @return string identifier for the given catalog. If the catalog hasn't be registered return
-    *        None
-   */
-  def catalogIdentifier(catalog: CatalogPlugin): Option[String] = synchronized {
-    catalogIdentifiers.get(catalog)
   }
 
   def isCatalogRegistered(name: String): Boolean = {
@@ -103,11 +83,7 @@ class CatalogManager(
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
-          val catalog = loadV2SessionCatalog()
-          catalogIdentifiers(catalog) = SESSION_CATALOG_NAME
-          catalog
-        })
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
         case NonFatal(_) =>
           logError(

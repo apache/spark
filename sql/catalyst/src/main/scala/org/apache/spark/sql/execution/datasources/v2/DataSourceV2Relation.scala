@@ -32,19 +32,17 @@ import org.apache.spark.util.Utils
  * A logical plan representing a data source v2 table.
  *
  * @param table   The table that this relation represents.
- * @param output the output attributes of this relation
- * @param catalogIdentifier the string identifier for the catalog. None if no catalog is specified
- * @param identifiers the identifiers for the v2 relation. For multipath dataframe, there could be
- *                    more than one identifier or Nil if a V2 relation is instantiated using
- *                    options
+ * @param output the output attributes of this relation.
+ * @param catalog catalogPlugin for the table.
+ * @param identifier the identifier for the table.
  * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
  *                and [[WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
-    catalogIdentifier: Option[String],
-    identifiers: Seq[Identifier],
+    catalog: CatalogPlugin,
+    identifier: Identifier,
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
@@ -146,18 +144,18 @@ case class StreamingDataSourceV2Relation(
 object DataSourceV2Relation {
   def create(
       table: Table,
-      catalogIdentifier: Option[String],
-      identifiers: Seq[Identifier],
+      catalog: CatalogPlugin,
+      identifiers: Identifier,
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, catalogIdentifier, identifiers, options)
+    DataSourceV2Relation(table, output, catalog, identifiers, options)
   }
 
   def create(
       table: Table,
-      catalogIdentifier: Option[String],
-      identifiers: Seq[Identifier]): DataSourceV2Relation =
-    create(table, catalogIdentifier, identifiers, CaseInsensitiveStringMap.empty)
+      catalog: CatalogPlugin,
+      identifier: Identifier): DataSourceV2Relation =
+    create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

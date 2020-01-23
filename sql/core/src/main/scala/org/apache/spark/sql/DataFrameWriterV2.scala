@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -51,14 +51,10 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
-  private val (catalog, catalogIdentifier, tableIdentifier) = {
-    import df.sparkSession.sessionState.analyzer.{NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
-    tableName match {
-      case NonSessionCatalogAndIdentifier(catalog, identifier) =>
-        (catalog.asTableCatalog, tableName.headOption, identifier)
-      case SessionCatalogAndIdentifier(catalog, identifier) =>
-        (catalog.asTableCatalog, Some(CatalogManager.SESSION_CATALOG_NAME), identifier)
-    }
+  private val (catalog, identifier) = {
+    val CatalogAndIdentifier(catalog, identifier) = tableName
+
+    (catalog.asTableCatalog, identifier)
   }
 
   private val logicalPlan = df.queryExecution.logical
@@ -131,7 +127,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     runCommand("create") {
       CreateTableAsSelect(
         catalog,
-        tableIdentifier,
+        identifier,
         partitioning.getOrElse(Seq.empty),
         logicalPlan,
         properties = provider.map(p => properties + (TableCatalog.PROP_PROVIDER -> p))
@@ -161,13 +157,13 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def append(): Unit = {
-    val append = loadTable(catalog, tableIdentifier) match {
+    val append = loadTable(catalog, identifier) match {
       case Some(t) =>
         AppendData.byName(
-          DataSourceV2Relation.create(t, catalogIdentifier, Seq(tableIdentifier)),
+          DataSourceV2Relation.create(t, catalog, identifier),
           logicalPlan, options.toMap)
       case _ =>
-        throw new NoSuchTableException(tableIdentifier)
+        throw new NoSuchTableException(identifier)
     }
 
     runCommand("append")(append)
@@ -185,13 +181,13 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def overwrite(condition: Column): Unit = {
-    val overwrite = loadTable(catalog, tableIdentifier) match {
+    val overwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwriteByExpression.byName(
-          DataSourceV2Relation.create(t, catalogIdentifier, Seq(tableIdentifier)),
+          DataSourceV2Relation.create(t, catalog, identifier),
           logicalPlan, condition.expr, options.toMap)
       case _ =>
-        throw new NoSuchTableException(tableIdentifier)
+        throw new NoSuchTableException(identifier)
     }
 
     runCommand("overwrite")(overwrite)
@@ -212,13 +208,13 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def overwritePartitions(): Unit = {
-    val dynamicOverwrite = loadTable(catalog, tableIdentifier) match {
+    val dynamicOverwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwritePartitionsDynamic.byName(
-          DataSourceV2Relation.create(t, catalogIdentifier, Seq(tableIdentifier)),
+          DataSourceV2Relation.create(t, catalog, identifier),
           logicalPlan, options.toMap)
       case _ =>
-        throw new NoSuchTableException(tableIdentifier)
+        throw new NoSuchTableException(identifier)
     }
 
     runCommand("overwritePartitions")(dynamicOverwrite)
@@ -238,7 +234,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     runCommand("replace") {
       ReplaceTableAsSelect(
         catalog,
-        tableIdentifier,
+        identifier,
         partitioning.getOrElse(Seq.empty),
         logicalPlan,
         properties = provider.map(p => properties + ("provider" -> p)).getOrElse(properties).toMap,

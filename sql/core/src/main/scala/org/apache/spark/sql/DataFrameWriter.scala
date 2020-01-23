@@ -261,17 +261,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val catalogManager = df.sparkSession.sessionState.catalogManager
       mode match {
         case SaveMode.Append | SaveMode.Overwrite =>
-          val (table, catalogOpt, ident) = provider match {
+          val (table, catalog, ident) = provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), catalogManager.catalogIdentifier(catalog), Seq(ident))
+              (catalog.loadTable(ident), catalog, ident)
             case tableProvider: TableProvider =>
               val t = tableProvider.getTable(dsOptions)
               if (t.supports(BATCH_WRITE)) {
-                (t, None, Nil)
+                (t, null, null)
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
@@ -280,7 +280,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
           }
 
-          val relation = DataSourceV2Relation.create(table, catalogOpt, ident, dsOptions)
+          val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
@@ -412,14 +412,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
-    import df.sparkSession.sessionState.analyzer.catalogManager
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t, catalogManager.catalogIdentifier(catalog), Seq(ident))
+        DataSourceV2Relation.create(t, catalog, ident)
     }
 
     val command = mode match {
@@ -544,8 +543,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
 
   private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
-    import df.sparkSession.sessionState.analyzer.catalogManager
-
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
     }
@@ -561,8 +558,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        val v2Relation =
-          DataSourceV2Relation.create(table, catalogManager.catalogIdentifier(catalog), Seq(ident))
+        val v2Relation = DataSourceV2Relation.create(table, catalog, ident)
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>

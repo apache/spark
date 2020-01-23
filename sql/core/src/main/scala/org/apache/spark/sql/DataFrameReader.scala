@@ -207,7 +207,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val (table, catalogOpt, ident) = provider match {
+      val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
           throw new IllegalArgumentException(
             s"$source does not support user specified schema. Please don't specify the schema.")
@@ -217,11 +217,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             hasCatalog,
             catalogManager,
             dsOptions)
-          (catalog.loadTable(ident), catalogManager.catalogIdentifier(catalog), Seq(ident))
+          (catalog.loadTable(ident), catalog, ident)
         case _ =>
+          // TODO: Non-catalog paths for DSV2 are currently not well defined.
           userSpecifiedSchema match {
-            case Some(schema) => (provider.getTable(dsOptions, schema), None, Nil)
-            case _ => (provider.getTable(dsOptions), None, Nil)
+            case Some(schema) => (provider.getTable(dsOptions, schema), null, null)
+            case _ => (provider.getTable(dsOptions), null, null)
           }
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -229,7 +230,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(
             sparkSession,
-            DataSourceV2Relation.create(table, catalogOpt, ident, dsOptions))
+            DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }

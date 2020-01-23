@@ -34,7 +34,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(r.isDefined)
     assert(r.get.isInstanceOf[DataSourceV2Relation])
     val v2Relation = r.get.asInstanceOf[DataSourceV2Relation]
-    assert(v2Relation.catalogIdentifier == Some("dummy"))
-    assert(v2Relation.identifiers == Seq(ident))
+    assert(v2Relation.catalog == testCatalog)
+    assert(v2Relation.identifier == ident)
   }
 }
