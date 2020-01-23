@@ -70,20 +70,6 @@ public interface SupportsNamespaces extends CatalogPlugin {
   List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER);
 
   /**
-   * Return a default namespace for the catalog.
-   * <p>
-   * When this catalog is set as the current catalog, the namespace returned by this method will be
-   * set as the current namespace.
-   * <p>
-   * The namespace returned by this method is not required to exist.
-   *
-   * @return a multi-part namespace
-   */
-  default String[] defaultNamespace() {
-    return new String[0];
-  }
-
-  /**
    * List top-level namespaces from the catalog.
    * <p>
    * If an object such as a table, view, or function exists, its parent namespaces must also exist
