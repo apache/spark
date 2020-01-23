@@ -40,19 +40,19 @@ import java.util.Map;
 public interface SupportsNamespaces extends CatalogPlugin {
 
   /**
-   * A property to specify the location of the namespace. If the namespace
+   * A reserved property to specify the location of the namespace. If the namespace
    * needs to store files, it should be under this location.
    */
   String PROP_LOCATION = "location";
 
   /**
-   * A property to specify the description of the namespace. The description
+   * A reserved property to specify the description of the namespace. The description
    * will be returned in the result of "DESCRIBE NAMESPACE" command.
    */
   String PROP_COMMENT = "comment";
 
   /**
-   * A property to specify the owner of the namespace.
+   * A reserved property to specify the owner of the namespace.
    */
   String PROP_OWNER = "owner";
 
