@@ -234,13 +234,6 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID =
-    buildConf("spark.sql.optimizer.reassignLambdaVariableID.enabled")
-      .doc("When true, Spark optimizer reassigns per-query unique IDs to LambdaVariable, so that " +
-        "it's more likely to hit codegen cache.")
-    .booleanConf
-    .createWithDefault(true)
-
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
