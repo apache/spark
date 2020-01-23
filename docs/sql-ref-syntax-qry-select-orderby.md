@@ -20,7 +20,7 @@ license: |
 ---
 The <code>ORDER BY</code> clause is used to return the result rows in a sorted manner
 in the user specified order. Unlike the <code>SORT BY</code> clause, this clause guarantees
-total order in the output. 
+a total order in the output. 
 
 ### Syntax
 {% highlight sql %}
@@ -68,11 +68,12 @@ ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ...] }
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (id INT, name STRING, age INT);
-INSERT INTO person VALUES (100, 'John', 30),
-                          (200, 'Mary', NULL),
-                          (300, 'Mike', 80),
-                          (400, 'Jerry', NULL),
-                          (500, 'Dan',  50);
+INSERT INTO person VALUES
+    (100, 'John', 30),
+    (200, 'Mary', NULL),
+    (300, 'Mike', 80),
+    (400, 'Jerry', NULL),
+    (500, 'Dan',  50);
 
 -- Sort rows by age. By default rows are sorted in ascending manner.
 SELECT name, age FROM person ORDER BY age;
