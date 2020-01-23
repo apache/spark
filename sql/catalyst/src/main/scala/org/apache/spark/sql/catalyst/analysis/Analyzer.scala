@@ -1326,33 +1326,43 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
-        val newMatchedActions = m.matchedActions.map {
-          case DeleteAction(deleteCondition) =>
-            val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
-            DeleteAction(resolvedDeleteCondition)
-          case UpdateAction(updateCondition, assignments) =>
-            val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            // The update value can access columns from both target and source tables.
-            UpdateAction(
-              resolvedUpdateCondition,
-              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
-          case o => o
+
+        EliminateSubqueryAliases(targetTable) match {
+          case r: NamedRelation if r.skipSchemaResolution =>
+            // Do not resolve the expression if the target table accepts any schema.
+            // This allows data sources to customize their own resolution logic using
+            // custom resolution rules.
+            m
+
+          case _ =>
+            val newMatchedActions = m.matchedActions.map {
+              case DeleteAction(deleteCondition) =>
+                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+                DeleteAction(resolvedDeleteCondition)
+              case UpdateAction(updateCondition, assignments) =>
+                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+                // The update value can access columns from both target and source tables.
+                UpdateAction(
+                  resolvedUpdateCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+              case o => o
+            }
+            val newNotMatchedActions = m.notMatchedActions.map {
+              case InsertAction(insertCondition, assignments) =>
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition =
+                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+              case o => o
+            }
+            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            m.copy(mergeCondition = resolvedMergeCondition,
+              matchedActions = newMatchedActions,
+              notMatchedActions = newNotMatchedActions)
         }
-        val newNotMatchedActions = m.notMatchedActions.map {
-          case InsertAction(insertCondition, assignments) =>
-            // The insert action is used when not matched, so its condition and value can only
-            // access columns from the source table.
-            val resolvedInsertCondition =
-              insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
-            InsertAction(
-              resolvedInsertCondition,
-              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
-          case o => o
-        }
-        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-        m.copy(mergeCondition = resolvedMergeCondition,
-          matchedActions = newMatchedActions,
-          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
