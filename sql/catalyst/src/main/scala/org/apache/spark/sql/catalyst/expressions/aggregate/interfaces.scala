@@ -112,7 +112,6 @@ case class AggregateExpression(
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.
-  @transient
   override lazy val canonicalized: Expression = {
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
