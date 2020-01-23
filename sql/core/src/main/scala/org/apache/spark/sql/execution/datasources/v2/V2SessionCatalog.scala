@@ -83,9 +83,9 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       properties: util.Map[String, String]): Table = {
 
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
-    val provider = properties.getOrDefault(CatalogV2Util.PROP_PROVIDER, conf.defaultDataSourceName)
+    val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
-    val location = Option(properties.get(CatalogV2Util.PROP_LOCATION))
+    val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -100,7 +100,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
-      comment = Option(properties.get(CatalogV2Util.PROP_COMMENT)))
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -124,8 +124,8 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
-    val comment = properties.get(CatalogV2Util.PROP_COMMENT)
-    val owner = properties.getOrElse(CatalogV2Util.PROP_OWNER, catalogTable.owner)
+    val comment = properties.get(TableCatalog.PROP_COMMENT)
+    val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
 
     try {
       catalog.alterTable(
@@ -232,7 +232,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
           case remove: RemoveProperty
-            if CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.contains(remove.property) =>
+            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>
@@ -296,13 +296,13 @@ private[sql] object V2SessionCatalog {
       defaultLocation: Option[URI] = None): CatalogDatabase = {
     CatalogDatabase(
       name = db,
-      description = metadata.getOrDefault(CatalogV2Util.PROP_COMMENT, ""),
-      locationUri = Option(metadata.get(CatalogV2Util.PROP_LOCATION))
+      description = metadata.getOrDefault(SupportsNamespaces.PROP_COMMENT, ""),
+      locationUri = Option(metadata.get(SupportsNamespaces.PROP_LOCATION))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
       properties = metadata.asScala.toMap --
-        Seq(CatalogV2Util.PROP_COMMENT, CatalogV2Util.PROP_LOCATION))
+        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {
@@ -312,8 +312,8 @@ private[sql] object V2SessionCatalog {
       catalogDatabase.properties.foreach {
         case (key, value) => metadata.put(key, value)
       }
-      metadata.put(CatalogV2Util.PROP_LOCATION, catalogDatabase.locationUri.toString)
-      metadata.put(CatalogV2Util.PROP_COMMENT, catalogDatabase.description)
+      metadata.put(SupportsNamespaces.PROP_LOCATION, catalogDatabase.locationUri.toString)
+      metadata.put(SupportsNamespaces.PROP_COMMENT, catalogDatabase.description)
 
       metadata.asJava
     }

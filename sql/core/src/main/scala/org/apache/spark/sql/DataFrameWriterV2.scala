@@ -23,8 +23,8 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -39,10 +39,9 @@ import org.apache.spark.sql.types.IntegerType
 final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     extends CreateTableWriter[T] {
 
-  import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
 
   private val df: DataFrame = ds.toDF()
 
@@ -130,7 +129,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         identifier,
         partitioning.getOrElse(Seq.empty),
         logicalPlan,
-        properties = provider.map(p => properties + (CatalogV2Util.PROP_PROVIDER -> p))
+        properties = provider.map(p => properties + (TableCatalog.PROP_PROVIDER -> p))
           .getOrElse(properties).toMap,
         writeOptions = options.toMap,
         ignoreIfExists = false)

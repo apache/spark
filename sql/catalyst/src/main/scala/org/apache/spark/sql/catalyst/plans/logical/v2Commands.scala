@@ -499,7 +499,7 @@ case class AlterTableSetLocation(
     partitionSpec: Option[TablePartitionSpec],
     location: String) extends AlterTable {
   override lazy val changes: Seq[TableChange] = {
-    Seq(TableChange.setProperty(CatalogV2Util.PROP_LOCATION, location))
+    Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
   }
 }
 

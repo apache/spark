@@ -264,16 +264,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(
         catalog,
         ns,
-        Map(CatalogV2Util.PROP_LOCATION -> location)) :: Nil
+        Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
         catalog,
         ns,
-        Map(CatalogV2Util.PROP_COMMENT -> comment)) :: Nil
+        Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
     case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
-      val changes = TableChange.setProperty(CatalogV2Util.PROP_COMMENT, comment)
+      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
       AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>

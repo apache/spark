@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -162,7 +162,7 @@ class DataSourceV2SQLSuite
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
-      Array(CatalogV2Util.PROP_OWNER.capitalize, defaultUser, ""),
+      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
 
   }
@@ -438,7 +438,7 @@ class DataSourceV2SQLSuite
   }
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
-    import org.apache.spark.sql.connector.InMemoryTableCatalog._
+    import InMemoryTableCatalog._
     spark.sql(s"CREATE TABLE testcat_atomic.created USING $v2Source AS SELECT id, data FROM source")
     intercept[CannotReplaceMissingTableException] {
       spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
@@ -877,7 +877,7 @@ class DataSourceV2SQLSuite
         sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
         val metadata =
           catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
-        val catalogPath = metadata(CatalogV2Util.PROP_LOCATION)
+        val catalogPath = metadata(SupportsNamespaces.PROP_LOCATION)
         assert(catalogPath.equals(catalogPath))
       }
     }
@@ -899,9 +899,9 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateNameSpace: reserved properties") {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+    import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         val exception = intercept[ParseException] {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
         }
@@ -909,7 +909,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
@@ -926,9 +926,9 @@ class DataSourceV2SQLSuite
   }
 
   test("create/replace/alter table - reserved properties") {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+    import TableCatalog._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           Seq("CREATE", "REPLACE").foreach { action =>
             val e = intercept[ParseException] {
@@ -950,7 +950,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           withTable("testcat.reservedTest") {
             Seq("CREATE", "REPLACE").foreach { action =>
@@ -994,7 +994,7 @@ class DataSourceV2SQLSuite
             val tableCatalog = catalog("testcat").asTableCatalog
             val identifier = Identifier.of(Array(), "reservedTest")
             assert(tableCatalog.loadTable(identifier).properties()
-              .get(CatalogV2Util.PROP_LOCATION) == "foo",
+              .get(TableCatalog.PROP_LOCATION) == "foo",
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
@@ -1082,9 +1082,9 @@ class DataSourceV2SQLSuite
       val description = descriptionDf.collect()
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
-        Row(CatalogV2Util.PROP_COMMENT.capitalize, "test namespace"),
-        Row(CatalogV2Util.PROP_LOCATION.capitalize, "/tmp/ns_test"),
-        Row(CatalogV2Util.PROP_OWNER.capitalize, defaultUser))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
       )
     }
   }
@@ -1097,18 +1097,18 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row(CatalogV2Util.PROP_COMMENT.capitalize, "test namespace"),
-        Row(CatalogV2Util.PROP_LOCATION.capitalize, "/tmp/ns_test"),
-        Row(CatalogV2Util.PROP_OWNER.capitalize, defaultUser),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", "((a,b),(b,a),(c,c))"))
       )
     }
   }
 
   test("AlterNamespaceSetProperties: reserved properties") {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+    import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql("CREATE NAMESPACE testcat.reservedTest")
           val exception = intercept[ParseException] {
@@ -1119,7 +1119,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      RESERVED_PROPERTIES.asScala.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest")
           sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
@@ -1144,9 +1144,9 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row(CatalogV2Util.PROP_COMMENT.capitalize, "test namespace"),
-        Row(CatalogV2Util.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
-        Row(CatalogV2Util.PROP_OWNER.capitalize, defaultUser))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
       )
     }
   }
@@ -1942,7 +1942,7 @@ class DataSourceV2SQLSuite
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row(CatalogV2Util.PROP_OWNER, defaultUser),
+        Row(TableCatalog.PROP_OWNER, defaultUser),
         Row("provider", provider),
         Row("status", status),
         Row("user", user))
@@ -2171,7 +2171,7 @@ class DataSourceV2SQLSuite
       Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
-      .where(s"k='${CatalogV2Util.PROP_COMMENT.capitalize}'")
+      .where(s"k='${SupportsNamespaces.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
@@ -2209,7 +2209,7 @@ class DataSourceV2SQLSuite
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where(s"k='${CatalogV2Util.PROP_COMMENT.capitalize}'")
+      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 

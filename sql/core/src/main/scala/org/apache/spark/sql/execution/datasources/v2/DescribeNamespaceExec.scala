@@ -35,7 +35,7 @@ case class DescribeNamespaceExec(
     namespace: Seq[String],
     isExtended: Boolean) extends V2CommandExec {
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import SupportsNamespaces._
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -44,12 +44,12 @@ case class DescribeNamespaceExec(
 
     rows += toCatalystRow("Namespace Name", ns.last)
 
-    NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
       rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
     }
 
     if (isExtended) {
-      val properties = metadata.asScala -- NAMESPACE_RESERVED_PROPERTIES
+      val properties = metadata.asScala -- RESERVED_PROPERTIES.asScala
       if (properties.nonEmpty) {
         rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }

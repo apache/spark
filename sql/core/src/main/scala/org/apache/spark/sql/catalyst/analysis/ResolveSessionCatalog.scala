@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -246,9 +246,9 @@ class ResolveSessionCatalog(
           s"The database name is not valid: ${ns.quoted}")
       }
 
-      val comment = c.properties.get(CatalogV2Util.PROP_COMMENT)
-      val location = c.properties.get(CatalogV2Util.PROP_LOCATION)
-      val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+      val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
+      val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
+      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
