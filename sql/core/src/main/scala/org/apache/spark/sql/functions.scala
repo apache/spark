@@ -3456,9 +3456,11 @@ object functions {
   /**
    * Returns an array of elements for which a predicate holds in a given array.
    * {{{
+   *   df.select(filter(col("s"), x -> x % 2 === 0))
    *   df.selectExpr("filter(col, x -> x % 2 == 0)")
    * }}}
    *
+   * @param column: the input array column
    * @param f: col => predicate, the boolean predicate to filter the input column
    *
    * @group collection_funcs
@@ -3471,9 +3473,11 @@ object functions {
   /**
    * Returns an array of elements for which a predicate holds in a given array.
    * {{{
+   *   df.select(filter(col("s"), (x, i) => i % 2 === 0))
    *   df.selectExpr("filter(col, (x, i) -> i % 2 == 0)")
    * }}}
    *
+   * @param column: the input array column
    * @param f: (col, index) => predicate, the boolean predicate to filter the input column
    *           given the index. Indices start at 0.
    *
