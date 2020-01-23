@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
