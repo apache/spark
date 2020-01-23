@@ -84,7 +84,7 @@ class ResourceProfile(
       calculateTasksAndLimitingResource(sparkConf)
     }
     _executorResourceNumParts.get.getOrElse(resource,
-      throw new SparkException(s"Resource $resource doesn't existing in profile id: $id"))
+      throw new SparkException(s"Resource $resource doesn't exist in profile id: $id"))
   }
 
   // maximum tasks you could put on an executor with this profile based on the limiting resource
@@ -280,7 +280,6 @@ object ResourceProfile extends Logging {
     getOrCreateDefaultProfile(conf)
   }
 
-  // for testing only
   private[spark] def clearDefaultProfile: Unit = {
     DEFAULT_PROFILE_LOCK.synchronized {
       defaultProfile = None
