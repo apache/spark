@@ -78,6 +78,15 @@ private[spark] object KubernetesVolumeUtils {
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
         KubernetesEmptyDirVolumeConf(options.get(mediumKey), options.get(sizeLimitKey))
 
+      case KUBERNETES_VOLUMES_NFS_TYPE =>
+        val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_READ_ONLY_KEY"
+        val serverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY"
+        KubernetesNFSVolumeConf(
+          options(pathKey),
+          options.get(readOnlyKey).map(_.toBoolean),
+          options(serverKey))
+
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
     }

@@ -119,6 +119,14 @@ object KubernetesTestConf {
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
           (KUBERNETES_VOLUMES_EMPTYDIR_TYPE, mconf ++ lconf)
+
+        case KubernetesNFSVolumeConf(path, readOnly, server) =>
+          val rconf = readOnly.map { r =>
+            (KUBERNETES_VOLUMES_OPTIONS_READ_ONLY_KEY, r.toString())
+          }.toMap
+          (KUBERNETES_VOLUMES_NFS_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path,
+            KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server) ++ rconf)
       }
 
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)
