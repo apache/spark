@@ -3456,7 +3456,7 @@ object functions {
   /**
    * Returns an array of elements for which a predicate holds in a given array.
    * {{{
-   *   df.select(filter(col("s"), x -> x % 2 === 0))
+   *   df.select(filter(col("s"), x => x % 2 === 0))
    *   df.selectExpr("filter(col, x -> x % 2 == 0)")
    * }}}
    *
