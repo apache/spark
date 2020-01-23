@@ -917,14 +917,14 @@ class Analyzer(
     private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadTable(catalog, ident).map {
+          def loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              val key = catalog.name +: ident.namespace :+ ident.name
-              AnalysisContext.get.relationCache.getOrElseUpdate(
-                key, v1SessionCatalog.getRelation(v1Table.v1Table))
+              v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
               DataSourceV2Relation.create(table)
           }
+          val key = catalog.name +: ident.namespace :+ ident.name
+          Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
         case _ => None
       }
     }
