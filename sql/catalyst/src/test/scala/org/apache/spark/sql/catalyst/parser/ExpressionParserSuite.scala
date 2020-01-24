@@ -524,6 +524,16 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
+  test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
+    assertEqual("123.0BD", Literal(Decimal(BigDecimal("123.0")), DecimalType(4, 1)))
+    assertEqual("123BD", Literal(Decimal(BigDecimal("123")), DecimalType(3, 0)))
+    assertEqual("123E10BD", Literal(Decimal(BigDecimal("123E10")), DecimalType(13, 0)))
+    assertEqual("123E+10BD", Literal(Decimal(BigDecimal("123E+10")), DecimalType(13, 0)))
+    assertEqual("123E-10BD", Literal(Decimal(BigDecimal("123E-10")), DecimalType(10, 10)))
+    assertEqual("1.23E10BD", Literal(Decimal(BigDecimal("1.23E10")), DecimalType(11, 0)))
+    assertEqual("-1.23E10BD", Literal(Decimal(BigDecimal("-1.23E10")), DecimalType(11, 0)))
+  }
+
   test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
     def testDecimal(value: String, parser: ParserInterface): Unit = {
       assertEqual(value, Literal(BigDecimal(value).underlying), parser)
@@ -645,11 +655,6 @@ class ExpressionParserSuite extends AnalysisTest {
         "-" -> UnaryMinus(expected)
       ).foreach { case (sign, expectedLiteral) =>
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
-
-        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-          assertEqual(intervalValue, expected)
-        }
       }
     }
 
@@ -687,8 +692,7 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
     // Non Existing unit
-    intercept("interval 10 nanoseconds",
-      "no viable alternative at input '10 nanoseconds'")
+    intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
@@ -730,34 +734,6 @@ class ExpressionParserSuite extends AnalysisTest {
     checkIntervals(
       "3 months 4 days 22 seconds 1 millisecond",
       Literal(new CalendarInterval(3, 4, 22001000L)))
-  }
-
-  test("SPARK-23264 Interval Compatibility tests") {
-    def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        assertEqual(intervalValue, expected)
-      }
-
-      // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-        val aliases = defaultParser.parseExpression(intervalValue).collect {
-          case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
-        }
-        assert(aliases.size === 1)
-      }
-    }
-    val forms = Seq("", "s")
-    val values = Seq("5", "1", "-11", "8")
-    intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
-      }
-    }
   }
 
   test("composed expressions") {

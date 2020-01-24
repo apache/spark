@@ -1636,7 +1636,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
       ) {
         val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
           "cleanSource" -> "delete")
@@ -1680,7 +1681,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
       ) {
         val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
           "cleanSource" -> "archive", "sourceArchiveDir" -> archiveDir.getAbsolutePath)
@@ -1749,7 +1751,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         withSQLConf(
           SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
           // Force deleting the old logs
-          SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+          SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+          SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS.key -> "0"
         ) {
           val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
             "cleanSource" -> cleanOption, "sourceArchiveDir" -> archiveDir.getAbsolutePath)
@@ -1814,15 +1817,29 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
   }
 
-  test("SourceFileArchiver - base archive path depth <= 2") {
+  test("SourceFileArchiver - fail when base archive path matches source pattern") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
-    val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
-    val baseArchiveDirPath = new Path("/hello")
-
-    intercept[IllegalArgumentException] {
-      new SourceFileArchiver(fakeFileSystem, sourcePatternPath, fakeFileSystem, baseArchiveDirPath)
+    def assertThrowIllegalArgumentException(sourcePatttern: Path, baseArchivePath: Path): Unit = {
+      intercept[IllegalArgumentException] {
+        new SourceFileArchiver(fakeFileSystem, sourcePatttern, fakeFileSystem, baseArchivePath)
+      }
     }
+
+    // 1) prefix of base archive path matches source pattern (baseArchiveDirPath has more depths)
+    val sourcePatternPath = new Path("/hello*/spar?")
+    val baseArchiveDirPath = new Path("/hello/spark/structured/streaming")
+    assertThrowIllegalArgumentException(sourcePatternPath, baseArchiveDirPath)
+
+    // 2) prefix of source pattern matches base archive path (source pattern has more depths)
+    val sourcePatternPath2 = new Path("/hello*/spar?/structured/streaming")
+    val baseArchiveDirPath2 = new Path("/hello/spark/structured")
+    assertThrowIllegalArgumentException(sourcePatternPath2, baseArchiveDirPath2)
+
+    // 3) source pattern matches base archive path (both have same depth)
+    val sourcePatternPath3 = new Path("/hello*/spar?/structured/*")
+    val baseArchiveDirPath3 = new Path("/hello/spark/structured/streaming")
+    assertThrowIllegalArgumentException(sourcePatternPath3, baseArchiveDirPath3)
   }
 
   test("SourceFileArchiver - different filesystems between source and archive") {

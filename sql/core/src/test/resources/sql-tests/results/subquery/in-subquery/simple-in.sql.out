@@ -72,7 +72,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2)
 -- !query 3 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query 3 output
 t1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 t1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
@@ -88,7 +88,7 @@ WHERE  t1b IN (SELECT t2b
                FROM   t2
                WHERE  t1a = t2a)
 -- !query 4 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query 4 output
 t1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 

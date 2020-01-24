@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
@@ -250,18 +251,19 @@ case class CreateNamespace(
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
  */
 case class DropNamespace(
-    catalog: CatalogPlugin,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     ifExists: Boolean,
-    cascade: Boolean) extends Command
+    cascade: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
  */
 case class DescribeNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     extended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
 
   override def output: Seq[Attribute] = Seq(
     AttributeReference("name", StringType, nullable = false,
@@ -275,28 +277,41 @@ case class DescribeNamespace(
  * command that works for v2 catalogs.
  */
 case class AlterNamespaceSetProperties(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
-    properties: Map[String, String]) extends Command
+    namespace: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetLocation(
+    namespace: LogicalPlan,
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
-    catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**
- * The logical plan of the DESCRIBE TABLE command that works for v2 tables.
+ * The logical plan of the DESCRIBE relation_name command that works for v2 tables.
  */
-case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
-
-  override lazy val resolved: Boolean = table.resolved
-
+case class DescribeRelation(
+    relation: LogicalPlan,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
 
@@ -412,9 +427,10 @@ case class RenameTable(
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(
-    catalog: TableCatalog,
-    namespace: Seq[String],
+    namespace: LogicalPlan,
     pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
@@ -448,8 +464,10 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
  * The logical plan of the SHOW TBLPROPERTIES command that works for v2 catalogs.
  */
 case class ShowTableProperties(
-    table: NamedRelation,
-    propertyKey: Option[String]) extends Command{
+    table: LogicalPlan,
+    propertyKey: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())

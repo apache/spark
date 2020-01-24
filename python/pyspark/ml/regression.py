@@ -41,6 +41,25 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'FMRegressor', 'FMRegressionModel']
 
 
+class JavaRegressor(JavaPredictor, _JavaPredictorParams):
+    """
+    Java Regressor for regression tasks.
+
+    .. versionadded:: 3.0.0
+    """
+    pass
+
+
+class JavaRegressionModel(JavaPredictionModel, _JavaPredictorParams):
+    """
+    Java Model produced by a ``_JavaRegressor``.
+    To be mixed in with class:`pyspark.ml.JavaModel`
+
+    .. versionadded:: 3.0.0
+    """
+    pass
+
+
 class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
                               HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
                               HasAggregationDepth, HasLoss):
@@ -69,7 +88,7 @@ class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetPa
 
 
 @inherit_doc
-class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
+class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -251,7 +270,7 @@ class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, J
         return self._set(lossType=value)
 
 
-class LinearRegressionModel(JavaPredictionModel, _LinearRegressionParams, GeneralJavaMLWritable,
+class LinearRegressionModel(JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
                             JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
@@ -593,8 +612,12 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
     IsotonicRegressionModel...
+    >>> model.numFeatures
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
+    0.0
+    >>> model.predict(test0.head().features[model.getFeatureIndex()])
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
@@ -727,6 +750,21 @@ class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritab
         """
         return self._call_java("predictions")
 
+    @property
+    @since("3.0.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
+
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
+
 
 class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
     """
@@ -739,7 +777,7 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLWritable,
+class DecisionTreeRegressor(JavaRegressor, _DecisionTreeRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
@@ -912,7 +950,6 @@ class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLW
         """
         return self._set(checkpointInterval=value)
 
-    @since("1.4.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -935,8 +972,10 @@ class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLW
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(_DecisionTreeModel, _DecisionTreeRegressorParams,
-                                  JavaMLWritable, JavaMLReadable):
+class DecisionTreeRegressionModel(
+    JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`DecisionTreeRegressor`.
 
@@ -982,7 +1021,7 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
 
 
 @inherit_doc
-class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLWritable,
+class RandomForestRegressor(JavaRegressor, _RandomForestRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
@@ -995,9 +1034,13 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2)
+    >>> rf.getMinWeightFractionPerNode()
+    0.0
     >>> rf.setSeed(42)
     RandomForestRegressor...
     >>> model = rf.fit(df)
+    >>> model.getBootstrap()
+    True
     >>> model.getSeed()
     42
     >>> model.setLeafCol("leafId")
@@ -1044,13 +1087,15 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                 featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0):
+                 featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None, bootstrap=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                 featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0")
+                 featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
+                 weightCol=None, bootstrap=True)
         """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1058,7 +1103,8 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
-                         featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0)
+                         featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                         bootstrap=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1068,13 +1114,15 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0):
+                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                  weightCol=None, bootstrap=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0)
+                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0, \
+                  weightCol=None, bootstrap=True)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1133,6 +1181,13 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
         """
         return self._set(numTrees=value)
 
+    @since("3.0.0")
+    def setBootstrap(self, value):
+        """
+        Sets the value of :py:attr:`bootstrap`.
+        """
+        return self._set(bootstrap=value)
+
     @since("1.4.0")
     def setSubsamplingRate(self, value):
         """
@@ -1159,9 +1214,25 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
         """
         return self._set(seed=value)
 
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
-class RandomForestRegressionModel(_TreeEnsembleModel, _RandomForestRegressorParams,
-                                  JavaMLWritable, JavaMLReadable):
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+
+class RandomForestRegressionModel(
+    JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -1213,7 +1284,7 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
 
 
 @inherit_doc
-class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
+class GBTRegressor(JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1454,7 +1525,10 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
         return self._set(minWeightFractionPerNode=value)
 
 
-class GBTRegressionModel(_TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(
+    JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`GBTRegressor`.
 
@@ -1497,8 +1571,7 @@ class GBTRegressionModel(_TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable
         return self._call_java("evaluateEachIteration", dataset, loss)
 
 
-class _AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                   HasMaxIter, HasTol, HasFitIntercept,
+class _AFTSurvivalRegressionParams(_JavaPredictorParams, HasMaxIter, HasTol, HasFitIntercept,
                                    HasAggregationDepth):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
@@ -1545,7 +1618,7 @@ class _AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 
 @inherit_doc
-class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
+class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
                             JavaMLWritable, JavaMLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
@@ -1665,27 +1738,6 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
         return self._set(maxIter=value)
 
     @since("1.6.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("1.6.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
-
-    @since("1.6.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("1.6.0")
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
@@ -1707,27 +1759,13 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
         return self._set(aggregationDepth=value)
 
 
-class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
+class AFTSurvivalRegressionModel(JavaRegressionModel, _AFTSurvivalRegressionParams,
                                  JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     @since("3.0.0")
     def setQuantileProbabilities(self, value):
@@ -1773,13 +1811,6 @@ class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
         Predicted Quantiles
         """
         return self._call_java("predictQuantiles", features)
-
-    @since("2.0.0")
-    def predict(self, features):
-        """
-        Predicted value
-        """
-        return self._call_java("predict", features)
 
 
 class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,
@@ -1860,7 +1891,7 @@ class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, 
 
 
 @inherit_doc
-class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionParams,
+class GeneralizedLinearRegression(JavaRegressor, _GeneralizedLinearRegressionParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Generalized Linear Regression.
@@ -2065,7 +2096,7 @@ class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionPar
         return self._set(aggregationDepth=value)
 
 
-class GeneralizedLinearRegressionModel(JavaPredictionModel, _GeneralizedLinearRegressionParams,
+class GeneralizedLinearRegressionModel(JavaRegressionModel, _GeneralizedLinearRegressionParams,
                                        JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`GeneralizedLinearRegression`.
@@ -2353,7 +2384,7 @@ class _FactorizationMachinesParams(_JavaPredictorParams, HasMaxIter, HasStepSize
 
 
 @inherit_doc
-class FMRegressor(JavaPredictor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
+class FMRegressor(JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for regression.
 
@@ -2399,23 +2430,6 @@ class FMRegressor(JavaPredictor, _FactorizationMachinesParams, JavaMLWritable, J
 
     .. versionadded:: 3.0.0
     """
-
-    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
-                       "which are used to get pairwise interactions between variables",
-                       typeConverter=TypeConverters.toInt)
-
-    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
-                      typeConverter=TypeConverters.toBoolean)
-
-    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
-                              "set that should be used for one iteration of gradient descent",
-                              typeConverter=TypeConverters.toFloat)
-
-    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
-                    typeConverter=TypeConverters.toFloat)
-
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -2534,7 +2548,7 @@ class FMRegressor(JavaPredictor, _FactorizationMachinesParams, JavaMLWritable, J
         return self._set(regParam=value)
 
 
-class FMRegressionModel(JavaPredictionModel, _FactorizationMachinesParams, JavaMLWritable,
+class FMRegressionModel(JavaRegressionModel, _FactorizationMachinesParams, JavaMLWritable,
                         JavaMLReadable):
     """
     Model fitted by :class:`FMRegressor`.

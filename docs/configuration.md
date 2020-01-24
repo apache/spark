@@ -844,13 +844,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>
@@ -2054,7 +2055,8 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached.
+    runs even though the threshold hasn't been reached. The number of slots is computed based on
+    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
     Default unit is bytes, unless otherwise specified.
   </td>
 </tr>

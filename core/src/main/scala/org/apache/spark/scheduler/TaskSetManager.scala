@@ -87,7 +87,13 @@ private[spark] class TaskSetManager(
   // number of slots on a single executor, would the task manager speculative run the tasks if
   // their duration is longer than the given threshold. In this way, we wouldn't speculate too
   // aggressively but still handle basic cases.
-  val speculationTasksLessEqToSlots = numTasks <= (conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK)
+  // SPARK-30417: #cores per executor might not be set in spark conf for standalone mode, then
+  // the value of the conf would 1 by default. However, the executor would use all the cores on
+  // the worker. Therefore, CPUS_PER_TASK is okay to be greater than 1 without setting #cores.
+  // To handle this case, we assume the minimum number of slots is 1.
+  // TODO: use the actual number of slots for standalone mode.
+  val speculationTasksLessEqToSlots =
+    numTasks <= Math.max(conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK, 1)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -939,7 +945,10 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !killedByOtherAttempt.contains(tid)) {
+        // We may have a running task whose partition has been marked as successful,
+        // this partition has another task completed in another stage attempt.
+        // We treat it as a running task and will call handleFailedTask later.
+        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1

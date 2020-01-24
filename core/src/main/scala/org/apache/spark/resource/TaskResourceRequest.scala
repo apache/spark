@@ -17,10 +17,6 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
-
-import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
-
 /**
  * A task resource request. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -37,7 +33,19 @@ private[spark] class TaskResourceRequest(val resourceName: String, val amount: D
   assert(amount <= 0.5 || amount % 1 == 0,
     s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
 
-  if (!resourceName.equals(ResourceProfile.CPUS) && !resourceName.startsWith(RESOURCE_DOT)) {
-    throw new IllegalArgumentException(s"Task resource not allowed: $resourceName")
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: TaskResourceRequest =>
+        that.getClass == this.getClass &&
+          that.resourceName == resourceName && that.amount == amount
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(resourceName, amount).hashCode()
+
+  override def toString(): String = {
+    s"name: $resourceName, amount: $amount"
   }
 }

@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.avro.AvroOptions
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScan
@@ -34,19 +36,33 @@ case class AvroScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
-    options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
-    override def isSplitable(path: Path): Boolean = true
+    options: CaseInsensitiveStringMap,
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+  override def isSplitable(path: Path): Boolean = true
 
-    override def createReaderFactory(): PartitionReaderFactory = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-      val broadcastedConf = sparkSession.sparkContext.broadcast(
-        new SerializableConfiguration(hadoopConf))
-      // The partition values are already truncated in `FileScan.partitions`.
-      // We should use `readPartitionSchema` as the partition schema here.
-      AvroPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-        dataSchema, readDataSchema, readPartitionSchema, caseSensitiveMap)
-    }
+  override def createReaderFactory(): PartitionReaderFactory = {
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    // Hadoop Configurations are case sensitive.
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    val broadcastedConf = sparkSession.sparkContext.broadcast(
+      new SerializableConfiguration(hadoopConf))
+    val parsedOptions = new AvroOptions(caseSensitiveMap, hadoopConf)
+    // The partition values are already truncated in `FileScan.partitions`.
+    // We should use `readPartitionSchema` as the partition schema here.
+    AvroPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
   }
+
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case a: AvroScan => super.equals(a) && dataSchema == a.dataSchema && options == a.options
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}

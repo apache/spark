@@ -232,8 +232,8 @@ final class OneVsRestModel private[ml] (
       val numClass = models.length
 
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-        val predArray = Array.fill[Double](numClass)(0.0)
+      val rawPredictionUDF = udf { predictions: Map[Int, Double] =>
+        val predArray = Array.ofDim[Double](numClass)
         predictions.foreach { case (idx, value) => predArray(idx) = value }
         Vectors.dense(predArray)
       }

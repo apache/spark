@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.orc.{OrcScan, OrcTable}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -44,6 +46,11 @@ import org.apache.spark.sql.types._
  */
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
   protected def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -54,12 +61,11 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        assert(pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pushedFilters")
+        assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for ${o.pushedFilters}")
         checker(maybeFilter.get)
 
       case _ =>
