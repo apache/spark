@@ -852,24 +852,31 @@ test_that("collect() support Unicode characters", {
     skip("Shouldn't be executed on Windows due to input encoding issues")
   }
 
-  lines <- c("{\"name\":\"안녕하세요\"}",
-             "{\"name\":\"您好\", \"age\":30}",
-             "{\"name\":\"こんにちは\", \"age\":19}",
-             "{\"name\":\"Xin chào\"}")
+  jsonPath <- file.path(
+    Sys.getenv("SPARK_HOME"),
+    "R", "pkg", "tests", "fulltests", "data",
+    "test_utils_utf.json"
+  )
 
-  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(lines, jsonPath)
+  lines <- readLines(jsonPath, encoding = "UTF-8")
+
+  expected <- regmatches(lines, regexec('(?<="name": ").*?(?=")', lines, perl = TRUE))
 
   df <- read.df(jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
-  expect_equal(rdf$name[2], markUtf8("您好"))
-  expect_equal(rdf$name[3], markUtf8("こんにちは"))
-  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+  expect_equal(rdf$name[1], expected[[1]])
+  expect_equal(rdf$name[2], expected[[2]])
+  expect_equal(rdf$name[3], expected[[3]])
+  expect_equal(rdf$name[4], expected[[4]])
 
   df1 <- createDataFrame(rdf)
-  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+  expect_equal(
+    collect(
+      where(df1, df1$name == expected[[2]])
+    )$name,
+    expected[[2]]
+  )
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
