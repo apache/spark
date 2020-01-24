@@ -22,6 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * A field inside a StructType.
@@ -45,11 +46,11 @@ case class StructField(
 
   private[sql] def buildFormattedString(
       prefix: String,
-      builder: StringBuilder,
+      stringConcat: StringConcat,
       maxDepth: Int): Unit = {
     if (maxDepth > 0) {
-      builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
-      DataType.buildFormattedString(dataType, s"$prefix    |", builder, maxDepth)
+      stringConcat.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
+      DataType.buildFormattedString(dataType, s"$prefix    |", stringConcat, maxDepth)
     }
   }
 

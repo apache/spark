@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -362,12 +363,12 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def treeString: String = treeString(Int.MaxValue)
 
   def treeString(maxDepth: Int): String = {
-    val builder = new StringBuilder
-    builder.append("root\n")
+    val stringConcat = new StringUtils.StringConcat()
+    stringConcat.append("root\n")
     val prefix = " |"
     val depth = if (maxDepth > 0) maxDepth else Int.MaxValue
-    fields.foreach(field => field.buildFormattedString(prefix, builder, depth))
-    builder.toString()
+    fields.foreach(field => field.buildFormattedString(prefix, stringConcat, depth))
+    stringConcat.toString()
   }
 
   // scalastyle:off println
@@ -376,9 +377,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private[sql] def buildFormattedString(
       prefix: String,
-      builder: StringBuilder,
+      stringConcat: StringConcat,
       maxDepth: Int): Unit = {
-    fields.foreach(field => field.buildFormattedString(prefix, builder, maxDepth))
+    fields.foreach(field => field.buildFormattedString(prefix, stringConcat, maxDepth))
   }
 
   override private[sql] def jsonValue =

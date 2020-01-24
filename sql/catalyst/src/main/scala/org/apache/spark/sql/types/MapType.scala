@@ -21,6 +21,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
@@ -42,14 +43,14 @@ case class MapType(
 
   private[sql] def buildFormattedString(
       prefix: String,
-      builder: StringBuilder,
+      stringConcat: StringConcat,
       maxDepth: Int = Int.MaxValue): Unit = {
     if (maxDepth > 0) {
-      builder.append(s"$prefix-- key: ${keyType.typeName}\n")
-      DataType.buildFormattedString(keyType, s"$prefix    |", builder, maxDepth)
-      builder.append(s"$prefix-- value: ${valueType.typeName} " +
+      stringConcat.append(s"$prefix-- key: ${keyType.typeName}\n")
+      DataType.buildFormattedString(keyType, s"$prefix    |", stringConcat, maxDepth)
+      stringConcat.append(s"$prefix-- value: ${valueType.typeName} " +
         s"(valueContainsNull = $valueContainsNull)\n")
-      DataType.buildFormattedString(valueType, s"$prefix    |", builder, maxDepth)
+      DataType.buildFormattedString(valueType, s"$prefix    |", stringConcat, maxDepth)
     }
   }
 

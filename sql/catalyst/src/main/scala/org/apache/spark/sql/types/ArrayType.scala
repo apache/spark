@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * Companion object for ArrayType.
@@ -68,12 +69,12 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
   private[sql] def buildFormattedString(
       prefix: String,
-      builder: StringBuilder,
+      stringConcat: StringConcat,
       maxDepth: Int): Unit = {
     if (maxDepth > 0) {
-      builder.append(
+      stringConcat.append(
         s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
-      DataType.buildFormattedString(elementType, s"$prefix    |", builder, maxDepth)
+      DataType.buildFormattedString(elementType, s"$prefix    |", stringConcat, maxDepth)
     }
   }
 

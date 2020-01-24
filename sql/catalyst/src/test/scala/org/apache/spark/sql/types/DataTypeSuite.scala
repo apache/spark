@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonParseException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 class DataTypeSuite extends SparkFunSuite {
 
@@ -462,7 +463,7 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("c", DataTypes.IntegerType),
       StructField("d", DataTypes.IntegerType)))
 
-    val builder = new StringBuilder
+    val builder = new StringConcat
 
     MapType(keyType, valueType).buildFormattedString(prefix = "", builder = builder)
 
