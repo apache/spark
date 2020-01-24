@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.exchange
 import java.util.Random
 import java.util.function.Supplier
 
+import scala.concurrent.Future
+
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
@@ -32,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Uns
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.LocalShuffledRowRDD
+import org.apache.spark.sql.execution.adaptive.{LocalShuffledRowRDD, SkewedShuffledRowRDD}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -64,6 +66,15 @@ case class ShuffleExchangeExec(
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
+  // 'mapOutputStatisticsFuture' is only needed when enable AQE.
+  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+    if (inputRDD.getNumPartitions == 0) {
+      Future.successful(null)
+    } else {
+      sparkContext.submitMapStage(shuffleDependency)
+    }
+  }
+
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -79,13 +90,22 @@ case class ShuffleExchangeExec(
       writeMetrics)
   }
 
-  def createShuffledRDD(partitionStartIndices: Option[Array[Int]]): ShuffledRowRDD = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
+  def createShuffledRDD(
+      partitionRanges: Option[Array[(Int, Int)]]): ShuffledRowRDD = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionRanges)
   }
 
   def createLocalShuffleRDD(
-      advisoryParallelism: Option[Int] = None): LocalShuffledRowRDD = {
-    new LocalShuffledRowRDD(shuffleDependency, readMetrics, advisoryParallelism)
+      partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
+    new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
+  }
+
+  def createSkewedShuffleRDD(
+      partitionIndex: Int,
+      startMapIndex: Int,
+      endMapIndex: Int): SkewedShuffledRowRDD = {
+    new SkewedShuffledRowRDD(shuffleDependency,
+      partitionIndex, startMapIndex, endMapIndex, readMetrics)
   }
 
   /**

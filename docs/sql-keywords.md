@@ -19,16 +19,16 @@ license: |
   limitations under the License.
 ---
 
-When `spark.sql.dialect=PostgreSQL` or keep default `spark.sql.dialect=Spark` with setting `spark.sql.dialect.spark.ansi.enabled` to true, Spark SQL will use the ANSI mode parser.
+When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
 In this mode, Spark SQL has two kinds of keywords:
 * Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
-* Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK can be used as identifiers in other places.
+* Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `EXPLAIN SELECT ...` is a command, but EXPLAIN can be used as identifiers in other places.
 
 When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.dialect.spark.ansi.enabled` is false.
+By default `spark.sql.ansi.enabled` is false.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -88,7 +88,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>DATABASE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DATABASES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DAY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DAYS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DBPROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DEFINED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>DELETE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -104,6 +103,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>DROP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ELSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>END</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>ESCAPE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ESCAPED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXCEPT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>EXCHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -116,6 +116,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>FALSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FETCH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FIELDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>FILTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FILEFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST_VALUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -134,7 +135,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>GROUPING</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>HAVING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>HOUR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>HOURS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>IF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>IGNORE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>IMPORT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -172,15 +172,9 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>MAP</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MATCHED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MERGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MICROSECOND</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MICROSECONDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MILLISECOND</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MILLISECONDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MINUS</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MINUTE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>MINUTES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MONTH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>MONTHS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MSCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NAMESPACE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NAMESPACES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -240,7 +234,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>ROWS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SCHEMA</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SECOND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SECONDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SELECT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SEMI</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SEPARATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
@@ -291,12 +284,9 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>USING</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VIEW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>WEEK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>WEEKS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>WHEN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>WHERE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>WINDOW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>WITH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>YEAR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>YEARS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
 </table>

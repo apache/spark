@@ -70,14 +70,10 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsTruncate {
-    private var queryId: String = _
+  class MyWriteBuilder(path: String, info: LogicalWriteInfo)
+      extends WriteBuilder with SupportsTruncate {
+    private val queryId: String = info.queryId()
     private var needTruncate = false
-
-    override def withQueryId(queryId: String): WriteBuilder = {
-      this.queryId = queryId
-      this
-    }
 
     override def truncate(): WriteBuilder = {
       this.needTruncate = true
@@ -143,8 +139,8 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-      new MyWriteBuilder(path)
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      new MyWriteBuilder(path, info)
     }
 
     override def capabilities(): util.Set[TableCapability] =
@@ -240,4 +236,6 @@ class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] 
       fs.delete(file, false)
     }
   }
+
+  override def close(): Unit = {}
 }

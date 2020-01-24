@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -45,10 +44,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
     val stringCol = idCol.cast(StringType)
     spark.range(cardinality)
       .select(udf(idCol, nullableIntCol, stringCol))
-      .write
-      .format("noop")
-      .mode(Overwrite)
-      .save()
+      .noop()
   }
 
   private def doRunBenchmarkWithPrimitiveTypes(
@@ -58,10 +54,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
       idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
     spark.range(cardinality)
       .select(udf(idCol, nullableIntCol))
-      .write
-      .format("noop")
-      .mode(Overwrite)
-      .save()
+      .noop()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -116,10 +109,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(s"Baseline", numIters = 5) { _ =>
         spark.range(cardinality)
           .select(col("id"), col("id") * 2, col("id") * 3)
-          .write
-          .format("noop")
-          .mode(Overwrite)
-          .save()
+          .noop()
       }
 
       val identityUDF = udf { x: Long => x }
@@ -129,10 +119,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
             identityUDF(col("id")),
             identityUDF(col("id") * 2),
             identityUDF(col("id") * 3))
-          .write
-          .format("noop")
-          .mode(Overwrite)
-          .save()
+          .noop()
       }
 
       benchmark.run()

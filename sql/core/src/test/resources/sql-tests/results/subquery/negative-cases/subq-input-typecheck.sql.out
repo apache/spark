@@ -44,7 +44,7 @@ struct<>
 
 -- !query 4
 CREATE TEMPORARY VIEW t5 AS SELECT * FROM VALUES
-  (CAST(1 AS DECIMAL(18, 0)), CAST(2 AS STRING), CAST(3 AS BIGINT))
+  (CAST('2011-01-01 01:01:01' AS TIMESTAMP), CAST(2 AS STRING), CAST(3 AS BIGINT))
 AS t1(t5a, t5b, t5c)
 -- !query 4 schema
 struct<>
@@ -139,8 +139,8 @@ cannot resolve '(named_struct('t4a', t4.`t4a`, 't4b', t4.`t4b`, 't4c', t4.`t4c`)
 The data type of one or more elements in the left hand side of an IN subquery
 is not compatible with the data type of the output of the subquery
 Mismatched columns:
-[(t4.`t4a`:double, t5.`t5a`:decimal(18,0)), (t4.`t4c`:string, t5.`t5c`:bigint)]
+[(t4.`t4a`:double, t5.`t5a`:timestamp), (t4.`t4c`:string, t5.`t5c`:bigint)]
 Left side:
 [double, string, string].
 Right side:
-[decimal(18,0), string, bigint].;
+[timestamp, string, bigint].;

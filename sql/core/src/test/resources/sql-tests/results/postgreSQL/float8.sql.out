@@ -125,25 +125,28 @@ struct<CAST(          -INFINiTY    AS DOUBLE):double>
 -- !query 15
 SELECT double('N A N')
 -- !query 15 schema
-struct<CAST(N A N AS DOUBLE):double>
+struct<>
 -- !query 15 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: N A N
 
 
 -- !query 16
 SELECT double('NaN x')
 -- !query 16 schema
-struct<CAST(NaN x AS DOUBLE):double>
+struct<>
 -- !query 16 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: NaN x
 
 
 -- !query 17
 SELECT double(' INFINITY    x')
 -- !query 17 schema
-struct<CAST( INFINITY    x AS DOUBLE):double>
+struct<>
 -- !query 17 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric:  INFINITY    x
 
 
 -- !query 18
@@ -173,9 +176,10 @@ NaN
 -- !query 21
 SELECT double(decimal('nan'))
 -- !query 21 schema
-struct<CAST(CAST(nan AS DECIMAL(10,0)) AS DOUBLE):double>
+struct<>
 -- !query 21 output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: nan
 
 
 -- !query 22

@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
@@ -39,7 +39,7 @@ class NoopDataSource extends TableProvider with DataSourceRegister {
 }
 
 private[noop] object NoopTable extends Table with SupportsWrite {
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
   override def capabilities(): util.Set[TableCapability] = {
@@ -72,6 +72,7 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = {}
+  override def close(): Unit = {}
 }
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {

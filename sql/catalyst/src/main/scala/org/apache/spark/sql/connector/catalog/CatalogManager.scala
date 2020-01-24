@@ -53,6 +53,15 @@ class CatalogManager(
     }
   }
 
+  def isCatalogRegistered(name: String): Boolean = {
+    try {
+      catalog(name)
+      true
+    } catch {
+      case _: CatalogNotFoundException => false
+    }
+  }
+
   private def loadV2SessionCatalog(): CatalogPlugin = {
     Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
@@ -84,11 +93,6 @@ class CatalogManager(
     }.getOrElse(defaultSessionCatalog)
   }
 
-  private def getDefaultNamespace(c: CatalogPlugin) = c match {
-    case c: SupportsNamespaces => c.defaultNamespace()
-    case _ => Array.empty[String]
-  }
-
   private var _currentNamespace: Option[Array[String]] = None
 
   def currentNamespace: Array[String] = synchronized {
@@ -96,7 +100,7 @@ class CatalogManager(
       if (currentCatalog.name() == SESSION_CATALOG_NAME) {
         Array(v1SessionCatalog.getCurrentDatabase)
       } else {
-        getDefaultNamespace(currentCatalog)
+        currentCatalog.defaultNamespace()
       }
     }
   }

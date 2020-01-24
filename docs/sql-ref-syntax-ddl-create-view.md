@@ -26,9 +26,8 @@ a virtual table that has no physical data therefore other operations like
 
 ### Syntax
 {% highlight sql %}
-CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
-    create_view_clauses
-    AS query;
+CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_identifier
+    create_view_clauses AS query
 {% endhighlight %}
 
 ### Parameters
@@ -37,7 +36,7 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
   <dd>If a view of same name already exists, it will be replaced.</dd>
 </dl>
 <dl>
-  <dt><code><em>[GLOBAL] TEMPORARY</em></code></dt>
+  <dt><code><em>[ GLOBAL ] TEMPORARY</em></code></dt>
   <dd>TEMPORARY views are session-scoped and will be dropped when session ends 
       because it skips persisting the definition in the underlying metastore, if any.
       GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.</dd>
@@ -47,12 +46,22 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
   <dd>Creates a view if it does not exists.</dd>
 </dl>
 <dl>
+  <dt><code><em>view_identifier</em></code></dt>
+  <dd>
+    Specifies a view name, which may be optionally qualified with a database name.<br><br>
+    <b> Syntax:</b>
+      <code>
+        [ database_name. ] view_name
+      </code>
+  </dd>
+</dl>
+<dl>
   <dt><code><em>create_view_clauses</em></code></dt>
   <dd>These clauses are optional and order insensitive. It can be of following formats.
     <ul>
-      <li><code>[(column_name [COMMENT column_comment], ...) ]</code> to specify column-level comments.</li>
-      <li><code>[COMMENT view_comment]</code> to specify view-level comments.</li>
-      <li><code>[TBLPROPERTIES (property_name = property_value, ...)]</code> to add metadata key-value pairs.</li>
+      <li><code>[ ( column_name [ COMMENT column_comment ], ... ) ]</code> to specify column-level comments.</li>
+      <li><code>[ COMMENT view_comment ]</code> to specify view-level comments.</li>
+      <li><code>[ TBLPROPERTIES ( property_name = property_value, ... ) ]</code> to add metadata key-value pairs.</li>
     </ul>  
   </dd>
 </dl>

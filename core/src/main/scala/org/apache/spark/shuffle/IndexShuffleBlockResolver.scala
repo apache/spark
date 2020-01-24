@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -51,12 +52,36 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Long): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+
+  def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
+
+  /**
+   * Get the shuffle data file.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   */
+   def getDataFile(shuffleId: Int, mapId: Long, dirs: Option[Array[String]]): File = {
+    val blockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Long): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  /**
+   * Get the shuffle index file.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   */
+  private def getIndexFile(
+      shuffleId: Int,
+      mapId: Long,
+      dirs: Option[Array[String]] = None): File = {
+    val blockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
   /**
@@ -190,7 +215,9 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+  override def getBlockData(
+      blockId: BlockId,
+      dirs: Option[Array[String]]): ManagedBuffer = {
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
       case id: ShuffleBlockId =>
         (id.shuffleId, id.mapId, id.reduceId, id.reduceId + 1)
@@ -201,7 +228,7 @@ private[spark] class IndexShuffleBlockResolver(
     }
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(shuffleId, mapId)
+    val indexFile = getIndexFile(shuffleId, mapId, dirs)
 
     // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
     // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
@@ -224,7 +251,7 @@ private[spark] class IndexShuffleBlockResolver(
       }
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(shuffleId, mapId),
+        getDataFile(shuffleId, mapId, dirs),
         startOffset,
         endOffset - startOffset)
     } finally {

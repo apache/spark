@@ -223,7 +223,7 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
-          case _ => plan
+          case _ => hint
         }
     }
   }
