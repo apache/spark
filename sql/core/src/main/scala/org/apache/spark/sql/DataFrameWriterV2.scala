@@ -53,7 +53,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val (catalog, identifier) = {
     val CatalogAndIdentifier(catalog, identifier) = tableName
-
     (catalog.asTableCatalog, identifier)
   }
 

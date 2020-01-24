@@ -54,11 +54,9 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
 
   test("batch scan: check missing capabilities") {
     val e = intercept[AnalysisException] {
-      TableCapabilityCheck.apply(DataSourceV2Relation.create(
-        CapabilityTable(),
-        None,
-        None,
-        CaseInsensitiveStringMap.empty))
+      TableCapabilityCheck.apply(
+        DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
+      )
     }
     assert(e.message.contains("does not support batch scan"))
   }

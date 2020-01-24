@@ -256,9 +256,7 @@ private[sql] object CatalogV2Util {
       case _: NoSuchNamespaceException => None
     }
 
-  def loadRelation(
-      catalog: CatalogPlugin,
-      ident: Identifier): Option[NamedRelation] = {
+  def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
