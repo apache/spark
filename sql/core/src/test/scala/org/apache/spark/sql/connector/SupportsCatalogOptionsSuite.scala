@@ -212,7 +212,6 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
-
       }
       override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
     }
@@ -270,7 +269,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   private def save(name: String, mode: SaveMode, catalogOpt: Option[String]): Unit = {
     val df = spark.range(10).write.format(format).option("name", name)
-    catalogOpt.foreach(cName => df.option("catalog", catalogName))
+    catalogOpt.foreach(cName => df.option("catalog", cName))
     df.mode(mode).save()
   }
 }
