@@ -241,8 +241,7 @@ class Analyzer(
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
-    Batch("Normalize Alter Table", Once,
-      ResolveAlterTableChanges :: Nil),
+    Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
     Batch("Nondeterministic", Once,
