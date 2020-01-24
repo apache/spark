@@ -46,7 +46,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
@@ -117,7 +117,9 @@ class ExecutorSuite extends SparkFunSuite
 
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf),
+        resources = immutable.Map.empty[String, ResourceInformation])
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockExecutorBackend, taskDescription)
 
@@ -254,7 +256,9 @@ class ExecutorSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val executor =
-      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf),
+        resources = immutable.Map.empty[String, ResourceInformation])
     val executorClass = classOf[Executor]
 
     // Save all heartbeats sent into an ArrayBuffer for verification
@@ -353,7 +357,9 @@ class ExecutorSuite extends SparkFunSuite
     val mockBackend = mock[ExecutorBackend]
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf),
+        resources = immutable.Map.empty[String, ResourceInformation])
       executor.launchTask(mockBackend, taskDescription)
 
       // Ensure that the executor's metricsPoller is polled so that values are recorded for
@@ -466,7 +472,9 @@ class ExecutorSuite extends SparkFunSuite
     val timedOut = new AtomicBoolean(false)
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
-        uncaughtExceptionHandler = mockUncaughtExceptionHandler)
+        uncaughtExceptionHandler = mockUncaughtExceptionHandler,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf),
+        resources = immutable.Map.empty[String, ResourceInformation])
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
       if (killTask) {
