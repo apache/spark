@@ -370,7 +370,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     val request = mock[HttpServletRequest]
     when(request.getMethod()).thenReturn("GET")
-    when(request.getRequestURI()).thenReturn("http://localhost:18080/history/local-123/jobs/job/")
+    when(request.getRequestURI()).thenReturn("/history/local-123/jobs/job/")
+    when(request.getRequestURL())
+      .thenReturn(new StringBuffer("http://localhost:18080/history/local-123/jobs/job/"))
     when(request.getQueryString()).thenReturn("id=2")
     val resp = mock[HttpServletResponse]
     when(resp.encodeRedirectURL(any())).thenAnswer { (invocationOnMock: InvocationOnMock) =>
@@ -378,6 +380,29 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
     filter.doFilter(request, resp, null)
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
+  }
+
+  test("redirect respects X-Forwarded-Proto header") {
+    val operations = new StubCacheOperations()
+    val ui = operations.putAndAttach("foo", None, true, 0, 10)
+    val cache = mock[ApplicationCache]
+    when(cache.operations).thenReturn(operations)
+    val filter = new ApplicationCacheCheckFilter(new CacheKey("foo", None), ui, cache)
+    ui.invalidate()
+
+    val request = mock[HttpServletRequest]
+    when(request.getMethod()).thenReturn("GET")
+    when(request.getRequestURI()).thenReturn("/history/local-123/jobs/job/")
+    when(request.getRequestURL())
+      .thenReturn(new StringBuffer("http://localhost:18080/history/local-123/jobs/job/"))
+    when(request.getQueryString()).thenReturn("id=2")
+    when(request.getHeader("X-Forwarded-Proto")).thenReturn("https")
+    val resp = mock[HttpServletResponse]
+    when(resp.encodeRedirectURL(any())).thenAnswer { (invocationOnMock: InvocationOnMock) =>
+      invocationOnMock.getArguments()(0).asInstanceOf[String]
+    }
+    filter.doFilter(request, resp, null)
+    verify(resp).sendRedirect("https://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
 }
