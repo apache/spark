@@ -382,7 +382,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
-  test("redirect respects X-Forwarded-Proto header") {
+  test("SPARK-27996: redirect respects X-Forwarded-Proto header") {
     val operations = new StubCacheOperations()
     val ui = operations.putAndAttach("foo", None, true, 0, 10)
     val cache = mock[ApplicationCache]
