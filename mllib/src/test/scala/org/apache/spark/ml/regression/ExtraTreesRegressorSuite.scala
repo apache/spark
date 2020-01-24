@@ -65,6 +65,7 @@ class ExtraTreesRegressorSuite extends MLTest with DefaultReadWriteTest{
       .setMaxBins(10)
       .setNumTrees(3)
       .setSeed(seed)
+    assert(!etr.getBootstrap)
 
     val df = orderedLabeledPoints50_1000.toDF()
     val model = etr.fit(df)

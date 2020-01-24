@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.util.Try
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ProbabilisticClassifierParams
 import org.apache.spark.ml.linalg.VectorUDT
@@ -334,7 +333,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   setDefault(subsamplingRate -> 1.0)
 
   /** @group getParam */
-  def getSubsamplingRate: Double = $(subsamplingRate)
+  final def getSubsamplingRate: Double = $(subsamplingRate)
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -433,8 +432,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /**
    * Number of trees to train (at least 1).
-   * If 1, then no bootstrapping is used.  If greater than 1, then bootstrapping is done.
-   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
    *
    * Note: The reason that we cannot add this to both GBT and RF (i.e. in TreeEnsembleParams)
@@ -475,7 +472,7 @@ private[ml] trait RandomForestRegressorParams
 /**
  * Parameters for Extra Trees algorithms.
  */
-private[ml] trait ExtraTreesParams extends TreeEnsembleParams with Logging {
+private[ml] trait ExtraTreesParams extends RandomForestParams {
 
   /**
    * Number of random drawn splits for each candidate feature before finding best split.
@@ -492,17 +489,14 @@ private[ml] trait ExtraTreesParams extends TreeEnsembleParams with Logging {
   /** @group expertGetParam */
   final def getNumRandomSplitsPerFeature: Int = $(numRandomSplitsPerFeature)
 
-  final override def getSubsamplingRate: Double = {
-    logWarning("ExtraTreesParams.getSubsamplingRate should NOT be used")
-    $(subsamplingRate)
-  }
+  setDefault(bootstrap -> false)
 }
 
 private[ml] trait ExtraTreesClassifierParams
-  extends ExtraTreesParams with RandomForestClassifierParams
+  extends ExtraTreesParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait ExtraTreesRegressorParams
-  extends ExtraTreesParams with RandomForestRegressorParams
+  extends ExtraTreesParams with TreeEnsembleRegressorParams with TreeClassifierParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.

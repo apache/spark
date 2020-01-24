@@ -1037,6 +1037,8 @@ class RandomForestRegressor(JavaRegressor, _RandomForestRegressorParams, JavaMLW
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2)
     >>> rf.getMinWeightFractionPerNode()
     0.0
+    >>> rf.getBootstrap()
+    True
     >>> rf.setSeed(42)
     RandomForestRegressor...
     >>> model = rf.fit(df)
@@ -1268,12 +1270,7 @@ class _ExtraTreesRegressorParamsParams(_RandomForestRegressorParams, _ExtraTrees
 
     .. versionadded:: 3.0.0
     """
-    def getSubsamplingRate(self):
-        """
-        Gets the value of subsamplingRate or its default value.
-        """
-        warnings.warn("ExtraTreesParams.getSubsamplingRate should NOT be used")
-        return self.getOrDefault(self.subsamplingRate)
+    pass
 
 
 @inherit_doc
@@ -1294,6 +1291,8 @@ class ExtraTreesRegressor(JavaPredictor, _ExtraTreesRegressorParamsParams, JavaM
     0.0
     >>> etr.setSeed(42)
     ExtraTreesRegressor...
+    >>> etr.getBootstrap()
+    False
     >>> model = etr.fit(df)
     >>> model.getSeed()
     42
@@ -1337,46 +1336,46 @@ class ExtraTreesRegressor(JavaPredictor, _ExtraTreesRegressorParamsParams, JavaM
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                 impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto",
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None,
-                 numRandomSplitsPerFeature=1, subsamplingRate=1.0):
+    def __init__(self, featuresCol="features", weightCol=None, labelCol="label",
+                 leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0,
+                 maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto",
+                 impurity="variance", minInstancesPerNode=1, minWeightFractionPerNode=0.0,
+                 numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False,
+                 checkpointInterval=10, seed=None):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto", \
-                 leafCol=", minWeightFractionPerNode=0.0", weightCol=None, \
-                 numRandomSplitsPerFeature=1, subsamplingRate=1.0)
+        __init__(self, featuresCol="features", weightCol=None, labelCol="label", \
+                 leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0, \
+                 maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto", \
+                 impurity="variance", minInstancesPerNode=1, minWeightFractionPerNode=0.0, \
+                 numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False, \
+                 checkpointInterval=10, seed=None)
         """
         super(ExtraTreesRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.ExtraTreesRegressor", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance", numTrees=20, featureSubsetStrategy="auto",
-                         leafCol="", minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1,
-                         subsamplingRate=1.0)
+        self._setDefault(leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0,
+                         maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto",
+                         impurity="variance", minInstancesPerNode=1, minWeightFractionPerNode=0.0,
+                         numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False,
+                         checkpointInterval=10, seed=None)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto",
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None,
-                  numRandomSplitsPerFeature=1, subsamplingRate=1.0):
+    def setParams(self, featuresCol="features", weightCol=None, labelCol="label",
+                  leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0,
+                  maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto",
+                  impurity="variance", minInstancesPerNode=1, minWeightFractionPerNode=0.0,
+                  numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False,
+                  checkpointInterval=10, seed=None):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, numTrees=20, featureSubsetStrategy="auto", \
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, \
-                  numRandomSplitsPerFeature=1, subsamplingRate=1.0)
+        setParams(self, featuresCol="features", weightCol=None, labelCol="label", \
+                 leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0, \
+                 maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto", \
+                 impurity="variance", minInstancesPerNode=1, minWeightFractionPerNode=0.0, \
+                 numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False, \
+                 checkpointInterval=10, seed=None)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1438,6 +1437,12 @@ class ExtraTreesRegressor(JavaPredictor, _ExtraTreesRegressorParamsParams, JavaM
         Sets the value of :py:attr:`bootstrap`.
         """
         return self._set(bootstrap=value)
+
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
 
     def setFeatureSubsetStrategy(self, value):
         """

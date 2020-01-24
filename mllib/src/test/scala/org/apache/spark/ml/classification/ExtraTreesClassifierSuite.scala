@@ -85,6 +85,7 @@ class ExtraTreesClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(5)
       .setSeed(seed)
       .setCacheNodeIds(true)
+    assert(!etc.getBootstrap)
     val model = etc.fit(df)
 
     MLTestingUtils.validateClassifier(model,

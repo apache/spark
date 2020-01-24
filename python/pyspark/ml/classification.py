@@ -1390,6 +1390,8 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     ...     leafCol="leafId")
     >>> rf.getMinWeightFractionPerNode()
     0.0
+    >>> rf.getBootstrap()
+    True
     >>> model = rf.fit(td)
     >>> model.getLabelCol()
     'indexed'
@@ -1619,16 +1621,11 @@ class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClass
 
 
 @inherit_doc
-class _ExtraTreesClassifierParams(_RandomForestClassifierParams, _ExtraTreesParams):
+class _ExtraTreesClassifierParams(_ExtraTreesParams, _TreeClassifierParams):
     """
     Params for :py:class:`ExtraTreesClassifier` and :py:class:`ExtraTreesClassificationModel`.
     """
-    def getSubsamplingRate(self):
-        """
-        Gets the value of subsamplingRate or its default value.
-        """
-        warnings.warn("ExtraTreesParams.getSubsamplingRate should NOT be used")
-        return self.getOrDefault(self.subsamplingRate)
+    pass
 
 
 @inherit_doc
@@ -1654,6 +1651,8 @@ class ExtraTreesClassifier(JavaProbabilisticClassifier, _ExtraTreesClassifierPar
     ...     leafCol="leafId")
     >>> etc.getMinWeightFractionPerNode()
     0.0
+    >>> etc.getBootstrap()
+    False
     >>> model = etc.fit(td)
     >>> model.getLabelCol()
     'indexed'
@@ -1703,49 +1702,49 @@ class ExtraTreesClassifier(JavaProbabilisticClassifier, _ExtraTreesClassifierPar
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 probabilityCol="probability", rawPredictionCol="rawPrediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, leafCol="",
-                 minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1,
-                 subsamplingRate=1.0):
+    def __init__(self, featuresCol="features", weightCol=None, labelCol="label",
+                 predictionCol="prediction", probabilityCol="probability",
+                 rawPredictionCol="rawPrediction", leafCol="", numTrees=20, bootstrap=False,
+                 subsamplingRate=1.0, maxDepth=5, maxBins=32, minInfoGain=0.0,
+                 featureSubsetStrategy="auto", impurity="gini", minInstancesPerNode=1,
+                 minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1, maxMemoryInMB=256,
+                 cacheNodeIds=False, checkpointInterval=10, seed=None):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, leafCol="", \
-                 minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1, \
-                 subsamplingRate=1.0)
+        __init__(self, featuresCol="features", weightCol=None, labelCol="label", \
+                 predictionCol="prediction", probabilityCol="probability", \
+                 rawPredictionCol="rawPrediction", leafCol="", numTrees=20, \
+                 subsamplingRate=1.0, maxDepth=5, maxBins=32, minInfoGain=0.0, \
+                 featureSubsetStrategy="auto", impurity="gini", minInstancesPerNode=1, \
+                 minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1, maxMemoryInMB=256, \
+                 cacheNodeIds=False, checkpointInterval=10, seed=None)
         """
         super(ExtraTreesClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.ExtraTreesClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         leafCol="", minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1,
-                         subsamplingRate=1.0)
+        self._setDefault(leafCol="", numTrees=20, bootstrap=False, subsamplingRate=1.0,
+                         maxDepth=5, maxBins=32, minInfoGain=0.0, featureSubsetStrategy="auto",
+                         impurity="gini", minInstancesPerNode=1, minWeightFractionPerNode=0.0,
+                         numRandomSplitsPerFeature=1, maxMemoryInMB=256, cacheNodeIds=False,
+                         checkpointInterval=10)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  probabilityCol="probability", rawPredictionCol="rawPrediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", leafCol="",
-                  minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1,
-                  subsamplingRate=1.0):
+    def setParams(self, featuresCol="features", weightCol=None, labelCol="label",
+                  predictionCol="prediction", probabilityCol="probability",
+                  rawPredictionCol="rawPrediction", leafCol="", numTrees=20, bootstrap=False,
+                  subsamplingRate=1.0, maxDepth=5, maxBins=32, minInfoGain=0.0,
+                  featureSubsetStrategy="auto", impurity="gini", minInstancesPerNode=1,
+                  minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1, maxMemoryInMB=256,
+                  cacheNodeIds=False, checkpointInterval=10, seed=None):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", leafCol="", \
-                  minWeightFractionPerNode=0.0, weightCol=None, numRandomSplitsPerFeature=1, \
-                  subsamplingRate=1.0)
+        setParams(self, featuresCol="features", weightCol=None, labelCol="label", \
+                 predictionCol="prediction", probabilityCol="probability", \
+                 rawPredictionCol="rawPrediction", leafCol="", numTrees=20, \
+                 subsamplingRate=1.0, maxDepth=5, maxBins=32, minInfoGain=0.0, \
+                 featureSubsetStrategy="auto", impurity="gini", minInstancesPerNode=1, \
+                 minWeightFractionPerNode=0.0, numRandomSplitsPerFeature=1, maxMemoryInMB=256, \
+                 cacheNodeIds=False, checkpointInterval=10, seed=None)
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1807,6 +1806,12 @@ class ExtraTreesClassifier(JavaProbabilisticClassifier, _ExtraTreesClassifierPar
         Sets the value of :py:attr:`bootstrap`.
         """
         return self._set(bootstrap=value)
+
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
 
     def setFeatureSubsetStrategy(self, value):
         """

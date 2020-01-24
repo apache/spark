@@ -355,7 +355,7 @@ class _TreeRegressorParams(_HasVarianceImpurity):
     pass
 
 
-class _ExtraTreesParams(Params):
+class _ExtraTreesParams(_RandomForestParams):
     """
     Private class to track supported Extra Trees algorithms.
 
