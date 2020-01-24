@@ -848,6 +848,10 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
+  if (is_windows()) {
+    skip("Shouldn't be executed on Windows due to input encoding issues")
+  }
+
   lines <- c("{\"name\":\"안녕하세요\"}",
              "{\"name\":\"您好\", \"age\":30}",
              "{\"name\":\"こんにちは\", \"age\":19}",
