@@ -684,6 +684,21 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
   }
 
+  test("SPARK-30633: Use Long seeds for xxHash") {
+    val literal = Literal.create(42L, LongType)
+    val seeds = Seq(
+      Long.MinValue,
+      Integer.MIN_VALUE.toLong - 1L,
+      0L,
+      Integer.MAX_VALUE.toLong + 1L,
+      Long.MaxValue
+    )
+
+    for (seed <- seeds) {
+      checkEvaluation(XxHash64(Seq(literal), seed), XxHash64(Seq(literal), seed).eval())
+    }
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)
