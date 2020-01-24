@@ -285,7 +285,7 @@ $(document).ready(function () {
         "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>" +
         " Show Additional Metrics" +
         "</a></div>" +
-        "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
+        "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
         "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
         "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
@@ -480,7 +480,7 @@ $(document).ready(function () {
 
                 $("#additionalMetrics").click(function(){
                     $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-metrics").toggle();
+                    $("#toggle-metrics").toggleClass("d-none");
                     if (window.localStorage) {
                         window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
                     }
@@ -488,7 +488,7 @@ $(document).ready(function () {
 
                 $("#aggregatedMetrics").click(function(){
                     $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-aggregatedMetrics").toggle();
+                    $("#toggle-aggregatedMetrics").toggleClass("d-none");
                     if (window.localStorage) {
                         window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
                     }
@@ -954,12 +954,12 @@ $(document).ready(function () {
                     if (window.localStorage.getItem("arrowtoggle1class") !== null &&
                         window.localStorage.getItem("arrowtoggle1class").includes("arrow-open")) {
                         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-metrics").toggle();
+                        $("#toggle-metrics").toggleClass("d-none");
                     }
                     if (window.localStorage.getItem("arrowtoggle2class") !== null &&
                         window.localStorage.getItem("arrowtoggle2class").includes("arrow-open")) {
                         $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-aggregatedMetrics").toggle();
+                        $("#toggle-aggregatedMetrics").toggleClass("d-none");
                     }
                 }
             });

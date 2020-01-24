@@ -58,16 +58,11 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
 function setupTooltipForSparkPlanNode(nodeId) {
   var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text()
   d3.select("svg g .node_" + nodeId)
-    .on('mouseover', function(d) {
+    .each(function(d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "top"
+        title: nodeTooltip, trigger: "hover focus", container: "body", placement: "top"
       });
-      $(domNode).tooltip("show");
-    })
-    .on('mouseout', function(d) {
-      var domNode = d3.select(this).node();
-      $(domNode).tooltip("destroy");
     })
 }
 

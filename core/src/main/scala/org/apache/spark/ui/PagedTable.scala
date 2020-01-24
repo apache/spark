@@ -184,9 +184,9 @@ private[spark] trait PagedTable[T] {
     val pageTags = (startPage to endPage).map { p =>
       if (p == page) {
         // The current page should be disabled so that it cannot be clicked.
-        <li class="disabled"><a href="#">{p}</a></li>
+        <li class="page-item disabled"><a href="#" class="page-link">{p}</a></li>
       } else {
-        <li><a href={Unparsed(pageLink(p))}>{p}</a></li>
+        <li class="page-item"><a href={Unparsed(pageLink(p))} class="page-link">{p}</a></li>
       }
     }
 
@@ -217,32 +217,34 @@ private[spark] trait PagedTable[T] {
         <form id={s"form-$tableId-page"}
               method="get"
               action={Unparsed(goButtonFormPath)}
-              class="form-inline pull-right"
+              class="form-inline float-right justify-content-end"
               style="margin-bottom: 0px;">
           {hiddenFormFields}
           <label>{totalPages} Pages. Jump to</label>
           <input type="text"
                  name={pageNumberFormField}
                  id={s"form-$tableId-page-no"}
-                 value={page.toString} class="span1" />
+                 value={page.toString}
+                 class="col-1 form-control" />
 
           <label>. Show </label>
           <input type="text"
                  id={s"form-$tableId-page-size"}
                  name={pageSizeFormField}
                  value={pageSize.toString}
-                 class="span1" />
+                 class="col-1 form-control" />
           <label>items in a page.</label>
 
-          <button type="submit" class="btn">Go</button>
+          <button type="submit" class="btn btn-spark">Go</button>
         </form>
       </div>
-      <div class="pagination" style="margin-bottom: 0px;">
+      <div>
         <span style="float: left; padding-top: 4px; padding-right: 4px;">Page: </span>
-        <ul>
+        <ul class="pagination">
           {if (currentGroup > firstGroup) {
-          <li>
-            <a href={Unparsed(pageLink(startPage - groupSize))} aria-label="Previous Group">
+          <li class="page-item">
+            <a href={Unparsed(pageLink(startPage - groupSize))} class="page-link"
+               aria-label="Previous Group">
               <span aria-hidden="true">
                 &lt;&lt;
               </span>
@@ -250,8 +252,8 @@ private[spark] trait PagedTable[T] {
           </li>
           }}
           {if (page > 1) {
-          <li>
-          <a href={Unparsed(pageLink(page - 1))} aria-label="Previous">
+          <li class="page-item">
+          <a href={Unparsed(pageLink(page - 1))} class="page-link" aria-label="Previous">
             <span aria-hidden="true">
               &lt;
             </span>
@@ -260,15 +262,16 @@ private[spark] trait PagedTable[T] {
           }}
           {pageTags}
           {if (page < totalPages) {
-          <li>
-            <a href={Unparsed(pageLink(page + 1))} aria-label="Next">
+          <li class="page-item">
+            <a href={Unparsed(pageLink(page + 1))} class="page-link" aria-label="Next">
               <span aria-hidden="true">&gt;</span>
             </a>
           </li>
           }}
           {if (currentGroup < lastGroup) {
-          <li>
-            <a href={Unparsed(pageLink(startPage + groupSize))} aria-label="Next Group">
+          <li class="page-item">
+            <a href={Unparsed(pageLink(startPage + groupSize))} class="page-link"
+               aria-label="Next Group">
               <span aria-hidden="true">
                 &gt;&gt;
               </span>

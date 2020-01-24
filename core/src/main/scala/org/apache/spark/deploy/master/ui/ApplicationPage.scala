@@ -39,7 +39,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
-      val msg = <div class="row-fluid">No running application with ID {appId}</div>
+      val msg = <div class="row">No running application with ID {appId}</div>
       return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
@@ -55,9 +55,9 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
     val removedExecutorsTable = UIUtils.listingTable(executorHeaders, executorRow, removedExecutors)
 
     val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
+      <div class="row">
+        <div class="col-12">
+          <ul class="list-unstyled">
             <li><strong>ID:</strong> {app.id}</li>
             <li><strong>Name:</strong> {app.desc.name}</li>
             <li><strong>User:</strong> {app.desc.user}</li>
@@ -103,8 +103,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
         </div>
       </div>
 
-      <div class="row-fluid"> <!-- Executors -->
-        <div class="span12">
+      <div class="row"> <!-- Executors -->
+        <div class="col-12">
           <span class="collapse-aggregated-executors collapse-table"
               onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
             <h4>

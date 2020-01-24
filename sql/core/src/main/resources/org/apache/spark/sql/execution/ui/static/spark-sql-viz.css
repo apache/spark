@@ -16,6 +16,7 @@
  */
 
 #plan-viz-graph .label {
+  font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
 }

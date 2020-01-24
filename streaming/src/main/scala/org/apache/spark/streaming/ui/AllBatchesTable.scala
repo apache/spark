@@ -75,7 +75,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
   }
 
   private def batchTable: Seq[Node] = {
-    <table id={tableId} class="table table-bordered table-striped table-condensed sortable">
+    <table id={tableId} class="table table-bordered table-striped table-sm sortable">
       <thead>
         {columns}
       </thead>

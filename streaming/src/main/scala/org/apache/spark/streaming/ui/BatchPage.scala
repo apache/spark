@@ -305,7 +305,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         (outputOpData, sparkJobIds.map { jobId => SparkJobIdWithUIData(jobId, getJobData(jobId)) })
       }
 
-    <table id="batch-job-table" class="table table-bordered table-striped table-condensed">
+    <table id="batch-job-table" class="table table-bordered table-striped table-sm">
       <thead>
         {columns}
       </thead>
@@ -342,7 +342,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }.toSeq
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <strong>Batch Duration: </strong>
             {SparkUIUtils.formatDuration(streamingListener.batchDuration)}
