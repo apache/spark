@@ -73,9 +73,12 @@ class AggregatingAccumulatorSuite
     // Idempotency of result
     checkResult(acc1.value, InternalRow(73L, str("baz"), 3L), expectedSchema, false)
 
-    // A few updates to the copied accumulator
-    acc2.add(InternalRow(-2L, str("qwerty"), -6773.9d))
-    acc2.add(InternalRow(-35L, str("zzz-top"), -323.9d))
+    // A few updates to the copied accumulator using an updater
+    val updater = acc2.copyAndReset()
+    updater.add(InternalRow(-2L, str("qwerty"), -6773.9d))
+    updater.add(InternalRow(-35L, str("zzz-top"), -323.9d))
+    assert(acc2.isZero)
+    acc2.setState(updater)
     checkResult(acc2.value, InternalRow(-36L, str("zzz-top"), 2L), expectedSchema, false)
 
     // Merge accumulators

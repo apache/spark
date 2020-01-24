@@ -23,18 +23,18 @@ Return the list of columns in a table. If the table does not exist, an exception
 
 ### Syntax
 {% highlight sql %}
-SHOW COLUMNS table [ database ]
+SHOW COLUMNS table_identifier [ database ]
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table</em></code></dt>
+  <dt><code><em>table_identifier</em></code></dt>
   <dd>
     Specifies the table name of an existing table. The table may be optionally qualified
     with a database name.<br><br>
     <b>Syntax:</b>
       <code>
-        { IN | FROM } [database_name.]table_name
+        { IN | FROM } [ database_name . ] table_name
       </code><br><br>
     <b>Note:</b>
     Keywords <code>IN</code> and <code>FROM</code> are interchangeable.

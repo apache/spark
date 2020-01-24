@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.connector.write.SupportsTruncate
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
@@ -435,6 +435,30 @@ abstract class StreamExecution(
   }
 
   /**
+   * Interrupts the query execution thread and awaits its termination until until it exceeds the
+   * timeout. The timeout can be set on "spark.sql.streaming.stopTimeout".
+   *
+   * @throws TimeoutException If the thread cannot be stopped within the timeout
+   */
+  @throws[TimeoutException]
+  protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
+    val timeout = math.max(
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+    queryExecutionThread.interrupt()
+    queryExecutionThread.join(timeout)
+    if (queryExecutionThread.isAlive) {
+      val stackTraceException = new SparkException("The stream thread was last executing:")
+      stackTraceException.setStackTrace(queryExecutionThread.getStackTrace)
+      val timeoutException = new TimeoutException(
+        s"Stream Execution thread failed to stop within $timeout milliseconds (specified by " +
+        s"${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on what was " +
+        "being executed in the streaming query thread.")
+      timeoutException.initCause(stackTraceException)
+      throw timeoutException
+    }
+  }
+
+  /**
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
@@ -588,9 +612,11 @@ abstract class StreamExecution(
       table: SupportsWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
-    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
-      .withQueryId(id.toString)
-      .withInputDataSchema(inputPlan.schema)
+    val info = LogicalWriteInfoImpl(
+      queryId = id.toString,
+      inputPlan.schema,
+      new CaseInsensitiveStringMap(options.asJava))
+    val writeBuilder = table.newWriteBuilder(info)
     outputMode match {
       case Append =>
         writeBuilder.buildForStreaming()

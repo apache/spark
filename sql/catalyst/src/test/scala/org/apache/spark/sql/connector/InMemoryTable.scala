@@ -22,6 +22,8 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
@@ -93,8 +95,8 @@ class InMemoryTable(
     override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    InMemoryTable.maybeSimulateFailedTableWrite(options)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
@@ -122,7 +124,7 @@ class InMemoryTable(
   }
 
   private abstract class TestBatchWrite extends BatchWrite {
-    override def createBatchWriterFactory(): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
 
@@ -250,4 +252,6 @@ private class BufferWriter extends DataWriter[InternalRow] {
   override def commit(): WriterCommitMessage = buffer
 
   override def abort(): Unit = {}
+
+  override def close(): Unit = {}
 }

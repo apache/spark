@@ -26,7 +26,7 @@ to return the metadata pertaining to a partition or column respectively.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} [TABLE] [format] table_identifier [partition_spec] [col_name]
+{ DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ]
 {% endhighlight %}
 
 ### Parameters
@@ -42,7 +42,7 @@ to return the metadata pertaining to a partition or column respectively.
     Specifies a table name, which may be optionally qualified with a database name.<br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]table_name
+        [ database_name. ] table_name
       </code>
   </dd>
   <dt><code><em>partition_spec</em></code></dt>
@@ -51,7 +51,7 @@ to return the metadata pertaining to a partition or column respectively.
     for partitions. When specified, additional partition metadata is returned.<br><br>
     <b>Syntax:</b>
       <code>
-        PARTITION (partition_col_name  = partition_col_val [ , ... ])
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
       </code>
   </dd>  
   <dt><code><em>col_name</em></code></dt>
@@ -63,7 +63,7 @@ to return the metadata pertaining to a partition or column respectively.
     
     <b>Syntax:</b>
       <code>
-        [database_name.][table_name.]column_name
+        [ database_name. ] [ table_name. ] column_name
       </code>
    </dd>
 </dl>

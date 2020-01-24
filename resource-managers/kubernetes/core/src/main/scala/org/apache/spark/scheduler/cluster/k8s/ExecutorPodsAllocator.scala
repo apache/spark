@@ -72,6 +72,11 @@ private[spark] class ExecutorPodsAllocator(
 
   private var lastSnapshot = ExecutorPodsSnapshot(Nil)
 
+  // Executors that have been deleted by this allocator but not yet detected as deleted in
+  // a snapshot from the API server. This is used to deny registration from these executors
+  // if they happen to come up before the deletion takes effect.
+  @volatile private var deletedExecutorIds = Set.empty[Long]
+
   def start(applicationId: String): Unit = {
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, _)
@@ -84,6 +89,8 @@ private[spark] class ExecutorPodsAllocator(
       snapshotsStore.notifySubscribers()
     }
   }
+
+  def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
 
   private def onNewSnapshots(
       applicationId: String,
@@ -141,10 +148,17 @@ private[spark] class ExecutorPodsAllocator(
       }
       .map { case (id, _) => id }
 
+    // Make a local, non-volatile copy of the reference since it's used multiple times. This
+    // is the only method that modifies the list, so this is safe.
+    var _deletedExecutorIds = deletedExecutorIds
+
     if (snapshots.nonEmpty) {
       logDebug(s"Pod allocation status: $currentRunningCount running, " +
         s"${currentPendingExecutors.size} pending, " +
         s"${newlyCreatedExecutors.size} unacknowledged.")
+
+      val existingExecs = lastSnapshot.executorPods.keySet
+      _deletedExecutorIds = _deletedExecutorIds.filter(existingExecs.contains)
     }
 
     val currentTotalExpectedExecutors = totalExpectedExecutors.get
@@ -169,6 +183,8 @@ private[spark] class ExecutorPodsAllocator(
 
       if (toDelete.nonEmpty) {
         logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
+        _deletedExecutorIds = _deletedExecutorIds ++ toDelete
+
         Utils.tryLogNonFatalError {
           kubernetesClient
             .pods()
@@ -208,6 +224,8 @@ private[spark] class ExecutorPodsAllocator(
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       }
     }
+
+    deletedExecutorIds = _deletedExecutorIds
 
     // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
     // update method when not needed.

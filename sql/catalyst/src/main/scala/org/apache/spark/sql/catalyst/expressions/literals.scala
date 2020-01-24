@@ -63,9 +63,12 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
+    case d: BigDecimal =>
+      val decimal = Decimal(d)
+      Literal(decimal, DecimalType.fromDecimal(decimal))
     case d: JavaBigDecimal =>
-      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+      val decimal = Decimal(d)
+      Literal(decimal, DecimalType.fromDecimal(decimal))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
@@ -407,7 +410,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Long, TimestampType) =>
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"TIMESTAMP('${formatter.format(v)}')"
+      s"TIMESTAMP '${formatter.format(v)}'"
+    case (i: CalendarInterval, CalendarIntervalType) =>
+      s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

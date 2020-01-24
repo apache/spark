@@ -20,9 +20,12 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
 
-class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
+class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper {
   /** Check that a Decimal has the given string representation, precision and scale */
   private def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
     assert(d.toString === string)
@@ -32,15 +35,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("creating decimals") {
     checkDecimal(new Decimal(), "0", 1, 0)
-    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 3, 2)
-    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 2, 1)
-    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 3, 2)
-    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 2, 2)
+    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 1, 1)
+    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 2, 2)
+    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 1, 1)
     checkDecimal(Decimal(BigDecimal("0")), "0", 1, 0)
     checkDecimal(Decimal(BigDecimal("1.0")), "1.0", 2, 1)
-    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 3, 2)
-    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 2, 1)
-    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 2, 2)
+    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 1, 1)
+    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 2, 2)
     checkDecimal(Decimal(BigDecimal("-1.0")), "-1.0", 2, 1)
     checkDecimal(Decimal(BigDecimal("10.030")), "10.030", 5, 3)
     checkDecimal(Decimal(BigDecimal("10.030"), 4, 1), "10.0", 4, 1)
@@ -63,13 +66,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
-  test("creating decimals with negative scale") {
-    checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
-    checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
-    checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
-    checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+  test("creating decimals with negative scale under legacy mode") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
+      checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
+      checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
+      checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
+      checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
+      checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+    }
+  }
+
+  test("SPARK-30252: Negative scale is not allowed by default") {
+    def checkNegativeScaleDecimal(d: => Decimal): Unit = {
+      intercept[AnalysisException](d)
+        .getMessage
+        .contains("Negative scale is not allowed under ansi mode")
+    }
+    checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
+    checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
+    checkNegativeScaleDecimal(Decimal(98765L, 5, -3))
+    checkNegativeScaleDecimal(Decimal.createUnsafe(98765L, 5, -3))
   }
 
   test("double and long values") {

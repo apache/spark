@@ -26,6 +26,19 @@ package object kafka010 {   // scalastyle:ignore
   // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
   type PartitionOffsetMap = Map[TopicPartition, Long]
 
+  private[kafka010] val PRODUCER_CACHE_TIMEOUT =
+    ConfigBuilder("spark.kafka.producer.cache.timeout")
+      .doc("The expire time to remove the unused producers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10m")
+
+  private[kafka010] val PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
+    ConfigBuilder("spark.kafka.producer.cache.evictorThreadRunInterval")
+      .doc("The interval of time between runs of the idle evictor thread for producer pool. " +
+        "When non-positive, no idle evictor thread will be run.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1m")
+
   private[kafka010] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.kafka.consumer.cache.capacity")
       .doc("The maximum number of consumers cached. Please note it's a soft limit" +
@@ -65,34 +78,6 @@ package object kafka010 {   // scalastyle:ignore
   private[kafka010] val FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
     ConfigBuilder("spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval")
       .doc("The interval of time between runs of the idle evictor thread for fetched data pool. " +
-        "When non-positive, no idle evictor thread will be run.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("1m")
-
-  private[kafka010] val PRODUCER_CACHE_CAPACITY =
-    ConfigBuilder("spark.kafka.producer.cache.capacity")
-      .doc("The maximum number of producers cached. Please note it's a soft limit" +
-        " (check Structured Streaming Kafka integration guide for further details).")
-      .intConf
-      .createWithDefault(64)
-
-  private[kafka010] val PRODUCER_CACHE_JMX_ENABLED =
-    ConfigBuilder("spark.kafka.producer.cache.jmx.enable")
-      .doc("Enable or disable JMX for pools created with this configuration instance.")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[kafka010] val PRODUCER_CACHE_TIMEOUT =
-    ConfigBuilder("spark.kafka.producer.cache.timeout")
-      .doc("The minimum amount of time a producer may sit idle in the pool before " +
-        "it is eligible for eviction by the evictor. " +
-        "When non-positive, no producers will be evicted from the pool due to idle time alone.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("5m")
-
-  private[kafka010] val PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
-    ConfigBuilder("spark.kafka.producer.cache.evictorThreadRunInterval")
-      .doc("The interval of time between runs of the idle evictor thread for producer pool. " +
         "When non-positive, no idle evictor thread will be run.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1m")

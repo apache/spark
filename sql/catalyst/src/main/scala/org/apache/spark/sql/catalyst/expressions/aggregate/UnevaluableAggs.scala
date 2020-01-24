@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -53,7 +53,7 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   """,
   since = "3.0.0")
 case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_and"
+  override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
 }
 
 @ExpressionDescription(
@@ -69,5 +69,5 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   """,
   since = "3.0.0")
 case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_or"
+  override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")
 }

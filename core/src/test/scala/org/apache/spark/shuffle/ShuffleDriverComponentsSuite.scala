@@ -21,6 +21,7 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.collect.ImmutableMap
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}

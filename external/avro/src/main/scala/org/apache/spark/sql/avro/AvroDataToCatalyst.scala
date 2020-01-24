@@ -39,7 +39,7 @@ case class AvroDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(avroSchema).dataType
+    val dt = SchemaConverters.toSqlType(expectedSchema).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -51,18 +51,24 @@ case class AvroDataToCatalyst(
 
   override def nullable: Boolean = true
 
-  @transient private lazy val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+  private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val reader = new GenericDatumReader[Any](avroSchema)
+  @transient private lazy val actualSchema = new Schema.Parser().parse(jsonFormatSchema)
 
-  @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType)
+  @transient private lazy val expectedSchema = avroOptions.schema
+    .map(expectedSchema => new Schema.Parser().parse(expectedSchema))
+    .getOrElse(actualSchema)
+
+  @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
+
+  @transient private lazy val deserializer = new AvroDeserializer(expectedSchema, dataType)
 
   @transient private var decoder: BinaryDecoder = _
 
   @transient private var result: Any = _
 
   @transient private lazy val parseMode: ParseMode = {
-    val mode = AvroOptions(options).parseMode
+    val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new AnalysisException(unacceptableModeMessage(mode.name))
     }

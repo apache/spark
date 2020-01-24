@@ -22,9 +22,11 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -37,12 +39,18 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   import testImplicits._
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
+  private var linearRegressionData: DataFrame = _
+  private val seed = 42
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
         .map(_.asML))
+
+    linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+      xVariance = Array(0.7, 1.2), nPoints = 1000, seed, eps = 0.5), 2).map(_.asML).toDF()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -64,12 +72,14 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   test("Regression with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestRegressor()
+      .setBootstrap(false)
     regressionTestWithContinuousFeatures(rf)
   }
 
   test("Regression with continuous features and node Id cache :" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestRegressor()
+      .setBootstrap(false)
       .setCacheNodeIds(true)
     regressionTestWithContinuousFeatures(rf)
   }
@@ -156,6 +166,37 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
       assert(i.getImpurity === model.getImpurity)
       assert(i.getMaxBins === model.getMaxBins)
     })
+  }
+
+  test("training with sample weights") {
+    val df = linearRegressionData
+    val numClasses = 0
+    // (numTrees, maxDepth, subsamplingRate, fractionInTol)
+    val testParams = Seq(
+      (50, 5, 1.0, 0.75),
+      (50, 10, 1.0, 0.75),
+      (50, 10, 0.95, 0.78)
+    )
+
+    for ((numTrees, maxDepth, subsamplingRate, tol) <- testParams) {
+      val estimator = new RandomForestRegressor()
+        .setNumTrees(numTrees)
+        .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.05)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[RandomForestRegressionModel,
+        RandomForestRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.2, tol))
+      MLTestingUtils.testOutliersWithSmallWeights[RandomForestRegressionModel,
+        RandomForestRegressor](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.2, tol),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[RandomForestRegressionModel,
+        RandomForestRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.2, tol), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

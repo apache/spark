@@ -106,7 +106,7 @@ select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat
 -- !query 12 schema
 struct<from_json({"time":"26/08/2015"}):struct<time:timestamp>>
 -- !query 12 output
-{"time":2015-08-26 00:00:00.0}
+{"time":2015-08-26 00:00:00}
 
 
 -- !query 13

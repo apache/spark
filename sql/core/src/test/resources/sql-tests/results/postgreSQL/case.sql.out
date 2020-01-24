@@ -176,28 +176,28 @@ struct<None:string,NULL on no matches:int>
 -- !query 18
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query 18 schema
-struct<CASE WHEN (1 = 0) THEN (1 div 0) WHEN (1 = 1) THEN 1 ELSE (2 div 0) END:int>
+struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
 -- !query 18 output
-1
+1.0
 
 
 -- !query 19
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
 -- !query 19 schema
-struct<CASE WHEN (1 = 0) THEN (1 div 0) WHEN (1 = 1) THEN 1 ELSE (2 div 0) END:int>
+struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
 -- !query 19 output
-1
+1.0
 
 
 -- !query 20
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
 -- !query 20 schema
-struct<CASE WHEN (i > 100) THEN (1 div 0) ELSE 0 END:int>
+struct<CASE WHEN (i > 100) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) ELSE CAST(0 AS DOUBLE) END:double>
 -- !query 20 output
-0
-0
-0
-0
+0.0
+0.0
+0.0
+0.0
 
 
 -- !query 21

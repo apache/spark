@@ -27,7 +27,7 @@ struct<>
 -- !query 2 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE or a COMMENT(line 1, pos 0)
+Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE or a COMMENT or a FIRST/AFTER(line 1, pos 0)
 
 == SQL ==
 ALTER TABLE test_change CHANGE a
@@ -87,13 +87,8 @@ ALTER TABLE test_change CHANGE a TYPE INT AFTER b
 -- !query 8 schema
 struct<>
 -- !query 8 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Operation not allowed: ALTER TABLE table CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
-
-== SQL ==
-ALTER TABLE test_change CHANGE a TYPE INT AFTER b
-^^^
+org.apache.spark.sql.AnalysisException
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.;
 
 
 -- !query 9
@@ -101,13 +96,8 @@ ALTER TABLE test_change CHANGE b TYPE STRING FIRST
 -- !query 9 schema
 struct<>
 -- !query 9 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Operation not allowed: ALTER TABLE table CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
-
-== SQL ==
-ALTER TABLE test_change CHANGE b TYPE STRING FIRST
-^^^
+org.apache.spark.sql.AnalysisException
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.;
 
 
 -- !query 10
