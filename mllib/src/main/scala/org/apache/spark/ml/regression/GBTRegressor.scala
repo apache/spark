@@ -261,7 +261,7 @@ class GBTRegressionModel private[ml](
   /**
    * Number of trees in ensemble
    *
-   * @deprecated  Use [[getNumTrees]] instead. This method will be removed in 3.0.0
+   * @deprecated  Use [[getNumTrees]] instead. This method will be removed in 3.0.0.
    */
   @deprecated("Use getNumTrees instead. This method will be removed in 3.0.0.", "2.4.5")
   val numTrees: Int = trees.length
