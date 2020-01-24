@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -2999,6 +3000,127 @@ class Analyzer(
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  object ResolveAlterTableChanges extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case a @ AlterTable(_, _, t: DataSourceV2Relation, changes) =>
+        val schema = t.schema
+        val normalizedChanges = changes.flatMap {
+          case add: AddColumn if add.position() != null && add.position().isInstanceOf[After] =>
+            val parent = add.fieldNames().init
+            val target = schema.findNestedField(parent, includeCollections = true)
+            if (target.isEmpty) {
+              Some(add)
+            } else {
+              val sf = target.get._2
+              sf.dataType match {
+                case struct: StructType =>
+                  val after = add.position().asInstanceOf[After]
+                  struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
+                    case Some(colName) =>
+                      Some(TableChange.addColumn(
+                        add.fieldNames(),
+                        add.dataType(),
+                        add.isNullable,
+                        add.comment,
+                        ColumnPosition.after(colName)))
+                    case None =>
+                      throw new AnalysisException("Couldn't find the reference column for " +
+                        s"AFTER ${after.column()} at ${UnresolvedAttribute(parent).name}")
+                  }
+                case other =>
+                  throw new AnalysisException(
+                    s"Columns can only be added to struct types. Found ${other.simpleString}.")
+              }
+            }
+
+          case typeChange: UpdateColumnType =>
+            // Hive style syntax provides the column type, even if it may not have changed
+            val fieldOpt = schema.findNestedField(
+              typeChange.fieldNames(), includeCollections = true, conf.resolver)
+
+            if (fieldOpt.isEmpty) {
+              // We couldn't resolve the field. Leave it to CheckAnalysis
+              Some(typeChange)
+            } else {
+              val (fieldNames, field) = fieldOpt.get
+              if (field.dataType == typeChange.newDataType()) {
+                // The user didn't want the field to change, so remove this change
+                None
+              } else {
+                Some(TableChange.updateColumnType(
+                  (fieldNames :+ field.name).toArray, typeChange.newDataType()))
+              }
+            }
+          case n: UpdateColumnNullability =>
+            resolveFieldNames(
+              schema,
+              n.fieldNames(),
+              TableChange.updateColumnNullability(_, n.nullable())).orElse(Some(n))
+
+          case position: UpdateColumnPosition =>
+            position.position() match {
+              case after: After => // resolve this column as well
+                val fieldOpt = schema.findNestedField(
+                  position.fieldNames(), includeCollections = true, conf.resolver)
+
+                if (fieldOpt.isEmpty) {
+                  Some(position)
+                } else {
+                  val (normalizedPath, field) = fieldOpt.get
+                  val targetCol = schema.findNestedField(
+                    normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
+                  if (targetCol.isEmpty) {
+                    throw new AnalysisException("Couldn't find the reference column for " +
+                      s"AFTER ${after.column()} at ${UnresolvedAttribute(normalizedPath).name}")
+                  } else {
+                    Some(TableChange.updateColumnPosition(
+                      (normalizedPath :+ field.name).toArray,
+                      ColumnPosition.after(targetCol.get._2.name)))
+                  }
+                }
+              case _ =>
+                resolveFieldNames(
+                  schema,
+                  position.fieldNames(),
+                  TableChange.updateColumnPosition(_, position.position())).orElse(Some(position))
+            }
+
+          case comment: UpdateColumnComment =>
+            resolveFieldNames(
+              schema,
+              comment.fieldNames(),
+              TableChange.updateColumnComment(_, comment.newComment())).orElse(Some(comment))
+
+          case rename: RenameColumn =>
+            resolveFieldNames(
+              schema,
+              rename.fieldNames(),
+              TableChange.renameColumn(_, rename.newName())).orElse(Some(rename))
+
+          case delete: DeleteColumn =>
+            resolveFieldNames(schema, delete.fieldNames(), TableChange.deleteColumn)
+              .orElse(Some(delete))
+
+          case column: ColumnChange =>
+            // This is informational for future developers
+            throw new UnsupportedOperationException(
+              "Please add an implementation for a column change here")
+          case other => Some(other)
+        }
+
+        a.copy(changes = normalizedChanges)
+    }
+
+    private def resolveFieldNames(
+        schema: StructType,
+        fieldNames: Array[String],
+        copy: Array[String] => TableChange): Option[TableChange] = {
+      val fieldOpt = schema.findNestedField(
+        fieldNames, includeCollections = true, conf.resolver)
+      fieldOpt.map { case (path, field) => copy(path +: field.name) }
     }
   }
 }
