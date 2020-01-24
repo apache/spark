@@ -270,15 +270,34 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("select explode of nested field of array of struct") {
-    val query1 = spark.table("contacts")
-      .select(explode(col("friends.first")))
-    checkScan(query1, "struct<friends:array<struct<first:string>>>")
-    checkAnswer(query1, Row("Susan") :: Nil)
+    // Config combinations
+    val configs = Seq((true, true), (true, false), (false, true), (false, false))
 
-    val query2 = spark.table("contacts")
-      .select(explode(col("friends.first")), col("friends.middle"))
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
-    checkAnswer(query2, Row("Susan", Array("Z.")) :: Nil)
+    configs.foreach { case (nestedPruning, nestedPruningOnExpr) =>
+      withSQLConf(
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedPruning.toString,
+          SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> nestedPruningOnExpr.toString) {
+        val query1 = spark.table("contacts")
+          .select(explode(col("friends.first")))
+        if (nestedPruning) {
+          // If `NESTED_SCHEMA_PRUNING_ENABLED` is enabled, even disabling `NESTED_PRUNING_ON_EXPRESSIONS`,
+          // nested schema is still pruned at scan node.
+          checkScan(query1, "struct<friends:array<struct<first:string>>>")
+        } else {
+          checkScan(query1, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        }
+        checkAnswer(query1, Row("Susan") :: Nil)
+
+        val query2 = spark.table("contacts")
+          .select(explode(col("friends.first")), col("friends.middle"))
+        if (nestedPruning) {
+          checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+        } else {
+          checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        }
+        checkAnswer(query2, Row("Susan", Array("Z.")) :: Nil)
+      }
+    }
   }
 
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
