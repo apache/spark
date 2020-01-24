@@ -496,7 +496,7 @@ private[ml] trait ExtraTreesClassifierParams
   extends ExtraTreesParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait ExtraTreesRegressorParams
-  extends ExtraTreesParams with TreeEnsembleRegressorParams with TreeClassifierParams
+  extends ExtraTreesParams with TreeEnsembleRegressorParams with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
