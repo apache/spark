@@ -848,10 +848,6 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  if (is_windows()) {
-    skip("Shouldn't be executed on Windows due to input encoding issues")
-  }
-
   jsonPath <- file.path(
     Sys.getenv("SPARK_HOME"),
     "R", "pkg", "tests", "fulltests", "data",
