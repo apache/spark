@@ -151,11 +151,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS =
     ConfigBuilder("spark.eventLog.gcMetrics.youngGenerationGarbageCollectors")
       .doc("Names of supported young generation garbage collector. A name usually is " +
@@ -232,6 +227,11 @@ package object config {
 
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
+
+  private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
+    ConfigBuilder("spark.executor.processTreeMetrics.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")

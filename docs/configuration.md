@@ -1639,7 +1639,7 @@ Apart from these, the following properties are also available, and may be useful
     are written to the event log.
   </td>
 </tr>
-  <td><code>spark.eventLog.logStageExecutorProcessTreeMetrics.enabled</code></td>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
   <td>false</td>
   <td>
     Whether to collect process tree metrics (from the /proc filesystem) when collecting
