@@ -83,18 +83,14 @@ class CountSerDeUDT extends UserDefinedType[CountSerDeSQL] {
     StructField("sum", IntegerType, false) ::
     Nil)
 
-  def serialize(sql: CountSerDeSQL): Any = {
-    val row = new GenericInternalRow(3)
-    row.setInt(0, 1 + sql.nSer)
-    row.setInt(1, sql.nDeSer)
-    row.setInt(2, sql.sum)
-    row
+  def writeRow(sql: CountSerDeSQL): Row = {
+    Row(1 + sql.nSer, sql.nDeSer, sql.sum)
   }
 
-  def deserialize(any: Any): CountSerDeSQL = any match {
-    case row: InternalRow if (row.numFields == 3) =>
-      CountSerDeSQL(row.getInt(0), 1 + row.getInt(1), row.getInt(2))
-    case u => throw new Exception(s"failed to deserialize: $u")
+  def readRow(row: Row): CountSerDeSQL = {
+    require(row.length == 3,
+      s"CountSerDeSQL.readRow given row with length ${row.length} but requires length == 3")
+    CountSerDeSQL(row.getInt(0), 1 + row.getInt(1), row.getInt(2))
   }
 
   override def equals(obj: Any): Boolean = {
