@@ -312,7 +312,8 @@ abstract class SchemaPruningSuite
         val query1 = spark.table("contacts")
           .select(explode(col("friends.first")))
         if (nestedPruning) {
-          // If `NESTED_SCHEMA_PRUNING_ENABLED` is enabled, even disabling `NESTED_PRUNING_ON_EXPRESSIONS`,
+          // If `NESTED_SCHEMA_PRUNING_ENABLED` is enabled,
+          // even disabling `NESTED_PRUNING_ON_EXPRESSIONS`,
           // nested schema is still pruned at scan node.
           checkScan(query1, "struct<friends:array<struct<first:string>>>")
         } else {
