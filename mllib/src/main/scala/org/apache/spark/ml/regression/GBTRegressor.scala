@@ -303,14 +303,6 @@ class GBTRegressionModel private[ml](
     blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
-  /**
-   * Number of trees in ensemble
-   *
-   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 3.1.0
-   */
-  @deprecated("Use getNumTrees instead. This method will be removed in 3.1.0.", "3.0.0")
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
     copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures),
