@@ -36,9 +36,13 @@ object StaticSQLConf {
     .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
+    .doc("Spark built-in implementation is in-memory and hive," +
+      "when set to yourImpl(can be any words), " +
+      "you need also provide following configuration to make everything going" +
+      "spark.sql.catalogImplementation.yourImpl.builder" +
+      "spark.sql.catalogImplementation.yourImpl.externalCatalog")
     .internal()
     .stringConf
-    .checkValues(Set("hive", "in-memory"))
     .createWithDefault("in-memory")
 
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")

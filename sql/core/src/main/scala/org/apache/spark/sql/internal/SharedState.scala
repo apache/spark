@@ -217,6 +217,12 @@ object SharedState extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
       case "in-memory" => classOf[InMemoryCatalog].getCanonicalName
+      case other => conf.getOption(s"spark.sql.catalogImplementation.$other.externalCatalog")
+          .getOrElse {
+        throw new IllegalArgumentException(
+          "You need to configure spark.sql.catalogImplementation.xx.externalCatalog when xx " +
+              "configured by spark.sql.catalogImplementation is not in-memory nor hive")
+      }
     }
   }
 
