@@ -333,7 +333,7 @@ $(document).ready(function () {
               $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
               $("#toggle-metrics").toggle();
               if (window.localStorage) {
-                        window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
+                  window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
               }
           });
 
