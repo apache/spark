@@ -1029,8 +1029,8 @@ object SparkSession extends Logging {
       case other => conf.getOption(s"spark.sql.catalogImplementation.$other.builder")
           .getOrElse {
         throw new IllegalArgumentException(
-          "You need to configure spark.sql.catalogImplementation.xx.builder when xx configured by" +
-              "spark.sql.catalogImplementation is not in-memory nor hive")
+          s"You need to configure spark.sql.catalogImplementation.$other.builder when " +
+            s"`$other` configured by spark.sql.catalogImplementation is not in-memory nor hive.")
       }
     }
   }

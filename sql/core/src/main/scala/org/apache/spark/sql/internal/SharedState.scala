@@ -220,8 +220,8 @@ object SharedState extends Logging {
       case other => conf.getOption(s"spark.sql.catalogImplementation.$other.externalCatalog")
           .getOrElse {
         throw new IllegalArgumentException(
-          "You need to configure spark.sql.catalogImplementation.xx.externalCatalog when xx " +
-              "configured by spark.sql.catalogImplementation is not in-memory nor hive")
+          s"You need to configure spark.sql.catalogImplementation.$other.externalCatalog when " +
+            s"`$other` configured by spark.sql.catalogImplementation is not in-memory nor hive.")
       }
     }
   }
