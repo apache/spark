@@ -17,7 +17,10 @@
 
 # TODO Remove before merging SPARK-23435
 if (!grepl("^2\\..*", installed.packages()["testthat", "Version"])) {
-  install.packages("testthat", repos = "https://cloud.r-project.org/")
+  install.packages(
+    "https://cloud.r-project.org/src/contrib/Archive/testthat/testthat_2.3.0.tar.gz",
+    repos = NULL, type = "source"
+  )
 }
 
 library(testthat)
