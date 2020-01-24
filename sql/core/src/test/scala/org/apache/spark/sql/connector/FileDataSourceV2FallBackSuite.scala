@@ -87,10 +87,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
 
-    override protected def sparkConf: SparkConf =
-      super
-        .sparkConf
-        .set(SQLConf.USE_V1_SOURCE_LIST, "")
+  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("Fall back to v1 when writing to file with read only FileDataSourceV2") {
     val df = spark.range(10).toDF()
