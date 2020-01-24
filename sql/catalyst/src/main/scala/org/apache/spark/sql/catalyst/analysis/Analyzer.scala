@@ -3121,7 +3121,7 @@ class Analyzer(
         copy: Array[String] => TableChange): Option[TableChange] = {
       val fieldOpt = schema.findNestedField(
         fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => copy(path +: field.name) }
+      fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
     }
   }
 }

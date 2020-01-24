@@ -434,7 +434,7 @@ trait CheckAnalysis extends PredicateHelper {
                 throw new AnalysisException(
                   s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
               }
-              field.get
+              field.get._2
             }
 
             alter.changes.foreach {
