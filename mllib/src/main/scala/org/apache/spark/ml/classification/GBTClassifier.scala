@@ -319,7 +319,12 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  /** Number of trees in ensemble */
+  /**
+   * Number of trees in ensemble
+   *
+   * @deprecated  Use [[getNumTrees]] instead. This method will be removed in 3.0.0.
+   */
+  @deprecated("Use getNumTrees instead. This method will be removed in 3.0.0.", "2.4.5")
   val numTrees: Int = trees.length
 
   @Since("1.4.0")
@@ -330,7 +335,7 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTClassificationModel (uid=$uid) with $numTrees trees"
+    s"GBTClassificationModel (uid=$uid) with $getNumTrees trees"
   }
 
   /**
@@ -349,7 +354,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */
