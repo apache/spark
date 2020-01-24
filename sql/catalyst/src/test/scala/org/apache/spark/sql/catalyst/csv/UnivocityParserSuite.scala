@@ -25,8 +25,11 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -142,11 +145,11 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       "timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
-    val expected = 1420070400 * DateTimeUtils.MICROS_PER_SECOND
+    val expected = 1420070400 * MICROS_PER_SECOND
     assert(parser.makeConverter("_1", TimestampType).apply(timestamp) ==
       expected)
     assert(parser.makeConverter("_1", DateType).apply("2015-01-01") ==
-      expected / DateTimeUtils.MICROS_PER_DAY)
+      expected / MICROS_PER_DAY)
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
@@ -268,5 +271,53 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
     assert(convertedValue.isInstanceOf[UTF8String])
     assert(convertedValue == expected)
+  }
+
+  test("skipping rows using pushdown filters") {
+    def check(
+        input: String = "1,a",
+        dataSchema: StructType = StructType.fromDDL("i INTEGER, s STRING"),
+        requiredSchema: StructType = StructType.fromDDL("i INTEGER"),
+        filters: Seq[Filter],
+        expected: Option[InternalRow]): Unit = {
+      Seq(false, true).foreach { columnPruning =>
+        val options = new CSVOptions(Map.empty[String, String], columnPruning, "GMT")
+        val parser = new UnivocityParser(dataSchema, requiredSchema, options, filters)
+        val actual = parser.parse(input)
+        assert(actual === expected)
+      }
+    }
+
+    check(filters = Seq(), expected = Some(InternalRow(1)))
+    check(filters = Seq(EqualTo("i", 1)), expected = Some(InternalRow(1)))
+    check(filters = Seq(EqualTo("i", 2)), expected = None)
+    check(
+      requiredSchema = StructType.fromDDL("s STRING"),
+      filters = Seq(StringStartsWith("s", "b")),
+      expected = None)
+    check(
+      requiredSchema = StructType.fromDDL("i INTEGER, s STRING"),
+      filters = Seq(StringStartsWith("s", "a")),
+      expected = Some(InternalRow(1, UTF8String.fromString("a"))))
+    check(
+      input = "1,a,3.14",
+      dataSchema = StructType.fromDDL("i INTEGER, s STRING, d DOUBLE"),
+      requiredSchema = StructType.fromDDL("i INTEGER, d DOUBLE"),
+      filters = Seq(EqualTo("d", 3.14)),
+      expected = Some(InternalRow(1, 3.14)))
+
+    val errMsg = intercept[IllegalArgumentException] {
+      check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
+    }.getMessage
+    assert(errMsg.contains("invalid attr does not exist"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      check(
+        dataSchema = new StructType(),
+        requiredSchema = new StructType(),
+        filters = Seq(EqualTo("i", 1)),
+        expected = Some(InternalRow.empty))
+    }.getMessage
+    assert(errMsg2.contains("i does not exist"))
   }
 }

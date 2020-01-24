@@ -53,7 +53,8 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
+  val calenderintervalArray = Array(
+    new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(

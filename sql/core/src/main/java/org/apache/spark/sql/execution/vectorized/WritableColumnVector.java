@@ -27,6 +27,7 @@ import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -370,6 +371,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
       putByteArray(rowId, bigInteger.toByteArray());
     }
+  }
+
+  public void putInterval(int rowId, CalendarInterval value) {
+    getChild(0).putInt(rowId, value.months);
+    getChild(1).putInt(rowId, value.days);
+    getChild(2).putLong(rowId, value.microseconds);
   }
 
   @Override
@@ -736,10 +743,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
-      // Two columns. Months as int. Microseconds as Long.
-      this.childColumns = new WritableColumnVector[2];
+      // Three columns. Months as int. Days as Int. Microseconds as Long.
+      this.childColumns = new WritableColumnVector[3];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
     } else {
       this.childColumns = null;
     }

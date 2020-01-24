@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 private[columnar] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
@@ -285,6 +285,20 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     if (!row.isNullAt(ordinal)) {
       val size = BINARY.actualSize(row, ordinal)
       sizeInBytes += size
+      count += 1
+    } else {
+      gatherNullStats
+    }
+  }
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
+private[columnar] final class IntervalColumnStats extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      sizeInBytes += CALENDAR_INTERVAL.actualSize(row, ordinal)
       count += 1
     } else {
       gatherNullStats

@@ -158,7 +158,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
-      0 until rdd.partitions.size, resultHandler, () => Unit)
+      0 until rdd.partitions.size, resultHandler, () => ())
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
@@ -251,7 +251,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // stage so that we can check the state of the output committer.
     val retriedStage = sc.parallelize(1 to 100, 10)
       .map { i => (i % 10, i) }
-      .reduceByKey { case (_, _) =>
+      .reduceByKey { (_, _) =>
         val ctx = TaskContext.get()
         if (ctx.stageAttemptNumber() == 0) {
           throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1L, 1, 1,

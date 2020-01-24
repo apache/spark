@@ -44,6 +44,10 @@ trait CompressionCodec {
 
   def compressedOutputStream(s: OutputStream): OutputStream
 
+  private[spark] def compressedContinuousOutputStream(s: OutputStream): OutputStream = {
+    compressedOutputStream(s)
+  }
+
   def compressedInputStream(s: InputStream): InputStream
 
   private[spark] def compressedContinuousInputStream(s: InputStream): InputStream = {
@@ -218,6 +222,12 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
     new BufferedOutputStream(new ZstdOutputStream(s, level), bufferSize)
+  }
+
+  override private[spark] def compressedContinuousOutputStream(s: OutputStream) = {
+    // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
+    // stuck on reading open frame.
+    new BufferedOutputStream(new ZstdOutputStream(s, level).setCloseFrameOnFlush(true), bufferSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {

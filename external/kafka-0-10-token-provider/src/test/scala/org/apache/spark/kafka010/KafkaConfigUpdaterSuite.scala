@@ -19,9 +19,11 @@ package org.apache.spark.kafka010
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL}
+import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 
 import org.apache.spark.SparkFunSuite
 
@@ -65,14 +67,21 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   test("setAuthenticationConfigIfNeeded with global security should not set values") {
-    val params = Map.empty[String, String]
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
     setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
       .setAuthenticationConfigIfNeeded()
       .build()
 
-    assert(updatedParams.size() === 0)
+    assert(updatedParams.asScala === params)
   }
 
   test("setAuthenticationConfigIfNeeded with token should set values") {
@@ -104,7 +113,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
       )
     )
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
       .setAuthenticationConfigIfNeeded()
@@ -128,7 +137,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     val e = intercept[IllegalArgumentException] {
       KafkaConfigUpdater(testModule, params)

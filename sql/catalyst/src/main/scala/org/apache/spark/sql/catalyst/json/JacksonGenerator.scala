@@ -133,6 +133,10 @@ private[sql] class JacksonGenerator(
         val dateString = dateFormatter.format(row.getInt(ordinal))
         gen.writeString(dateString)
 
+    case CalendarIntervalType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(row.getInterval(ordinal).toString)
+
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeBinary(row.getBinary(ordinal))
@@ -184,6 +188,9 @@ private[sql] class JacksonGenerator(
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
+      } else if (!options.ignoreNullFields) {
+        gen.writeFieldName(field.name)
+        gen.writeNull()
       }
       i += 1
     }

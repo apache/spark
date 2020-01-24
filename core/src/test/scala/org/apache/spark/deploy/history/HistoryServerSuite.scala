@@ -185,7 +185,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     test(name) {
       val (code, jsonOpt, errOpt) = getContentAndCode(path)
       code should be (HttpServletResponse.SC_OK)
-      jsonOpt should be ('defined)
+      jsonOpt should be (Symbol("defined"))
       errOpt should be (None)
 
       val exp = IOUtils.toString(new FileInputStream(

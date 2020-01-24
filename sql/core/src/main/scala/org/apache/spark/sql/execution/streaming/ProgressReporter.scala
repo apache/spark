@@ -24,9 +24,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
@@ -88,7 +89,7 @@ trait ProgressReporter extends Logging {
   private var lastNoDataProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(getTimeZone("UTC"))
+  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -147,8 +148,8 @@ trait ProgressReporter extends Logging {
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
-    val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
+    val processingTimeSec = Math.max(1L,
+      currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
@@ -172,6 +173,7 @@ trait ProgressReporter extends Logging {
     val sinkProgress = SinkProgress(
       sink.toString,
       sinkCommitProgress.map(_.numOutputRows))
+    val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -183,7 +185,8 @@ trait ProgressReporter extends Logging {
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
-      sink = sinkProgress)
+      sink = sinkProgress,
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
     if (hasNewData) {
       // Reset noDataEventTimestamp if we processed any data
@@ -320,6 +323,16 @@ trait ProgressReporter extends Logging {
         Map.empty
       }
     }
+  }
+
+  /** Extracts observed metrics from the most recent query execution. */
+  private def extractObservedMetrics(
+      hasNewData: Boolean,
+      lastExecution: QueryExecution): Map[String, Row] = {
+    if (!hasNewData || lastExecution == null) {
+      return Map.empty
+    }
+    lastExecution.observedMetrics
   }
 
   /** Records the duration of running `body` for the next query progress update. */

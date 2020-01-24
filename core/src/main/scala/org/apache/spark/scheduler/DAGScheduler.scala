@@ -267,7 +267,7 @@ private[spark] class DAGScheduler(
       executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
-    blockManagerMaster.driverEndpoint.askSync[Boolean](
+    blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 
@@ -400,7 +400,8 @@ private[spark] class DAGScheduler(
     if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
+      logInfo(s"Registering RDD ${rdd.id} (${rdd.getCreationSite}) as input to " +
+        s"shuffle ${shuffleDep.shuffleId}")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
     }
     stage
@@ -694,9 +695,13 @@ private[spark] class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.isEmpty) {
+      val clonedProperties = Utils.cloneProperties(properties)
+      if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) == null) {
+        clonedProperties.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, callSite.shortForm)
+      }
       val time = clock.getTimeMillis()
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
+        SparkListenerJobStart(jobId, time, Seq.empty, clonedProperties))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks
@@ -1080,7 +1085,8 @@ private[spark] class DAGScheduler(
   private def submitStage(stage: Stage): Unit = {
     val jobId = activeJobForStage(stage)
     if (jobId.isDefined) {
-      logDebug("submitStage(" + stage + ")")
+      logDebug(s"submitStage($stage (name=${stage.name};" +
+        s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)

@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 
 
 /**
@@ -48,7 +50,14 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends BasePandasGroupExec(func, output) with UnaryExecNode {
+  extends SparkPlan with UnaryExecNode {
+
+  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pandasFunction = func.asInstanceOf[PythonUDF].func
+  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -72,7 +81,7 @@ case class FlatMapGroupsInPandasExec(
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
       val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
-        .map{case(_, x) => x}
+        .map { case (_, x) => x }
 
       val runner = new ArrowPythonRunner(
         chainedFunc,
@@ -82,7 +91,7 @@ case class FlatMapGroupsInPandasExec(
         sessionLocalTimeZone,
         pythonRunnerConf)
 
-      executePython(data, runner)
+      executePython(data, output, runner)
     }}
   }
 }

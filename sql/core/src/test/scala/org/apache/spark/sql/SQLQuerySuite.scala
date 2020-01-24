@@ -22,13 +22,19 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.parallel.immutable.ParVector
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -38,8 +44,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -57,7 +64,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
+        ++ FunctionsCommand.virtualOperators, pattern)
         .map(Row(_))
     }
 
@@ -169,7 +177,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      spark.sessionState.functionRegistry.listFunction().par.foreach { funcId =>
+      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+      parFuncs.foreach { funcId =>
         // Examples can change settings. We clone the session to prevent tests clashing.
         val clonedSpark = spark.cloneSession()
         val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -777,8 +786,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |   SELECT * FROM testData UNION ALL
           |   SELECT * FROM testData) y
           |WHERE x.key = y.key""".stripMargin),
-      testData.rdd.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -1551,7 +1561,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     import org.apache.spark.unsafe.types.CalendarInterval
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123 )))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -1559,35 +1569,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
-
-    val e1 = intercept[AnalysisException] {
-      sql("select interval")
-    }
-    assert(e1.message.contains("at least one time unit should be given for interval literal"))
-
-    // Currently we don't yet support nanosecond
-    val e2 = intercept[AnalysisException] {
-      sql("select interval 23 nanosecond")
-    }
-    assert(e2.message.contains("no viable alternative at input 'interval 23 nanosecond'"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.unsafe.types.CalendarInterval
-    import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
-
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
-    checkAnswer(df.select(df("i") + new CalendarInterval(2, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
+    checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new CalendarInterval(2, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
+    checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
 
     // unary minus
     checkAnswer(df.select(-df("i")),
-      Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+      Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
   }
 
   test("aggregation with codegen updates peak execution memory") {
@@ -2843,6 +2839,44 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
 
+  test("Support filter clause for aggregate function with hash aggregate") {
+    Seq(("COUNT(a)", 3), ("COLLECT_LIST(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+      val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collect {
+        case agg: HashAggregateExec => agg.aggregateExpressions
+        case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
+      }
+      checkAnswer(df, Row(funcToResult._2))
+    }
+  }
+
+  test("Support filter clause for aggregate function uses SortAggregateExec") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collect {
+        case agg: SortAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
+      }
+      checkAnswer(df, Row(3))
+    }
+  }
+
   test("Non-deterministic aggregate functions should not be deduplicated") {
     val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -3250,7 +3284,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
              |on leftside.a = rightside.a
            """.stripMargin)
 
-        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+        val inMemoryTableScan = collect(queryDf.queryExecution.executedPlan) {
           case i: InMemoryTableScanExec => i
         }
         assert(inMemoryTableScan.size == 2)
@@ -3310,6 +3344,45 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |) t3
           |ON t1.x=t3.x
         """.stripMargin).collect()
+    }
+  }
+
+  test("SPARK-29682: Conflicting attributes in Expand are resolved") {
+    val numsDF = Seq(1, 2, 3).toDF("nums")
+    val cubeDF = numsDF.cube("nums").agg(max(lit(0)).as("agcol"))
+
+    checkAnswer(
+      cubeDF.join(cubeDF, "nums"),
+      Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
+  }
+
+  test("SPARK-29860: Fix dataType mismatch issue for InSubquery") {
+    withTempView("ta", "tb", "tc", "td", "te", "tf") {
+      sql("CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(8, 0))) AS ta(id)")
+      sql("CREATE TEMPORARY VIEW tb AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(7, 2))) AS tb(id)")
+      sql("CREATE TEMPORARY VIEW tc AS SELECT * FROM VALUES(CAST(1 AS DOUBLE)) AS tc(id)")
+      sql("CREATE TEMPORARY VIEW td AS SELECT * FROM VALUES(CAST(1 AS FLOAT)) AS td(id)")
+      sql("CREATE TEMPORARY VIEW te AS SELECT * FROM VALUES(CAST(1 AS BIGINT)) AS te(id)")
+      sql("CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
+      val df1 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tb)")
+      checkAnswer(df1, Row(new java.math.BigDecimal(1)))
+      val df2 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tc)")
+      checkAnswer(df2, Row(new java.math.BigDecimal(1)))
+      val df3 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM td)")
+      checkAnswer(df3, Row(new java.math.BigDecimal(1)))
+      val df4 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM te)")
+      checkAnswer(df4, Row(new java.math.BigDecimal(1)))
+      val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
+      checkAnswer(df5, Array.empty[Row])
+    }
+  }
+
+  test("SPARK-30447: fix constant propagation inside NOT") {
+    withTempView("t") {
+      Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
+      val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
+
+      checkAnswer(df, Row(1))
     }
   }
 }

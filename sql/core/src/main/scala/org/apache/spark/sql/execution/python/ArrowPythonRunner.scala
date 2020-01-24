@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -42,8 +43,8 @@ class ArrowPythonRunner(
     schema: StructType,
     timeZoneId: String,
     conf: Map[String, String])
-  extends BaseArrowPythonRunner[Iterator[InternalRow]](
-    funcs, evalType, argOffsets) {
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
+  with PythonArrowOutput {
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(

@@ -20,6 +20,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
+function shouldRenderPlanViz() {
+  return planVizContainer().selectAll("svg").empty();
+}
+
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
@@ -61,7 +65,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
     .on('mouseover', function(d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "right"
+        title: nodeTooltip, trigger: "manual", container: "body", placement: "top"
       });
       $(domNode).tooltip("show");
     })

@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -30,7 +31,6 @@ import scala.reflect.ClassTag
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
-import org.mockito.invocation.InvocationOnMock
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -143,12 +143,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // need to create a SparkContext is to initialize LiveListenerBus.
     sc = mock(classOf[SparkContext])
     when(sc.conf).thenReturn(conf)
-    master = spy(new BlockManagerMaster(
-      rpcEnv.setupEndpoint("blockmanager",
-        new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-          new LiveListenerBus(conf), None)), conf, true))
 
-    val initialize = PrivateMethod[Unit]('initialize)
+    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
+    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        new LiveListenerBus(conf), None, blockManagerInfo)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
+      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
+
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
   }
 
@@ -469,7 +472,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    val reregister = !master.driverEndpoint.askSync[Boolean](
+    val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister)
   }
@@ -570,7 +573,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
@@ -593,7 +596,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
@@ -651,7 +654,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       // check getRemoteBytes
       val bytesViaStore1 = cleanBm.getRemoteBytes(blockId)
       assert(bytesViaStore1.isDefined)
-      val expectedContent = sameHostBm.getBlockData(blockId).nioByteBuffer().array()
+      val expectedContent = sameHostBm.getLocalBlockData(blockId).nioByteBuffer().array()
       assert(bytesViaStore1.get.toArray === expectedContent)
 
       // check getRemoteValues
@@ -1092,7 +1095,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockStatus = blockStatusOption.get
     assert((blockStatus.diskSize > 0) === !storageLevel.useMemory)
     assert((blockStatus.memSize > 0) === storageLevel.useMemory)
-    assert(blockManager.getBlockData(blockId).nioByteBuffer().array() === ser)
+    assert(blockManager.getLocalBlockData(blockId).nioByteBuffer().array() === ser)
   }
 
   Seq(

@@ -30,27 +30,44 @@ trait ResourceAllocator {
 
   protected def resourceName: String
   protected def resourceAddresses: Seq[String]
+  protected def slotsPerAddress: Int
 
   /**
-   * Map from an address to its availability, the value `true` means the address is available,
-   * while value `false` means the address is assigned.
+   * Map from an address to its availability, a value > 0 means the address is available,
+   * while value of 0 means the address is fully assigned.
+   *
+   * For task resources ([[org.apache.spark.scheduler.ExecutorResourceInfo]]), this value
+   * can be a multiple, such that each address can be allocated up to [[slotsPerAddress]]
+   * times.
+   *
    * TODO Use [[OpenHashMap]] instead to gain better performance.
    */
-  private lazy val addressAvailabilityMap = mutable.HashMap(resourceAddresses.map(_ -> true): _*)
+  private lazy val addressAvailabilityMap = {
+    mutable.HashMap(resourceAddresses.map(_ -> slotsPerAddress): _*)
+  }
 
   /**
    * Sequence of currently available resource addresses.
+   *
+   * With [[slotsPerAddress]] greater than 1, [[availableAddrs]] can contain duplicate addresses
+   * e.g. with [[slotsPerAddress]] == 2, availableAddrs for addresses 0 and 1 can look like
+   * Seq("0", "0", "1"), where address 0 has two assignments available, and 1 has one.
    */
-  def availableAddrs: Seq[String] = addressAvailabilityMap.flatMap { case (addr, available) =>
-    if (available) Some(addr) else None
-  }.toSeq
+  def availableAddrs: Seq[String] = addressAvailabilityMap
+    .flatMap { case (addr, available) =>
+      (0 until available).map(_ => addr)
+    }.toSeq
 
   /**
    * Sequence of currently assigned resource addresses.
+   *
+   * With [[slotsPerAddress]] greater than 1, [[assignedAddrs]] can contain duplicate addresses
+   * e.g. with [[slotsPerAddress]] == 2, assignedAddrs for addresses 0 and 1 can look like
+   * Seq("0", "1", "1"), where address 0 was assigned once, and 1 was assigned twice.
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>
-      if (!available) Some(addr) else None
+      (0 until slotsPerAddress - available).map(_ => addr)
     }.toSeq
 
   /**
@@ -65,8 +82,8 @@ trait ResourceAllocator {
           s"address $address doesn't exist.")
       }
       val isAvailable = addressAvailabilityMap(address)
-      if (isAvailable) {
-        addressAvailabilityMap(address) = false
+      if (isAvailable > 0) {
+        addressAvailabilityMap(address) = addressAvailabilityMap(address) - 1
       } else {
         throw new SparkException("Try to acquire an address that is not available. " +
           s"$resourceName address $address is not available.")
@@ -86,8 +103,8 @@ trait ResourceAllocator {
           s"address $address doesn't exist.")
       }
       val isAvailable = addressAvailabilityMap(address)
-      if (!isAvailable) {
-        addressAvailabilityMap(address) = true
+      if (isAvailable < slotsPerAddress) {
+        addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
       } else {
         throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +
           s"address $address is not assigned.")

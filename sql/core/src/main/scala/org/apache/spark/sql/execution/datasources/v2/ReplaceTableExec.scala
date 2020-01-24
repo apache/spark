@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -35,16 +33,16 @@ case class ReplaceTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    orCreate: Boolean) extends LeafExecNode {
+    orCreate: Boolean) extends V2CommandExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
     }
     catalog.createTable(ident, tableSchema, partitioning.toArray, tableProperties.asJava)
-    sqlContext.sparkContext.parallelize(Seq.empty, 1)
+    Seq.empty
   }
 
   override def output: Seq[Attribute] = Seq.empty
@@ -56,9 +54,9 @@ case class AtomicReplaceTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    orCreate: Boolean) extends LeafExecNode {
+    orCreate: Boolean) extends V2CommandExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
         identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
@@ -74,8 +72,7 @@ case class AtomicReplaceTableExec(
       throw new CannotReplaceMissingTableException(identifier)
     }
     commitOrAbortStagedChanges(staged)
-
-    sqlContext.sparkContext.parallelize(Seq.empty, 1)
+    Seq.empty
   }
 
   override def output: Seq[Attribute] = Seq.empty

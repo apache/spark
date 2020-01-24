@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -36,6 +37,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
@@ -171,19 +174,22 @@ case class DescribeDatabaseCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
+    val allDbProperties = dbMetadata.properties
     val result =
       Row("Database Name", dbMetadata.name) ::
-        Row("Description", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
+        Row("Comment", dbMetadata.description) ::
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
 
     if (extended) {
-      val properties =
-        if (dbMetadata.properties.isEmpty) {
+      val properties = allDbProperties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+      val propertiesStr =
+        if (properties.isEmpty) {
           ""
         } else {
-          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
+          properties.toSeq.mkString("(", ", ", ")")
         }
-      result :+ Row("Properties", properties)
+      result :+ Row("Properties", propertiesStr)
     } else {
       result
     }
@@ -270,7 +276,7 @@ case class AlterTableSetPropertiesCommand(
     // direct property.
     val newTable = table.copy(
       properties = table.properties ++ properties,
-      comment = properties.get("comment").orElse(table.comment))
+      comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment))
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -299,14 +305,14 @@ case class AlterTableUnsetPropertiesCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
-        if (!table.properties.contains(k) && k != "comment") {
+        if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
           throw new AnalysisException(
             s"Attempted to unset non-existent property '$k' in table '${table.identifier}'")
         }
       }
     }
     // If comment is in the table property, we reset it to None
-    val tableComment = if (propKeys.contains("comment")) None else table.comment
+    val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
     val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
@@ -469,14 +475,26 @@ case class AlterTableAddPartitionCommand(
       CatalogTablePartition(normalizedSpec, table.storage.copy(
         locationUri = location.map(CatalogUtils.stringToURI)))
     }
-    catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
+
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
+    // Also the request to metastore times out when adding lot of partitions in one shot.
+    // we should split them into smaller batches
+    val batchSize = 100
+    parts.toIterator.grouped(batchSize).foreach { batch =>
+      catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
+    }
 
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val addedSize = parts.map { part =>
-          CommandUtils.calculateLocationSize(sparkSession.sessionState, table.identifier,
-            part.storage.locationUri)
-        }.sum
+        def calculatePartSize(part: CatalogTablePartition) = CommandUtils.calculateLocationSize(
+          sparkSession.sessionState, table.identifier, part.storage.locationUri)
+        val threshold = sparkSession.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
+        val partSizes = if (parts.length > threshold) {
+            ThreadUtils.parmap(parts, "gatheringNewPartitionStats", 8)(calculatePartSize)
+          } else {
+            parts.map(calculatePartSize)
+          }
+        val addedSize = partSizes.sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
           catalog.alterTableStats(table.identifier, Some(newStats))
@@ -684,7 +702,7 @@ case class AlterTableRecoverPartitionsCommand(
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
+        val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
         parArray
       } else {

@@ -363,11 +363,11 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
     }
   }
 
-  private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
-  private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
-  private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _addBatchProcTime = PrivateMethod[Unit](Symbol("addBatchProcTime"))
+  private val _requestExecutors = PrivateMethod[Unit](Symbol("requestExecutors"))
+  private val _killExecutor = PrivateMethod[Unit](Symbol("killExecutor"))
   private val _executorAllocationManager =
-    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
+    PrivateMethod[Option[ExecutorAllocationManager]](Symbol("executorAllocationManager"))
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)

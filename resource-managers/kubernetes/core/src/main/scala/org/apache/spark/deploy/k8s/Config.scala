@@ -36,6 +36,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_MASTER_URL =
+    ConfigBuilder("spark.kubernetes.driver.master")
+      .doc("The internal Kubernetes master (API server) address " +
+        "to be used for driver to request executors.")
+      .stringConf
+      .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -139,6 +146,12 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for each executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.scheduler.name")
+      .doc("Specify the scheduler name for each executor pod")
       .stringConf
       .createOptional
 

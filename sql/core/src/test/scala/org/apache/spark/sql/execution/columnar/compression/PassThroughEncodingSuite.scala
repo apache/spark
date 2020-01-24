@@ -160,8 +160,7 @@ class PassThroughSuite extends SparkFunSuite {
     }
 
     test(s"$PassThrough with $typeName: long random series") {
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[T#InternalType]))
+      skeleton(Seq.fill[T#InternalType](10000)(makeRandomValue(columnType)))
     }
 
     test(s"$PassThrough with $typeName: empty column for decompress()") {
@@ -169,8 +168,7 @@ class PassThroughSuite extends SparkFunSuite {
     }
 
     test(s"$PassThrough with $typeName: long random series for decompress()") {
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeletonForDecompress(input.map(_.asInstanceOf[T#InternalType]))
+      skeletonForDecompress(Seq.fill[T#InternalType](10000)(makeRandomValue(columnType)))
     }
 
     test(s"$PassThrough with $typeName: simple case with null for decompress()") {

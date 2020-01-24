@@ -40,18 +40,21 @@ import java.util.Map;
 public interface SupportsNamespaces extends CatalogPlugin {
 
   /**
-   * Return a default namespace for the catalog.
-   * <p>
-   * When this catalog is set as the current catalog, the namespace returned by this method will be
-   * set as the current namespace.
-   * <p>
-   * The namespace returned by this method is not required to exist.
-   *
-   * @return a multi-part namespace
+   * A reserved property to specify the location of the namespace. If the namespace
+   * needs to store files, it should be under this location.
    */
-  default String[] defaultNamespace() {
-    return new String[0];
-  }
+  String PROP_LOCATION = "location";
+
+  /**
+   * A reserved property to specify the description of the namespace. The description
+   * will be returned in the result of "DESCRIBE NAMESPACE" command.
+   */
+  String PROP_COMMENT = "comment";
+
+  /**
+   * A reserved property to specify the owner of the namespace.
+   */
+  String PROP_OWNER = "owner";
 
   /**
    * List top-level namespaces from the catalog.
@@ -131,16 +134,14 @@ public interface SupportsNamespaces extends CatalogPlugin {
       NamespaceChange... changes) throws NoSuchNamespaceException;
 
   /**
-   * Drop a namespace from the catalog.
+   * Drop a namespace from the catalog, recursively dropping all objects within the namespace.
    * <p>
-   * This operation may be rejected by the catalog implementation if the namespace is not empty by
-   * throwing {@link IllegalStateException}. If the catalog implementation does not support this
-   * operation, it may throw {@link UnsupportedOperationException}.
+   * If the catalog implementation does not support this operation, it may throw
+   * {@link UnsupportedOperationException}.
    *
    * @param namespace a multi-part namespace
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
-   * @throws IllegalStateException If the namespace is not empty
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
   boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException;

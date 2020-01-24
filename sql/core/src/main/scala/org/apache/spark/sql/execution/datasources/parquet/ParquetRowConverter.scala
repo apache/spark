@@ -154,7 +154,7 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  private val UTC = DateTimeUtils.TimeZoneUTC
+  private[this] val UTC = DateTimeUtils.TimeZoneUTC
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -171,17 +171,15 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
-
-  private val unsafeProjection = UnsafeProjection.create(catalystType)
+  private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   /**
-   * The [[UnsafeRow]] converted from an entire Parquet record.
+   * The [[InternalRow]] converted from an entire Parquet record.
    */
-  def currentRecord: UnsafeRow = unsafeProjection(currentRow)
+  def currentRecord: InternalRow = currentRow
 
   // Converters for each field.
-  private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+  private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     parquetType.getFields.asScala.map { parquetField =>
       val fieldIndex = catalystType.fieldIndex(parquetField.getName)
       val catalystField = catalystType(fieldIndex)
@@ -190,12 +188,15 @@ private[parquet] class ParquetRowConverter(
     }.toArray
   }
 
+  // Updaters for each field.
+  private[this] val fieldUpdaters: Array[ParentContainerUpdater] = fieldConverters.map(_.updater)
+
   override def getConverter(fieldIndex: Int): Converter = fieldConverters(fieldIndex)
 
   override def end(): Unit = {
     var i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.end()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).end()
       i += 1
     }
     updater.set(currentRow)
@@ -203,13 +204,14 @@ private[parquet] class ParquetRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < currentRow.numFields) {
+    val numFields = currentRow.numFields
+    while (i < numFields) {
       currentRow.setNullAt(i)
       i += 1
     }
     i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.start()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).start()
       i += 1
     }
   }
@@ -320,10 +322,34 @@ private[parquet] class ParquetRowConverter(
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
+        val wrappedUpdater = {
+          // SPARK-30338: avoid unnecessary InternalRow copying for nested structs:
+          // There are two cases to handle here:
+          //
+          //  1. Parent container is a map or array: we must make a deep copy of the mutable row
+          //     because this converter may be invoked multiple times per Parquet input record
+          //     (if the map or array contains multiple elements).
+          //
+          //  2. Parent container is a struct: we don't need to copy the row here because either:
+          //
+          //     (a) all ancestors are structs and therefore no copying is required because this
+          //         converter will only be invoked once per Parquet input record, or
+          //     (b) some ancestor is struct that is nested in a map or array and that ancestor's
+          //         converter will perform deep-copying (which will recursively copy this row).
+          if (updater.isInstanceOf[RowUpdater]) {
+            // `updater` is a RowUpdater, implying that the parent container is a struct.
+            updater
+          } else {
+            // `updater` is NOT a RowUpdater, implying that the parent container a map or array.
+            new ParentContainerUpdater {
+              override def set(value: Any): Unit = {
+                updater.set(value.asInstanceOf[SpecificInternalRow].copy())  // deep copy
+              }
+            }
+          }
+        }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
-            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-          })
+          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
@@ -466,9 +492,9 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = ArrayBuffer.empty[Any]
 
-    private val elementConverter: Converter = {
+    private[this] val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
 
@@ -519,10 +545,7 @@ private[parquet] class ParquetRowConverter(
 
     override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
-    // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
-    // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
-    // in row cells.
-    override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+    override def start(): Unit = currentArray.clear()
 
     /** Array element converter */
     private final class ElementConverter(parquetType: Type, catalystType: DataType)
@@ -530,9 +553,10 @@ private[parquet] class ParquetRowConverter(
 
       private var currentElement: Any = _
 
-      private val converter = newConverter(parquetType, catalystType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentElement = value
-      })
+      private[this] val converter =
+        newConverter(parquetType, catalystType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentElement = value
+        })
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
@@ -549,10 +573,10 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentKeys: ArrayBuffer[Any] = _
-    private var currentValues: ArrayBuffer[Any] = _
+    private[this] val currentKeys = ArrayBuffer.empty[Any]
+    private[this] val currentValues = ArrayBuffer.empty[Any]
 
-    private val keyValueConverter = {
+    private[this] val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
       new KeyValueConverter(
         repeatedType.getType(0),
@@ -567,15 +591,15 @@ private[parquet] class ParquetRowConverter(
       // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
       // undefined.
       // TODO (SPARK-26174): disallow it with a config.
-      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
+      updater.set(
+        new ArrayBasedMapData(
+          new GenericArrayData(currentKeys.toArray),
+          new GenericArrayData(currentValues.toArray)))
     }
 
-    // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
-    // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
-    // cells.
     override def start(): Unit = {
-      currentKeys = ArrayBuffer.empty[Any]
-      currentValues = ArrayBuffer.empty[Any]
+      currentKeys.clear()
+      currentValues.clear()
     }
 
     /** Parquet converter for key-value pairs within the map. */
@@ -590,7 +614,7 @@ private[parquet] class ParquetRowConverter(
 
       private var currentValue: Any = _
 
-      private val converters = Array(
+      private[this] val converters = Array(
         // Converter for keys
         newConverter(parquetKeyType, catalystKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
@@ -616,10 +640,10 @@ private[parquet] class ParquetRowConverter(
   }
 
   private trait RepeatedConverter {
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = ArrayBuffer.empty[Any]
 
     protected def newArrayUpdater(updater: ParentContainerUpdater) = new ParentContainerUpdater {
-      override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+      override def start(): Unit = currentArray.clear()
       override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
       override def set(value: Any): Unit = currentArray += value
     }
@@ -637,7 +661,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: PrimitiveConverter =
+    private[this] val elementConverter: PrimitiveConverter =
       newConverter(parquetType, catalystType, updater).asPrimitiveConverter()
 
     override def addBoolean(value: Boolean): Unit = elementConverter.addBoolean(value)
@@ -664,7 +688,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: GroupConverter =
+    private[this] val elementConverter: GroupConverter =
       newConverter(parquetType, catalystType, updater).asGroupConverter()
 
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)

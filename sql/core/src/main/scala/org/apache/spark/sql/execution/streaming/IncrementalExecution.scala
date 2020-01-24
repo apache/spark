@@ -50,7 +50,7 @@ class IncrementalExecution(
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession.sparkContext,
+      sparkSession,
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
@@ -77,7 +77,8 @@ class IncrementalExecution(
    */
   override
   lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
-    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
+      tracker) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral

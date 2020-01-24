@@ -27,6 +27,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
 
 /**
@@ -58,7 +59,9 @@ private class CleanupTaskWeakReference(
  * to be processed when the associated object goes out of scope of the application. Actual
  * cleanup is performed in a separate daemon thread.
  */
-private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
+private[spark] class ContextCleaner(
+    sc: SparkContext,
+    shuffleDriverComponents: ShuffleDriverComponents) extends Logging {
 
   /**
    * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
@@ -221,7 +224,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-      blockManagerMaster.removeShuffle(shuffleId, blocking)
+      shuffleDriverComponents.removeShuffle(shuffleId, blocking)
       listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
       logDebug("Cleaned shuffle " + shuffleId)
     } catch {
@@ -269,7 +272,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
-  private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 }

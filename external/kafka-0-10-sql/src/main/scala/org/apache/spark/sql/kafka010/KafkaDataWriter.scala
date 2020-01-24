@@ -22,6 +22,7 @@ import java.{util => ju}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.kafka010.producer.{CachedKafkaProducer, InternalKafkaProducerPool}
 
 /**
  * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we
@@ -44,11 +45,14 @@ private[kafka010] class KafkaDataWriter(
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
+  private var producer: Option[CachedKafkaProducer] = None
 
   def write(row: InternalRow): Unit = {
     checkForErrors()
-    sendRow(row, producer)
+    if (producer.isEmpty) {
+      producer = Some(InternalKafkaProducerPool.acquire(producerParams))
+    }
+    producer.foreach { p => sendRow(row, p.producer) }
   }
 
   def commit(): WriterCommitMessage = {
@@ -56,7 +60,7 @@ private[kafka010] class KafkaDataWriter(
     // This requires flushing and then checking that no callbacks produced errors.
     // We also check for errors before to fail as soon as possible - the check is cheap.
     checkForErrors()
-    producer.flush()
+    producer.foreach(_.producer.flush())
     checkForErrors()
     KafkaDataWriterCommitMessage
   }
@@ -64,11 +68,7 @@ private[kafka010] class KafkaDataWriter(
   def abort(): Unit = {}
 
   def close(): Unit = {
-    checkForErrors()
-    if (producer != null) {
-      producer.flush()
-      checkForErrors()
-      CachedKafkaProducer.close(producerParams)
-    }
+    producer.foreach(InternalKafkaProducerPool.release)
+    producer = None
   }
 }

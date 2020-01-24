@@ -1,0 +1,17 @@
+================================================================================================
+projection on wide table
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+projection on wide table:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split threshold 10                                 8915           9048         180          0.1        8501.7       1.0X
+split threshold 100                                4419           4465          31          0.2        4214.2       2.0X
+split threshold 1024                               2477           2559          57          0.4        2362.4       3.6X
+split threshold 2048                               2314           2391          74          0.5        2206.7       3.9X
+split threshold 4096                               2374           2399          18          0.4        2264.2       3.8X
+split threshold 8192                               2831           2846          11          0.4        2699.7       3.1X
+split threshold 65536                             26886          26944          55          0.0       25640.7       0.3X
+
+

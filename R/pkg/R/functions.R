@@ -136,6 +136,14 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
+#' @param pos In \itemize{
+#'                \item \code{locate}: a start position of search.
+#'                \item \code{overlay}: a start postiton for replacement.
+#'                }
+#' @param len In \itemize{
+#'               \item \code{lpad} the maximum length of each output result.
+#'               \item \code{overlay} a number of bytes to replace.
+#'               }
 #' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
@@ -879,8 +887,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -1024,8 +1032,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1318,6 +1326,35 @@ setMethod("negate",
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
             column(jc)
           })
+
+#' @details
+#' \code{overlay}: Overlay the specified portion of \code{x} with \code{replace},
+#' starting from byte position \code{pos} of \code{src} and proceeding for
+#' \code{len} bytes.
+#'
+#' @param replace a Column with replacement.
+#'
+#' @rdname column_string_functions
+#' @aliases overlay overlay,Column-method,numericOrColumn-method
+#' @note overlay since 3.0.0
+setMethod("overlay",
+  signature(x = "Column", replace = "Column", pos = "numericOrColumn"),
+  function(x, replace, pos, len = -1) {
+    if (is.numeric(pos)) {
+      pos <- lit(as.integer(pos))
+    }
+
+    if (is.numeric(len)) {
+      len <- lit(as.integer(len))
+    }
+
+    jc <- callJStatic(
+      "org.apache.spark.sql.functions", "overlay",
+      x@jc, replace@jc, pos@jc, len@jc
+    )
+
+    column(jc)
+  })
 
 #' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
@@ -2819,7 +2856,6 @@ setMethod("window", signature(x = "Column"),
 #'
 #' @param substr a character string to be matched.
 #' @param str a Column where matches are sought for each entry.
-#' @param pos start position of search.
 #' @rdname column_string_functions
 #' @aliases locate locate,character,Column-method
 #' @note locate since 1.5.0
@@ -2834,7 +2870,6 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #' @details
 #' \code{lpad}: Left-padded with pad to a length of len.
 #'
-#' @param len maximum length of each output result.
 #' @param pad a character string to be padded with.
 #' @rdname column_string_functions
 #' @aliases lpad lpad,Column,numeric,character-method
@@ -3620,8 +3655,8 @@ setMethod("size",
 #' (array indices start at 1, or from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
-#' @param start an index indicating the first element occurring in the result.
-#' @param length a number of consecutive elements chosen to the result.
+#' @param start the starting index
+#' @param length the length of the slice
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
@@ -3706,7 +3741,7 @@ setMethod("create_map",
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3727,7 +3762,7 @@ setMethod("collect_list",
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method

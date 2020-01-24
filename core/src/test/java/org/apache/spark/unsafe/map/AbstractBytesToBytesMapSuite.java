@@ -692,13 +692,11 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     Thread thread = new Thread(() -> {
       int i = 0;
-      long used = 0;
       while (i < 10) {
         c1.use(10000000);
-        used += 10000000;
         i++;
       }
-      c1.free(used);
+      c1.free(c1.getUsed());
     });
 
     try {

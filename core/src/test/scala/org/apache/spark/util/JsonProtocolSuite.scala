@@ -938,6 +938,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     t.setExecutorDeserializeCpuTime(a)
     t.setExecutorRunTime(b)
     t.setExecutorCpuTime(b)
+    t.setPeakExecutionMemory(c)
     t.setResultSize(c)
     t.setJvmGCTime(d)
     t.setResultSerializationTime(a + b)
@@ -1243,6 +1244,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
+      |    "Peak Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1366,6 +1368,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
+      |    "Peak Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1489,6 +1492,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
+      |    "Peak Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -2052,7 +2056,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        {
       |          "ID": 9,
       |          "Name": "$PEAK_EXECUTION_MEMORY",
-      |          "Update": 0,
+      |          "Update": 500,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },

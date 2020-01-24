@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -50,16 +50,21 @@ object CommandUtils extends Logging {
       catalog.alterTableStats(table.identifier, Some(newStats))
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
+    } else {
+      // In other cases, we still need to invalidate the table relation cache.
+      catalog.refreshTable(table.identifier)
     }
   }
 
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
-    if (catalogTable.partitionColumnNames.isEmpty) {
+    val startTime = System.nanoTime()
+    val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
+      logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
@@ -75,6 +80,9 @@ object CommandUtils extends Logging {
         }.sum
       }
     }
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
+      s" the total size for table ${catalogTable.identifier}.")
+    totalSize
   }
 
   def calculateLocationSize(
@@ -110,7 +118,6 @@ object CommandUtils extends Logging {
     }
 
     val startTime = System.nanoTime()
-    logInfo(s"Starting to calculate the total file size under path $locationUri.")
     val size = locationUri.map { p =>
       val path = new Path(p)
       try {
@@ -125,7 +132,7 @@ object CommandUtils extends Logging {
       }
     }.getOrElse(0L)
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
-    logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
+    logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
   }
@@ -214,7 +221,9 @@ object CommandUtils extends Logging {
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
-          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+          new ApproximatePercentile(attr,
+            Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)),
+            Literal(conf.percentileAccuracy))
         val expr = aggFunc.toAggregateExpression()
         Alias(expr, expr.toString)()
       }
