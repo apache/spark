@@ -172,7 +172,7 @@ test_that("structField type strings", {
   typeList <- c(primitiveTypes, complexTypes)
   typeStrings <- names(typeList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- typeList[[i]]
     testField <- structField("_col", typeString)
@@ -203,7 +203,7 @@ test_that("structField type strings", {
   errorList <- c(primitiveErrors, complexErrors)
   typeStrings <- names(errorList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
     expect_error(structField("_col", typeString), expected)
@@ -1405,6 +1405,8 @@ test_that("column functions", {
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
     date_trunc("quarter", c) + current_date() + current_timestamp()
+  c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
+    overlay(c1, c2, 3, 4)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))

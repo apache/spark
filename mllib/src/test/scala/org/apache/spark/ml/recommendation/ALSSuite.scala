@@ -488,8 +488,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("implicit feedback regression") {
-    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
-    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val trainingWithNeg = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
     val modelWithNeg =
       trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
     val modelWithZero =
@@ -661,11 +661,12 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
         } { (ex, act, df, enc) =>
+          // With AQE on/off, the order of result may be different. Here sortby the result.
           val expected = ex.transform(df).selectExpr("prediction")
-            .first().getFloat(0)
+            .sort("prediction").first().getFloat(0)
           testTransformerByGlobalCheckFunc(df, act, "prediction") {
             case rows: Seq[Row] =>
-              expected ~== rows.head.getFloat(0) absTol 1e-6
+              expected ~== rows.sortBy(_.getFloat(0)).head.getFloat(0) absTol 1e-6
           }(enc)
         }
     }
@@ -696,7 +697,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
         val e1 = intercept[SparkException] {
-          model.transform(dataFrame).first
+          model.transform(dataFrame).collect()
         }
         TestUtils.assertExceptionMsg(e1, msg)
         val e2 = intercept[StreamingQueryException] {

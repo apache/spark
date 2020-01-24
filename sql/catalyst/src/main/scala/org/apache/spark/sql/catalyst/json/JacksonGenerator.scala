@@ -133,6 +133,10 @@ private[sql] class JacksonGenerator(
         val dateString = dateFormatter.format(row.getInt(ordinal))
         gen.writeString(dateString)
 
+    case CalendarIntervalType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(row.getInterval(ordinal).toString)
+
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeBinary(row.getBinary(ordinal))

@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString, StringUtils}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -407,8 +407,17 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
-    s"struct<${fieldTypes.mkString(",")}>"
+    val stringConcat = new StringUtils.StringConcat()
+    val len = fields.length
+    stringConcat.append("struct<")
+    var i = 0
+    while (i < len) {
+      stringConcat.append(s"${fields(i).name}:${fields(i).dataType.catalogString}")
+      i += 1
+      if (i < len) stringConcat.append(",")
+    }
+    stringConcat.append(">")
+    stringConcat.toString
   }
 
   override def sql: String = {
@@ -490,7 +499,7 @@ object StructType extends AbstractDataType {
   override private[sql] def simpleString: String = "struct"
 
   private[sql] def fromString(raw: String): StructType = {
-    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
+    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
       case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }

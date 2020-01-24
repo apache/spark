@@ -1,2 +1,2 @@
 --- malformed interval literal with ansi mode
---import literals.sql
+--IMPORT literals.sql

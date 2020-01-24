@@ -74,7 +74,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_TESTING': '1',
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
-        'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+        'PYSPARK_ROW_FIELD_SORTING_ENABLED': 'true'
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -86,9 +87,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     env["TMPDIR"] = tmp_dir
 
     # Also override the JVM's temp directory by setting driver and executor options.
+    java_options = "-Djava.io.tmpdir={0} -Dio.netty.tryReflectionSetAccessible=true".format(tmp_dir)
     spark_args = [
-        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
-        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
+        "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
@@ -265,8 +267,8 @@ def main():
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
-        LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
-        LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
+        LOGGER.info("%s python_implementation is %s", python_exec, python_implementation)
+        LOGGER.info("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:

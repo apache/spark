@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -57,18 +57,17 @@ class RegressionMetrics @Since("2.0.0") (
     })
 
   /**
-   * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
+   * Use SummarizerBuffer to calculate summary statistics of observations and errors.
    */
-  private lazy val summary: MultivariateStatisticalSummary = {
-    predictionAndObservations.map {
+  private lazy val summary = {
+    val weightedVectors = predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
         (Vectors.dense(observation, observation - prediction, prediction), weight)
       case (prediction: Double, observation: Double) =>
         (Vectors.dense(observation, observation - prediction, prediction), 1.0)
-    }.treeAggregate(new MultivariateOnlineSummarizer())(
-        (summary, sample) => summary.add(sample._1, sample._2),
-        (sum1, sum2) => sum1.merge(sum2)
-      )
+    }
+    Statistics.colStats(weightedVectors,
+      Seq("mean", "normL1", "normL2", "variance"))
   }
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)

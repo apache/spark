@@ -108,12 +108,10 @@ class StandardScaler @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val Row(mean: Vector, variance: Vector) = dataset
-      .select(Summarizer.metrics("mean", "variance").summary(col($(inputCol))).as("summary"))
-      .select("summary.mean", "summary.variance")
+    val Row(mean: Vector, std: Vector) = dataset
+      .select(Summarizer.metrics("mean", "std").summary(col($(inputCol))).as("summary"))
+      .select("summary.mean", "summary.std")
       .first()
-
-    val std = Vectors.dense(variance.toArray.map(math.sqrt))
 
     copyValues(new StandardScalerModel(uid, std.compressed, mean.compressed).setParent(this))
   }
@@ -159,7 +157,7 @@ class StandardScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val shift = if ($(withMean)) mean.toArray else Array.emptyDoubleArray
     val scale = if ($(withStd)) {
       std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
@@ -168,12 +166,18 @@ class StandardScalerModel private[ml] (
     val func = getTransformFunc(shift, scale, $(withMean), $(withStd))
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), mean.size)
+    }
+    outputSchema
   }
 
   @Since("1.4.1")
