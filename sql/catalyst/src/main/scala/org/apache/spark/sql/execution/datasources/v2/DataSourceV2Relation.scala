@@ -33,16 +33,16 @@ import org.apache.spark.util.Utils
  *
  * @param table   The table that this relation represents.
  * @param output the output attributes of this relation.
- * @param catalog catalogPlugin for the table.
- * @param identifier the identifier for the table.
+ * @param catalog catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier the identifier for the table. None if no identifier is defined.
  * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
  *                and [[WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
-    catalog: CatalogPlugin,
-    identifier: Identifier,
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
@@ -144,17 +144,17 @@ case class StreamingDataSourceV2Relation(
 object DataSourceV2Relation {
   def create(
       table: Table,
-      catalog: CatalogPlugin,
-      identifiers: Identifier,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, catalog, identifiers, options)
+    DataSourceV2Relation(table, output, catalog, identifier, options)
   }
 
   def create(
       table: Table,
-      catalog: CatalogPlugin,
-      identifier: Identifier): DataSourceV2Relation =
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier]): DataSourceV2Relation =
     create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
 
   /**

@@ -267,11 +267,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), catalog, ident)
+              (catalog.loadTable(ident), Some(catalog), Some(ident))
             case tableProvider: TableProvider =>
               val t = tableProvider.getTable(dsOptions)
               if (t.supports(BATCH_WRITE)) {
-                (t, null, null)
+                (t, None, None)
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
@@ -418,7 +418,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t, catalog, ident)
+        DataSourceV2Relation.create(t, Some(catalog), Some(ident))
     }
 
     val command = mode match {
@@ -558,7 +558,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        val v2Relation = DataSourceV2Relation.create(table, catalog, ident)
+        val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>

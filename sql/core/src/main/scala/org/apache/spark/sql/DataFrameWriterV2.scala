@@ -160,7 +160,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val append = loadTable(catalog, identifier) match {
       case Some(t) =>
         AppendData.byName(
-          DataSourceV2Relation.create(t, catalog, identifier),
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
           logicalPlan, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
@@ -184,7 +184,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val overwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwriteByExpression.byName(
-          DataSourceV2Relation.create(t, catalog, identifier),
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
           logicalPlan, condition.expr, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
@@ -211,7 +211,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val dynamicOverwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwritePartitionsDynamic.byName(
-          DataSourceV2Relation.create(t, catalog, identifier),
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
           logicalPlan, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
