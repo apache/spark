@@ -257,8 +257,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       catalogPlugin: TableCatalog = catalog(catalogName)): Unit = {
     assert(plan.isInstanceOf[DataSourceV2Relation])
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
-    assert(v2.identifier.name() == identifier)
-    assert(v2.catalog == catalogPlugin)
+    assert(v2.identifier.exists(_.name() == identifier))
+    assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
   private def load(name: String, catalogOpt: Option[String]): DataFrame = {

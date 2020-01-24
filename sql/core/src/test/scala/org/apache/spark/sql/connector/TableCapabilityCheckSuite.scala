@@ -91,7 +91,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
 
   test("AppendData: check missing capabilities") {
     val plan = AppendData.byName(
-      DataSourceV2Relation.create(CapabilityTable(), None, mockIdent, emptyMap),
+      DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap),
       TestRelation)
 
     val exc = intercept[AnalysisException]{
@@ -104,7 +104,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   test("AppendData: check correct capabilities") {
     Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
       val plan = AppendData.byName(
-        DataSourceV2Relation.create(CapabilityTable(write), None, mockIdent, emptyMap),
+        DataSourceV2Relation.create(CapabilityTable(write), None, None, emptyMap),
         TestRelation)
 
       TableCapabilityCheck.apply(plan)

@@ -93,8 +93,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       catalogPlugin: TableCatalog = catalog("testcat")): Unit = {
     assert(plan.isInstanceOf[DataSourceV2Relation])
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
-    assert(v2.identifier.name() == identifier)
-    assert(v2.catalog == catalogPlugin)
+    assert(v2.identifier.exists(_.name() == identifier))
+    assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
   test("Append: basic append") {
