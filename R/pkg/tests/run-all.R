@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+# TODO Remove before merging SPARK-23435
+if (grepl("^1\\.\\d+\\.\\d+$", installed.packages()["testthat", "Version"])) {
+  install.packages("testthat")
+}
+
 library(testthat)
 library(SparkR)
 
