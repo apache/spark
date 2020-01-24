@@ -17,7 +17,7 @@
 
 # TODO Remove before merging SPARK-23435
 if (grepl("^1\\.\\d+\\.\\d+$", installed.packages()["testthat", "Version"])) {
-  install.packages("testthat", repos = 'https://cloud.r-project.org/')
+  install.packages("testthat", repos = "https://cloud.r-project.org/")
 }
 
 library(testthat)
