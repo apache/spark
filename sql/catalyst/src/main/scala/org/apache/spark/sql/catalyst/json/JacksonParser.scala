@@ -338,6 +338,7 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
     var skipRow = false
 
+    jsonFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>

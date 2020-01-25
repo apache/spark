@@ -18,13 +18,24 @@
 package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BasePredicate
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, StructType}
 
 class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
+  case class JsonPredicate(predicate: BasePredicate, totalRefs: Int, var refCount: Int) {
+    def reset(): Unit = {
+      refCount = totalRefs
+    }
+  }
+
+  private var allPredicates: List[JsonPredicate] = List.empty
+
   def skipRow(row: InternalRow, index: Int): Boolean = {
     false
   }
+
+  def reset(): Unit = allPredicates.foreach(_.reset)
 }
 
 object JsonFilters {
