@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -326,7 +324,7 @@ class ResolveSessionCatalog(
 
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
+      val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
@@ -485,10 +483,8 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowTablePropertiesStatement(SessionCatalogAndTable(_, tbl), propertyKey) =>
-      ShowTablePropertiesCommand(
-        tbl.asTableIdentifier,
-        propertyKey)
+    case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
+      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case DescribeFunctionStatement(CatalogAndIdentifier(catalog, ident), extended) =>
       val functionIdent =

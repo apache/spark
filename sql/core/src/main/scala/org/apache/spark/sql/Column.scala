@@ -841,7 +841,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex

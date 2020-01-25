@@ -163,16 +163,13 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
 
-        timezone = "America/New_York"
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
             assert_frame_equal(pdf_arrow_la, pdf_la)
 
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
             assert_frame_equal(pdf_arrow_ny, pdf_ny)
 
@@ -234,18 +231,15 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_respect_session_timezone(self):
         from datetime import timedelta
         pdf = self.create_pandas_data_frame()
-        timezone = "America/New_York"
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             df_no_arrow_la, df_arrow_la = self._createDataFrame_toggle(pdf, schema=self.schema)
             result_la = df_no_arrow_la.collect()
             result_arrow_la = df_arrow_la.collect()
             self.assertEqual(result_la, result_arrow_la)
 
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             df_no_arrow_ny, df_arrow_ny = self._createDataFrame_toggle(pdf, schema=self.schema)
             result_ny = df_no_arrow_ny.collect()
             result_arrow_ny = df_arrow_ny.collect()

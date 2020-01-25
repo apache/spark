@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
@@ -30,7 +31,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A very simple source that reads files from the given directory as they appear.
@@ -285,7 +288,7 @@ class FileStreamSource(
     }
   }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = sourceCleaner.foreach(_.stop())
 }
 
 
@@ -353,8 +356,35 @@ object FileStreamSource {
     def size: Int = map.size()
   }
 
-  private[sql] trait FileStreamSourceCleaner {
-    def clean(entry: FileEntry): Unit
+  private[sql] abstract class FileStreamSourceCleaner extends Logging {
+    private val cleanThreadPool: Option[ThreadPoolExecutor] = {
+      val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
+      if (numThreads > 0) {
+        logDebug(s"Cleaning file source on $numThreads separate thread(s)")
+        Some(ThreadUtils.newDaemonCachedThreadPool("file-source-cleaner-threadpool", numThreads))
+      } else {
+        logDebug("Cleaning file source on main thread")
+        None
+      }
+    }
+
+    def stop(): Unit = cleanThreadPool.foreach(ThreadUtils.shutdown(_))
+
+    def clean(entry: FileEntry): Unit = {
+      cleanThreadPool match {
+        case Some(p) =>
+          p.submit(new Runnable {
+            override def run(): Unit = {
+              cleanTask(entry)
+            }
+          })
+
+        case None =>
+          cleanTask(entry)
+      }
+    }
+
+    protected def cleanTask(entry: FileEntry): Unit
   }
 
   private[sql] object FileStreamSourceCleaner {
@@ -448,7 +478,7 @@ object FileStreamSource {
       filters.toList
     }
 
-    override def clean(entry: FileEntry): Unit = {
+    override protected def cleanTask(entry: FileEntry): Unit = {
       val curPath = new Path(new URI(entry.path))
       val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
@@ -472,7 +502,7 @@ object FileStreamSource {
   private[sql] class SourceFileRemover(fileSystem: FileSystem)
     extends FileStreamSourceCleaner with Logging {
 
-    override def clean(entry: FileEntry): Unit = {
+    override protected def cleanTask(entry: FileEntry): Unit = {
       val curPath = new Path(new URI(entry.path))
       try {
         logDebug(s"Removing completed file $curPath")
