@@ -2526,4 +2526,38 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       checkAnswer(readBack, timestampsWithFormat)
     }
   }
+
+  test("filters push down") {
+    // Seq(true, false).foreach { filterPushdown =>
+    Seq(true).foreach { filterPushdown =>
+      withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+        withTempPath { path =>
+          val t = "2019-12-17 00:01:02"
+          Seq(
+            """{"c0": "abc", "c1": {"c2": 1, "c3": "2019-11-14 20:35:30"}}""",
+            s"""{"c0": "def", "c1": {"c2": 2, "c3": "$t"}}""").toDF("data")
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+          // Seq(true, false).foreach { multiLine =>
+          Seq(false).foreach { multiLine =>
+            // Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
+            Seq("PERMISSIVE").foreach { mode =>
+              val readback = spark.read
+                .option("mode", mode)
+                .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+                .option("multiLine", multiLine)
+                .schema("c0 string, c1 struct<c2:integer,c3:timestamp>")
+                .json(path.getAbsolutePath)
+                .where($"c1.c2" === 2 && $"c0" === "def")
+                .select($"c1.c3")
+              // count() pushes empty schema. This checks handling of a filter
+              // which refers to not existed field.
+              assert(readback.count() === 1)
+              checkAnswer(readback, Row(Timestamp.valueOf(t)))
+            }
+          }
+        }
+      }
+    }
+  }
 }
