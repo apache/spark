@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BasePredicate
 import org.apache.spark.sql.sources
@@ -28,8 +30,6 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
       refCount = totalRefs
     }
   }
-
-  private var allPredicates: Array[JsonPredicate] = null
 
   private val indexedPredicates: Array[Array[JsonPredicate]] = schema match {
     case st: StructType =>
@@ -58,15 +58,26 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
     skip
   }
 
-  def reset(): Unit = {
-    if (allPredicates != null) {
-      val len = allPredicates.length
-      var i = 0
-      while (i < len) {
-        val pred = allPredicates(i)
-        pred.refCount = pred.totalRefs
-        i += 1
+  private val allPredicates: Array[JsonPredicate] = {
+    val predicates = new ArrayBuffer[JsonPredicate]()
+    if (indexedPredicates != null) {
+      for {
+        groupedPredicates <- indexedPredicates
+        predicate <- groupedPredicates if groupedPredicates != null
+      } {
+        predicates += predicate
       }
+    }
+    predicates.toArray
+  }
+
+  def reset(): Unit = {
+    val len = allPredicates.length
+    var i = 0
+    while (i < len) {
+      val pred = allPredicates(i)
+      pred.refCount = pred.totalRefs
+      i += 1
     }
   }
 }
