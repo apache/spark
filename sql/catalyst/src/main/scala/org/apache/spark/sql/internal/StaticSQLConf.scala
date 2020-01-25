@@ -145,8 +145,16 @@ object StaticSQLConf {
         "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
         "cause memory problem.")
       .intConf
-      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
       .createWithDefault(128)
+
+  val SUBQUERY_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.subquery.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute the subquery.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
+      .createWithDefault(16)
 
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +

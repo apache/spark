@@ -49,7 +49,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       df: => DataFrame,
       expectedHints: Seq[JoinHint],
       warnings: Seq[String]): Unit = {
-    val logAppender = new LogAppender
+    val logAppender = new LogAppender("join hints")
     withLogAppender(logAppender) {
       verifyJoinHint(df, expectedHints)
     }

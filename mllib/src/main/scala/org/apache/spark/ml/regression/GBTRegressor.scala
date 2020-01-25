@@ -23,7 +23,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -300,11 +299,8 @@ class GBTRegressionModel private[ml](
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
-
-  /** Number of trees in ensemble */
-  val numTrees: Int = trees.length
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
@@ -314,7 +310,7 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTRegressionModel: uid=$uid, numTrees=$numTrees, numFeatures=$numFeatures"
+    s"GBTRegressionModel: uid=$uid, numTrees=$getNumTrees, numFeatures=$numFeatures"
   }
 
   /**

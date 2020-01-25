@@ -1135,12 +1135,11 @@ def months_between(date1, date2, roundOff=True):
 
 @since(2.2)
 def to_date(col, format=None):
-    """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
-    :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
     `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
-    is omitted (equivalent to ``col.cast("date")``).
+    is omitted. Equivalent to ``col.cast("date")``.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
@@ -1160,12 +1159,11 @@ def to_date(col, format=None):
 
 @since(2.2)
 def to_timestamp(col, format=None):
-    """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
-    :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to
     `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
-    is omitted (equivalent to ``col.cast("timestamp")``).
+    is omitted. Equivalent to ``col.cast("timestamp")``.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
@@ -1598,6 +1596,40 @@ def instr(str, substr):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.instr(_to_java_column(str), substr))
+
+
+@since(3.0)
+def overlay(src, replace, pos, len=-1):
+    """
+    Overlay the specified portion of `src` with `replace`,
+    starting from byte position `pos` of `src` and proceeding for `len` bytes.
+
+    >>> df = spark.createDataFrame([("SPARK_SQL", "CORE")], ("x", "y"))
+    >>> df.select(overlay("x", "y", 7).alias("overlayed")).show()
+    +----------+
+    | overlayed|
+    +----------+
+    |SPARK_CORE|
+    +----------+
+    """
+    if not isinstance(pos, (int, str, Column)):
+        raise TypeError(
+            "pos should be an integer or a Column / column name, got {}".format(type(pos)))
+    if len is not None and not isinstance(len, (int, str, Column)):
+        raise TypeError(
+            "len should be an integer or a Column / column name, got {}".format(type(len)))
+
+    pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
+    len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
+
+    sc = SparkContext._active_spark_context
+
+    return Column(sc._jvm.functions.overlay(
+        _to_java_column(src),
+        _to_java_column(replace),
+        pos,
+        len
+    ))
 
 
 @since(1.5)
