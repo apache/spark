@@ -210,6 +210,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+      case e =>
+        logError(s"Received unexpected message. ${e}")
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -291,6 +293,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Option(delegationTokens.get()),
           rp)
         context.reply(reply)
+      case e =>
+        logError(s"Received unexpected ask ${e}")
     }
 
     // Make fake resource offers on all executors
