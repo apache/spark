@@ -2,127 +2,127 @@
 -- Number of queries: 42
 
 
--- !query 0
+-- !query
 select to_json(named_struct('a', 1, 'b', 2))
--- !query 0 schema
+-- !query schema
 struct<to_json(named_struct(a, 1, b, 2)):string>
--- !query 0 output
+-- !query output
 {"a":1,"b":2}
 
 
--- !query 1
+-- !query
 select to_json(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
--- !query 1 schema
+-- !query schema
 struct<to_json(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
--- !query 1 output
+-- !query output
 {"time":"26/08/2015"}
 
 
--- !query 2
+-- !query
 select to_json(array(named_struct('a', 1, 'b', 2)))
--- !query 2 schema
+-- !query schema
 struct<to_json(array(named_struct(a, 1, b, 2))):string>
--- !query 2 output
+-- !query output
 [{"a":1,"b":2}]
 
 
--- !query 3
+-- !query
 select to_json(map(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 2)))
--- !query 3 schema
+-- !query schema
 struct<to_json(map(named_struct(a, 1, b, 2), named_struct(a, 1, b, 2))):string>
--- !query 3 output
+-- !query output
 {"[1,2]":{"a":1,"b":2}}
 
 
--- !query 4
+-- !query
 select to_json(map('a', named_struct('a', 1, 'b', 2)))
--- !query 4 schema
+-- !query schema
 struct<to_json(map(a, named_struct(a, 1, b, 2))):string>
--- !query 4 output
+-- !query output
 {"a":{"a":1,"b":2}}
 
 
--- !query 5
+-- !query
 select to_json(map('a', 1))
--- !query 5 schema
+-- !query schema
 struct<to_json(map(a, 1)):string>
--- !query 5 output
+-- !query output
 {"a":1}
 
 
--- !query 6
+-- !query
 select to_json(array(map('a',1)))
--- !query 6 schema
+-- !query schema
 struct<to_json(array(map(a, 1))):string>
--- !query 6 output
+-- !query output
 [{"a":1}]
 
 
--- !query 7
+-- !query
 select to_json(array(map('a',1), map('b',2)))
--- !query 7 schema
+-- !query schema
 struct<to_json(array(map(a, 1), map(b, 2))):string>
--- !query 7 output
+-- !query output
 [{"a":1},{"b":2}]
 
 
--- !query 8
+-- !query
 select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Must use a map() function for options;; line 1 pos 7
 
 
--- !query 9
+-- !query
 select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
 
 
--- !query 10
+-- !query
 select to_json()
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid number of arguments for function to_json. Expected: one of 1 and 2; Found: 0; line 1 pos 7
 
 
--- !query 11
+-- !query
 select from_json('{"a":1}', 'a INT')
--- !query 11 schema
+-- !query schema
 struct<from_json({"a":1}):struct<a:int>>
--- !query 11 output
+-- !query output
 {"a":1}
 
 
--- !query 12
+-- !query
 select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'))
--- !query 12 schema
+-- !query schema
 struct<from_json({"time":"26/08/2015"}):struct<time:timestamp>>
--- !query 12 output
+-- !query output
 {"time":2015-08-26 00:00:00}
 
 
--- !query 13
+-- !query
 select from_json('{"a":1}', 1)
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Schema should be specified in DDL format as a string literal or output of the schema_of_json function instead of 1;; line 1 pos 7
 
 
--- !query 14
+-- !query
 select from_json('{"a":1}', 'a InvalidType')
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 
 DataType invalidtype is not supported.(line 1, pos 2)
@@ -133,222 +133,222 @@ a InvalidType
 ; line 1 pos 7
 
 
--- !query 15
+-- !query
 select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Must use a map() function for options;; line 1 pos 7
 
 
--- !query 16
+-- !query
 select from_json('{"a":1}', 'a INT', map('mode', 1))
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
 
 
--- !query 17
+-- !query
 select from_json()
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7
 
 
--- !query 18
+-- !query
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a')
--- !query 18 schema
+-- !query schema
 struct<c0:string,c1:string,c2:string,c3:string>
--- !query 18 output
+-- !query output
 NULL	2	NULL	1
 
 
--- !query 19
+-- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 
 
 
--- !query 20
+-- !query
 SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable
--- !query 20 schema
+-- !query schema
 struct<c0:string,c1:string,c2:string>
--- !query 20 output
+-- !query output
 2	NULL	1
 
 
--- !query 21
+-- !query
 DROP VIEW IF EXISTS jsonTable
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 
 
 
--- !query 22
+-- !query
 select from_json('{"a":1, "b":2}', 'map<string, int>')
--- !query 22 schema
+-- !query schema
 struct<entries:map<string,int>>
--- !query 22 output
+-- !query output
 {"a":1,"b":2}
 
 
--- !query 23
+-- !query
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>')
--- !query 23 schema
+-- !query schema
 struct<from_json({"a":1, "b":"2"}):struct<a:int,b:string>>
--- !query 23 output
+-- !query output
 {"a":1,"b":"2"}
 
 
--- !query 24
+-- !query
 select schema_of_json('{"c1":0, "c2":[1]}')
--- !query 24 schema
+-- !query schema
 struct<schema_of_json({"c1":0, "c2":[1]}):string>
--- !query 24 output
+-- !query output
 struct<c1:bigint,c2:array<bigint>>
 
 
--- !query 25
+-- !query
 select from_json('{"c1":[1, 2, 3]}', schema_of_json('{"c1":[0]}'))
--- !query 25 schema
+-- !query schema
 struct<from_json({"c1":[1, 2, 3]}):struct<c1:array<bigint>>>
--- !query 25 output
+-- !query output
 {"c1":[1,2,3]}
 
 
--- !query 26
+-- !query
 select from_json('[1, 2, 3]', 'array<int>')
--- !query 26 schema
+-- !query schema
 struct<from_json([1, 2, 3]):array<int>>
--- !query 26 output
+-- !query output
 [1,2,3]
 
 
--- !query 27
+-- !query
 select from_json('[1, "2", 3]', 'array<int>')
--- !query 27 schema
+-- !query schema
 struct<from_json([1, "2", 3]):array<int>>
--- !query 27 output
+-- !query output
 NULL
 
 
--- !query 28
+-- !query
 select from_json('[1, 2, null]', 'array<int>')
--- !query 28 schema
+-- !query schema
 struct<from_json([1, 2, null]):array<int>>
--- !query 28 output
+-- !query output
 [1,2,null]
 
 
--- !query 29
+-- !query
 select from_json('[{"a": 1}, {"a":2}]', 'array<struct<a:int>>')
--- !query 29 schema
+-- !query schema
 struct<from_json([{"a": 1}, {"a":2}]):array<struct<a:int>>>
--- !query 29 output
+-- !query output
 [{"a":1},{"a":2}]
 
 
--- !query 30
+-- !query
 select from_json('{"a": 1}', 'array<struct<a:int>>')
--- !query 30 schema
+-- !query schema
 struct<from_json({"a": 1}):array<struct<a:int>>>
--- !query 30 output
+-- !query output
 [{"a":1}]
 
 
--- !query 31
+-- !query
 select from_json('[null, {"a":2}]', 'array<struct<a:int>>')
--- !query 31 schema
+-- !query schema
 struct<from_json([null, {"a":2}]):array<struct<a:int>>>
--- !query 31 output
+-- !query output
 [null,{"a":2}]
 
 
--- !query 32
+-- !query
 select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>')
--- !query 32 schema
+-- !query schema
 struct<from_json([{"a": 1}, {"b":2}]):array<map<string,int>>>
--- !query 32 output
+-- !query output
 [{"a":1},{"b":2}]
 
 
--- !query 33
+-- !query
 select from_json('[{"a": 1}, 2]', 'array<map<string,int>>')
--- !query 33 schema
+-- !query schema
 struct<from_json([{"a": 1}, 2]):array<map<string,int>>>
--- !query 33 output
+-- !query output
 NULL
 
 
--- !query 34
+-- !query
 select to_json(array('1', '2', '3'))
--- !query 34 schema
+-- !query schema
 struct<to_json(array(1, 2, 3)):string>
--- !query 34 output
+-- !query output
 ["1","2","3"]
 
 
--- !query 35
+-- !query
 select to_json(array(array(1, 2, 3), array(4)))
--- !query 35 schema
+-- !query schema
 struct<to_json(array(array(1, 2, 3), array(4))):string>
--- !query 35 output
+-- !query output
 [[1,2,3],[4]]
 
 
--- !query 36
+-- !query
 select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'))
--- !query 36 schema
+-- !query schema
 struct<schema_of_json({"c1":1}):string>
--- !query 36 output
+-- !query output
 struct<c1:string>
 
 
--- !query 37
+-- !query
 select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'))
--- !query 37 schema
+-- !query schema
 struct<schema_of_json({"c1":01, "c2":0.1}):string>
--- !query 37 output
+-- !query output
 struct<c1:bigint,c2:decimal(1,1)>
 
 
--- !query 38
+-- !query
 select schema_of_json(null)
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'schema_of_json(NULL)' due to data type mismatch: The input json should be a string literal and not null; however, got NULL.; line 1 pos 7
 
 
--- !query 39
+-- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
--- !query 39 schema
+-- !query schema
 struct<>
--- !query 39 output
+-- !query output
 
 
 
--- !query 40
+-- !query
 SELECT schema_of_json(jsonField) FROM jsonTable
--- !query 40 schema
+-- !query schema
 struct<>
--- !query 40 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'schema_of_json(jsontable.`jsonField`)' due to data type mismatch: The input json should be a string literal and not null; however, got jsontable.`jsonField`.; line 1 pos 7
 
 
--- !query 41
+-- !query
 DROP VIEW IF EXISTS jsonTable
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 
