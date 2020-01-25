@@ -39,7 +39,7 @@ if __name__ == "__main__":
     time.sleep(5)
     rdd.collect()
     print("Waiting some more....")
-    time.sleep(5)
+    time.sleep(10)
     rdd.collect()
     print("Finished waiting, stopping Spark.")
     spark.stop()
