@@ -138,7 +138,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           logError("Asked to launch a task while decommissioned.")
           driver match {
             case Some(endpoint) =>
-              logInfo("Sending DecommissionExecutor to driver")
+              logInfo("Sending DecommissionExecutor to driver.")
               endpoint.send(DecommissionExecutor(executorId))
             case _ =>
               logError("No registered driver to send Decommission to.")
@@ -228,7 +228,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
-    logInfo("Decommissioning self")
+    logInfo("Decommissioning self w/sync")
     try {
       decommissioned = true
       // Tell master we are are decommissioned so it stops trying to schedule us
