@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 
 import org.apache.spark.ml.linalg._
+import org.apache.spark.rdd.RDD
 
 /**
  * Class that represents an instance of weighted data point with label and features.
@@ -35,9 +36,9 @@ private[spark] case class Instance(label: Double, weight: Double, features: Vect
  * Class that represents an block of instance.
  */
 private[spark] class InstanceBlock(
-    private val labels: Array[Double],
-    private val weights: Array[Double],
-    private val featureMatrix: Matrix) {
+    val labels: Array[Double],
+    val weights: Array[Double],
+    val featureMatrix: Matrix) {
   require(labels.length == featureMatrix.numRows)
   require(featureMatrix.isTransposed)
   if (weights.nonEmpty) {
@@ -145,6 +146,10 @@ private[spark] object InstanceBlock {
         colIndices.result(), values.result(), true)
     }
     new InstanceBlock(labels, weights, matrix)
+  }
+
+  def blokify(instances: RDD[Instance], blockSize: Int): RDD[InstanceBlock] = {
+    instances.mapPartitions(_.grouped(blockSize).map(InstanceBlock.fromInstances))
   }
 }
 

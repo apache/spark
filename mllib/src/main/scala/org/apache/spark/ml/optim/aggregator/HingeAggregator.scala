@@ -39,12 +39,23 @@ private[ml] class HingeAggregator(
   extends DifferentiableLossAggregator[InstanceBlock, HingeAggregator] {
 
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
+  protected override val dim: Int = numFeaturesPlusIntercept
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
-  protected override val dim: Int = numFeaturesPlusIntercept
+  @transient private lazy val (linear, intercept) = if (fitIntercept) {
+    (Vectors.dense(coefficientsArray.take(numFeatures)), coefficientsArray(numFeatures))
+  } else {
+    (Vectors.dense(coefficientsArray), 0.0)
+  }
+  @transient private lazy val linearGradSumVec = if (fitIntercept) {
+    new DenseVector(Array.ofDim[Double](numFeatures))
+  } else {
+    null
+  }
+
 
   /**
    * Add a new training instance to this HingeAggregator, and update the loss and gradient
@@ -100,49 +111,57 @@ private[ml] class HingeAggregator(
    * Add a new training instance to this HingeAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param instanceBlock The InstanceBlock to be added.
+   * @param block The InstanceBlock to be added.
    * @return This HingeAggregator object.
    */
-  def add(instanceBlock: InstanceBlock): this.type = {
-//    instanceBlock.instanceIterator.foreach(this.add)
-    require(numFeatures == instanceBlock.numFeatures, s"Dimensions mismatch when adding new " +
-      s"instance. Expecting $numFeatures but got ${instanceBlock.numFeatures}.")
-    require(instanceBlock.weightIter.forall(_ >= 0),
-      s"instance weights ${instanceBlock.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+  def add(block: InstanceBlock): this.type = {
+    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
+    require(block.weightIter.forall(_ >= 0),
+      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
 
-    if (instanceBlock.weightIter.forall(_ == 0)) return this
-    val localCoefficients = coefficientsArray
+    if (block.weightIter.forall(_ == 0)) return this
+    val size = block.size
     val localGradientSumArray = gradientSumArray
-    val intercept = if (fitIntercept) localCoefficients(numFeatures) else 0.0
 
+    val dots = if (intercept != 0) {
+      new DenseVector(Array.fill(size)(intercept))
+    } else {
+      new DenseVector(Array.ofDim[Double](size))
+    }
+    BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, dots)
+
+    val gradScaleArray = Array.ofDim[Double](size)
     var i = 0
-    while (i < instanceBlock.size) {
-      val weight = instanceBlock.getWeight(i)
+    while (i < size) {
+      val weight = block.getWeight(i)
       if (weight > 0) {
-        var dot = intercept
-        instanceBlock.getNonZeroIter(i).foreach { case (index, value) =>
-          dot += localCoefficients(index) * value
-        }
-
+        weightSum += weight
         // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
         // Therefore the gradient is -(2y - 1)*x
-        val label = instanceBlock.getLabel(i)
+        val label = block.getLabel(i)
         val labelScaled = 2 * label - 1.0
-        val loss = math.max((1.0 - labelScaled * dot) * weight, 0.0)
-
-        if (loss != 0) {
-          val gradientScale = -labelScaled * weight
-          instanceBlock.getNonZeroIter(i).foreach { case (index, value) =>
-            localGradientSumArray(index) += value * gradientScale
-          }
-          if (fitIntercept) {
-            localGradientSumArray(numFeatures) += gradientScale
-          }
+        val loss = (1.0 - labelScaled * dots(i)) * weight
+        if (loss > 0) {
           lossSum += loss
+          gradScaleArray(i) = -labelScaled * weight
         }
-        weightSum += weight
       }
       i += 1
+    }
+
+    // predictions are all correct
+    if (gradScaleArray.forall(_ == 0)) return this
+
+    val gradScaleVec = new DenseVector(gradScaleArray)
+
+    if (fitIntercept) {
+      BLAS.gemv(1.0, block.featureMatrix.transpose, gradScaleVec, 0.0, linearGradSumVec)
+      linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
+      localGradientSumArray(numFeatures) += gradScaleArray.sum
+    } else {
+      val gradSumVec = new DenseVector(localGradientSumArray)
+      BLAS.gemv(1.0, block.featureMatrix.transpose, gradScaleVec, 1.0, gradSumVec)
     }
 
     this

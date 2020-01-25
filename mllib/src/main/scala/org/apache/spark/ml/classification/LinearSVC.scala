@@ -41,7 +41,7 @@ import org.apache.spark.storage.StorageLevel
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold {
+  with HasAggregationDepth with HasThreshold with HasBlockSize {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -155,6 +155,15 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
@@ -162,7 +171,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
-      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
 
     val sc = dataset.sparkSession.sparkContext
     val instances = extractInstances(dataset)
@@ -218,19 +227,19 @@ class LinearSVC @Since("2.2.0") (
         None
       }
 
-      val blocks = instances.mapPartitions { iter =>
-        val featuresStdVec = bcFeaturesStd.value
-        iter.map { case Instance(label, weight, features) =>
-          val standardized = Array.ofDim[Double](numFeatures)
+      val standardized = instances.map {
+        case Instance(label, weight, features) =>
+          val featuresStdVec = bcFeaturesStd.value
+          val array = Array.ofDim[Double](numFeatures)
           features.foreachNonZero { (i, v) =>
             val std = featuresStdVec(i)
-            if (std != 0) {
-              standardized(i) = v / std
-            }
+            if (std != 0) array(i) = v / std
           }
-          Instance(label, weight, Vectors.dense(standardized).compressed)
-        }.grouped(4096).map(InstanceBlock.fromInstances)
-      }.persist(StorageLevel.MEMORY_AND_DISK).setName("training dataset (blockSize=4096)")
+          Instance(label, weight, Vectors.dense(array))
+      }
+      val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+        .persist(StorageLevel.MEMORY_AND_DISK)
+        .setName(s"training dataset (blockSize=${$(blockSize)})")
 
       val getAggregatorFunc = new HingeAggregator(numFeatures, $(fitIntercept))(_)
       val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,

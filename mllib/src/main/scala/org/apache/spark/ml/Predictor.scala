@@ -18,8 +18,8 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.feature.{Instance, InstanceBlock, LabeledPoint}
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -81,18 +81,6 @@ private[ml] trait PredictorParams extends Params
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
-  }
-
-  /**
-   * Extract [[labelCol]], weightCol(if any) and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   */
-  protected def extractInstanceBlocks(
-      dataset: Dataset[_],
-      blockSize: Int): RDD[InstanceBlock] = {
-    require(blockSize > 0)
-    extractInstances(dataset)
-      .mapPartitions { _.grouped(blockSize).map(InstanceBlock.fromInstances) }
   }
 
   /**
