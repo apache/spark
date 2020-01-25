@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.{Experimental, Unstable}
-import org.apache.spark.sql.connector.write.streaming.StreamingWrite
-import org.apache.spark.sql.sources.InsertableRelation
+import org.apache.spark.annotation.Unstable;
+import org.apache.spark.sql.sources.InsertableRelation;
 
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource
@@ -32,10 +31,8 @@ import org.apache.spark.sql.sources.InsertableRelation
  *
  * @since 3.0.0
  */
-@Experimental
 @Unstable
-trait V1WriteBuilder extends WriteBuilder {
-
+public interface V1WriteBuilder extends WriteBuilder {
   /**
    * Creates an InsertableRelation that allows appending a DataFrame to a
    * a destination (using data source-specific parameters). The insert method will only be
@@ -44,11 +41,5 @@ trait V1WriteBuilder extends WriteBuilder {
    *
    * @since 3.0.0
    */
-  def buildForV1Write(): InsertableRelation
-
-  // These methods cannot be implemented by a V1WriteBuilder. The super class will throw
-  // an Unsupported OperationException
-  override final def buildForBatch(): BatchWrite = super.buildForBatch()
-
-  override final def buildForStreaming(): StreamingWrite = super.buildForStreaming()
+  InsertableRelation buildForV1Write();
 }

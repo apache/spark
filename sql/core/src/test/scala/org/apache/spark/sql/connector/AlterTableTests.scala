@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -113,6 +114,19 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.schema === StructType(Seq(
         StructField("id", IntegerType),
         StructField("data", StringType).withComment("doc"))))
+    }
+  }
+
+  test("AlterTable: add column with interval type") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e1 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
+      assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
+      val e2 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
+      assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
     }
   }
 
@@ -310,6 +324,15 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: update column type to interval") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE interval"))
+      assert(e.getMessage.contains("id to interval type"))
+    }
+  }
+
   test("AlterTable: SET/DROP NOT NULL") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -358,7 +381,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+      assert(exc.getMessage.contains("update a struct by updating its fields"))
 
       val table = getTableMetadata(t)
 
@@ -945,7 +968,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(table.name === fullTableName(t))
       assert(table.properties ===
-        Map("provider" -> v2Format, "location" -> "s3://bucket/path").asJava)
+        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
     }
   }
 
@@ -971,7 +994,8 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
     }
   }
 
@@ -983,15 +1007,15 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
 
       val updated = getTableMetadata(t)
 
       assert(updated.name === fullTableName(t))
-      assert(updated.properties === Map("provider" -> v2Format).asJava)
+      assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
-
 }

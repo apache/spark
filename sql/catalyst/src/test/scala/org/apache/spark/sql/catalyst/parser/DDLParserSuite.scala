@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -791,13 +791,13 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -1341,19 +1341,6 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
       AlterNamespaceSetLocation(
         UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-  }
-
-  test("set namespace owner") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET OWNER USER user1"),
-      AlterNamespaceSetOwner(UnresolvedNamespace(Seq("a", "b", "c")), "user1", "USER"))
-
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET OWNER ROLE role1"),
-      AlterNamespaceSetOwner(UnresolvedNamespace(Seq("a", "b", "c")), "role1", "ROLE"))
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET OWNER GROUP group1"),
-      AlterNamespaceSetOwner(UnresolvedNamespace(Seq("a", "b", "c")), "group1", "GROUP"))
   }
 
   test("show databases: basic") {
@@ -1912,11 +1899,11 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTablePropertiesStatement(Seq("a", "b", "c"), None))
+      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTablePropertiesStatement(Seq("a", "b", "c"), Some("propKey1")))
+      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {

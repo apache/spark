@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -27,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(
-    val sparkContext: SparkContext,
+    val session: SparkSession,
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies {
@@ -39,7 +38,7 @@ class SparkPlanner(
       extraPlanningStrategies ++ (
       LogicalQueryStageStrategy ::
       PythonEvals ::
-      DataSourceV2Strategy ::
+      new DataSourceV2Strategy(session) ::
       FileSourceStrategy ::
       DataSourceStrategy(conf) ::
       SpecialLimits ::

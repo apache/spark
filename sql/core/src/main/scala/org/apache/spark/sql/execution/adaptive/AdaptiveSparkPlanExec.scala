@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -87,6 +88,10 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, context.subqueryCache),
+    // Here the 'OptimizeSkewedJoin' rule should be executed
+    // before 'ReduceNumShufflePartitions', as the skewed partition handled
+    // in 'OptimizeSkewedJoin' rule, should be omitted in 'ReduceNumShufflePartitions'.
+    OptimizeSkewedJoin(conf),
     ReduceNumShufflePartitions(conf),
     // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
     // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
@@ -128,16 +133,27 @@ case class AdaptiveSparkPlanExec(
     executedPlan.resetMetrics()
   }
 
+  private def collectSQLMetrics(plan: SparkPlan): Seq[SQLMetric] = {
+    val metrics = new mutable.ArrayBuffer[SQLMetric]()
+    plan.foreach {
+      case p: ShuffleQueryStageExec if (p.resultOption.isEmpty) =>
+        collectSQLMetrics(p.plan).foreach(metrics += _)
+      case p: BroadcastQueryStageExec if (p.resultOption.isEmpty) =>
+        collectSQLMetrics(p.plan).foreach(metrics += _)
+      case p: SparkPlan =>
+        p.metrics.foreach { case metric =>
+          metrics += metric._2
+        }
+    }
+    metrics
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
       // update UI.
-      val executionId = if (isSubquery) {
-        None
-      } else {
-        Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
-          .map(_.toLong)
-      }
+      val executionId = Option(context.session.sparkContext.getLocalProperty(
+        SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -176,7 +192,8 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
             errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}", ex))
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}." +
+                s" and the cause is ${ex.getMessage}", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -479,10 +496,27 @@ case class AdaptiveSparkPlanExec(
    * Notify the listeners of the physical plan change.
    */
   private def onUpdatePlan(executionId: Long): Unit = {
-    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-      executionId,
-      SQLExecution.getQueryExecution(executionId).toString,
-      SparkPlanInfo.fromSparkPlan(this)))
+    if (isSubquery) {
+      // When executing subqueries, we can't update the query plan in the UI as the
+      // UI doesn't support partial update yet. However, the subquery may have been
+      // optimized into a different plan and we must let the UI know the SQL metrics
+      // of the new plan nodes, so that it can track the valid accumulator updates later
+      // and display SQL metrics correctly.
+      onUpdateSQLMetrics(collectSQLMetrics(currentPhysicalPlan), executionId)
+    } else {
+      context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+        executionId,
+        SQLExecution.getQueryExecution(executionId).toString,
+        SparkPlanInfo.fromSparkPlan(this)))
+    }
+  }
+
+  private def onUpdateSQLMetrics(sqlMetrics: Seq[SQLMetric], executionId: Long): Unit = {
+    val sqlPlanMetrics = sqlMetrics.map { case sqlMetric =>
+      SQLPlanMetric(sqlMetric.name.get, sqlMetric.id, sqlMetric.metricType)
+    }
+    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
+      executionId.toLong, sqlPlanMetrics))
   }
 
   /**
@@ -506,7 +540,8 @@ case class AdaptiveSparkPlanExec(
       }
     } finally {
       val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures.", errors.head)
+        "Adaptive execution failed due to stage materialization failures." +
+          s" and the cause is ${errors.head.getMessage}", errors.head)
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex

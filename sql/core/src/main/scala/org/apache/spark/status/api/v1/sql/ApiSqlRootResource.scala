@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.status.api.v1.sql
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import javax.ws.rs.Path
 
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
-  extends LeafNode {
-  override def output: Seq[Attribute] = Nil
-}
+import org.apache.spark.status.api.v1.ApiRequestContext
 
-case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
+@Path("/v1")
+private[v1] class ApiSqlRootResource extends ApiRequestContext {
 
-  override def output: Seq[Attribute] = Nil
+  @Path("applications/{appId}/sql")
+  def sqlList(): Class[SqlResource] = classOf[SqlResource]
 }

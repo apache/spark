@@ -24,8 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,25 +39,25 @@ import java.util.Map;
 public interface TableCatalog extends CatalogPlugin {
 
   /**
-   * A property to specify the location of the table. The files of the table
+   * A reserved property to specify the location of the table. The files of the table
    * should be under this location.
    */
   String PROP_LOCATION = "location";
 
   /**
-   * A property to specify the description of the table.
+   * A reserved property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
 
   /**
-   * A property to specify the provider of the table.
+   * A reserved property to specify the provider of the table.
    */
   String PROP_PROVIDER = "provider";
 
   /**
-   * The list of reserved table properties.
+   * A reserved property to specify the owner of the table.
    */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_PROVIDER);
+  String PROP_OWNER = "owner";
 
   /**
    * List the tables in a namespace from the catalog.

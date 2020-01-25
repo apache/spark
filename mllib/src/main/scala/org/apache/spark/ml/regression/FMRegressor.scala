@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.param._
@@ -291,7 +291,7 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
 @Since("3.0.0")
 class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
-  extends Predictor[Vector, FMRegressor, FMRegressionModel]
+  extends Regressor[Vector, FMRegressor, FMRegressionModel]
   with FactorizationMachines with FMRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
@@ -454,7 +454,7 @@ class FMRegressionModel private[regression] (
     @Since("3.0.0") val intercept: Double,
     @Since("3.0.0") val linear: Vector,
     @Since("3.0.0") val factors: Matrix)
-  extends PredictionModel[Vector, FMRegressionModel]
+  extends RegressionModel[Vector, FMRegressionModel]
   with FMRegressorParams with MLWritable {
 
   @Since("3.0.0")

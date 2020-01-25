@@ -844,13 +844,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>

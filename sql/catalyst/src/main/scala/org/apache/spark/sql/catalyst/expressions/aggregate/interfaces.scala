@@ -96,6 +96,7 @@ case class AggregateExpression(
   extends Expression
   with Unevaluable {
 
+  @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
     AttributeReference(
       aggregateFunction.toString,
@@ -108,7 +109,7 @@ case class AggregateExpression(
     UnresolvedAttribute(aggregateFunction.toString)
   }
 
-  lazy val filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
+  def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.
   override lazy val canonicalized: Expression = {
@@ -137,10 +138,11 @@ case class AggregateExpression(
 
   @transient
   override lazy val references: AttributeSet = {
-    mode match {
-      case Partial | Complete => aggregateFunction.references ++ filterAttributes
+    val aggAttributes = mode match {
+      case Partial | Complete => aggregateFunction.references
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
+    aggAttributes ++ filterAttributes
   }
 
   override def toString: String = {
@@ -149,10 +151,20 @@ case class AggregateExpression(
       case PartialMerge => "merge_"
       case Final | Complete => ""
     }
-    prefix + aggregateFunction.toAggString(isDistinct)
+    val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE $predicate)"
+      case _ => aggFuncStr
+    }
   }
 
-  override def sql: String = aggregateFunction.sql(isDistinct)
+  override def sql: String = {
+    val aggFuncStr = aggregateFunction.sql(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE ${predicate.sql})"
+      case _ => aggFuncStr
+    }
+  }
 }
 
 /**

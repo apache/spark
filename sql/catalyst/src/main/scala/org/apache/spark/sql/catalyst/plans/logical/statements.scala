@@ -293,14 +293,6 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name statement, as parsed from SQL.
- */
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
-
-/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
@@ -445,13 +437,6 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
- */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
 
 /**
  * A DESCRIBE FUNCTION statement, as parsed from SQL

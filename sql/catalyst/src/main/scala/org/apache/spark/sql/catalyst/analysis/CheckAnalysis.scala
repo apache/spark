@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -98,6 +99,9 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedTableOrView =>
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
@@ -116,13 +120,6 @@ trait CheckAnalysis extends PredicateHelper {
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
@@ -383,6 +380,11 @@ trait CheckAnalysis extends PredicateHelper {
               failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
+            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
+          case write: V2WriteCommand if write.resolved =>
+            write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
           // If the view output doesn't have the same number of columns neither with the child
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
@@ -441,23 +443,27 @@ trait CheckAnalysis extends PredicateHelper {
                 if (parent.nonEmpty) {
                   findField("add to", parent)
                 }
+                TypeUtils.failWithIntervalType(add.dataType())
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a struct by adding, deleting, or updating its fields")
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a struct by updating its fields")
                   case _: MapType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a map by updating $fieldName.key or $fieldName.value")
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a map by updating $fieldName.key or $fieldName.value")
                   case _: ArrayType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update the element by updating $fieldName.element")
-                  case _: AtomicType =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update the element by updating $fieldName.element")
+                  case u: UserDefinedType[_] =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a UserDefinedType[${u.sql}] by updating its fields")
+                  case _: CalendarIntervalType =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
+                      s"interval type")
+                  case _ =>
                     // update is okay
                 }
                 if (!Cast.canUpCast(field.dataType, update.newDataType)) {
