@@ -282,6 +282,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
+      case DecommissionExecutor(executorId) =>
+        logInfo(s"Received decommission executor message ${executorId}.")
+        decommissionExecutor(executorId)
+        context.reply(true)
+
       case RetrieveSparkAppConfig(resourceProfileId) =>
         // note this will be updated in later prs to get the ResourceProfile from a
         // ResourceProfileManager that matches the resource profile id
