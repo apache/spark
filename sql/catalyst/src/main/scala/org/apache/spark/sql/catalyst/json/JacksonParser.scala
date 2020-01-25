@@ -83,7 +83,7 @@ class JacksonParser(
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => Some(convertObject(parser, st, fieldConverters))
+      case START_OBJECT => convertRootObject(parser, st, fieldConverters)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -328,6 +328,41 @@ class JacksonParser(
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
         s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+  }
+
+  private def convertRootObject(
+    parser: JsonParser,
+    schema: StructType,
+    fieldConverters: Array[ValueConverter]): Option[InternalRow] = {
+    val row = new GenericInternalRow(schema.length)
+    var badRecordException: Option[Throwable] = None
+    var skipRow = false
+
+    while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
+      schema.getFieldIndex(parser.getCurrentName) match {
+        case Some(index) =>
+          try {
+            row.update(index, fieldConverters(index).apply(parser))
+            skipRow = jsonFilters.skipRow(row, index)
+          } catch {
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+              parser.skipChildren()
+          }
+        case None =>
+          parser.skipChildren()
+      }
+    }
+
+    if (skipRow) {
+      None
+    } else {
+      if (badRecordException.isEmpty) {
+        Some(row)
+      } else {
+        throw PartialResultException(row, badRecordException.get)
+      }
+    }
   }
 
   /**
