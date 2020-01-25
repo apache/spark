@@ -21,7 +21,6 @@ import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
@@ -30,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -40,7 +40,8 @@ import org.apache.spark.util.Utils
 class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
-    allowArrayAsStructs: Boolean) extends Logging {
+    allowArrayAsStructs: Boolean,
+    filters: Seq[Filter]) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -62,6 +63,8 @@ class JacksonParser(
     options.dateFormat,
     options.zoneId,
     options.locale)
+
+  private val jsonFilters = new JsonFilters(filters, schema)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

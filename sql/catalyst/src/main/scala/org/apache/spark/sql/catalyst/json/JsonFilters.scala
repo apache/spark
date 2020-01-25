@@ -17,8 +17,15 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
+
+class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
+  def skipRow(row: InternalRow, index: Int): Boolean = {
+    false
+  }
+}
 
 object JsonFilters {
   private def checkFilterRefs(filter: sources.Filter, schema: StructType): Boolean = {

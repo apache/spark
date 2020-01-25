@@ -87,17 +87,21 @@ case class JsonScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
   }
 
   override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters)
 
   override def equals(obj: Any): Boolean = obj match {
-    case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options
-
+    case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options &&
+      equivalentFilters(pushedFilters, j.pushedFilters)
     case _ => false
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def description(): String = {
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+  }
 }

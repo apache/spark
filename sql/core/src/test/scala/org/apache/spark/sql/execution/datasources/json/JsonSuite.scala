@@ -70,7 +70,11 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
 
       val dummyOption = new JSONOptions(options, SQLConf.get.sessionLocalTimeZone)
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
+      val parser = new JacksonParser(
+        dummySchema,
+        dummyOption,
+        allowArrayAsStructs = true,
+        filters = Seq.empty)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
