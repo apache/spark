@@ -31,7 +31,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
+      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
