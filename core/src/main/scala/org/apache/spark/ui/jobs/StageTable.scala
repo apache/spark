@@ -23,6 +23,7 @@ import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.ListMap
 import scala.xml._
 
 import org.apache.commons.text.StringEscapeUtils
@@ -40,6 +41,7 @@ private[ui] class StageTableBase(
     stageTag: String,
     basePath: String,
     subPath: String,
+    metrics: Set[String],
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
@@ -75,6 +77,7 @@ private[ui] class StageTableBase(
       isFairScheduler,
       killEnabled,
       currentTime,
+      metrics,
       stagePageSize,
       stageSortColumn,
       stageSortDesc,
@@ -111,14 +114,22 @@ private[ui] class StageTableRowData(
     val shuffleRead: Long,
     val shuffleReadWithUnit: String,
     val shuffleWrite: Long,
-    val shuffleWriteWithUnit: String)
+    val shuffleWriteWithUnit: String,
+    val peakExecutionMemory: Long,
+    val peakExecutionMemoryWithUnit: String,
+    val memoryBytesSpilled: Long,
+    val memoryBytesSpilledWithUnit: String,
+    val diskBytesSpilled: Long,
+    val diskBytesSpilledWithUnit: String,
+    val jvmGcTime: Long,
+    val formattedJvmGcTime: String)
 
 private[ui] class MissingStageTableRowData(
     stageInfo: v1.StageData,
     stageId: Int,
     attemptId: Int) extends StageTableRowData(
   stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
-    "")
+    "", 0, "", 0, "", 0, "", 0, "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
@@ -131,6 +142,7 @@ private[ui] class StagePagedTable(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     currentTime: Long,
+    metrics: Set[String],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -176,6 +188,23 @@ private[ui] class StagePagedTable(
   }
 
   override def headers: Seq[Node] = {
+    // must be in the same order than rowContent
+    val optionalHeaders = ListMap(
+      "Input" -> ("Input", ToolTips.INPUT, true),
+      "Output"-> ("Output", ToolTips.OUTPUT, true),
+      "Shuffle Read"-> ("Shuffle Read", ToolTips.SHUFFLE_READ, true),
+      "Shuffle Write" -> ("Shuffle Write", ToolTips.SHUFFLE_WRITE, true),
+      "Peak Execution Memory" -> ("Peak Execution Memory", ToolTips.PEAK_EXECUTION_MEMORY, true),
+      "Spill (Memory)" -> ("Spill (Memory)", ToolTips.SHUFFLE_READ, true),  // TODO
+      "Spill (Disk)" -> ("Spill (Disk)", ToolTips.SHUFFLE_WRITE, true),  // TODO
+      "GC Time" -> ("GC Time", ToolTips.GC_TIME, true)
+    )
+    if(metrics.exists(!optionalHeaders.contains(_))) {
+      throw new IllegalArgumentException(
+        s"Unknown metric: ${metrics.diff(optionalHeaders.keys.toSet).mkString(", ")}"
+      )
+    }
+
     // stageHeadersAndCssClasses has three parts: header title, tooltip information, and sortable.
     // The tooltip information could be None, which indicates it does not have a tooltip.
     // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
@@ -186,12 +215,9 @@ private[ui] class StagePagedTable(
         ("Description", null, true),
         ("Submitted", null, true),
         ("Duration", ToolTips.DURATION, true),
-        ("Tasks: Succeeded/Total", null, false),
-        ("Input", ToolTips.INPUT, true),
-        ("Output", ToolTips.OUTPUT, true),
-        ("Shuffle Read", ToolTips.SHUFFLE_READ, true),
-        ("Shuffle Write", ToolTips.SHUFFLE_WRITE, true)
+        ("Tasks: Succeeded/Total", null, false)
       ) ++
+      optionalHeaders.filterKeys(metrics.contains).values ++
       {if (isFailedStage) {Seq(("Failure Reason", null, false))} else Seq.empty}
 
     if (!stageHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -284,18 +310,52 @@ private[ui] class StagePagedTable(
           {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
           completed = stageData.numCompleteTasks, failed = stageData.numFailedTasks,
           skipped = 0, reasonToNumKilled = stageData.killedTasksSummary, total = info.numTasks)}
-        </td>
-        <td>{data.inputReadWithUnit}</td>
-        <td>{data.outputWriteWithUnit}</td>
-        <td>{data.shuffleReadWithUnit}</td>
-        <td>{data.shuffleWriteWithUnit}</td> ++
-        {
-          if (isFailedStage) {
-            failureReasonHtml(info)
-          } else {
-            Seq.empty
-          }
-        }
+        </td> ++
+        {if (metrics.contains("Input")) {
+          <td>{data.inputReadWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Output")) {
+          <td>{data.outputWriteWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Shuffle Read")) {
+          <td>{data.shuffleReadWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Shuffle Write")) {
+          <td>{data.shuffleWriteWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Peak Execution Memory")) {
+          <td>{data.peakExecutionMemoryWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Spill (Memory)")) {
+          <td>{data.memoryBytesSpilledWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("Spill (Disk)")) {
+          <td>{data.diskBytesSpilledWithUnit}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (metrics.contains("GC Time")) {
+          <td>{data.formattedJvmGcTime}</td>
+        } else {
+          Seq.empty
+        }} ++
+        {if (isFailedStage) {
+          failureReasonHtml(info)
+        } else {
+          Seq.empty
+        }}
     }
   }
 
@@ -377,10 +437,9 @@ private[ui] class StagePagedTable(
     <td></td> ++ // Submitted
     <td></td> ++ // Duration
     <td></td> ++ // Tasks: Succeeded/Total
-    <td></td> ++ // Input
-    <td></td> ++ // Output
-    <td></td> ++ // Shuffle Read
-    <td></td> // Shuffle Write
+    {metrics.map(_ =>
+      <td></td> // selected metrics
+    )}
   }
 }
 
@@ -433,6 +492,17 @@ private[ui] class StageDataSource(
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
+    val peakExecMemory = stageData.peakExecutionMemory
+    val peakExecMemoryWithUnit = if (peakExecMemory > 0) Utils.bytesToString(peakExecMemory) else ""
+    val memorySpilled = stageData.memoryBytesSpilled
+    val memorySpilledWithUnit = if (memorySpilled > 0) Utils.bytesToString(memorySpilled) else ""
+    val diskSpilled = stageData.diskBytesSpilled
+    val diskSpilledWithUnit = if (diskSpilled > 0) Utils.bytesToString(diskSpilled) else ""
+    val jvmGcTime = stageData.jvmGcTime
+    val formattedJvmGcTime = if (jvmGcTime > 0) UIUtils.formatDuration(jvmGcTime) else ""
+    // TODO: add stageData.executorRunTime + stageData.executorCpuTime to jvm: Run / CPU / GC Time
+    // SPARK-26109: Duration of task as executorRunTime to make it consistent with the
+    // aggregated tasks summary metrics table and the previous versions of Spark.
 
 
     new StageTableRowData(
@@ -453,7 +523,15 @@ private[ui] class StageDataSource(
       shuffleRead,
       shuffleReadWithUnit,
       shuffleWrite,
-      shuffleWriteWithUnit
+      shuffleWriteWithUnit,
+      peakExecMemory,
+      peakExecMemoryWithUnit,
+      memorySpilled,
+      memorySpilledWithUnit,
+      diskSpilled,
+      diskSpilledWithUnit,
+      jvmGcTime,
+      formattedJvmGcTime
     )
   }
 
@@ -471,6 +549,10 @@ private[ui] class StageDataSource(
       case "Output" => Ordering.by(_.outputWrite)
       case "Shuffle Read" => Ordering.by(_.shuffleRead)
       case "Shuffle Write" => Ordering.by(_.shuffleWrite)
+      case "Peak Execution Memory" => Ordering.by(_.peakExecutionMemory)
+      case "Spill (Memory)" => Ordering.by(_.memoryBytesSpilled)
+      case "Spill (Disk)" => Ordering.by(_.diskBytesSpilled)
+      case "GC Time" => Ordering.by(_.jvmGcTime)
       case "Tasks: Succeeded/Total" =>
         throw new IllegalArgumentException(s"Unsortable column: $sortColumn")
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
