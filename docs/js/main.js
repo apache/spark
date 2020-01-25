@@ -29,7 +29,7 @@ function codeTabs() {
     $(this).addClass("tab-content");
 
     // Insert the tab bar
-    var tabBar = $('<ul class="nav nav-tabs" data-tabs="tabs"></ul>');
+    var tabBar = $('<ul class="nav nav-tabs mb-4" data-tabs="tabs" role="tablist"></ul>');
     $(this).before(tabBar);
 
     // Add each code sample to the tab bar:
@@ -50,12 +50,12 @@ function codeTabs() {
         var buttonLabel = ""
       }
       tabBar.append(
-        '<li><a class="tab_' + lang + '" href="#' + id + '">' + buttonLabel + '</a></li>'
+        '<li class="nav-item"><a class="nav-link tab_' + lang + '" href="#' + id + '" data-toggle="tab">' + buttonLabel + '</a></li>'
       );
     });
 
     codeSamples.first().addClass("active");
-    tabBar.children("li").first().addClass("active");
+    tabBar.children("li").first().children("a").first().addClass("active");
     counter++;
   });
   $("ul.nav-tabs a").click(function (e) {
