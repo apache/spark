@@ -108,7 +108,7 @@ private[ml] class HingeAggregator(
   }
 
   /**
-   * Add a new training instance to this HingeAggregator, and update the loss and gradient
+   * Add a new training instance block to this HingeAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param block The InstanceBlock to be added.

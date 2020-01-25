@@ -34,6 +34,7 @@ private[spark] case class Instance(label: Double, weight: Double, features: Vect
 
 /**
  * Class that represents an block of instance.
+ * If all weights are 1, then an empty array is stored.
  */
 private[spark] class InstanceBlock(
     val labels: Array[Double],
@@ -85,14 +86,15 @@ private[spark] class InstanceBlock(
       case dm: DenseMatrix =>
         (i: Int) =>
           val start = numFeatures * i
-          Iterator.tabulate(numFeatures)(j => (j, dm.values(start + j)))
-            .filter(_._2 != 0)
+          Iterator.tabulate(numFeatures)(j =>
+            (j, dm.values(start + j))
+          ).filter(_._2 != 0)
       case sm: SparseMatrix =>
         (i: Int) =>
           val start = sm.colPtrs(i)
           val end = sm.colPtrs(i + 1)
-          Iterator.tabulate(end - start)(i =>
-            (sm.rowIndices(start + i), sm.values(start + i))
+          Iterator.tabulate(end - start)(j =>
+            (sm.rowIndices(start + j), sm.values(start + j))
           ).filter(_._2 != 0)
     }
   }
