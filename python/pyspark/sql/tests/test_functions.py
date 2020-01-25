@@ -333,6 +333,9 @@ class FunctionsTests(ReusedSQLTestCase):
             "overlay(x, y, 2, 5)",
             "overlay(x, y, 11, -1)",
             "overlay(x, y, 2, 5)",
+        ]
+
+        self.assertListEqual(actual, expected)
 
     def test_percentile_approx(self):
         from pyspark.sql.functions import col, percentile_approx
