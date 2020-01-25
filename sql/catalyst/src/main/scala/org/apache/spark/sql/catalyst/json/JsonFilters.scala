@@ -29,13 +29,46 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
     }
   }
 
-  private var allPredicates: List[JsonPredicate] = List.empty
+  private var allPredicates: Array[JsonPredicate] = null
 
-  def skipRow(row: InternalRow, index: Int): Boolean = {
-    false
+  private val indexedPredicates: Array[Array[JsonPredicate]] = schema match {
+    case st: StructType =>
+      Array.fill(st.length)(null)
+    case _ => null
   }
 
-  def reset(): Unit = allPredicates.foreach(_.reset)
+  def skipRow(row: InternalRow, index: Int): Boolean = {
+    var skip = false
+    assert(indexedPredicates != null, "skipRow() can be called only for structs")
+    val predicates = indexedPredicates(index)
+    if (predicates != null) {
+      val len = predicates.length
+      var i = 0
+
+      while (i < len) {
+        val pred = predicates(i)
+        pred.refCount -= 1
+        if (!skip && pred.refCount == 0) {
+          skip = !pred.predicate.eval(row)
+        }
+        i += 1
+      }
+    }
+
+    skip
+  }
+
+  def reset(): Unit = {
+    if (allPredicates != null) {
+      val len = allPredicates.length
+      var i = 0
+      while (i < len) {
+        val pred = allPredicates(i)
+        pred.refCount = pred.totalRefs
+        i += 1
+      }
+    }
+  }
 }
 
 object JsonFilters {
