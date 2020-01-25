@@ -21,7 +21,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
-import scala.collection.JavaConverters._
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
@@ -38,8 +37,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
@@ -178,13 +177,12 @@ case class DescribeDatabaseCommand(
     val allDbProperties = dbMetadata.properties
     val result =
       Row("Database Name", dbMetadata.name) ::
-        Row("Description", dbMetadata.description) ::
+        Row("Comment", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner Name", allDbProperties.getOrElse(PROP_OWNER_NAME, "")) ::
-        Row("Owner Type", allDbProperties.getOrElse(PROP_OWNER_TYPE, "")) :: Nil
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
 
     if (extended) {
-      val properties = allDbProperties -- RESERVED_PROPERTIES.asScala
+      val properties = allDbProperties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       val propertiesStr =
         if (properties.isEmpty) {
           ""

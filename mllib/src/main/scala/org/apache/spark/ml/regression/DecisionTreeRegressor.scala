@@ -22,7 +22,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -117,6 +116,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val instances = extractInstances(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
+    require(!strategy.bootstrap, "DecisionTreeRegressor does not need bootstrap sampling")
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
