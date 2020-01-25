@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.json
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.BasePredicate
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
 class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
   case class JsonPredicate(predicate: BasePredicate, totalRefs: Int, var refCount: Int) {
@@ -31,9 +32,33 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
     }
   }
 
+  def buildPredicates(requiredSchema: StructType): Array[Array[JsonPredicate]] = {
+    val groupedFilters = filters.map(filter => (filter.references.toSet, filter))
+      .groupBy { case (refs, _) => refs }
+      .mapValues(_.map { case (_, filter) => filter })
+    val filterLiterals = filters.filter(_.references.isEmpty)
+    val groupedPredicates = groupedFilters.map { case (refs, filters) =>
+      val reducedExpr = (filterLiterals ++ filters)
+        .flatMap(JsonFilters.filterToExpression(_, toRef))
+        .reduce(And)
+      val predicate = Predicate.create(reducedExpr)
+      (refs, JsonPredicate(predicate, refs.size, 0))
+    }
+    val groupedByFields = groupedPredicates.toSeq.flatMap { case (refs, predicate) =>
+      refs.map(ref => (ref, predicate))
+    }.groupBy { case (ref, _) => ref }
+    .map { case (ref, values) => (ref, values.map { case (_, predicate) => predicate})}
+
+    val jsonPredicates = Array.fill[Array[JsonPredicate]](requiredSchema.length)(null)
+    groupedByFields.foreach { case (fieldName, predicates) =>
+      val fieldIndex = requiredSchema.fieldIndex(fieldName)
+      jsonPredicates(fieldIndex) = predicates.toArray
+    }
+    jsonPredicates
+  }
+
   private val indexedPredicates: Array[Array[JsonPredicate]] = schema match {
-    case st: StructType =>
-      Array.fill(st.length)(null)
+    case st: StructType => buildPredicates(st)
     case _ => null
   }
 
@@ -80,6 +105,11 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
       i += 1
     }
   }
+
+  // Finds a filter attribute in the read schema and converts it to a `BoundReference`
+  private def toRef(attr: String): Option[BoundReference] = {
+    None
+  }
 }
 
 object JsonFilters {
@@ -96,5 +126,71 @@ object JsonFilters {
    */
   def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
     filters.filter(checkFilterRefs(_, schema))
+  }
+
+  private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
+    a.zip(b).headOption
+  }
+
+  private def toLiteral(value: Any): Option[Literal] = {
+    Try(Literal(value)).toOption
+  }
+
+  /**
+   * Converts a filter to an expression and binds it to row positions.
+   *
+   * @param filter The filter to convert.
+   * @param toRef The function converts a filter attribute to a bound reference.
+   * @return some expression with resolved attributes or None if the conversion
+   *         of the given filter to an expression is impossible.
+   */
+  def filterToExpression(
+    filter: sources.Filter,
+    toRef: String => Option[BoundReference]): Option[Expression] = {
+    def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
+      zip(toRef(name), toLiteral(value))
+    }
+    def translate(filter: sources.Filter): Option[Expression] = filter match {
+      case sources.And(left, right) =>
+        zip(translate(left), translate(right)).map(And.tupled)
+      case sources.Or(left, right) =>
+        zip(translate(left), translate(right)).map(Or.tupled)
+      case sources.Not(child) =>
+        translate(child).map(Not)
+      case sources.EqualTo(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(EqualTo.tupled)
+      case sources.EqualNullSafe(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(EqualNullSafe.tupled)
+      case sources.IsNull(attribute) =>
+        toRef(attribute).map(IsNull)
+      case sources.IsNotNull(attribute) =>
+        toRef(attribute).map(IsNotNull)
+      case sources.In(attribute, values) =>
+        val literals = values.toSeq.flatMap(toLiteral)
+        if (literals.length == values.length) {
+          toRef(attribute).map(In(_, literals))
+        } else {
+          None
+        }
+      case sources.GreaterThan(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(GreaterThan.tupled)
+      case sources.GreaterThanOrEqual(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(GreaterThanOrEqual.tupled)
+      case sources.LessThan(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(LessThan.tupled)
+      case sources.LessThanOrEqual(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(LessThanOrEqual.tupled)
+      case sources.StringContains(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(Contains.tupled)
+      case sources.StringStartsWith(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(StartsWith.tupled)
+      case sources.StringEndsWith(attribute, value) =>
+        zipAttributeAndValue(attribute, value).map(EndsWith.tupled)
+      case sources.AlwaysTrue() =>
+        Some(Literal(true, BooleanType))
+      case sources.AlwaysFalse() =>
+        Some(Literal(false, BooleanType))
+    }
+    translate(filter)
   }
 }
