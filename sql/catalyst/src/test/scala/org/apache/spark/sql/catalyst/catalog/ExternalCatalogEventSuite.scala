@@ -255,16 +255,13 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
         RenamePartitionEvent("db5", "tbl1", Seq(partition.spec), Seq(newPartition.spec)) ::
         Nil)
 
-    // ALTER
-    catalog.alterPartitions("db5", "tbl1", Seq.empty)
-    checkEvents(AlterPartitionPreEvent("db5", "tbl1", Seq.empty) ::
-      AlterPartitionEvent("db5", "tbl1", Seq.empty) :: Nil)
-
     // DROP
-    intercept[AnalysisException] {
+    val message = intercept[AnalysisException] {
       catalog.dropPartitions("db5", "tbl2", Seq(newPartition.spec),
         ignoreIfNotExists = false, purge = true, retainData = false)
-    }
+    }.getMessage
+
+    assert(message.equals("Table or view 'tbl2' not found in database 'db5';"))
     checkEvents(DropPartitionPreEvent("db5", "tbl2", Seq(newPartition.spec)) :: Nil)
 
     catalog.dropPartitions("db5", "tbl1", Seq(newPartition.spec),
