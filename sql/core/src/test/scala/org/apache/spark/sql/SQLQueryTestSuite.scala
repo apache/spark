@@ -87,16 +87,16 @@ import org.apache.spark.tags.ExtendedSQLTest
  * {{{
  *   -- some header information
  *
- *   -- !query 0
+ *   -- !query
  *   select 1, -1
- *   -- !query 0 schema
+ *   -- !query schema
  *   struct<...schema...>
- *   -- !query 0 output
+ *   -- !query output
  *   ... data row 1 ...
  *   ... data row 2 ...
  *   ...
  *
- *   -- !query 1
+ *   -- !query
  *   ...
  * }}}
  *
