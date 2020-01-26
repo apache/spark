@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
+private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -82,7 +82,7 @@ class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
   def generateBasicInfo(query: StreamingQueryUIData): Seq[Node] = {
     val duration = if (query.isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.submitTime)
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.submissionTime)
     } else {
       withNoProgress(query, {
         val end = query.lastProgress.timestamp
@@ -100,7 +100,7 @@ class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       </strong>
       since
       <strong>
-        {SparkUIUtils.formatDate(query.submitTime)}
+        {SparkUIUtils.formatDate(query.submissionTime)}
       </strong>
       (<strong>{numBatches}</strong> completed batches)
     </div>
