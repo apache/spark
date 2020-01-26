@@ -130,11 +130,12 @@ private[ml] class HingeAggregator(
       Array.ofDim[Double](size)
     }
 
-    // vec here represents dotProducts
+    // arr/vec here represents dotProducts
     val vec = new DenseVector(arr)
     BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, vec)
 
     // in-place convert dotProducts to gradient scales
+    // then, arr/vec represents gradient scales
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
@@ -147,10 +148,13 @@ private[ml] class HingeAggregator(
         val loss = (1.0 - labelScaled * arr(i)) * weight
         if (loss > 0) {
           lossSum += loss
-          arr(i) = -labelScaled * weight
+          val gradScale = -labelScaled * weight
+          arr(i) = gradScale
         } else {
           arr(i) = 0.0
         }
+      } else {
+        arr(i) = 0.0
       }
       i += 1
     }

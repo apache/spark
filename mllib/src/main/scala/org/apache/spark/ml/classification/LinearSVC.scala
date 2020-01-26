@@ -217,22 +217,21 @@ class LinearSVC @Since("2.2.0") (
 
       val featuresStd = summarizer.std.compressed
       val bcFeaturesStd = sc.broadcast(featuresStd)
-      val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
         Some(new L2Regularization(regParamL2, shouldApply,
-          if ($(standardization)) None else Some(getFeaturesStd)))
+          if ($(standardization)) None else Some(featuresStd.apply)))
       } else {
         None
       }
 
       val standardized = instances.map {
         case Instance(label, weight, features) =>
-          val featuresStdVec = bcFeaturesStd.value
+          val featuresStd = bcFeaturesStd.value
           val array = Array.ofDim[Double](numFeatures)
           features.foreachNonZero { (i, v) =>
-            val std = featuresStdVec(i)
+            val std = featuresStd(i)
             if (std != 0) array(i) = v / std
           }
           Instance(label, weight, Vectors.dense(array))
