@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +31,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
     }
   }
 
-  private val indexedPredicates = {
+  private val indexedPredicates: Array[Array[JsonPredicate]] = {
     val literals = filters.filter(_.references.isEmpty)
     val groupedByRefSet = filters
       .groupBy(_.references.toSet)
@@ -55,51 +54,23 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
 
   def skipRow(row: InternalRow, index: Int): Boolean = {
     var skip = false
-    assert(indexedPredicates != null, "skipRow() can be called only for structs")
-    val predicates = indexedPredicates(index)
-    if (predicates != null) {
-      val len = predicates.length
-      var i = 0
-
-      while (i < len) {
-        val pred = predicates(i)
-        pred.refCount -= 1
-        if (!skip && pred.refCount == 0) {
-          skip = !pred.predicate.eval(row)
-        }
-        i += 1
+    indexedPredicates(index).foreach { pred =>
+      pred.refCount -= 1
+      if (!skip && pred.refCount == 0) {
+        skip = !pred.predicate.eval(row)
       }
     }
-
     skip
   }
 
-  private val allPredicates: Array[JsonPredicate] = {
-    val predicates = new ArrayBuffer[JsonPredicate]()
-    if (indexedPredicates != null) {
-      for {
-        groupedPredicates <- indexedPredicates
-        predicate <- groupedPredicates if groupedPredicates != null
-      } {
-        predicates += predicate
-      }
-    }
-    predicates.toArray
-  }
-
-  def reset(): Unit = {
-    val len = allPredicates.length
-    var i = 0
-    while (i < len) {
-      val pred = allPredicates(i)
-      pred.refCount = pred.totalRefs
-      i += 1
-    }
-  }
+  def reset(): Unit = indexedPredicates.foreach(_.foreach(_.reset))
 
   // Finds a filter attribute in the read schema and converts it to a `BoundReference`
   private def toRef(attr: String): Option[BoundReference] = {
-    None
+    schema.getFieldIndex(attr).map { index =>
+      val field = schema(index)
+      BoundReference(schema.fieldIndex(attr), field.dataType, field.nullable)
+    }
   }
 }
 
