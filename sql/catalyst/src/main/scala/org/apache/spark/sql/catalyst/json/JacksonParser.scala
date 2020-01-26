@@ -64,8 +64,6 @@ class JacksonParser(
     options.zoneId,
     options.locale)
 
-  private val jsonFilters = new JsonFilters(filters, schema)
-
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -82,8 +80,9 @@ class JacksonParser(
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+    val jsonFilters = new JsonFilters(filters, st)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => convertRootObject(parser, st, fieldConverters)
+      case START_OBJECT => convertRootObject(parser, st, fieldConverters, jsonFilters)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -333,7 +332,8 @@ class JacksonParser(
   private def convertRootObject(
     parser: JsonParser,
     schema: StructType,
-    fieldConverters: Array[ValueConverter]): Option[InternalRow] = {
+    fieldConverters: Array[ValueConverter],
+    jsonFilters: JsonFilters): Option[InternalRow] = {
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false

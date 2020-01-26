@@ -23,9 +23,9 @@ import scala.util.Try
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{BooleanType, StructType}
 
-class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
+class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
   case class JsonPredicate(predicate: BasePredicate, totalRefs: Int, var refCount: Int) {
     def reset(): Unit = {
       refCount = totalRefs
