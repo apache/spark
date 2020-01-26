@@ -89,10 +89,7 @@ test_that("cleanClosure on R functions", {
     lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
     l$field[1, 1] <- 3  # Test for access operators `$`.
     res <- defUse + l$field[1, ]  # Test for def-use chain of "defUse", and "" symbol.
-    # Enable once SPARK-30629 is fixed
-    # nolint start
-    # f(res)  # Test for recursive calls.
-    # nolint end
+    f(res)  # Test for recursive calls.
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
@@ -104,10 +101,7 @@ test_that("cleanClosure on R functions", {
   # nolint end
   expect_true("g" %in% ls(env))
   expect_true("l" %in% ls(env))
-  # Enable once SPARK-30629 is fixed
-  # nolint start
-  # expect_true("f" %in% ls(env))
-  # nolint end
+  expect_true("f" %in% ls(env))
   expect_equal(get("l", envir = env, inherits = FALSE), l)
   # "y" should be in the environment of g.
   newG <- get("g", envir = env, inherits = FALSE)
