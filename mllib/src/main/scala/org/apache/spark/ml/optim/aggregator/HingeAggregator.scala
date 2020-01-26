@@ -45,11 +45,14 @@ private[ml] class HingeAggregator(
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
-  @transient private lazy val (linear, intercept) = if (fitIntercept) {
-    (Vectors.dense(coefficientsArray.take(numFeatures)), coefficientsArray(numFeatures))
+
+  @transient private lazy val linear = if (fitIntercept) {
+    Vectors.dense(coefficientsArray.take(numFeatures))
   } else {
-    (Vectors.dense(coefficientsArray), 0.0)
+    Vectors.dense(coefficientsArray)
   }
+  @transient private lazy val intercept = if (fitIntercept) coefficientsArray.last else 0.0
+
   @transient private lazy val linearGradSumVec = if (fitIntercept) {
     new DenseVector(Array.ofDim[Double](numFeatures))
   } else {
