@@ -51,7 +51,7 @@ private[ml] class HingeAggregator(
   } else {
     Vectors.dense(coefficientsArray)
   }
-  @transient private lazy val intercept = if (fitIntercept) coefficientsArray.last else 0.0
+  private val intercept = if (fitIntercept) bcCoefficients.value(numFeatures) else 0.0
 
   @transient private lazy val linearGradSumVec = if (fitIntercept) {
     new DenseVector(Array.ofDim[Double](numFeatures))
