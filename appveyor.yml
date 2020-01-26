@@ -43,8 +43,7 @@ install:
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
   - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival', 'arrow'), repos='https://cloud.r-project.org/')"
-  - cmd: R -e "install.packages(c('crayon', 'praise', 'R6'), repos='https://cloud.r-project.org/')"
-  - cmd: R -e "install.packages('testthat', repos='https://cloud.r-project.org/')"
+  - cmd: R -e "install.packages(c('crayon', 'praise', 'R6', 'testthat'), repos='https://cloud.r-project.org/')"
   - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival'); packageVersion('arrow')"
 
 build_script:

@@ -73,9 +73,9 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     }
 
     test_runner("SparkR",
-           file.path(sparkRDir, "pkg", "tests", "fulltests"),
-           NULL,
-           reporter)
+                file.path(sparkRDir, "pkg", "tests", "fulltests"),
+                NULL,
+                reporter)
   }
 
   SparkR:::uninstallDownloadedSpark()
