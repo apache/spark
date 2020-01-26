@@ -46,17 +46,23 @@ private[ml] class HingeAggregator(
       s" but got type ${bcCoefficients.value.getClass}.")
   }
 
-  @transient private lazy val linear = if (fitIntercept) {
-    Vectors.dense(coefficientsArray.take(numFeatures))
-  } else {
-    Vectors.dense(coefficientsArray)
+  @transient private lazy val linear = {
+    if (fitIntercept) {
+      new DenseVector(coefficientsArray.take(numFeatures))
+    } else {
+      new DenseVector(coefficientsArray)
+    }
   }
-  private val intercept = if (fitIntercept) bcCoefficients.value(numFeatures) else 0.0
 
-  @transient private lazy val linearGradSumVec = if (fitIntercept) {
-    new DenseVector(Array.ofDim[Double](numFeatures))
-  } else {
-    null
+  private val intercept =
+    if (fitIntercept) bcCoefficients.value(numFeatures) else 0.0
+
+  @transient private lazy val linearGradSumVec = {
+    if (fitIntercept) {
+      new DenseVector(Array.ofDim[Double](numFeatures))
+    } else {
+      null
+    }
   }
 
 
