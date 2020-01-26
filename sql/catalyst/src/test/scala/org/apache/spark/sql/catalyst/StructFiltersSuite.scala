@@ -124,13 +124,12 @@ abstract class StructFiltersSuite extends SparkFunSuite {
       sources.LessThan("i", 0)
     )
     Seq(filters1 -> false, filters2 -> true).foreach { case (filters, skip) =>
+      val schema = "i INTEGER, d DOUBLE, s STRING"
+      val row = InternalRow(10, 3.14, UTF8String.fromString("abc"))
+      val structFilters = createFilters(filters, getSchema(schema))
+      structFilters.reset()
       for (p <- 0 until 3) {
-        check(
-          requiredSchema = "i INTEGER, d DOUBLE, s STRING",
-          filters = filters,
-          row = InternalRow(10, 3.14, UTF8String.fromString("abc")),
-          pos = p,
-          skip = skip)
+        assert(structFilters.skipRow(row, p) === skip)
       }
     }
   }
