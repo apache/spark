@@ -193,43 +193,28 @@ struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 14 output
 NULL	NULL	NULL	0
->>>>>>> Fix
 
 
 -- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 15 output
 NULL	NULL	NULL	0
 NULL	NULL	NULL	0
 NULL	NULL	NULL	0
->>>>>>> Fix
 
 
 -- !query
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
 -- !query schema
 struct<sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 16 output
 NULL	0
 NULL	0
 NULL	0
->>>>>>> Fix
 
 
 -- !query
@@ -237,13 +222,8 @@ select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
  group by grouping sets ((t1.a,t2.b),())
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 17 output
 NULL	NULL	NULL	0
->>>>>>> Fix
 
 
 -- !query
@@ -596,43 +576,28 @@ struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 41 output
 NULL	NULL	NULL	0
->>>>>>> Fix
 
 
 -- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 42 output
 NULL	NULL	NULL	0
 NULL	NULL	NULL	0
 NULL	NULL	NULL	0
->>>>>>> Fix
 
 
 -- !query
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
 -- !query schema
 struct<sum(v):bigint,count(1):bigint>
-<<<<<<< HEAD
 -- !query output
-
-=======
--- !query 43 output
 NULL	0
 NULL	0
 NULL	0
->>>>>>> Fix
 
 
 -- !query
