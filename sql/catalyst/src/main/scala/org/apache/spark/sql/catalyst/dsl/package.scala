@@ -98,8 +98,6 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: String): Expression =
-      Like(expr, other, Literal(escapeChar))
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, Literal(escapeChar.toString))
     def rlike(other: Expression): Expression = RLike(expr, other)
