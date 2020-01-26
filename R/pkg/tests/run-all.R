@@ -61,7 +61,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     set.seed(42)
 
     # To be removed once testthat 1.x is removed from all builds
-    if (grepl("^1\\..*", installed.packages()["testthat", "Version"])) {
+    if (grepl("^1\\..*", packageVersion("testthat"))) {
       # testthat 1.x
       test_runner <- testthat:::run_tests
       reporter <- "summary"
