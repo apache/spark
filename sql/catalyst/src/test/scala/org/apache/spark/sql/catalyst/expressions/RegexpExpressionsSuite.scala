@@ -194,6 +194,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" like(_, escapeChar),
         s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""", true)
     }
+
+    val longEscapeErr = intercept[AnalysisException] {
+      checkLiteralRow("abdef" like(_, "==="), "abdef", true)
+    }.getMessage
+    assert(longEscapeErr.contains("The 'escape' parameter must be a string literal of one char"))
   }
 
   test("RLIKE Regular Expression") {
