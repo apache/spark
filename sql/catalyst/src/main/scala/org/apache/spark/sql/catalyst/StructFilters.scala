@@ -26,6 +26,8 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
 abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
   def skipRow(row: InternalRow, index: Int): Boolean
 
+  def reset(): Unit = {}
+
   // Finds a filter attribute in the schema and converts it to a `BoundReference`
   def toRef(attr: String): Option[BoundReference] = {
     schema.getFieldIndex(attr).map { index =>

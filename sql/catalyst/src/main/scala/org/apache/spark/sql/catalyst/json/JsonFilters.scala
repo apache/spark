@@ -32,16 +32,23 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
   }
 
   private val predicates: Array[Array[JsonPredicate]] = {
-    val literals = filters.filter(_.references.isEmpty)
     val groupedByRefSet = filters
       .groupBy(_.references.toSet)
       .map { case (refSet, refsFilters) =>
-        val reducedExpr = (literals ++ refsFilters)
+        val reducedExpr = refsFilters
           .flatMap(StructFilters.filterToExpression(_, toRef))
           .reduce(And)
         (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
       }
-    val groupedByFields = groupedByRefSet.toSeq
+    // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields
+    val withLiterals = groupedByRefSet.map { case (refSet, pred) =>
+      if (refSet.isEmpty) {
+        (schema.fields.map(_.name).toSet, pred.copy(totalRefs = 1))
+      } else {
+        (refSet, pred)
+      }
+    }
+    val groupedByFields = withLiterals.toSeq
       .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
       .groupBy(_._1)
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
@@ -63,5 +70,5 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
     skip
   }
 
-  def reset(): Unit = predicates.foreach(_.foreach(_.reset))
+  override def reset(): Unit = predicates.foreach(_.foreach(_.reset))
 }

@@ -65,8 +65,9 @@ abstract class StructFiltersSuite extends SparkFunSuite {
       row: InternalRow,
       pos: Int,
       skip: Boolean): Unit = {
-      val filters = createFilters(filters, getSchema(requiredSchema))
-      assert(filters.skipRow(row, pos) === skip)
+      val structFilters = createFilters(filters, getSchema(requiredSchema))
+      structFilters.reset()
+      assert(structFilters.skipRow(row, pos) === skip)
     }
 
     check(filters = Seq(), row = InternalRow(3.14), pos = 0, skip = false)
