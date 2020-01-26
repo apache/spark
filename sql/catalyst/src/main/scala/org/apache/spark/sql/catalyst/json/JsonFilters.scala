@@ -33,23 +33,24 @@ class JsonFilters(filters: Seq[sources.Filter], schema: DataType) {
   }
 
   def buildPredicates(requiredSchema: StructType): Array[Array[JsonPredicate]] = {
-    val groupedFilters = filters.groupBy(_.references.toSet)
     val literals = filters.filter(_.references.isEmpty)
-    val groupedPredicates = groupedFilters.map { case (refSet, refsFilters) =>
-      val reducedExpr = (literals ++ refsFilters)
-        .flatMap(JsonFilters.filterToExpression(_, toRef))
-        .reduce(And)
-      (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
-    }
-    val groupedByFields = groupedPredicates.toSeq
+    val groupedByRefSet = filters
+      .groupBy(_.references.toSet)
+      .map { case (refSet, refsFilters) =>
+        val reducedExpr = (literals ++ refsFilters)
+          .flatMap(JsonFilters.filterToExpression(_, toRef))
+          .reduce(And)
+        (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
+      }
+    val groupedByFields = groupedByRefSet.toSeq
       .flatMap { case (refSet, predicate) => refSet.map((_, predicate)) }
       .groupBy(_._1)
-    val jsonPredicates = Array.fill[Array[JsonPredicate]](requiredSchema.length)(null)
+    val groupedPredicates = Array.fill[Array[JsonPredicate]](requiredSchema.length)(null)
     groupedByFields.foreach { case (fieldName, predicates) =>
       val fieldIndex = requiredSchema.fieldIndex(fieldName)
-      jsonPredicates(fieldIndex) = predicates.map(_._2).toArray
+      groupedPredicates(fieldIndex) = predicates.map(_._2).toArray
     }
-    jsonPredicates
+    groupedPredicates
   }
 
   private val indexedPredicates: Array[Array[JsonPredicate]] = schema match {
