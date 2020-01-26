@@ -17,7 +17,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -67,9 +67,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       val standardized = Array.ofDim[Double](numFeatures)
       features.foreachNonZero { (i, v) =>
         val std = stdArray(i)
-        if (std != 0) {
-          standardized(i) = v / std
-        }
+        if (std != 0) standardized(i) = v / std
       }
       Instance(label, weight, Vectors.dense(standardized).compressed)
     }
@@ -171,6 +169,23 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // constant features should not affect gradient
     assert(aggConstantFeatureBinary.gradient(0) === 0.0)
     assert(aggConstantFeatureBinary.gradient(1) == aggConstantFeatureBinaryFiltered.gradient(0))
+  }
+
+  test("add instance block") {
+    val coefArray = Array(1.0, 2.0)
+    val intercept = 1.0
+
+    val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
+      fitIntercept = true)
+    instances.foreach(agg.add)
+
+    val agg2 = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
+      fitIntercept = true)
+    val block = InstanceBlock.fromInstances(instances)
+    agg2.add(block)
+
+    assert(agg.loss ~== agg2.loss relTol 1e-8)
+    assert(agg.gradient ~== agg2.gradient relTol 1e-8)
   }
 
 }

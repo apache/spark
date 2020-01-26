@@ -290,7 +290,6 @@ class LinearSVC @Since("2.2.0") (
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
 
-
     copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
 }

@@ -124,14 +124,17 @@ private[ml] class HingeAggregator(
     val size = block.size
     val localGradientSumArray = gradientSumArray
 
-    val dots = if (intercept != 0) {
-      new DenseVector(Array.fill(size)(intercept))
+    val arr = if (intercept != 0) {
+      Array.fill(size)(intercept)
     } else {
-      new DenseVector(Array.ofDim[Double](size))
+      Array.ofDim[Double](size)
     }
-    BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, dots)
 
-    val gradScaleArray = Array.ofDim[Double](size)
+    // vec here represents dotProducts
+    val vec = new DenseVector(arr)
+    BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, vec)
+
+    // in-place convert dotProducts to gradient scales
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
@@ -141,27 +144,27 @@ private[ml] class HingeAggregator(
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
         val labelScaled = 2 * label - 1.0
-        val loss = (1.0 - labelScaled * dots(i)) * weight
+        val loss = (1.0 - labelScaled * arr(i)) * weight
         if (loss > 0) {
           lossSum += loss
-          gradScaleArray(i) = -labelScaled * weight
+          arr(i) = -labelScaled * weight
+        } else {
+          arr(i) = 0.0
         }
       }
       i += 1
     }
 
-    // predictions are all correct
-    if (gradScaleArray.forall(_ == 0)) return this
-
-    val gradScaleVec = new DenseVector(gradScaleArray)
+    // predictions are all correct, no gradient signal
+    if (arr.forall(_ == 0)) return this
 
     if (fitIntercept) {
-      BLAS.gemv(1.0, block.featureMatrix.transpose, gradScaleVec, 0.0, linearGradSumVec)
+      BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 0.0, linearGradSumVec)
       linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
-      localGradientSumArray(numFeatures) += gradScaleArray.sum
+      localGradientSumArray(numFeatures) += arr.sum
     } else {
       val gradSumVec = new DenseVector(localGradientSumArray)
-      BLAS.gemv(1.0, block.featureMatrix.transpose, gradScaleVec, 1.0, gradSumVec)
+      BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 1.0, gradSumVec)
     }
 
     this

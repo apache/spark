@@ -64,11 +64,11 @@ private[spark] class InstanceBlock(
 
   def labelIter: Iterator[Double] = labels.iterator
 
-  def getWeight(i: Int): Double = {
+  @transient lazy val getWeight: Int => Double = {
     if (weights.nonEmpty) {
-      weights(i)
+      (i: Int) => weights(i)
     } else {
-      1.0
+      (i: Int) => 1.0
     }
   }
 
@@ -81,7 +81,7 @@ private[spark] class InstanceBlock(
   }
 
   // directly get the non-zero iterator of i-th row vector without array copy or slice
-  val getNonZeroIter: Int => Iterator[(Int, Double)] = {
+  @transient lazy val getNonZeroIter: Int => Iterator[(Int, Double)] = {
     featureMatrix match {
       case dm: DenseMatrix =>
         (i: Int) =>
