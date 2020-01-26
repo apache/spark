@@ -76,7 +76,7 @@ object RewriteGroupingAnalyticsWithoutKeys extends Rule[LogicalPlan] {
     Seq(VirtualColumn.groupingIdName, VirtualColumn.groupingPosName)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    case agg @ Aggregate(groupingExprs, aggExprs, expand @ Expand(projs, childOutput, child)) =>
+    case agg @ Aggregate(groupingExprs, aggExprs, expand @ Expand(proj, childOutput, child)) =>
       val groupByAttrMap = AttributeSet.fromAttributeSets(groupingExprs.map {
         case ar: AttributeReference if virtualGroupingColumnNames.contains(ar.name) =>
           AttributeSet.empty
@@ -87,7 +87,7 @@ object RewriteGroupingAnalyticsWithoutKeys extends Rule[LogicalPlan] {
         val groupByIndices = childOutput.zipWithIndex.filter { case (a, _) =>
           groupByAttrMap.contains(a)
         }
-        projs.partition { groupingSet =>
+        proj.partition { groupingSet =>
           groupByIndices.map(_._2).map(groupingSet).forall {
             // Checks if all entries in `groupingSet` have NULL
             case Literal(null, _) => true
@@ -96,7 +96,7 @@ object RewriteGroupingAnalyticsWithoutKeys extends Rule[LogicalPlan] {
         }
       }
       if (groupsWithoutKeys.nonEmpty) {
-        val aggsWithtoutKeys = {
+        val aggsWithoutKeys = {
           val newAggExprs = aggExprs.map {
             case ne if ne.collectFirst { case ae: AggregateExpression => ae }.nonEmpty => ne
             // There are the two parts that we need to rewrite in non-aggregate exprs;
@@ -128,12 +128,12 @@ object RewriteGroupingAnalyticsWithoutKeys extends Rule[LogicalPlan] {
         }
         if (groupsWithKeys.nonEmpty) {
           val aggWithKeys = agg.copy(child = expand.copy(projections = groupsWithKeys))
-          Union(aggWithKeys +: aggsWithtoutKeys)
+          Union(aggWithKeys +: aggsWithoutKeys)
         } else if (groupsWithoutKeys.size > 1) {
           // The case of multiple empty grouping sets
-          Union(aggsWithtoutKeys)
+          Union(aggsWithoutKeys)
         } else {
-          aggsWithtoutKeys.head
+          aggsWithoutKeys.head
         }
       } else {
         agg
