@@ -31,7 +31,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
     }
   }
 
-  private val indexedPredicates: Array[Array[JsonPredicate]] = {
+  private val predicates: Array[Array[JsonPredicate]] = {
     val literals = filters.filter(_.references.isEmpty)
     val groupedByRefSet = filters
       .groupBy(_.references.toSet)
@@ -42,19 +42,19 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
         (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
       }
     val groupedByFields = groupedByRefSet.toSeq
-      .flatMap { case (refSet, predicate) => refSet.map((_, predicate)) }
+      .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
       .groupBy(_._1)
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
-    groupedByFields.foreach { case (fieldName, predicates) =>
+    groupedByFields.foreach { case (fieldName, fieldPredicates) =>
       val fieldIndex = schema.fieldIndex(fieldName)
-      groupedPredicates(fieldIndex) = predicates.map(_._2).toArray
+      groupedPredicates(fieldIndex) = fieldPredicates.map(_._2).toArray
     }
     groupedPredicates
   }
 
   def skipRow(row: InternalRow, index: Int): Boolean = {
     var skip = false
-    indexedPredicates(index).foreach { pred =>
+    predicates(index).foreach { pred =>
       pred.refCount -= 1
       if (!skip && pred.refCount == 0) {
         skip = !pred.predicate.eval(row)
@@ -63,7 +63,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
     skip
   }
 
-  def reset(): Unit = indexedPredicates.foreach(_.foreach(_.reset))
+  def reset(): Unit = predicates.foreach(_.foreach(_.reset))
 
   // Finds a filter attribute in the read schema and converts it to a `BoundReference`
   private def toRef(attr: String): Option[BoundReference] = {
