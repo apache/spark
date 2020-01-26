@@ -32,7 +32,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
     }
   }
 
-  def buildPredicates(requiredSchema: StructType): Array[Array[JsonPredicate]] = {
+  private val indexedPredicates = {
     val literals = filters.filter(_.references.isEmpty)
     val groupedByRefSet = filters
       .groupBy(_.references.toSet)
@@ -45,17 +45,12 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType) {
     val groupedByFields = groupedByRefSet.toSeq
       .flatMap { case (refSet, predicate) => refSet.map((_, predicate)) }
       .groupBy(_._1)
-    val groupedPredicates = Array.fill[Array[JsonPredicate]](requiredSchema.length)(null)
+    val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
     groupedByFields.foreach { case (fieldName, predicates) =>
-      val fieldIndex = requiredSchema.fieldIndex(fieldName)
+      val fieldIndex = schema.fieldIndex(fieldName)
       groupedPredicates(fieldIndex) = predicates.map(_._2).toArray
     }
     groupedPredicates
-  }
-
-  private val indexedPredicates: Array[Array[JsonPredicate]] = schema match {
-    case st: StructType => buildPredicates(st)
-    case _ => null
   }
 
   def skipRow(row: InternalRow, index: Int): Boolean = {
