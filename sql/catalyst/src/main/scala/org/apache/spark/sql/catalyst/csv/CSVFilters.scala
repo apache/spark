@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import scala.util.Try
-
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{BooleanType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * An instance of the class compiles filters to predicates and allows to
@@ -33,7 +31,8 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * @param filters The filters pushed down to CSV datasource.
  * @param requiredSchema The schema with only fields requested by the upper layer.
  */
-class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType) {
+class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
+  extends StructFilters(filters, requiredSchema) {
   /**
    * Converted filters to predicates and grouped by maximum field index
    * in the read schema. For example, if an filter refers to 2 attributes
@@ -75,7 +74,7 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType) {
       for (i <- 0 until len) {
         if (!groupedFilters(i).isEmpty) {
           val reducedExpr = groupedFilters(i)
-            .flatMap(CSVFilters.filterToExpression(_, toRef))
+            .flatMap(StructFilters.filterToExpression(_, toRef))
             .reduce(And)
           groupedPredicates(i) = Predicate.create(reducedExpr)
         }
@@ -96,96 +95,5 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType) {
   def skipRow(row: InternalRow, index: Int): Boolean = {
     val predicate = predicates(index)
     predicate != null && !predicate.eval(row)
-  }
-
-  // Finds a filter attribute in the read schema and converts it to a `BoundReference`
-  private def toRef(attr: String): Option[BoundReference] = {
-    requiredSchema.getFieldIndex(attr).map { index =>
-      val field = requiredSchema(index)
-      BoundReference(requiredSchema.fieldIndex(attr), field.dataType, field.nullable)
-    }
-  }
-}
-
-object CSVFilters {
-  private def checkFilterRefs(filter: sources.Filter, schema: StructType): Boolean = {
-    val fieldNames = schema.fields.map(_.name).toSet
-    filter.references.forall(fieldNames.contains(_))
-  }
-
-  /**
-   * Returns the filters currently supported by CSV datasource.
-   * @param filters The filters pushed down to CSV datasource.
-   * @param schema data schema of CSV files.
-   * @return a sub-set of `filters` that can be handled by CSV datasource.
-   */
-  def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
-    filters.filter(checkFilterRefs(_, schema))
-  }
-
-  private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
-    a.zip(b).headOption
-  }
-
-  private def toLiteral(value: Any): Option[Literal] = {
-    Try(Literal(value)).toOption
-  }
-
-  /**
-   * Converts a filter to an expression and binds it to row positions.
-   *
-   * @param filter The filter to convert.
-   * @param toRef The function converts a filter attribute to a bound reference.
-   * @return some expression with resolved attributes or None if the conversion
-   *         of the given filter to an expression is impossible.
-   */
-  def filterToExpression(
-      filter: sources.Filter,
-      toRef: String => Option[BoundReference]): Option[Expression] = {
-    def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
-      zip(toRef(name), toLiteral(value))
-    }
-    def translate(filter: sources.Filter): Option[Expression] = filter match {
-      case sources.And(left, right) =>
-        zip(translate(left), translate(right)).map(And.tupled)
-      case sources.Or(left, right) =>
-        zip(translate(left), translate(right)).map(Or.tupled)
-      case sources.Not(child) =>
-        translate(child).map(Not)
-      case sources.EqualTo(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(EqualTo.tupled)
-      case sources.EqualNullSafe(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(EqualNullSafe.tupled)
-      case sources.IsNull(attribute) =>
-        toRef(attribute).map(IsNull)
-      case sources.IsNotNull(attribute) =>
-        toRef(attribute).map(IsNotNull)
-      case sources.In(attribute, values) =>
-        val literals = values.toSeq.flatMap(toLiteral)
-        if (literals.length == values.length) {
-          toRef(attribute).map(In(_, literals))
-        } else {
-          None
-        }
-      case sources.GreaterThan(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(GreaterThan.tupled)
-      case sources.GreaterThanOrEqual(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(GreaterThanOrEqual.tupled)
-      case sources.LessThan(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(LessThan.tupled)
-      case sources.LessThanOrEqual(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(LessThanOrEqual.tupled)
-      case sources.StringContains(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(Contains.tupled)
-      case sources.StringStartsWith(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(StartsWith.tupled)
-      case sources.StringEndsWith(attribute, value) =>
-        zipAttributeAndValue(attribute, value).map(EndsWith.tupled)
-      case sources.AlwaysTrue() =>
-        Some(Literal(true, BooleanType))
-      case sources.AlwaysFalse() =>
-        Some(Literal(false, BooleanType))
-    }
-    translate(filter)
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2.csv
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.StructFilters
 import org.apache.spark.sql.catalyst.csv.CSVFilters
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
@@ -49,7 +50,7 @@ case class CSVScanBuilder(
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.csvFilterPushDown) {
-      _pushedFilters = CSVFilters.pushedFilters(filters, dataSchema)
+      _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
     filters
   }
