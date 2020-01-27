@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.sql.catalyst.{InternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
@@ -32,29 +33,31 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
   }
 
   private val predicates: Array[Array[JsonPredicate]] = {
-    val groupedByRefSet = filters
-      .groupBy(_.references.toSet)
-      .map { case (refSet, refsFilters) =>
-        val reducedExpr = refsFilters
-          .flatMap(StructFilters.filterToExpression(_, toRef))
-          .reduce(And)
-        (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
-      }
-    // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields
-    val withLiterals = groupedByRefSet.map { case (refSet, pred) =>
-      if (refSet.isEmpty) {
-        (schema.fields.map(_.name).toSet, pred.copy(totalRefs = 1))
-      } else {
-        (refSet, pred)
-      }
-    }
-    val groupedByFields = withLiterals.toSeq
-      .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
-      .groupBy(_._1)
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
-    groupedByFields.foreach { case (fieldName, fieldPredicates) =>
-      val fieldIndex = schema.fieldIndex(fieldName)
-      groupedPredicates(fieldIndex) = fieldPredicates.map(_._2).toArray
+    if (SQLConf.get.jsonFilterPushDown) {
+      val groupedByRefSet = filters
+        .groupBy(_.references.toSet)
+        .map { case (refSet, refsFilters) =>
+          val reducedExpr = refsFilters
+            .flatMap(StructFilters.filterToExpression(_, toRef))
+            .reduce(And)
+          (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
+        }
+      // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields
+      val withLiterals = groupedByRefSet.map { case (refSet, pred) =>
+        if (refSet.isEmpty) {
+          (schema.fields.map(_.name).toSet, pred.copy(totalRefs = 1))
+        } else {
+          (refSet, pred)
+        }
+      }
+      val groupedByFields = withLiterals.toSeq
+        .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
+        .groupBy(_._1)
+      groupedByFields.foreach { case (fieldName, fieldPredicates) =>
+        val fieldIndex = schema.fieldIndex(fieldName)
+        groupedPredicates(fieldIndex) = fieldPredicates.map(_._2).toArray
+      }
     }
     groupedPredicates
   }
