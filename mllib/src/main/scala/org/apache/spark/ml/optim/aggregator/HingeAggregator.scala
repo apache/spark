@@ -35,7 +35,8 @@ import org.apache.spark.ml.linalg._
  */
 private[ml] class HingeAggregator(
     numFeatures: Int,
-    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
+    fitIntercept: Boolean,
+    blockSize: Int = 4096)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, HingeAggregator] {
 
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
@@ -54,8 +55,8 @@ private[ml] class HingeAggregator(
     }
   }
 
-  private val intercept =
-    if (fitIntercept) bcCoefficients.value(numFeatures) else 0.0
+  @transient private lazy val intercept =
+    if (fitIntercept) coefficientsArray(numFeatures) else 0.0
 
   @transient private lazy val linearGradSumVec = {
     if (fitIntercept) {
@@ -64,6 +65,9 @@ private[ml] class HingeAggregator(
       null
     }
   }
+
+  @transient private lazy val auxiliaryVec =
+    new DenseVector(Array.ofDim[Double](blockSize))
 
 
   /**
@@ -133,18 +137,27 @@ private[ml] class HingeAggregator(
     val size = block.size
     val localGradientSumArray = gradientSumArray
 
-    val arr = if (intercept != 0) {
-      Array.fill(size)(intercept)
+    // vec here represents dotProducts
+    val vec = if (size == blockSize) {
+      auxiliaryVec
     } else {
-      Array.ofDim[Double](size)
+      // the last block within one partition may be of size less than blockSize
+      new DenseVector(Array.ofDim[Double](size))
     }
 
-    // arr/vec here represents dotProducts
-    val vec = new DenseVector(arr)
-    BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, vec)
+    if (fitIntercept) {
+      var i = 0
+      while (i < size) {
+        vec.values(i) = intercept
+        i += 1
+      }
+      BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, vec)
+    } else {
+      BLAS.gemv(1.0, block.featureMatrix, linear, 0.0, vec)
+    }
 
     // in-place convert dotProducts to gradient scales
-    // then, arr/vec represents gradient scales
+    // then, vec represents gradient scales
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
@@ -154,27 +167,27 @@ private[ml] class HingeAggregator(
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
         val labelScaled = 2 * label - 1.0
-        val loss = (1.0 - labelScaled * arr(i)) * weight
+        val loss = (1.0 - labelScaled * vec(i)) * weight
         if (loss > 0) {
           lossSum += loss
           val gradScale = -labelScaled * weight
-          arr(i) = gradScale
+          vec.values(i) = gradScale
         } else {
-          arr(i) = 0.0
+          vec.values(i) = 0.0
         }
       } else {
-        arr(i) = 0.0
+        vec.values(i) = 0.0
       }
       i += 1
     }
 
     // predictions are all correct, no gradient signal
-    if (arr.forall(_ == 0)) return this
+    if (vec.values.forall(_ == 0)) return this
 
     if (fitIntercept) {
       BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 0.0, linearGradSumVec)
       linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
-      localGradientSumArray(numFeatures) += arr.sum
+      localGradientSumArray(numFeatures) += vec.values.sum
     } else {
       val gradSumVec = new DenseVector(localGradientSumArray)
       BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 1.0, gradSumVec)
