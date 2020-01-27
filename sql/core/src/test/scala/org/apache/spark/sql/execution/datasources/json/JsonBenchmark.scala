@@ -20,9 +20,10 @@ import java.io.File
 import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -373,6 +374,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
+
   private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
     def timestamps = {
       spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
@@ -493,6 +495,45 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark(s"Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", IntegerType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      spark.range(rowsNum).select(columns(): _*).write.json(path.getAbsolutePath)
+      def readback = {
+        spark.read.schema(schema).json(path.getAbsolutePath)
+      }
+
+      benchmark.addCase(s"w/o filters", numIters) { _ =>
+        readback.noop()
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase(s"pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
+      benchmark.addCase(s"w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
@@ -506,6 +547,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       jsonInDS(50 * 1000 * 1000, numIters)
       jsonInFile(50 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
     }
   }
 }
