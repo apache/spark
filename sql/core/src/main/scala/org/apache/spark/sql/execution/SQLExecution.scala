@@ -205,7 +205,9 @@ object SQLExecution {
     () => {
       SparkSession.setActiveSession(activeSession)
       sc.setLocalProperties(localProps)
-      body
+      withSQLConfPropagated(activeSession) {
+        body
+      }
     }
   }
 }
