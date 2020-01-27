@@ -23,14 +23,34 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
+/**
+ * The class provides API for applying pushed down filters to partially or
+ * fully set internal rows that have the struct schema.
+ *
+ * @param filters The pushed down source filters. The filters should refer to
+ *                the fields of the provided schema.
+ * @param schema The required schema of records from datasource files.
+ */
 abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
 
   assert(filters.forall(StructFilters.checkFilterRefs(_, schema)),
     "A pushed down filter refers to a non-existing schema field.")
 
+  /**
+   * Applies pushed down source filters to the given row assuming that
+   * value at `index` has been already set.
+   *
+   * @param row The row with fully or partially set values.
+   * @param index The index of already set value.
+   * @return true if currently processed row can be skipped otherwise false.
+   */
   def skipRow(row: InternalRow, index: Int): Boolean
 
-  def reset(): Unit = {}
+  /**
+   * Resets states of pushed down filters. The method must be called before
+   * precessing any new row otherwise skipRow() may return wrong result.
+   */
+  def reset(): Unit
 
   // Finds a filter attribute in the schema and converts it to a `BoundReference`
   def toRef(attr: String): Option[BoundReference] = {

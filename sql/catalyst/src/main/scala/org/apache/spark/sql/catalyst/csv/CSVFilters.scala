@@ -96,4 +96,9 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
     val predicate = predicates(index)
     predicate != null && !predicate.eval(row)
   }
+
+  // CSV filters are applied sequentially, and no need to track which filter references
+  // point out to already set row values. The reset() method is trivial because
+  // the filters don't have any states.
+  def reset(): Unit = {}
 }
