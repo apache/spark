@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.sql.Timestamp
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -91,11 +90,9 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "from_unixtime", "from_unixtime(id, 'yyyy-MM-dd HH:mm:ss.SSSSSS')")
     }
     runBenchmark("Convert timestamps") {
-      withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-        val timestampExpr = "cast(id as timestamp)"
-        run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
-        run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
-      }
+      val timestampExpr = "cast(id as timestamp)"
+      run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
+      run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
     }
     runBenchmark("Intervals") {
       val (start, end) = ("cast(id as timestamp)", "cast((id+8640000) as timestamp)")

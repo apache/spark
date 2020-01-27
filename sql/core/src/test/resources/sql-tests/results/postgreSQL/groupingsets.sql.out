@@ -2,28 +2,28 @@
 -- Number of queries: 54
 
 
--- !query 0
+-- !query
 create temp view gstest1(a,b,v)
   as values (1,1,10),(1,1,11),(1,2,12),(1,2,13),(1,3,14),
             (2,3,15),
             (3,3,16),(3,4,17),
             (4,1,18),(4,1,19)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 create table gstest2 (a integer, b integer, c integer, d integer,
                       e integer, f integer, g integer, h integer) using parquet
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 insert into gstest2 values
   (1, 1, 1, 1, 1, 1, 1, 1),
   (1, 1, 1, 1, 1, 1, 1, 2),
@@ -34,65 +34,65 @@ insert into gstest2 values
   (1, 1, 2, 2, 2, 2, 2, 2),
   (1, 2, 2, 2, 2, 2, 2, 2),
   (2, 2, 2, 2, 2, 2, 2, 2)
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 create table gstest3 (a integer, b integer, c integer, d integer) using parquet
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 insert into gstest3 values
   (1, 1, 1, 1),
   (2, 2, 2, 2)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 create table gstest4(id integer, v integer,
                      unhashable_col /* bit(4) */ byte, unsortable_col /* xid */ integer) using parquet
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 insert into gstest4
 values (1,1,tinyint('0'),1), (2,2,tinyint('1'),1),
        (3,4,tinyint('2'),2), (4,8,tinyint('3'),2),
        (5,16,tinyint('0'),2), (6,32,tinyint('1'),2),
        (7,64,tinyint('2'),1), (8,128,tinyint('3'),1)
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 create table gstest_empty (a integer, b integer, v integer) using parquet
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b)
--- !query 8 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 8 output
+-- !query output
 1	1	0	0	21	2	11
 1	2	0	0	25	2	13
 1	3	0	0	14	1	14
@@ -107,12 +107,12 @@ struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1
 NULL	NULL	1	1	145	10	19
 
 
--- !query 9
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by a,b
--- !query 9 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 9 output
+-- !query output
 NULL	NULL	1	1	145	10	19
 1	NULL	0	1	60	5	14
 1	1	0	0	21	2	11
@@ -127,12 +127,12 @@ NULL	NULL	1	1	145	10	19
 4	1	0	0	37	2	19
 
 
--- !query 10
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by b desc, a
--- !query 10 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 10 output
+-- !query output
 3	4	0	0	17	1	17
 1	3	0	0	14	1	14
 2	3	0	0	15	1	15
@@ -147,12 +147,12 @@ NULL	NULL	1	1	145	10	19
 4	NULL	0	1	37	2	19
 
 
--- !query 11
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by coalesce(a,0)+coalesce(b,0)
--- !query 11 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 11 output
+-- !query output
 NULL	NULL	1	1	145	10	19
 1	NULL	0	1	60	5	14
 1	1	0	0	21	2	11
@@ -167,12 +167,12 @@ NULL	NULL	1	1	145	10	19
 3	4	0	0	17	1	17
 
 
--- !query 12
+-- !query
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by rollup (a,b) order by rsum, a, b
--- !query 12 schema
+-- !query schema
 struct<a:int,b:int,sum(c):bigint,rsum:bigint>
--- !query 12 output
+-- !query output
 NULL	NULL	12	12
 1	NULL	10	22
 1	1	8	30
@@ -181,54 +181,54 @@ NULL	NULL	12	12
 2	2	2	36
 
 
--- !query 13
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a)
--- !query 13 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 13 output
+-- !query output
 
 
 
--- !query 14
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
--- !query 14 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 14 output
+-- !query output
 
 
 
--- !query 15
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
--- !query 15 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
--- !query 16 schema
+-- !query schema
 struct<sum(v):bigint,count(1):bigint>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
  group by grouping sets ((t1.a,t2.b),())
--- !query 17 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1, gstest2 t2
  group by grouping sets ((t1.a, t2.b), ())
--- !query 18 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,max(a):int>
--- !query 18 output
+-- !query output
 1	1	0	0	420	1
 1	2	0	0	120	2
 2	1	0	0	105	1
@@ -240,50 +240,50 @@ struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,max(a):
 NULL	NULL	1	1	1305	2
 
 
--- !query 19
+-- !query
 select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1 join gstest2 t2 on (t1.a=t2.a)
  group by grouping sets ((t1.a, t2.b), ())
--- !query 19 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,max(a):int>
--- !query 19 output
+-- !query output
 1	1	0	0	420	1
 1	2	0	0	60	1
 2	2	0	0	15	2
 NULL	NULL	1	1	495	2
 
 
--- !query 20
+-- !query
 select a, b, grouping(a), grouping(b), sum(t1.v), max(t2.c)
   from gstest1 t1 join gstest2 t2 using (a,b)
  group by grouping sets ((a, b), ())
--- !query 20 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,max(c):int>
--- !query 20 output
+-- !query output
 1	1	0	0	147	2
 1	2	0	0	25	2
 NULL	NULL	1	1	172	2
 
 
--- !query 21
+-- !query
 select four, x
   from (select four, ten, 'foo' as x from tenk1) as t
   group by grouping sets (four, x)
   having x = 'foo'
--- !query 21 schema
+-- !query schema
 struct<four:int,x:string>
--- !query 21 output
+-- !query output
 NULL	foo
 
 
--- !query 22
+-- !query
 select four, x || 'x'
   from (select four, ten, 'foo' as x from tenk1) as t
   group by grouping sets (four, x)
   order by four
--- !query 22 schema
+-- !query schema
 struct<four:int,concat(x, x):string>
--- !query 22 output
+-- !query output
 NULL	foox
 0	NULL
 1	NULL
@@ -291,38 +291,38 @@ NULL	foox
 3	NULL
 
 
--- !query 23
+-- !query
 select (x+y)*1, sum(z)
  from (select 1 as x, 2 as y, 3 as z) s
  group by grouping sets (x+y, x)
--- !query 23 schema
+-- !query schema
 struct<((x + y) * 1):int,sum(z):bigint>
--- !query 23 output
+-- !query output
 3	3
 NULL	3
 
 
--- !query 24
+-- !query
 CREATE TEMP VIEW int8_tbl AS SELECT * FROM VALUES
   (123L, 456L),
   (123L, 4567890123456789L),
   (4567890123456789L, 123L),
   (4567890123456789L, 4567890123456789L),
   (4567890123456789L, -4567890123456789L) as int8_tbl(q1, q2)
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 
 
 
--- !query 25
+-- !query
 select x, not x as not_x, q2 from
   (select *, q1 = 1 as x from int8_tbl i1) as t
   group by grouping sets(x, q2)
   order by x, q2
--- !query 25 schema
+-- !query schema
 struct<x:boolean,not_x:boolean,q2:bigint>
--- !query 25 output
+-- !query output
 NULL	NULL	-4567890123456789
 NULL	NULL	123
 NULL	NULL	456
@@ -330,21 +330,21 @@ NULL	NULL	4567890123456789
 false	true	NULL
 
 
--- !query 26
+-- !query
 DROP VIEW int8_tbl
--- !query 26 schema
+-- !query schema
 struct<>
--- !query 26 output
+-- !query output
 
 
 
--- !query 27
+-- !query
 select ten, sum(distinct four) from onek a
 group by grouping sets((ten,four),(ten))
 having exists (select 1 from onek b where sum(distinct a.four) = b.four)
--- !query 27 schema
+-- !query schema
 struct<ten:int,sum(DISTINCT four):bigint>
--- !query 27 output
+-- !query output
 0	0
 0	2
 0	2
@@ -372,32 +372,32 @@ struct<ten:int,sum(DISTINCT four):bigint>
 9	3
 
 
--- !query 28
+-- !query
 select a,count(*) from gstest2 group by rollup(a) order by a
--- !query 28 schema
+-- !query schema
 struct<a:int,count(1):bigint>
--- !query 28 output
+-- !query output
 NULL	9
 1	8
 2	1
 
 
--- !query 29
+-- !query
 select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a
--- !query 29 schema
+-- !query schema
 struct<a:int,count(1):bigint>
--- !query 29 output
+-- !query output
 NULL	9
 2	1
 
 
--- !query 30
+-- !query
 select ten, grouping(ten) from onek
 group by grouping sets(ten) having grouping(ten) >= 0
 order by 2,1
--- !query 30 schema
+-- !query schema
 struct<ten:int,grouping(ten):tinyint>
--- !query 30 output
+-- !query output
 0	0
 1	0
 2	0
@@ -410,44 +410,44 @@ struct<ten:int,grouping(ten):tinyint>
 9	0
 
 
--- !query 31
+-- !query
 select ten, grouping(ten) from onek
 group by grouping sets(ten, four) having grouping(ten) > 0
 order by 2,1
--- !query 31 schema
+-- !query schema
 struct<ten:int,grouping(ten):tinyint>
--- !query 31 output
+-- !query output
 NULL	1
 NULL	1
 NULL	1
 NULL	1
 
 
--- !query 32
+-- !query
 select ten, grouping(ten) from onek
 group by rollup(ten) having grouping(ten) > 0
 order by 2,1
--- !query 32 schema
+-- !query schema
 struct<ten:int,grouping(ten):tinyint>
--- !query 32 output
+-- !query output
 NULL	1
 
 
--- !query 33
+-- !query
 select ten, grouping(ten) from onek
 group by cube(ten) having grouping(ten) > 0
 order by 2,1
--- !query 33 schema
+-- !query schema
 struct<ten:int,grouping(ten):tinyint>
--- !query 33 output
+-- !query output
 NULL	1
 
 
--- !query 34
+-- !query
 select count(*) from gstest4 group by rollup(unhashable_col,unsortable_col)
--- !query 34 schema
+-- !query schema
 struct<count(1):bigint>
--- !query 34 output
+-- !query output
 1
 1
 1
@@ -463,12 +463,12 @@ struct<count(1):bigint>
 8
 
 
--- !query 35
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a),(b)) order by 3,4,1,2 /* 3,1,2 */
--- !query 35 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 35 output
+-- !query output
 1	NULL	0	1	60	5	14
 2	NULL	0	1	15	1	15
 3	NULL	0	1	33	2	17
@@ -479,12 +479,12 @@ NULL	3	1	0	45	3	16
 NULL	4	1	0	17	1	17
 
 
--- !query 36
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by cube(a,b) order by 3,4,1,2 /* 3,1,2 */
--- !query 36 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 36 output
+-- !query output
 1	1	0	0	21	2	11
 1	2	0	0	25	2	13
 1	3	0	0	14	1	14
@@ -503,28 +503,28 @@ NULL	4	1	0	17	1	17
 NULL	NULL	1	1	145	10	19
 
 
--- !query 37
+-- !query
 select unsortable_col, count(*)
   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
   order by string(unsortable_col)
--- !query 37 schema
+-- !query schema
 struct<unsortable_col:int,count(1):bigint>
--- !query 37 output
+-- !query output
 1	4
 1	4
 2	4
 2	4
 
 
--- !query 38
+-- !query
 select unhashable_col, unsortable_col,
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
   from gstest4 group by grouping sets ((unhashable_col),(unsortable_col))
  order by 3, 4, 6 /* 3, 5 */
--- !query 38 schema
+-- !query schema
 struct<unhashable_col:tinyint,unsortable_col:int,grouping(unhashable_col):tinyint,grouping(unsortable_col):tinyint,count(1):bigint,sum(v):bigint>
--- !query 38 output
+-- !query output
 0	NULL	0	1	2	17
 1	NULL	0	1	2	34
 2	NULL	0	1	2	68
@@ -533,15 +533,15 @@ NULL	2	1	0	4	60
 NULL	1	1	0	4	195
 
 
--- !query 39
+-- !query
 select unhashable_col, unsortable_col,
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
   from gstest4 group by grouping sets ((v,unhashable_col),(v,unsortable_col))
  order by 3, 4, 6 /* 3,5 */
--- !query 39 schema
+-- !query schema
 struct<unhashable_col:tinyint,unsortable_col:int,grouping(unhashable_col):tinyint,grouping(unsortable_col):tinyint,count(1):bigint,sum(v):bigint>
--- !query 39 output
+-- !query output
 0	NULL	0	1	1	1
 1	NULL	0	1	1	2
 2	NULL	0	1	1	4
@@ -560,44 +560,44 @@ NULL	1	1	0	1	64
 NULL	1	1	0	1	128
 
 
--- !query 40
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a)
--- !query 40 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 40 output
+-- !query output
 
 
 
--- !query 41
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
--- !query 41 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 41 output
+-- !query output
 
 
 
--- !query 42
+-- !query
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
--- !query 42 schema
+-- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
--- !query 42 output
+-- !query output
 
 
 
--- !query 43
+-- !query
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
--- !query 43 schema
+-- !query schema
 struct<sum(v):bigint,count(1):bigint>
--- !query 43 output
+-- !query output
 
 
 
--- !query 44
+-- !query
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,4,7 /* 3,6 */
--- !query 44 schema
+-- !query schema
 struct<a:int,b:int,grouping(a):tinyint,grouping(b):tinyint,sum(v):bigint,count(1):bigint,max(v):int>
--- !query 44 output
+-- !query output
 1	1	0	0	21	2	11
 1	2	0	0	25	2	13
 1	3	0	0	14	1	14
@@ -621,12 +621,12 @@ NULL	NULL	1	1	37	2	19
 NULL	NULL	1	1	37	2	19
 
 
--- !query 45
+-- !query
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by cube (a,b) order by rsum, a, b
--- !query 45 schema
+-- !query schema
 struct<a:int,b:int,sum(c):bigint,rsum:bigint>
--- !query 45 output
+-- !query output
 NULL	NULL	12	12
 NULL	1	8	20
 NULL	2	4	24
@@ -637,11 +637,11 @@ NULL	2	4	24
 2	2	2	48
 
 
--- !query 46
+-- !query
 SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b
--- !query 46 schema
+-- !query schema
 struct<a:int,b:int,count(1):bigint,max(a):int,max(b):int>
--- !query 46 output
+-- !query output
 NULL	NULL	2	2	2
 NULL	1	1	1	1
 NULL	2	1	2	2
@@ -649,67 +649,67 @@ NULL	2	1	2	2
 2	NULL	1	2	2
 
 
--- !query 47
+-- !query
 select v||'a', case grouping(v||'a') when 1 then 1 else 0 end, count(*)
   from values (1, 'a'), (1, 'b') u(i,v)
  group by rollup(i, v||'a') order by 1,3
--- !query 47 schema
+-- !query schema
 struct<concat(v, a):string,CASE WHEN (CAST(grouping(concat(v, a)) AS INT) = 1) THEN 1 ELSE 0 END:int,count(1):bigint>
--- !query 47 output
+-- !query output
 NULL	1	2
 NULL	1	2
 aa	0	1
 ba	0	1
 
 
--- !query 48
+-- !query
 select v||'a', case when grouping(v||'a') = 1 then 1 else 0 end, count(*)
   from values (1, 'a'), (1, 'b') u(i,v)
  group by rollup(i, v||'a') order by 1,3
--- !query 48 schema
+-- !query schema
 struct<concat(v, a):string,CASE WHEN (CAST(grouping(concat(v, a)) AS INT) = 1) THEN 1 ELSE 0 END:int,count(1):bigint>
--- !query 48 output
+-- !query output
 NULL	1	2
 NULL	1	2
 aa	0	1
 ba	0	1
 
 
--- !query 49
+-- !query
 DROP VIEW gstest1
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 
 
 
--- !query 50
+-- !query
 DROP TABLE gstest2
--- !query 50 schema
+-- !query schema
 struct<>
--- !query 50 output
+-- !query output
 
 
 
--- !query 51
+-- !query
 DROP TABLE gstest3
--- !query 51 schema
+-- !query schema
 struct<>
--- !query 51 output
+-- !query output
 
 
 
--- !query 52
+-- !query
 DROP TABLE gstest4
--- !query 52 schema
+-- !query schema
 struct<>
--- !query 52 output
+-- !query output
 
 
 
--- !query 53
+-- !query
 DROP TABLE gstest_empty
--- !query 53 schema
+-- !query schema
 struct<>
--- !query 53 output
+-- !query output
 

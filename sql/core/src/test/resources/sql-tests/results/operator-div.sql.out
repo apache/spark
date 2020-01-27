@@ -2,145 +2,145 @@
 -- Number of queries: 18
 
 
--- !query 0
+-- !query
 set spark.sql.legacy.integralDivide.returnBigint=true
--- !query 0 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 0 output
+-- !query output
 spark.sql.legacy.integralDivide.returnBigint	true
 
 
--- !query 1
+-- !query
 select 5 div 2
--- !query 1 schema
+-- !query schema
 struct<(5 div 2):bigint>
--- !query 1 output
+-- !query output
 2
 
 
--- !query 2
+-- !query
 select 5 div 0
--- !query 2 schema
+-- !query schema
 struct<(5 div 0):bigint>
--- !query 2 output
+-- !query output
 NULL
 
 
--- !query 3
+-- !query
 select 5 div null
--- !query 3 schema
+-- !query schema
 struct<(5 div CAST(NULL AS INT)):bigint>
--- !query 3 output
+-- !query output
 NULL
 
 
--- !query 4
+-- !query
 select null div 5
--- !query 4 schema
+-- !query schema
 struct<(CAST(NULL AS INT) div 5):bigint>
--- !query 4 output
+-- !query output
 NULL
 
 
--- !query 5
+-- !query
 select cast(51 as decimal(10, 0)) div cast(2 as decimal(2, 0))
--- !query 5 schema
+-- !query schema
 struct<(CAST(CAST(51 AS DECIMAL(10,0)) AS DECIMAL(10,0)) div CAST(CAST(2 AS DECIMAL(2,0)) AS DECIMAL(10,0))):bigint>
--- !query 5 output
+-- !query output
 25
 
 
--- !query 6
+-- !query
 select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0))
--- !query 6 schema
+-- !query schema
 struct<(CAST(CAST(5 AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(0 AS DECIMAL(2,0)) AS DECIMAL(2,0))):bigint>
--- !query 6 output
+-- !query output
 NULL
 
 
--- !query 7
+-- !query
 select cast(5 as decimal(1, 0)) div cast(null as decimal(2, 0))
--- !query 7 schema
+-- !query schema
 struct<(CAST(CAST(5 AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(NULL AS DECIMAL(2,0)) AS DECIMAL(2,0))):bigint>
--- !query 7 output
+-- !query output
 NULL
 
 
--- !query 8
+-- !query
 select cast(null as decimal(1, 0)) div cast(5 as decimal(2, 0))
--- !query 8 schema
+-- !query schema
 struct<(CAST(CAST(NULL AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(5 AS DECIMAL(2,0)) AS DECIMAL(2,0))):bigint>
--- !query 8 output
+-- !query output
 NULL
 
 
--- !query 9
+-- !query
 set spark.sql.legacy.integralDivide.returnBigint=false
--- !query 9 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 9 output
+-- !query output
 spark.sql.legacy.integralDivide.returnBigint	false
 
 
--- !query 10
+-- !query
 select 5 div 2
--- !query 10 schema
+-- !query schema
 struct<(5 div 2):int>
--- !query 10 output
+-- !query output
 2
 
 
--- !query 11
+-- !query
 select 5 div 0
--- !query 11 schema
+-- !query schema
 struct<(5 div 0):int>
--- !query 11 output
+-- !query output
 NULL
 
 
--- !query 12
+-- !query
 select 5 div null
--- !query 12 schema
+-- !query schema
 struct<(5 div CAST(NULL AS INT)):int>
--- !query 12 output
+-- !query output
 NULL
 
 
--- !query 13
+-- !query
 select null div 5
--- !query 13 schema
+-- !query schema
 struct<(CAST(NULL AS INT) div 5):int>
--- !query 13 output
+-- !query output
 NULL
 
 
--- !query 14
+-- !query
 select cast(51 as decimal(10, 0)) div cast(2 as decimal(2, 0))
--- !query 14 schema
+-- !query schema
 struct<(CAST(CAST(51 AS DECIMAL(10,0)) AS DECIMAL(10,0)) div CAST(CAST(2 AS DECIMAL(2,0)) AS DECIMAL(10,0))):decimal(10,0)>
--- !query 14 output
+-- !query output
 25
 
 
--- !query 15
+-- !query
 select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0))
--- !query 15 schema
+-- !query schema
 struct<(CAST(CAST(5 AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(0 AS DECIMAL(2,0)) AS DECIMAL(2,0))):decimal(1,0)>
--- !query 15 output
+-- !query output
 NULL
 
 
--- !query 16
+-- !query
 select cast(5 as decimal(1, 0)) div cast(null as decimal(2, 0))
--- !query 16 schema
+-- !query schema
 struct<(CAST(CAST(5 AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(NULL AS DECIMAL(2,0)) AS DECIMAL(2,0))):decimal(1,0)>
--- !query 16 output
+-- !query output
 NULL
 
 
--- !query 17
+-- !query
 select cast(null as decimal(1, 0)) div cast(5 as decimal(2, 0))
--- !query 17 schema
+-- !query schema
 struct<(CAST(CAST(NULL AS DECIMAL(1,0)) AS DECIMAL(2,0)) div CAST(CAST(5 AS DECIMAL(2,0)) AS DECIMAL(2,0))):decimal(1,0)>
--- !query 17 output
+-- !query output
 NULL
