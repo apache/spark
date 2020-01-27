@@ -134,3 +134,14 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     be referenced in the widow definitions in the query.
   </dd>
 </dl>
+
+### Related clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT clause](sql-ref-syntax-qry-select-limit.html)

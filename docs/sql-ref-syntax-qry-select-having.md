@@ -117,3 +117,13 @@ SELECT sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
   +---+
  
 {% endhighlight %}
+
+### Related clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY clause](sql-ref-syntax-qry-select-groupby.html)
+- [ORDER BY clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT clause](sql-ref-syntax-qry-select-limit.html)

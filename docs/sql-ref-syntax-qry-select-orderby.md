@@ -141,3 +141,13 @@ SELECT * FROM person ORDER BY name ASC, age DESC;
   |300|Mike |80  |
   +---+-----+----+
 {% endhighlight %}
+
+### Related clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING clause](sql-ref-syntax-qry-select-having.html)
+- [SORT BY clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT clause](sql-ref-syntax-qry-select-limit.html)### Related clauses

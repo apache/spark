@@ -223,3 +223,13 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
   +--------+------------+---+
 
 {% endhighlight %}
+
+### Related clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE clause](sql-ref-syntax-qry-select-where.html)
+- [HAVING clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT clause](sql-ref-syntax-qry-select-limit.html)
