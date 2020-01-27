@@ -20,7 +20,11 @@
         <link rel="stylesheet" href="css/bootstrap.min.css">
         <style>
             body {
+	        {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "migration-guide.html" %}
+                padding-top: 40px;
+                {% else %}
                 padding-top: 60px;
+                {% endif %}
                 padding-bottom: 40px;
             }
         </style>
@@ -66,7 +70,7 @@
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="collapse navbar-collapse" id="navbarText">
+                <div class="collapse navbar-collapse" id="navbarCollapse">
                     <ul class="navbar-nav">
                         <!--TODO(andyk): Add class="active" attribute to li some how.-->
                         <li class="nav-item"><a href="index.html" class="nav-link">Overview</a></li>
@@ -143,7 +147,7 @@
                 {% endif %}
                 <input id="nav-trigger" class="nav-trigger" checked type="checkbox">
                 <label for="nav-trigger"></label>
-                <div class="content-with-sidebar" id="content">
+                <div class="content-with-sidebar mr-3" id="content">
                     {% if page.displayTitle %}
                         <h1 class="title">{{ page.displayTitle }}</h1>
                     {% else %}
@@ -154,7 +158,7 @@
 
                 </div>
             {% else %}
-                <div class="content" id="content">
+                <div class="content mr-3" id="content">
                     {% if page.displayTitle %}
                         <h1 class="title">{{ page.displayTitle }}</h1>
                     {% else %}

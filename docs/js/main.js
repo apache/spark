@@ -94,4 +94,32 @@ $(function() {
   // Scroll now too in case we had opened the page on a hash, but wait a bit because some browsers
   // will try to do *their* initial scroll after running the onReady handler.
   $(window).on('load', function() { setTimeout(function() { maybeScrollToHash(); }, 25); });
+
+  // Make dropdown menus in nav bars show on hover instead of click
+  // using solution at https://webdesign.tutsplus.com/tutorials/how-
+  // to-make-the-bootstrap-navbar-dropdown-work-on-hover--cms-33840
+  const $dropdown = $(".dropdown");
+  const $dropdownToggle = $(".dropdown-toggle");
+  const $dropdownMenu = $(".dropdown-menu");
+  const showClass = "show";
+  $(window).on("load resize", function() {
+    if (this.matchMedia("(min-width: 768px)").matches) {
+      $dropdown.hover(
+        function() {
+          const $this = $(this);
+          $this.addClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "true");
+          $this.find($dropdownMenu).addClass(showClass);
+        },
+        function() {
+          const $this = $(this);
+          $this.removeClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "false");
+          $this.find($dropdownMenu).removeClass(showClass);
+        }
+      );
+    } else {
+      $dropdown.off("mouseenter mouseleave");
+    }
+  });
 });
