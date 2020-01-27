@@ -303,18 +303,18 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       filters = Seq(EqualTo("d", 3.14)),
       expected = Some(InternalRow(1, 3.14)))
 
-    val errMsg = intercept[IllegalArgumentException] {
+    val errMsg = intercept[AssertionError] {
       check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
     }.getMessage
-    assert(errMsg.contains("invalid attr does not exist"))
+    assert(errMsg.contains("A pushed down filter refers to a non-existing schema field"))
 
-    val errMsg2 = intercept[IllegalArgumentException] {
+    val errMsg2 = intercept[AssertionError] {
       check(
         dataSchema = new StructType(),
         requiredSchema = new StructType(),
         filters = Seq(EqualTo("i", 1)),
         expected = Some(InternalRow.empty))
     }.getMessage
-    assert(errMsg2.contains("i does not exist"))
+    assert(errMsg2.contains("A pushed down filter refers to a non-existing schema field"))
   }
 }

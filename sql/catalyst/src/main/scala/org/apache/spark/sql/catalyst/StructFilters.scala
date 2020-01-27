@@ -24,6 +24,10 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
 abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
+
+  assert(filters.forall(StructFilters.checkFilterRefs(_, schema)),
+    "A pushed down filter refers to a non-existing schema field.")
+
   def skipRow(row: InternalRow, index: Int): Boolean
 
   def reset(): Unit = {}
