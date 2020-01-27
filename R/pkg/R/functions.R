@@ -136,6 +136,14 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
+#' @param pos In \itemize{
+#'                \item \code{locate}: a start position of search.
+#'                \item \code{overlay}: a start postiton for replacement.
+#'                }
+#' @param len In \itemize{
+#'               \item \code{lpad} the maximum length of each output result.
+#'               \item \code{overlay} a number of bytes to replace.
+#'               }
 #' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
@@ -1320,6 +1328,35 @@ setMethod("negate",
           })
 
 #' @details
+#' \code{overlay}: Overlay the specified portion of \code{x} with \code{replace},
+#' starting from byte position \code{pos} of \code{src} and proceeding for
+#' \code{len} bytes.
+#'
+#' @param replace a Column with replacement.
+#'
+#' @rdname column_string_functions
+#' @aliases overlay overlay,Column-method,numericOrColumn-method
+#' @note overlay since 3.0.0
+setMethod("overlay",
+  signature(x = "Column", replace = "Column", pos = "numericOrColumn"),
+  function(x, replace, pos, len = -1) {
+    if (is.numeric(pos)) {
+      pos <- lit(as.integer(pos))
+    }
+
+    if (is.numeric(len)) {
+      len <- lit(as.integer(len))
+    }
+
+    jc <- callJStatic(
+      "org.apache.spark.sql.functions", "overlay",
+      x@jc, replace@jc, pos@jc, len@jc
+    )
+
+    column(jc)
+  })
+
+#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -2459,7 +2496,6 @@ setMethod("schema_of_csv", signature(x = "characterOrColumn"),
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
-            .Deprecated(msg = "from_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "from_utc_timestamp", y@jc, x)
             column(jc)
           })
@@ -2518,7 +2554,6 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
-            .Deprecated(msg = "to_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "to_utc_timestamp", y@jc, x)
             column(jc)
           })
@@ -2819,7 +2854,6 @@ setMethod("window", signature(x = "Column"),
 #'
 #' @param substr a character string to be matched.
 #' @param str a Column where matches are sought for each entry.
-#' @param pos start position of search.
 #' @rdname column_string_functions
 #' @aliases locate locate,character,Column-method
 #' @note locate since 1.5.0
@@ -2834,7 +2868,6 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #' @details
 #' \code{lpad}: Left-padded with pad to a length of len.
 #'
-#' @param len maximum length of each output result.
 #' @param pad a character string to be padded with.
 #' @rdname column_string_functions
 #' @aliases lpad lpad,Column,numeric,character-method

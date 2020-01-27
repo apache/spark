@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
 import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
@@ -49,14 +49,14 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
-    TableCatalog.RESERVED_PROPERTIES.asScala.toList.foreach(propKey => {
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
       if (table.properties.containsKey(propKey)) {
         rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
       }
     })
     val properties =
       table.properties.asScala.toList
-        .filter(kv => !TableCatalog.RESERVED_PROPERTIES.contains(kv._1))
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
