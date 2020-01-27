@@ -265,9 +265,10 @@ private[spark] class ExecutorAllocationManager(
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutorForFullParallelism).toInt
-    if (listener.pendingSpeculativeTasks > 0 && tasksPerExecutorForFullParallelism > 1) {
-      // If we have pending speculative tasks, allocate one more executor to satisfy the
-      // locality requirements of speculative tasks
+    if (tasksPerExecutorForFullParallelism > 1 && maxNeeded == 1 &&
+      listener.pendingSpeculativeTasks > 0) {
+      // If we have pending speculative tasks and only need a single executor, allocate one more
+      // to satisfy the locality requirements of speculation
       maxNeeded + 1
     } else {
       maxNeeded
@@ -620,16 +621,22 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
         }
 
-        // If the task failed (not intentionally killed), we expect it to be resubmitted later. To
-        // ensure we have enough resources to run the resubmitted task, we need to mark the
-        // scheduler as backlogged again if it's not already marked as such (SPARK-8366)
         taskEnd.reason match {
           case Success | _: TaskKilled =>
           case _ =>
             if (totalPendingTasks() == 0) {
+              // If the task failed (not intentionally killed), we expect it to be resubmitted
+              // later. To ensure we have enough resources to run the resubmitted task, we need to
+              // mark the scheduler as backlogged again if it's not already marked as such
+              // (SPARK-8366)
               allocationManager.onSchedulerBacklogged()
             }
             if (!taskEnd.taskInfo.speculative) {
+              // If a non-speculative task is intentionally killed, it means the speculative task
+              // has succeeded, and no further task of this task index will be resubmitted. In this
+              // case, the task index is completed and we shouldn't remove it from
+              // stageAttemptToTaskIndices. Otherwise, we will have a pending non-speculative task
+              // for the task index (SPARK-30511)
               stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
             }
         }

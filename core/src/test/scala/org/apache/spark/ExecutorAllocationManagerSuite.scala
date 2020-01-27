@@ -264,9 +264,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test("SPARK-30511 remove executors when speculative tasks end") {
-    val manager = createManager(createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4))
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 40)
+    val manager = createManager(createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4), clock = clock)
 
-    post(SparkListenerStageSubmitted(createStageInfo(0, 40)))
+    post(SparkListenerStageSubmitted(stage))
     assert(addExecutors(manager) === 1)
     assert(addExecutors(manager) === 2)
     assert(addExecutors(manager) === 4)
@@ -282,7 +284,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // 30 tasks (0 - 29) finished
     (0 to 29).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
       info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 3)
     assert(maxNumExecutorsNeeded(manager) == 3)
     (0 to 6).foreach { i => assert(removeExecutor(manager, i.toString))}
@@ -290,16 +293,16 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
     (30 to 39).foreach { _ => post(SparkListenerSpeculativeTaskSubmitted(0))}
-    adjustRequestedExecutors(manager)
     assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) == 6)
-    assert(maxNumExecutorsNeeded(manager) == 6)
+    assert(addExecutors(manager) === 1)
+    assert(numExecutorsTarget(manager) == 5)
+    assert(maxNumExecutorsNeeded(manager) == 5)
     (10 to 12).foreach(execId => onExecutorAdded(manager, execId.toString))
     (40 to 49).map { i =>
       createTaskInfo(taskId = i, taskIndex = i - 10, executorId = s"${i / 4}", speculative = true)}
       .foreach { info => post(SparkListenerTaskStart(0, 0, info))}
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) == 5) // At this point, we still have 6 executors running
     assert(maxNumExecutorsNeeded(manager) == 5)
 
@@ -308,7 +311,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(taskId = i, taskIndex = i - 10, executorId = s"${i / 4}", speculative = true)}
       .foreach {
         info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))}
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 4)
     assert(maxNumExecutorsNeeded(manager) == 4)
     assert(removeExecutor(manager, "10"))
@@ -320,7 +324,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(i, i, executorId = s"${i / 4}")}
       .foreach { info => post(
         SparkListenerTaskEnd(0, 0, null, TaskKilled("test"), info, new ExecutorMetrics, null))}
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 2)
     assert(maxNumExecutorsNeeded(manager) == 2)
     (7 to 8).foreach { i => assert(removeExecutor(manager, i.toString))}
@@ -335,7 +340,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // We should have 3 original tasks (index 37, 38, 39) running, with corresponding 3 speculative
     // tasks running. Target lowers to 2, but still hold 3 executors ["9", "11", "12"]
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 2)
     assert(maxNumExecutorsNeeded(manager) == 2)
     // At this point, we still have 3 executors running: ["9", "11", "12"]
@@ -348,12 +354,48 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // We should have 2 original tasks (index 38, 39) running, with corresponding 2 speculative
     // tasks running
-    adjustRequestedExecutors(manager)
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 1)
     assert(maxNumExecutorsNeeded(manager) == 1)
     assert(removeExecutor(manager, "11"))
     onExecutorRemoved(manager, "11")
     // At this point, we still have 2 executors running: ["9", "12"]
+
+    // Task 38 fails and task 49 fails, new speculative task 50 is submitted to speculate on task 39
+    post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
+      createTaskInfo(38, 38, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
+      createTaskInfo(49, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerSpeculativeTaskSubmitted(0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // maxNeeded = 1, allocate one more to satisfy speculation locality requirement
+    assert(numExecutorsTarget(manager) === 2)
+    assert(maxNumExecutorsNeeded(manager) == 2)
+    post(SparkListenerTaskStart(0, 0,
+      createTaskInfo(50, 39, executorId = "12", speculative = true)))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager) === 1)
+    assert(maxNumExecutorsNeeded(manager) == 1)
+
+    // Task 39 and 48 succeed, task 50 killed
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(39, 39, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(48, 38, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, TaskKilled("test"),
+      createTaskInfo(50, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerStageCompleted(stage))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager) === 0)
+    assert(maxNumExecutorsNeeded(manager) == 0)
+    assert(removeExecutor(manager, "9"))
+    onExecutorRemoved(manager, "9")
+    assert(removeExecutor(manager, "12"))
+    onExecutorRemoved(manager, "12")
   }
 
   test("properly handle task end events from completed stages") {
