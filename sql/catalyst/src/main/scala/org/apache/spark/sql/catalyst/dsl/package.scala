@@ -170,6 +170,8 @@ package object dsl {
     def count(e: Expression): Expression = Count(e).toAggregateExpression()
     def countDistinct(e: Expression*): Expression =
       Count(e).toAggregateExpression(isDistinct = true)
+    def countDistinct(filter: Option[Expression], e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true, filter = filter)
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
       HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
     def avg(e: Expression): Expression = Average(e).toAggregateExpression()

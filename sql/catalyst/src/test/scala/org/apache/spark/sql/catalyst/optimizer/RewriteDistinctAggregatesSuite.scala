@@ -20,7 +20,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -50,6 +50,14 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     comparePlans(input, rewrite)
   }
 
+  test("single distinct group with filter") {
+    val input = testRelation
+      .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'e))
+      .analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    comparePlans(input, rewrite)
+  }
+
   test("single distinct group with partial aggregates") {
     val input = testRelation
       .groupBy('a, 'd)(
@@ -63,6 +71,13 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   test("multiple distinct groups") {
     val input = testRelation
       .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
+      .analyze
+    checkRewrite(RewriteDistinctAggregates(input))
+  }
+
+  test("multiple distinct groups with filter") {
+    val input = testRelation
+      .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'b, 'c), countDistinct('d))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
