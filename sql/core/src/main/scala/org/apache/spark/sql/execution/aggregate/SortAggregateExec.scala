@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtils, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -110,6 +110,22 @@ case class SortAggregateExec(
   override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
 
   override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
+
+  override def verboseStringWithOperatorId(): String = {
+    val allAggregateExpressions = aggregateExpressions
+
+    val keyString = groupingExpressions.mkString("[", ", ", "]")
+    val functionString = allAggregateExpressions.mkString("[", ", ", "]")
+    val inputString = child.output.mkString("[", ", ", "]")
+    val outputString = output.mkString("[", ", ", "]")
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Input: $inputString
+       |Output: $outputString
+       |Keys: $keyString
+       |Functions: $functionString
+     """.stripMargin
+  }
 
   private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions

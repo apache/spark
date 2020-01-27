@@ -5,6 +5,7 @@
 CREATE table  explain_temp1 (key int, val int) USING PARQUET;
 CREATE table  explain_temp2 (key int, val int) USING PARQUET;
 CREATE table  explain_temp3 (key int, val int) USING PARQUET;
+CREATE table  explain_temp4 (key int, val string) USING PARQUET;
 
 SET spark.sql.codegen.wholeStage = true;
 
@@ -92,6 +93,25 @@ EXPLAIN FORMATTED
 EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1;
+
+-- HashAggregate
+EXPLAIN FORMATTED
+  SELECT
+    COUNT(val) FILTER (WHERE val = 1),
+    COUNT(key) FILTER (WHERE val > 1)
+  FROM explain_temp1;
+
+-- ObjectHashAggregate
+EXPLAIN FORMATTED
+  SELECT key, sort_array(collect_set(val))[0]
+  FROM explain_temp4
+  GROUP BY key;
+
+-- SortAggregate
+EXPLAIN FORMATTED
+  SELECT key, MIN(val)
+  FROM explain_temp4
+  GROUP BY key;
 
 -- cleanup
 DROP TABLE explain_temp1;
