@@ -126,19 +126,23 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   // Used to take a fraction amount from a task resource requirement and split into a real
-  // integer amount and the number of parts expected. For instance, if the amount is 0.5,
-  // the we get (1, 2) back out.
-  // Returns tuple of (amount, numParts)
-  def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
-    val parts = if (amount <= 0.5) {
-      Math.floor(1.0 / amount).toInt
-    } else if (amount % 1 != 0) {
+  // integer amount and the number of slots per address. For instance, if the amount is 0.5,
+  // the we get (1, 2) back out. This indicates that for each 1 address, it has 2 slots per
+  // address, which allows you to put 2 tasks on that address. Note if amount is greater
+  // than 1, then the number of slots per address has to be 1. This would indicate that a
+  // would have multiple addresses assigned per task. This can be used for calculating
+  // the number of tasks per executor -> (executorAmount * numParts) / (integer amount).
+  // Returns tuple of (integer amount, numParts)
+  def calculateAmountAndPartsForFraction(doubleAmount: Double): (Int, Int) = {
+    val parts = if (doubleAmount <= 0.5) {
+      Math.floor(1.0 / doubleAmount).toInt
+    } else if (doubleAmount % 1 != 0) {
       throw new SparkException(
-        s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
+        s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
     } else {
       1
     }
-    (Math.ceil(amount).toInt, parts)
+    (Math.ceil(doubleAmount).toInt, parts)
   }
 
   // Add any task resource requests from the spark conf to the TaskResourceRequests passed in
