@@ -40,7 +40,8 @@ from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer
-from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer, \
+    ArrowStreamArrowUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
@@ -270,6 +271,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_pandas_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return arg_offsets, wrap_pandas_iter_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
@@ -292,6 +295,7 @@ def read_udfs(pickleSer, infile, eval_type):
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                     PythonEvalType.SQL_SCALAR_ARROW_UDF,
                      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -315,6 +319,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
+        elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
+            ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, assign_cols_by_name)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.

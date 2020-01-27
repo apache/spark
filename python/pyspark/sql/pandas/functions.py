@@ -39,6 +39,8 @@ class PandasUDFType(object):
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
+    SCALAR_ARROW = PythonEvalType.SQL_SCALAR_ARROW_UDF
+
 
 @since(2.3)
 def pandas_udf(f=None, returnType=None, functionType=None):
@@ -420,6 +422,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                         PythonEvalType.SQL_SCALAR_ARROW_UDF,
                          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                          PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -457,7 +460,8 @@ def _create_pandas_udf(f, returnType, evalType):
         evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
     if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
-            evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
+            evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
+            evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF) and \
             len(argspec.args) == 0 and \
             argspec.varargs is None:
         raise ValueError(

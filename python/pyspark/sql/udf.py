@@ -101,6 +101,13 @@ class UserDefinedFunction(object):
                 raise NotImplementedError(
                     "Invalid return type with scalar Pandas UDFs: %s is "
                     "not supported" % str(self._returnType_placeholder))
+        elif self.evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF:
+            try:
+                to_arrow_type(self._returnType_placeholder)
+            except TypeError:
+                raise NotImplementedError(
+                    "Invalid return type with scalar Arrow UDFs: %s is "
+                    "not supported" % str(self._returnType_placeholder))
         elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
@@ -329,12 +336,13 @@ class UDFRegistration(object):
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                                  PythonEvalType.SQL_SCALAR_ARROW_UDF,
                                   PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                                   PythonEvalType.SQL_MAP_PANDAS_ITER_UDF]:
                 raise ValueError(
                     "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                    "SQL_SCALAR_PANDAS_ITER_UDF, SQL_GROUPED_AGG_PANDAS_UDF or "
-                    "SQL_MAP_PANDAS_ITER_UDF.")
+                    "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_UDF, "
+                    "SQL_GROUPED_AGG_PANDAS_UDF or SQL_MAP_PANDAS_ITER_UDF.")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)

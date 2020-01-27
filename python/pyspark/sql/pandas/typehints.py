@@ -27,6 +27,7 @@ def infer_eval_type(sig):
     require_minimum_pandas_version()
 
     import pandas as pd
+    import pyarrow as pa
 
     annotations = {}
     for param in sig.parameters.values():
@@ -107,8 +108,20 @@ def infer_eval_type(sig):
             not check_tuple_annotation(return_annotation)
         ))
 
+    # Arrow UDF, pa.ChunkedArray or Union[pa.ChunkedArray] -> pa.Array
+    is_arrow_udf = (
+        all(a == pa.ChunkedArray or
+            check_union_annotation(
+                a,
+                parameter_check_func=lambda na: na == pa.ChunkedArray)
+            for a in parameters_sig) and
+        (return_annotation == pa.Array)
+    )
+
     if is_series_or_frame:
         return PandasUDFType.SCALAR
+    elif is_arrow_udf:
+        return PandasUDFType.SCALAR_ARROW
     elif is_iterator_tuple_series_or_frame or is_iterator_series_or_frame:
         return PandasUDFType.SCALAR_ITER
     elif is_series_or_frame_agg:

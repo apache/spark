@@ -282,3 +282,61 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
             elif dataframes_in_group != 0:
                 raise ValueError(
                     'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
+
+
+class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
+    """
+    Serializes Arrow data with Arrow streaming format.
+
+    :param timezone: A timezone to respect when handling timestamp values
+    :param safecheck: If True, conversion from Arrow to Pandas checks for overflow/truncation
+    :param assign_cols_by_name: If True, then Pandas DataFrames will get columns by name
+    """
+
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
+        super(ArrowStreamArrowUDFSerializer, self).__init__()
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+
+    def load_stream(self, stream):
+        """
+        Deserialize ArrowRecordBatches to an Arrow table and return as a list of Arrow tables.
+        """
+        batches = super(ArrowStreamArrowUDFSerializer, self).load_stream(stream)
+        import pyarrow as pa
+        for batch in batches:
+            yield [c for c in pa.Table.from_batches([batch]).itercolumns()]
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+
+        def create_batch(pa_arrays):
+            """
+            Create an Arrow record batch from the given Arrow arrays or list of arrays.
+
+            :param pa_arrays: A single Arrow array, list of arrays, or list of (arrays, arrow_type)
+            :return: Arrow RecordBatch
+            """
+            import pyarrow as pa
+
+            values, _ = pa_arrays
+            return pa.RecordBatch.from_arrays([values], [values._name])
+
+        def init_stream_yield_batches():
+            should_write_start_length = True
+            for series in iterator:
+                batch = create_batch(series)
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
+
+    def __repr__(self):
+        return "ArrowStreamArrowUDFSerializer"
