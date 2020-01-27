@@ -109,4 +109,12 @@ parse dates from Dataset[String]                  37918          37976          
 from_json(timestamp)                              69611          69632          36          0.1        6961.1       0.0X
 from_json(date)                                   56598          56974         347          0.2        5659.8       0.0X
 
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.2
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+w/o filters                                       13083          13150          61          0.0      130827.2       1.0X
+pushdown disabled                                 13039          13115          78          0.0      130387.7       1.0X
+w/ filters                                          637            649          10          0.2        6369.7      20.5X
+
 
