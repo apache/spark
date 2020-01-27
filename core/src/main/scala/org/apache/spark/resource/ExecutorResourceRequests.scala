@@ -109,7 +109,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
       discoveryScript: String = "",
       vendor: String = ""): this.type = {
     // a bit weird but for Java api use empty string as meaning None because empty
-    // string is otherwise invalid for those paramters anyway
+    // string is otherwise invalid for those parameters anyway
     val req = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
     _executorResources.put(resourceName, req)
     this
