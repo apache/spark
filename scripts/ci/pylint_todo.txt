@@ -13,7 +13,7 @@
 ./airflow/providers/ddiscord/hooks/discord_webhook.py
 ./airflow/providers/amazon/aws/hooks/emr.py
 ./airflow/hooks/filesystem.py
-./airflow/contrib/hooks/ftp_hook.py
+./airflow/providers/ftp/hooks/ftp.py
 ./airflow/providers/jenking/hooks/jenkins.py
 ./airflow/providers/openfass/hooks/openfaas.py
 ./airflow/providers/opsgenie/hooks/opsgenie_alert.py
@@ -40,7 +40,7 @@
 ./airflow/providers/amazon/aws/operators/emr_create_job_flow.py
 ./airflow/providers/amazon/aws/operators/emr_terminate_job_flow.py
 ./airflow/contrib/operators/file_to_wasb.py
-./airflow/contrib/operators/grpc_operator.py
+./airflow/providers/grpc/operators/grpc.py
 ./airflow/providers/jenking/operators/jenkins_job_trigger.py
 ./airflow/providers/jira/operators/jira.py
 ./airflow/contrib/operators/mongo_to_s3.py
@@ -68,11 +68,11 @@
 ./airflow/providers/apache/spark/operators/spark_sql.py
 ./airflow/providers/apache/spark/operators/spark_submit.py
 ./airflow/providers/apache/sqoop/operators/sqoop.py
-./airflow/contrib/operators/ssh_operator.py
+./airflow/providers/ssh/operators/ssh.py
 ./airflow/providers/vertica/operators/vertica.py
 ./airflow/contrib/operators/vertica_to_mysql.py
 ./airflow/providers/microsoft/azure/operators/wasb_delete_blob.py
-./airflow/contrib/operators/winrm_operator.py
+./airflow/providers/microsoft/winrm/operators/winrm.py
 ./airflow/providers/amazon/aws/sensors/glue_catalog_partition.py
 ./airflow/providers/microsoft/azure/sensors/azure_cosmos.py
 ./airflow/sensors/bash.py
@@ -82,7 +82,7 @@
 ./airflow/providers/amazon/aws/sensors/emr_job_flow.py
 ./airflow/providers/amazon/aws/sensors/emr_step.py
 ./airflow/sensors/filesystem.py
-./airflow/contrib/sensors/ftp_sensor.py
+./airflow/providers/ftp/sensors/ftp.py
 ./airflow/providers/apache/hdfs/sensors/hdfs.py
 ./airflow/providers/jira/sensors/jira.py
 ./airflow/providers/mongo/sensors/mongo.py
@@ -101,8 +101,8 @@
 ./airflow/providers/docker/hooks/docker.py
 ./airflow/providers/apache/druid/hooks/druid.py
 ./airflow/providers/apache/hive/hooks/hive.py
-./airflow/hooks/http_hook.py
-./airflow/hooks/jdbc_hook.py
+./airflow/providers/http/hooks/http.py
+./airflow/providers/jdbc/hooks/jdbc.py
 ./airflow/providers/microsoft/mssql/hooks/mssql.py
 ./airflow/providers/mysql/hooks/mysql.py
 ./airflow/providers/oracle/hooks/oracle.py
@@ -142,12 +142,13 @@
 ./airflow/operators/dagrun_operator.py
 ./airflow/providers/apache/druid/operators/druid_check.py
 ./airflow/operators/dummy_operator.py
-./airflow/operators/email_operator.py
+./airflow/providers/email/operators/email.py
 ./airflow/operators/generic_transfer.py
 ./airflow/providers/apache/hive/operators/hive.py
 ./airflow/providers/apache/hive/operators/hive_stats.py
-./airflow/operators/http_operator.py
+./airflow/providers/http/operators/http.py
 ./airflow/operators/jdbc_operator.py
+./airflow/providers/jdbc/operators/jdbc.py
 ./airflow/providers/microsoft/mssql/operators/mssql.py
 ./airflow/providers/mssql/operators/mysql.py
 ./airflow/providers/oracle/operators/oracle.py
@@ -169,7 +170,7 @@
 ./airflow/sensors/external_task_sensor.py
 ./airflow/sensors/hdfs_sensor.py
 ./airflow/providers/apache/hive/sensors/hive_partition.py
-./airflow/sensors/http_sensor.py
+./airflow/providers/http/sensors/http.py
 ./airflow/providers/apache/hive/sensors/metastore_partition.py
 ./airflow/providers/apache/hive/sensors/named_hive_partition.py
 ./airflow/providers/amazon/aws/sensors/s3_key.py

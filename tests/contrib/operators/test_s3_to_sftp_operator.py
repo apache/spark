@@ -24,8 +24,8 @@ from moto import mock_s3
 
 from airflow.configuration import conf
 from airflow.contrib.operators.s3_to_sftp_operator import S3ToSFTPOperator
-from airflow.contrib.operators.ssh_operator import SSHOperator
 from airflow.models import DAG, TaskInstance
+from airflow.providers.ssh.operators.ssh import SSHOperator
 from airflow.utils import timezone
 from airflow.utils.timezone import datetime
 
@@ -47,7 +47,7 @@ DEFAULT_DATE = datetime(2018, 1, 1)
 class TestS3ToSFTPOperator(unittest.TestCase):
     @mock_s3
     def setUp(self):
-        from airflow.contrib.hooks.ssh_hook import SSHHook
+        from airflow.providers.ssh.hooks.ssh import SSHHook
         from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
         hook = SSHHook(ssh_conn_id='ssh_default')

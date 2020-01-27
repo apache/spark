@@ -1245,9 +1245,9 @@ communication protocols or interface.
 
    * - `File Transfer Protocol (FTP) <https://tools.ietf.org/html/rfc114>`__
      -
-     - :mod:`airflow.contrib.hooks.ftp_hook`
+     - :mod:`airflow.providers.ftp.hooks.ftp`
      -
-     - :mod:`airflow.contrib.sensors.ftp_sensor`
+     - :mod:`airflow.providers.ftp.sensors.ftp`
 
    * - Filesystem
      -
@@ -1257,20 +1257,20 @@ communication protocols or interface.
 
    * - `Hypertext Transfer Protocol (HTTP) <https://www.w3.org/Protocols/>`__
      -
-     - :mod:`airflow.hooks.http_hook`
-     - :mod:`airflow.operators.http_operator`
-     - :mod:`airflow.sensors.http_sensor`
+     - :mod:`airflow.providers.http.hooks.http`
+     - :mod:`airflow.providers.http.operators.http`
+     - :mod:`airflow.providers.http.sensors.http`
 
    * - `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
      -
-     - :mod:`airflow.contrib.hooks.imap_hook`
+     - :mod:`airflow.providers.imap.hooks.imap`
      -
-     - :mod:`airflow.contrib.sensors.imap_attachment_sensor`
+     - :mod:`airflow.providers.imap.sensors.imap_attachment`
 
    * - `Java Database Connectivity (JDBC) <https://docs.oracle.com/javase/8/docs/technotes/guides/jdbc/>`__
      -
-     - :mod:`airflow.hooks.jdbc_hook`
-     - :mod:`airflow.operators.jdbc_operator`
+     - :mod:`airflow.providers.jdbc.hooks.jdbc`
+     - :mod:`airflow.providers.jdbc.operators.jdbc`
      -
 
    * - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
@@ -1281,26 +1281,26 @@ communication protocols or interface.
 
    * - `Secure Shell (SSH) <https://tools.ietf.org/html/rfc4251>`__
      -
-     - :mod:`airflow.contrib.hooks.ssh_hook`
-     - :mod:`airflow.contrib.operators.ssh_operator`
+     - :mod:`airflow.providers.ssh.hooks.ssh`
+     - :mod:`airflow.providers.ssh.operators.ssh`
      -
 
    * - `Simple Mail Transfer Protocol (SMTP) <https://tools.ietf.org/html/rfc821>`__
      -
      -
-     - :mod:`airflow.operators.email_operator`
+     - :mod:`airflow.providers.email.operators.email`
      -
 
    * - `Windows Remote Management (WinRM) <https://docs.microsoft.com/en-gb/windows/win32/winrm/portal>`__
      -
-     - :mod:`airflow.contrib.hooks.winrm_hook`
-     - :mod:`airflow.contrib.operators.winrm_operator`
+     - :mod:`airflow.providers.microsoft.winrm.hooks.winrm`
+     - :mod:`airflow.providers.microsoft.winrm.operators.winrm`
      -
 
    * - `gRPC <https://grpc.io/>`__
      -
-     - :mod:`airflow.contrib.hooks.grpc_hook`
-     - :mod:`airflow.contrib.operators.grpc_operator`
+     - :mod:`airflow.providers.grpc.hooks.grpc`
+     - :mod:`airflow.providers.grpc.operators.grpc`
      -
 
 Transfer operators and hooks

@@ -378,6 +378,34 @@ HOOK = [
         'airflow.providers.zendesk.hooks.zendesk.ZendeskHook',
         'airflow.hooks.zendesk_hook.ZendeskHook',
     ),
+    (
+        'airflow.providers.ftp.hooks.ftp.FTPSHook',
+        'airflow.contrib.hooks.ftp_hook.FTPSHook',
+    ),
+    (
+        'airflow.providers.ftp.hooks.ftp.FTPHook',
+        'airflow.contrib.hooks.ftp_hook.FTPHook',
+    ),
+    (
+        'airflow.providers.imap.hooks.imap.ImapHook',
+        'airflow.contrib.hooks.imap_hook.ImapHook',
+    ),
+    (
+        'airflow.providers.ssh.hooks.ssh.SSHHook',
+        'airflow.contrib.hooks.ssh_hook.SSHHook',
+    ),
+    (
+        'airflow.providers.microsoft.winrm.hooks.winrm.WinRMHook',
+        'airflow.contrib.hooks.winrm_hook.WinRMHook',
+    ),
+    (
+        'airflow.providers.http.hooks.http.HttpHook',
+        'airflow.hooks.http_hook.HttpHook',
+    ),
+    (
+        'airflow.providers.jdbc.hooks.jdbc.JdbcHook',
+        'airflow.hooks.jdbc_hook.JdbcHook',
+    ),
 ]
 
 OPERATOR = [
@@ -1233,6 +1261,30 @@ OPERATOR = [
         'airflow.providers.slack.operators.slack.SlackAPIOperator',
         'airflow.operators.slack_operator.SlackAPIOperator',
     ),
+    (
+        'airflow.providers.grpc.operators.grpc.GrpcOperator',
+        'airflow.contrib.operators.grpc_operator.GrpcOperator',
+    ),
+    (
+        'airflow.providers.ssh.operators.ssh.SSHOperator',
+        'airflow.contrib.operators.ssh_operator.SSHOperator',
+    ),
+    (
+        'airflow.providers.microsoft.winrm.operators.winrm.WinRMOperator',
+        'airflow.contrib.operators.winrm_operator.WinRMOperator',
+    ),
+    (
+        'airflow.providers.email.operators.email.EmailOperator',
+        'airflow.operators.email_operator.EmailOperator',
+    ),
+    (
+        'airflow.providers.http.operators.http.SimpleHttpOperator',
+        'airflow.operators.http_operator.SimpleHttpOperator',
+    ),
+    (
+        'airflow.providers.jdbc.operators.jdbc.JdbcOperator',
+        'airflow.operators.jdbc_operator.JdbcOperator',
+    ),
 ]
 
 SENSOR = [
@@ -1406,6 +1458,22 @@ SENSOR = [
     (
         'airflow.providers.qubole.sensors.qubole.QuboleFileSensor',
         'airflow.contrib.sensors.qubole_sensor.QuboleFileSensor',
+    ),
+    (
+        'airflow.providers.ftp.sensors.ftp.FTPSensor',
+        'airflow.contrib.sensors.ftp_sensor.FTPSensor',
+    ),
+    (
+        'airflow.providers.ftp.sensors.ftp.FTPSSensor',
+        'airflow.contrib.sensors.ftp_sensor.FTPSSensor',
+    ),
+    (
+        'airflow.providers.imap.sensors.imap_attachment.ImapAttachmentSensor',
+        'airflow.contrib.sensors.imap_attachment_sensor.ImapAttachmentSensor',
+    ),
+    (
+        'airflow.providers.http.sensors.http.HttpSensor',
+        'airflow.sensors.http_sensor.HttpSensor',
     ),
 ]
 

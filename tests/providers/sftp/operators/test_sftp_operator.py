@@ -23,9 +23,9 @@ from base64 import b64encode
 from unittest import mock
 
 from airflow import AirflowException
-from airflow.contrib.operators.ssh_operator import SSHOperator
 from airflow.models import DAG, TaskInstance
 from airflow.providers.sftp.operators.sftp_operator import SFTPOperation, SFTPOperator
+from airflow.providers.ssh.operators.ssh import SSHOperator
 from airflow.utils import timezone
 from airflow.utils.timezone import datetime
 from tests.test_utils.config import conf_vars
@@ -37,7 +37,7 @@ TEST_CONN_ID = "conn_id_for_testing"
 
 class TestSFTPOperator(unittest.TestCase):
     def setUp(self):
-        from airflow.contrib.hooks.ssh_hook import SSHHook
+        from airflow.providers.ssh.hooks.ssh import SSHHook
 
         hook = SSHHook(ssh_conn_id='ssh_default')
         hook.no_host_key_check = True

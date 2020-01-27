@@ -261,7 +261,7 @@ class Connection(Base, LoggingMixin):
             from airflow.providers.sqlite.hooks.sqlite import SqliteHook
             return SqliteHook(sqlite_conn_id=self.conn_id)
         elif self.conn_type == 'jdbc':
-            from airflow.hooks.jdbc_hook import JdbcHook
+            from airflow.providers.jdbc.hooks.jdbc import JdbcHook
             return JdbcHook(jdbc_conn_id=self.conn_id)
         elif self.conn_type == 'mssql':
             from airflow.providers.microsoft.mssql.hooks.mssql import MsSqlHook
@@ -306,7 +306,7 @@ class Connection(Base, LoggingMixin):
             from airflow.gcp.hooks.cloud_sql import CloudSQLDatabaseHook
             return CloudSQLDatabaseHook(gcp_cloudsql_conn_id=self.conn_id)
         elif self.conn_type == 'grpc':
-            from airflow.contrib.hooks.grpc_hook import GrpcHook
+            from airflow.providers.grpc.hooks.grpc import GrpcHook
             return GrpcHook(grpc_conn_id=self.conn_id)
         raise AirflowException("Unknown hook type {}".format(self.conn_type))
 

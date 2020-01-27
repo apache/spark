@@ -23,8 +23,8 @@ import json
 from datetime import timedelta
 
 from airflow import DAG
-from airflow.operators.http_operator import SimpleHttpOperator
-from airflow.sensors.http_sensor import HttpSensor
+from airflow.providers.http.operators.http import SimpleHttpOperator
+from airflow.providers.http.sensors.http import HttpSensor
 from airflow.utils.dates import days_ago
 
 default_args = {
