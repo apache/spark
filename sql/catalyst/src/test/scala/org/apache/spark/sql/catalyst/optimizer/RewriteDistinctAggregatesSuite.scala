@@ -42,6 +42,16 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
+  private def checkGenerate(generate: LogicalPlan): Unit = generate match {
+    case Aggregate(_, _, _: Expand) =>
+    case _ => fail(s"Plan is not generated:\n$generate")
+  }
+
+  private def checkGenerateAndRewrite(rewrite: LogicalPlan): Unit = rewrite match {
+    case Aggregate(_, _, Aggregate(_, _, Expand(_, _, _: Expand))) =>
+    case _ => fail(s"Plan is not rewritten:\n$rewrite")
+  }
+
   test("single distinct group") {
     val input = testRelation
       .groupBy('a)(countDistinct('e))
@@ -54,8 +64,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val input = testRelation
       .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'e))
       .analyze
-    val rewrite = RewriteDistinctAggregates(input)
-    comparePlans(input, rewrite)
+    checkGenerate(RewriteDistinctAggregates(input))
   }
 
   test("single distinct group with partial aggregates") {
@@ -79,7 +88,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val input = testRelation
       .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'b, 'c), countDistinct('d))
       .analyze
-    checkRewrite(RewriteDistinctAggregates(input))
+    checkGenerateAndRewrite(RewriteDistinctAggregates(input))
   }
 
   test("multiple distinct groups with partial aggregates") {
