@@ -241,7 +241,7 @@ object ResourceProfile extends Logging {
           val taskResources = getDefaultTaskResources(conf)
           val executorResources = getDefaultExecutorResources(conf)
           val defProf = new ResourceProfile(executorResources, taskResources)
-          defProf.setToDefaultProfile
+          defProf.setToDefaultProfile()
           defaultProfile = Some(defProf)
           logInfo("Default ResourceProfile created, executor resources: " +
             s"${defProf.executorResources}, task resources: " +
@@ -275,12 +275,12 @@ object ResourceProfile extends Logging {
 
   // for testing only
   private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
-    clearDefaultProfile
+    clearDefaultProfile()
     // force recreate it after clearing
     getOrCreateDefaultProfile(conf)
   }
 
-  private[spark] def clearDefaultProfile: Unit = {
+  private[spark] def clearDefaultProfile(): Unit = {
     DEFAULT_PROFILE_LOCK.synchronized {
       defaultProfile = None
     }
