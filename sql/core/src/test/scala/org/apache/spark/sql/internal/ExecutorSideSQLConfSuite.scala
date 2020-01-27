@@ -172,7 +172,6 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           Iterator(TaskContext.get.getLocalProperty(confKey) == confValue)
         }
         df.hint("broadcast")
-        df
       }
 
       // set local propert and assert
