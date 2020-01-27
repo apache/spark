@@ -676,6 +676,33 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
   }
 
+  test("SPARK-30633: xxHash with different type seeds") {
+    val literal = Literal.create(42L, LongType)
+
+    val longSeeds = Seq(
+      Long.MinValue,
+      Integer.MIN_VALUE.toLong - 1L,
+      0L,
+      Integer.MAX_VALUE.toLong + 1L,
+      Long.MaxValue
+    )
+    for (seed <- longSeeds) {
+      checkEvaluation(XxHash64(Seq(literal), seed), XxHash64(Seq(literal), seed).eval())
+    }
+
+    val intSeeds = Seq(
+      Integer.MIN_VALUE,
+      0,
+      Integer.MAX_VALUE
+    )
+    for (seed <- intSeeds) {
+      checkEvaluation(XxHash64(Seq(literal), seed), XxHash64(Seq(literal), seed).eval())
+    }
+
+    checkEvaluation(XxHash64(Seq(literal), 100), XxHash64(Seq(literal), 100L).eval())
+    checkEvaluation(XxHash64(Seq(literal), 100L), XxHash64(Seq(literal), 100).eval())
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)
@@ -690,6 +717,18 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
         checkEvaluation(XxHash64(literals, seed), XxHash64(literals, seed).eval())
         checkEvaluation(HiveHash(literals), HiveHash(literals).eval())
+      }
+    }
+
+    val longSeed = Math.abs(seed).toLong + Integer.MAX_VALUE.toLong
+    test(s"SPARK-30633: xxHash64 with long seed: ${inputSchema.simpleString}") {
+      for (_ <- 1 to 10) {
+        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
+          case (value, dt) => Literal.create(value, dt)
+        }
+        // Only test the interpreted version has same result with codegen version.
+        checkEvaluation(XxHash64(literals, longSeed), XxHash64(literals, longSeed).eval())
       }
     }
   }
