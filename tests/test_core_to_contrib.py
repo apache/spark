@@ -302,6 +302,82 @@ HOOK = [
         'airflow.providers.sqlite.hooks.sqlite.SqliteHook',
         'airflow.hooks.sqlite_hook.SqliteHook',
     ),
+    (
+        'airflow.providers.cloudant.hooks.cloudant.CloudantHook',
+        'airflow.contrib.hooks.cloudant_hook.CloudantHook',
+    ),
+    (
+        'airflow.providers.databricks.hooks.databricks.DatabricksHook',
+        'airflow.contrib.hooks.databricks_hook.DatabricksHook',
+    ),
+    (
+        'airflow.providers.databricks.hooks.databricks.DatabricksHook',
+        'airflow.contrib.hooks.databricks_hook.DatabricksHook',
+    ),
+    (
+        'airflow.providers.datadog.hooks.datadog.DatadogHook',
+        'airflow.contrib.hooks.datadog_hook.DatadogHook',
+    ),
+    (
+        'airflow.providers.dingding.hooks.dingding.DingdingHook',
+        'airflow.contrib.hooks.dingding_hook.DingdingHook',
+    ),
+    (
+        'airflow.providers.ddiscord.hooks.discord_webhook.DiscordWebhookHook',
+        'airflow.contrib.hooks.discord_webhook_hook.DiscordWebhookHook',
+    ),
+    (
+        'airflow.providers.google.suite.hooks.drive.GoogleDriveHook',
+        'airflow.contrib.hooks.gdrive_hook.GoogleDriveHook',
+    ),
+    (
+        'airflow.providers.jenking.hooks.jenkins.JenkinsHook',
+        'airflow.contrib.hooks.jenkins_hook.JenkinsHook',
+    ),
+    (
+        'airflow.providers.opsgenie.hooks.opsgenie_alert.OpsgenieAlertHook',
+        'airflow.contrib.hooks.opsgenie_alert_hook.OpsgenieAlertHook',
+    ),
+    (
+        'airflow.providers.pagerduty.hooks.pagerduty.PagerdutyHook',
+        'airflow.contrib.hooks.pagerduty_hook.PagerdutyHook',
+    ),
+    (
+        'airflow.providers.qubole.hooks.qubole_check.QuboleCheckHook',
+        'airflow.contrib.hooks.qubole_check_hook.QuboleCheckHook',
+    ),
+    (
+        'airflow.providers.qubole.hooks.qubole.QuboleHook',
+        'airflow.contrib.hooks.qubole_hook.QuboleHook',
+    ),
+    (
+        'airflow.providers.salesforce.hooks.salesforce.SalesforceHook',
+        'airflow.contrib.hooks.salesforce_hook.SalesforceHook',
+    ),
+    (
+        'airflow.providers.segment.hooks.segment.SegmentHook',
+        'airflow.contrib.hooks.segment_hook.SegmentHook',
+    ),
+    (
+        'airflow.providers.slack.hooks.slack_webhook.SlackWebhookHook',
+        'airflow.contrib.hooks.slack_webhook_hook.SlackWebhookHook',
+    ),
+    (
+        'airflow.providers.vertica.hooks.vertica.VerticaHook',
+        'airflow.contrib.hooks.vertica_hook.VerticaHook',
+    ),
+    (
+        'airflow.providers.google.suite.hooks.sheets.GSheetsHook',
+        'airflow.gcp.hooks.gsheets.GSheetsHook',
+    ),
+    (
+        'airflow.providers.slack.hooks.slack.SlackHook',
+        'airflow.hooks.slack_hook.SlackHook',
+    ),
+    (
+        'airflow.providers.zendesk.hooks.zendesk.ZendeskHook',
+        'airflow.hooks.zendesk_hook.ZendeskHook',
+    ),
 ]
 
 OPERATOR = [
@@ -1096,6 +1172,67 @@ OPERATOR = [
         'airflow.providers.sqlite.operators.sqlite.SqliteOperator',
         'airflow.operators.sqlite_operator.SqliteOperator',
     ),
+    (
+        'airflow.providers.databricks.operators.databricks.DatabricksRunNowOperator',
+        'airflow.contrib.operators.databricks_operator.DatabricksRunNowOperator',
+    ),
+    (
+        'airflow.providers.databricks.operators.databricks.DatabricksSubmitRunOperator',
+        'airflow.contrib.operators.databricks_operator.DatabricksSubmitRunOperator',
+    ),
+    (
+        'airflow.providers.dindding.operators.dingding.DingdingOperator',
+        'airflow.contrib.operators.dingding_operator.DingdingOperator',
+    ),
+    (
+        'airflow.providers.discord.operators.discord_webhook.DiscordWebhookOperator',
+        'airflow.contrib.operators.discord_webhook_operator.DiscordWebhookOperator',
+    ),
+    (
+        'airflow.providers.jenking.operators.jenkins_job_trigger.JenkinsJobTriggerOperator',
+        'airflow.contrib.operators.jenkins_job_trigger_operator.JenkinsJobTriggerOperator',
+    ),
+    (
+        'airflow.providers.opsgenie.operators.opsgenie_alert.OpsgenieAlertOperator',
+        'airflow.contrib.operators.opsgenie_alert_operator.OpsgenieAlertOperator',
+    ),
+    (
+        'airflow.providers.qubole.operators.qubole_check.QuboleCheckOperator',
+        'airflow.contrib.operators.qubole_check_operator.QuboleCheckOperator',
+    ),
+    (
+        'airflow.providers.qubole.operators.qubole_check.QuboleValueCheckOperator',
+        'airflow.contrib.operators.qubole_check_operator.QuboleValueCheckOperator',
+    ),
+    (
+        'airflow.providers.qubole.operators.qubole.QuboleOperator',
+        'airflow.contrib.operators.qubole_operator.QuboleOperator',
+    ),
+    (
+        'airflow.providers.segment.operators.segment_track_event.SegmentTrackEventOperator',
+        'airflow.contrib.operators.segment_track_event_operator.SegmentTrackEventOperator',
+    ),
+    (
+        'airflow.providers.slack.operators.slack_webhook.SlackWebhookOperator',
+        'airflow.contrib.operators.slack_webhook_operator.SlackWebhookOperator',
+    ),
+    (
+        'airflow.providers.vertica.operators.vertica.VerticaOperator',
+        'airflow.contrib.operators.vertica_operator.VerticaOperator',
+    ),
+    (
+        'airflow.providers.datadog.sensors.datadog.DatadogSensor',
+        'airflow.contrib.sensors.datadog_sensor.DatadogSensor',
+    ),
+
+    (
+        'airflow.providers.slack.operators.slack.SlackAPIPostOperator',
+        'airflow.operators.slack_operator.SlackAPIPostOperator',
+    ),
+    (
+        'airflow.providers.slack.operators.slack.SlackAPIOperator',
+        'airflow.operators.slack_operator.SlackAPIOperator',
+    ),
 ]
 
 SENSOR = [
@@ -1253,6 +1390,22 @@ SENSOR = [
     (
         'airflow.providers.redis.sensors.redis_pub_sub.RedisPubSubSensor',
         'airflow.contrib.sensors.redis_pub_sub_sensor.RedisPubSubSensor',
+    ),
+    (
+        'airflow.providers.datadog.sensors.datadog.DatadogSensor',
+        'airflow.contrib.sensors.datadog_sensor.DatadogSensor',
+    ),
+    (
+        'airflow.providers.qubole.sensors.qubole.QuboleSensor',
+        'airflow.contrib.sensors.qubole_sensor.QuboleSensor',
+    ),
+    (
+        'airflow.providers.qubole.sensors.qubole.QubolePartitionSensor',
+        'airflow.contrib.sensors.qubole_sensor.QubolePartitionSensor',
+    ),
+    (
+        'airflow.providers.qubole.sensors.qubole.QuboleFileSensor',
+        'airflow.contrib.sensors.qubole_sensor.QuboleFileSensor',
     ),
 ]
 
