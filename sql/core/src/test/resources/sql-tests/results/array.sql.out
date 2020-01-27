@@ -2,45 +2,45 @@
 -- Number of queries: 12
 
 
--- !query 0
+-- !query
 create temporary view data as select * from values
   ("one", array(11, 12, 13), array(array(111, 112, 113), array(121, 122, 123))),
   ("two", array(21, 22, 23), array(array(211, 212, 213), array(221, 222, 223)))
   as data(a, b, c)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 select * from data
--- !query 1 schema
+-- !query schema
 struct<a:string,b:array<int>,c:array<array<int>>>
--- !query 1 output
+-- !query output
 one	[11,12,13]	[[111,112,113],[121,122,123]]
 two	[21,22,23]	[[211,212,213],[221,222,223]]
 
 
--- !query 2
+-- !query
 select a, b[0], b[0] + b[1] from data
--- !query 2 schema
+-- !query schema
 struct<a:string,b[0]:int,(b[0] + b[1]):int>
--- !query 2 output
+-- !query output
 one	11	23
 two	21	43
 
 
--- !query 3
+-- !query
 select a, c[0][0] + c[0][0 + 1] from data
--- !query 3 schema
+-- !query schema
 struct<a:string,(c[0][0] + c[0][(0 + 1)]):int>
--- !query 3 output
+-- !query output
 one	223
 two	423
 
 
--- !query 4
+-- !query
 create temporary view primitive_arrays as select * from values (
   array(true),
   array(2Y, 1Y),
@@ -64,21 +64,21 @@ create temporary view primitive_arrays as select * from values (
   date_array,
   timestamp_array
 )
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 select * from primitive_arrays
--- !query 5 schema
+-- !query schema
 struct<boolean_array:array<boolean>,tinyint_array:array<tinyint>,smallint_array:array<smallint>,int_array:array<int>,bigint_array:array<bigint>,decimal_array:array<decimal(19,0)>,double_array:array<double>,float_array:array<float>,date_array:array<date>,timestamp_array:array<timestamp>>
--- !query 5 output
+-- !query output
 [true]	[2,1]	[2,1]	[2,1]	[2,1]	[9223372036854775809,9223372036854775808]	[2.0,1.0]	[2.0,1.0]	[2016-03-14,2016-03-13]	[2016-11-15 20:54:00,2016-11-12 20:54:00]
 
 
--- !query 6
+-- !query
 select
   array_contains(boolean_array, true), array_contains(boolean_array, false),
   array_contains(tinyint_array, 2Y), array_contains(tinyint_array, 0Y),
@@ -91,22 +91,22 @@ select
   array_contains(date_array, date '2016-03-14'), array_contains(date_array, date '2016-01-01'),
   array_contains(timestamp_array, timestamp '2016-11-15 20:54:00.000'), array_contains(timestamp_array, timestamp '2016-01-01 20:54:00.000')
 from primitive_arrays
--- !query 6 schema
+-- !query schema
 struct<array_contains(boolean_array, true):boolean,array_contains(boolean_array, false):boolean,array_contains(tinyint_array, 2):boolean,array_contains(tinyint_array, 0):boolean,array_contains(smallint_array, 2):boolean,array_contains(smallint_array, 0):boolean,array_contains(int_array, 2):boolean,array_contains(int_array, 0):boolean,array_contains(bigint_array, 2):boolean,array_contains(bigint_array, 0):boolean,array_contains(decimal_array, 9223372036854775809):boolean,array_contains(decimal_array, CAST(1 AS DECIMAL(19,0))):boolean,array_contains(double_array, 2.0):boolean,array_contains(double_array, 0.0):boolean,array_contains(float_array, CAST(2.0 AS FLOAT)):boolean,array_contains(float_array, CAST(0.0 AS FLOAT)):boolean,array_contains(date_array, DATE '2016-03-14'):boolean,array_contains(date_array, DATE '2016-01-01'):boolean,array_contains(timestamp_array, TIMESTAMP '2016-11-15 20:54:00'):boolean,array_contains(timestamp_array, TIMESTAMP '2016-01-01 20:54:00'):boolean>
--- !query 6 output
+-- !query output
 true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false
 
 
--- !query 7
+-- !query
 select array_contains(b, 11), array_contains(c, array(111, 112, 113)) from data
--- !query 7 schema
+-- !query schema
 struct<array_contains(b, 11):boolean,array_contains(c, array(111, 112, 113)):boolean>
--- !query 7 output
+-- !query output
 false	false
 true	true
 
 
--- !query 8
+-- !query
 select
   sort_array(boolean_array),
   sort_array(tinyint_array),
@@ -119,31 +119,31 @@ select
   sort_array(date_array),
   sort_array(timestamp_array)
 from primitive_arrays
--- !query 8 schema
+-- !query schema
 struct<sort_array(boolean_array, true):array<boolean>,sort_array(tinyint_array, true):array<tinyint>,sort_array(smallint_array, true):array<smallint>,sort_array(int_array, true):array<int>,sort_array(bigint_array, true):array<bigint>,sort_array(decimal_array, true):array<decimal(19,0)>,sort_array(double_array, true):array<double>,sort_array(float_array, true):array<float>,sort_array(date_array, true):array<date>,sort_array(timestamp_array, true):array<timestamp>>
--- !query 8 output
+-- !query output
 [true]	[1,2]	[1,2]	[1,2]	[1,2]	[9223372036854775808,9223372036854775809]	[1.0,2.0]	[1.0,2.0]	[2016-03-13,2016-03-14]	[2016-11-12 20:54:00,2016-11-15 20:54:00]
 
 
--- !query 9
+-- !query
 select sort_array(array('b', 'd'), '1')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
 
 
--- !query 10
+-- !query
 select sort_array(array('b', 'd'), cast(NULL as boolean))
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
 
 
--- !query 11
+-- !query
 select
   size(boolean_array),
   size(tinyint_array),
@@ -156,7 +156,7 @@ select
   size(date_array),
   size(timestamp_array)
 from primitive_arrays
--- !query 11 schema
+-- !query schema
 struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,size(int_array):int,size(bigint_array):int,size(decimal_array):int,size(double_array):int,size(float_array):int,size(date_array):int,size(timestamp_array):int>
--- !query 11 output
+-- !query output
 1	2	2	2	2	2	2	2	2	2
