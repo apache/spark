@@ -26,7 +26,7 @@ class ResourceProfileSuite extends SparkFunSuite {
 
   override def beforeAll() {
     try {
-      ResourceProfile.clearDefaultProfile
+      ResourceProfile.clearDefaultProfile()
     } finally {
       super.beforeAll()
     }
@@ -34,7 +34,7 @@ class ResourceProfileSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ResourceProfile.clearDefaultProfile
+      ResourceProfile.clearDefaultProfile()
     } finally {
       super.afterEach()
     }

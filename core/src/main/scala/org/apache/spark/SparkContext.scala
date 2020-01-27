@@ -2046,7 +2046,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
     // `SparkContext` is stopped.
     localProperties.remove()
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")

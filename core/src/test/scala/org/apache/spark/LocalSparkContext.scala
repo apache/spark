@@ -44,7 +44,7 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   def resetSparkContext(): Unit = {
     LocalSparkContext.stop(sc)
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     sc = null
   }
 
