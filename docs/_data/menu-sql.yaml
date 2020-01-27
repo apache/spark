@@ -123,37 +123,27 @@
             - text: SELECT 
               url: sql-ref-syntax-qry-select.html 
               subitems:
-                - text: DISTINCT Clause
-                  url: sql-ref-syntax-qry-select-distinct.html
-                - text: Joins
-                  url: sql-ref-syntax-qry-select-join.html
-                - text: ORDER BY Clause 
-                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: WHERE Clause 
+                  url: sql-ref-syntax-qry-select-where.html
                 - text: GROUP BY Clause 
                   url: sql-ref-syntax-qry-select-groupby.html
                 - text: HAVING Clause 
                   url: sql-ref-syntax-qry-select-having.html
+                - text: ORDER BY Clause 
+                  url: sql-ref-syntax-qry-select-orderby.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
-                - text: Set operations
-                  url: sql-ref-syntax-qry-select-setops.html
+                - text: SORT BY Clause 
+                  url: sql-ref-syntax-qry-select-sortby.html
+                - text: CLUSTER BY Clause 
+                  url: sql-ref-syntax-qry-select-clusterby.html
+                - text: DISTRIBUTE BY Clause 
+                  url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: USE database
                   url: sql-ref-syntax-qry-select-usedb.html
-                - text: Common Table Expression(CTE)
-                  url: sql-ref-syntax-qry-select-cte.html
-                - text: Subqueries
-                  url: sql-ref-syntax-qry-select-subqueries.html
-                - text: Query hints
-                  url: sql-ref-syntax-qry-select-hints.html
-            - text: SAMPLING
-              url: sql-ref-syntax-qry-sampling.html
-            - text: WINDOWING ANALYTIC FUNCTIONS 
-              url: sql-ref-syntax-qry-window.html
-            - text: AGGREGATION (CUBE/ROLLUP/GROUPING)
-              url: sql-ref-syntax-qry-aggregation.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
-        - text: Auxilarry Statements
+        - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:
             - text: Analyze statement
