@@ -2,44 +2,44 @@
 -- Number of queries: 13
 
 
--- !query 0
+-- !query
 SELECT 'trailing' AS first
--- !query 0 schema
+-- !query schema
 struct<first:string>
--- !query 0 output
+-- !query output
 trailing
 
 
--- !query 1
+-- !query
 SELECT /* embedded single line */ 'embedded' AS `second`
--- !query 1 schema
+-- !query schema
 struct<second:string>
--- !query 1 output
+-- !query output
 embedded
 
 
--- !query 2
+-- !query
 SELECT /* both embedded and trailing single line */ 'both' AS third
--- !query 2 schema
+-- !query schema
 struct<third:string>
--- !query 2 output
+-- !query output
 both
 
 
--- !query 3
+-- !query
 SELECT 'before multi-line' AS fourth
--- !query 3 schema
+-- !query schema
 struct<fourth:string>
--- !query 3 output
+-- !query output
 before multi-line
 
 
--- !query 4
+-- !query
 /* This is an example of SQL which should not execute:
  * select 'multi-line'
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -50,12 +50,12 @@ mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR'
  * select 'multi-line'
 
 
--- !query 5
+-- !query
 */
 SELECT 'after multi-line' AS fifth
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 extraneous input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -66,12 +66,12 @@ extraneous input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR
 SELECT 'after multi-line' AS fifth
 
 
--- !query 6
+-- !query
 /*
 SELECT 'trailing' as x1
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -82,14 +82,14 @@ mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR'
 SELECT 'trailing' as x1
 
 
--- !query 7
+-- !query
 */
 
 /* This block comment surrounds a query which itself has a block comment...
 SELECT /* embedded single line */ 'embedded' AS x2
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -102,16 +102,16 @@ mismatched input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR
 SELECT /* embedded single line */ 'embedded' AS x2
 
 
--- !query 8
+-- !query
 */
 
 SELECT -- continued after the following block comments...
 /* Deeply nested comment.
    This includes a single apostrophe to make sure we aren't decoding this part as a string.
 SELECT 'deep nest' AS n1
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 extraneous input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -126,12 +126,12 @@ SELECT -- continued after the following block comments...
 SELECT 'deep nest' AS n1
 
 
--- !query 9
+-- !query
 /* Second level of nesting...
 SELECT 'deeper nest' as n2
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -142,12 +142,12 @@ mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR'
 SELECT 'deeper nest' as n2
 
 
--- !query 10
+-- !query
 /* Third level of nesting...
 SELECT 'deepest nest' as n3
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -158,16 +158,16 @@ mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR'
 SELECT 'deepest nest' as n3
 
 
--- !query 11
+-- !query
 */
 Hoo boy. Still two deep...
 */
 Now just one deep...
 */
 'deeply nested example' AS sixth
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
@@ -182,11 +182,11 @@ Now just one deep...
 'deeply nested example' AS sixth
 
 
--- !query 12
+-- !query
 /* and this is the end of the file */
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input '<EOF>' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 37)

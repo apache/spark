@@ -2,161 +2,161 @@
 -- Number of queries: 42
 
 
--- !query 0
+-- !query
 SELECT string('this is a text string') = string('this is a text string') AS true
--- !query 0 schema
+-- !query schema
 struct<true:boolean>
--- !query 0 output
+-- !query output
 true
 
 
--- !query 1
+-- !query
 SELECT string('this is a text string') = string('this is a text strin') AS `false`
--- !query 1 schema
+-- !query schema
 struct<false:boolean>
--- !query 1 output
+-- !query output
 false
 
 
--- !query 2
+-- !query
 CREATE TABLE TEXT_TBL (f1 string) USING parquet
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO TEXT_TBL VALUES ('doh!')
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor')
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 SELECT '' AS two, * FROM TEXT_TBL
--- !query 5 schema
+-- !query schema
 struct<two:string,f1:string>
--- !query 5 output
+-- !query output
 	doh!
 	hi de ho neighbor
 
 
--- !query 6
+-- !query
 select length(42)
--- !query 6 schema
+-- !query schema
 struct<length(CAST(42 AS STRING)):int>
--- !query 6 output
+-- !query output
 2
 
 
--- !query 7
+-- !query
 select string('four: ') || 2+2
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 java.lang.NumberFormatException
 invalid input syntax for type numeric: four: 2
 
 
--- !query 8
+-- !query
 select 'four: ' || 2+2
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 java.lang.NumberFormatException
 invalid input syntax for type numeric: four: 2
 
 
--- !query 9
+-- !query
 select 3 || 4.0
--- !query 9 schema
+-- !query schema
 struct<concat(CAST(3 AS STRING), CAST(4.0 AS STRING)):string>
--- !query 9 output
+-- !query output
 34.0
 
 
--- !query 10
+-- !query
 /*
  * various string functions
  */
 select concat('one')
--- !query 10 schema
+-- !query schema
 struct<concat(one):string>
--- !query 10 output
+-- !query output
 one
 
 
--- !query 11
+-- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
--- !query 11 schema
+-- !query schema
 struct<concat(CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date('20100309', 'yyyyMMdd') AS STRING)):string>
--- !query 11 output
+-- !query output
 123hellotruefalse2010-03-09
 
 
--- !query 12
+-- !query
 select concat_ws('#','one')
--- !query 12 schema
+-- !query schema
 struct<concat_ws(#, one):string>
--- !query 12 output
+-- !query output
 one
 
 
--- !query 13
+-- !query
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
--- !query 13 schema
+-- !query schema
 struct<concat_ws(#, CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date('20100309', 'yyyyMMdd') AS STRING)):string>
--- !query 13 output
+-- !query output
 1#x#x#hello#true#false#x-03-09
 
 
--- !query 14
+-- !query
 select concat_ws(',',10,20,null,30)
--- !query 14 schema
+-- !query schema
 struct<concat_ws(,, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
--- !query 14 output
+-- !query output
 10,20,30
 
 
--- !query 15
+-- !query
 select concat_ws('',10,20,null,30)
--- !query 15 schema
+-- !query schema
 struct<concat_ws(, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
--- !query 15 output
+-- !query output
 102030
 
 
--- !query 16
+-- !query
 select concat_ws(NULL,10,20,null,30) is null
--- !query 16 schema
+-- !query schema
 struct<(concat_ws(CAST(NULL AS STRING), CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)) IS NULL):boolean>
--- !query 16 output
+-- !query output
 true
 
 
--- !query 17
+-- !query
 select reverse('abcde')
--- !query 17 schema
+-- !query schema
 struct<reverse(abcde):string>
--- !query 17 output
+-- !query output
 edcba
 
 
--- !query 18
+-- !query
 select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i
--- !query 18 schema
+-- !query schema
 struct<i:bigint,left('ahoj', t.`i`):string,right('ahoj', t.`i`):string>
--- !query 18 output
+-- !query output
 -5		
 -4		
 -3		
@@ -170,192 +170,192 @@ struct<i:bigint,left('ahoj', t.`i`):string,right('ahoj', t.`i`):string>
 5	ahoj	ahoj
 
 
--- !query 19
+-- !query
 /*
  * format
  */
 select format_string(NULL)
--- !query 19 schema
+-- !query schema
 struct<format_string(CAST(NULL AS STRING)):string>
--- !query 19 output
+-- !query output
 NULL
 
 
--- !query 20
+-- !query
 select format_string('Hello')
--- !query 20 schema
+-- !query schema
 struct<format_string(Hello):string>
--- !query 20 output
+-- !query output
 Hello
 
 
--- !query 21
+-- !query
 select format_string('Hello %s', 'World')
--- !query 21 schema
+-- !query schema
 struct<format_string(Hello %s, World):string>
--- !query 21 output
+-- !query output
 Hello World
 
 
--- !query 22
+-- !query
 select format_string('Hello %%')
--- !query 22 schema
+-- !query schema
 struct<format_string(Hello %%):string>
--- !query 22 output
+-- !query output
 Hello %
 
 
--- !query 23
+-- !query
 select format_string('Hello %%%%')
--- !query 23 schema
+-- !query schema
 struct<format_string(Hello %%%%):string>
--- !query 23 output
+-- !query output
 Hello %%
 
 
--- !query 24
+-- !query
 select format_string('Hello %s %s', 'World')
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 java.util.MissingFormatArgumentException
 Format specifier '%s'
 
 
--- !query 25
+-- !query
 select format_string('Hello %s')
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 java.util.MissingFormatArgumentException
 Format specifier '%s'
 
 
--- !query 26
+-- !query
 select format_string('Hello %x', 20)
--- !query 26 schema
+-- !query schema
 struct<format_string(Hello %x, 20):string>
--- !query 26 output
+-- !query output
 Hello 14
 
 
--- !query 27
+-- !query
 select format_string('%1$s %3$s', 1, 2, 3)
--- !query 27 schema
+-- !query schema
 struct<format_string(%1$s %3$s, 1, 2, 3):string>
--- !query 27 output
+-- !query output
 1 3
 
 
--- !query 28
+-- !query
 select format_string('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
--- !query 28 schema
+-- !query schema
 struct<format_string(%1$s %12$s, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):string>
--- !query 28 output
+-- !query output
 1 12
 
 
--- !query 29
+-- !query
 select format_string('%1$s %4$s', 1, 2, 3)
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 java.util.MissingFormatArgumentException
 Format specifier '%4$s'
 
 
--- !query 30
+-- !query
 select format_string('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 java.util.MissingFormatArgumentException
 Format specifier '%13$s'
 
 
--- !query 31
+-- !query
 select format_string('%0$s', 'Hello')
--- !query 31 schema
+-- !query schema
 struct<format_string(%0$s, Hello):string>
--- !query 31 output
+-- !query output
 Hello
 
 
--- !query 32
+-- !query
 select format_string('Hello %s %1$s %s', 'World', 'Hello again')
--- !query 32 schema
+-- !query schema
 struct<format_string(Hello %s %1$s %s, World, Hello again):string>
--- !query 32 output
+-- !query output
 Hello World World Hello again
 
 
--- !query 33
+-- !query
 select format_string('Hello %s %s, %2$s %2$s', 'World', 'Hello again')
--- !query 33 schema
+-- !query schema
 struct<format_string(Hello %s %s, %2$s %2$s, World, Hello again):string>
--- !query 33 output
+-- !query output
 Hello World Hello again, Hello again Hello again
 
 
--- !query 34
+-- !query
 select format_string('>>%10s<<', 'Hello')
--- !query 34 schema
+-- !query schema
 struct<format_string(>>%10s<<, Hello):string>
--- !query 34 output
+-- !query output
 >>     Hello<<
 
 
--- !query 35
+-- !query
 select format_string('>>%10s<<', NULL)
--- !query 35 schema
+-- !query schema
 struct<format_string(>>%10s<<, NULL):string>
--- !query 35 output
+-- !query output
 >>      null<<
 
 
--- !query 36
+-- !query
 select format_string('>>%10s<<', '')
--- !query 36 schema
+-- !query schema
 struct<format_string(>>%10s<<, ):string>
--- !query 36 output
+-- !query output
 >>          <<
 
 
--- !query 37
+-- !query
 select format_string('>>%-10s<<', '')
--- !query 37 schema
+-- !query schema
 struct<format_string(>>%-10s<<, ):string>
--- !query 37 output
+-- !query output
 >>          <<
 
 
--- !query 38
+-- !query
 select format_string('>>%-10s<<', 'Hello')
--- !query 38 schema
+-- !query schema
 struct<format_string(>>%-10s<<, Hello):string>
--- !query 38 output
+-- !query output
 >>Hello     <<
 
 
--- !query 39
+-- !query
 select format_string('>>%-10s<<', NULL)
--- !query 39 schema
+-- !query schema
 struct<format_string(>>%-10s<<, NULL):string>
--- !query 39 output
+-- !query output
 >>null      <<
 
 
--- !query 40
+-- !query
 select format_string('>>%1$10s<<', 'Hello')
--- !query 40 schema
+-- !query schema
 struct<format_string(>>%1$10s<<, Hello):string>
--- !query 40 output
+-- !query output
 >>     Hello<<
 
 
--- !query 41
+-- !query
 DROP TABLE TEXT_TBL
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 
