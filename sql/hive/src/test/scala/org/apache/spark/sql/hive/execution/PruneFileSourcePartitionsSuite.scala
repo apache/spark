@@ -43,56 +43,50 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
 
   test("PruneFileSourcePartitions should not change the output of LogicalRelation") {
     withTable("test") {
-      withTempDir { dir =>
-        sql(
-          s"""
-            |CREATE EXTERNAL TABLE test(i int)
-            |PARTITIONED BY (p int)
-            |STORED AS parquet
-            |LOCATION '${dir.toURI}'""".stripMargin)
+      sql(
+        s"""
+          |CREATE TABLE test(i int)
+          |PARTITIONED BY (p int)
+          |STORED AS parquet""".stripMargin)
 
-        val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
-        val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+      val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
+      val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+      val dataSchema = StructType(tableMeta.schema.filterNot { f =>
+        tableMeta.partitionColumnNames.contains(f.name)
+      })
+      val relation = HadoopFsRelation(
+        location = catalogFileIndex,
+        partitionSchema = tableMeta.partitionSchema,
+        dataSchema = dataSchema,
+        bucketSpec = None,
+        fileFormat = new ParquetFileFormat(),
+        options = Map.empty)(sparkSession = spark)
 
-        val dataSchema = StructType(tableMeta.schema.filterNot { f =>
-          tableMeta.partitionColumnNames.contains(f.name)
-        })
-        val relation = HadoopFsRelation(
-          location = catalogFileIndex,
-          partitionSchema = tableMeta.partitionSchema,
-          dataSchema = dataSchema,
-          bucketSpec = None,
-          fileFormat = new ParquetFileFormat(),
-          options = Map.empty)(sparkSession = spark)
+      val logicalRelation = LogicalRelation(relation, tableMeta)
+      val query = Project(Seq(Symbol("i"), Symbol("p")),
+        Filter(Symbol("p") === 1, logicalRelation)).analyze
 
-        val logicalRelation = LogicalRelation(relation, tableMeta)
-        val query = Project(Seq(Symbol("i"), Symbol("p")),
-          Filter(Symbol("p") === 1, logicalRelation)).analyze
-
-        val optimized = Optimize.execute(query)
-        assert(optimized.missingInput.isEmpty)
-      }
+      val optimized = Optimize.execute(query)
+      assert(optimized.missingInput.isEmpty)
     }
   }
 
-  test("SPARK-30427 statistics of pruned partitions can be controlled by " +
+  test("SPARK-30427 statistics of pruned partitions on file source table can be controlled by " +
     "spark.sql.statistics.fallBackToFs.maxPartitionNumber") {
     withTable("test", "temp") {
-      withTempDir { dir =>
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE test(i int)
-             |PARTITIONED BY (p int)
-             |STORED AS parquet
-             |LOCATION '${dir.toURI}'""".stripMargin)
+      sql(
+        s"""
+          |CREATE TABLE test(i int)
+          |PARTITIONED BY (p int)
+          |STORED AS parquet""".stripMargin)
 
         spark.range(0, 1000, 1).selectExpr("id as col")
           .createOrReplaceTempView("temp")
 
         for (part <- Seq(1, 2, 3, 4)) {
           sql(s"""
-                 |INSERT OVERWRITE TABLE test PARTITION (p='$part')
-                 |select col from temp""".stripMargin)
+                |INSERT OVERWRITE TABLE test PARTITION (p='$part')
+                |select col from temp""".stripMargin)
         }
         val singlePartitionSizeInBytes = 4425
         val catalogTable = spark.sharedState.externalCatalog.getTable("default", "test")
@@ -119,16 +113,13 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           withSQLConf(
             SQLConf.MAX_PARTITION_NUMBER_FOR_STATS_CALCULATION_VIA_FS.key -> s"$maxPartNum") {
             val optimized = Optimize.execute(query)
-            val sizeInBytes =
-              if (maxPartNum>0 && prunedPartNum<=maxPartNum) {
-                singlePartitionSizeInBytes*2
-              } else {
-                singlePartitionSizeInBytes*4
-              }
-            assert(optimized.stats.sizeInBytes === sizeInBytes)
+            if (prunedPartNum <= maxPartNum) {
+              assert(optimized.stats.sizeInBytes / 2 === singlePartitionSizeInBytes)
+            } else {
+              assert(optimized.stats.sizeInBytes / 4 === singlePartitionSizeInBytes)
+            }
           }
         }
-      }
     }
   }
 
