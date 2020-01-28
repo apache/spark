@@ -131,14 +131,14 @@
                   url: sql-ref-syntax-qry-select-having.html
                 - text: ORDER BY Clause 
                   url: sql-ref-syntax-qry-select-orderby.html
-                - text: LIMIT Clause 
-                  url: sql-ref-syntax-qry-select-limit.html
                 - text: SORT BY Clause 
                   url: sql-ref-syntax-qry-select-sortby.html
                 - text: CLUSTER BY Clause 
                   url: sql-ref-syntax-qry-select-clusterby.html
                 - text: DISTRIBUTE BY Clause 
                   url: sql-ref-syntax-qry-select-distribute-by.html
+                - text: LIMIT Clause 
+                  url: sql-ref-syntax-qry-select-limit.html
                 - text: USE database
                   url: sql-ref-syntax-qry-select-usedb.html
             - text: EXPLAIN
