@@ -3006,35 +3006,40 @@ class Analyzer(
 
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a @ AlterTable(_, _, t: DataSourceV2Relation, changes) =>
+      case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
         val schema = t.schema
         val normalizedChanges = changes.flatMap {
-          case add: AddColumn if add.position() != null && add.position().isInstanceOf[After] =>
+          case add: AddColumn =>
             val parent = add.fieldNames().init
-            val target = schema.findNestedField(parent, includeCollections = true)
-            if (target.isEmpty) {
-              Some(add)
-            } else {
-              val sf = target.get._2
-              sf.dataType match {
-                case struct: StructType =>
-                  val after = add.position().asInstanceOf[After]
-                  struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
-                    case Some(colName) =>
-                      Some(TableChange.addColumn(
-                        add.fieldNames(),
-                        add.dataType(),
-                        add.isNullable,
-                        add.comment,
-                        ColumnPosition.after(colName)))
-                    case None =>
-                      throw new AnalysisException("Couldn't find the reference column for " +
-                        s"AFTER ${after.column()} at ${UnresolvedAttribute(parent).name}")
-                  }
-                case other =>
-                  throw new AnalysisException(
-                    s"Columns can only be added to struct types. Found ${other.simpleString}.")
+            if (parent.nonEmpty) {
+              val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
+              if (target.isEmpty) {
+                Some(add)
+              } else {
+                val (normalizedName, sf) = target.get
+                sf.dataType match {
+                  case struct: StructType =>
+                    val pos = findColumnPosition(add.position(), parent.quoted, struct)
+                    Some(TableChange.addColumn(
+                      (normalizedName ++ Seq(sf.name, add.fieldNames().last)).toArray,
+                      add.dataType(),
+                      add.isNullable,
+                      add.comment,
+                      pos))
+
+                  case other =>
+                    throw new AnalysisException(
+                      s"Columns can only be added to struct types. Found ${other.simpleString}.")
+                }
               }
+            } else {
+              val pos = findColumnPosition(add.position(), "root", schema)
+              Some(TableChange.addColumn(
+                add.fieldNames(),
+                add.dataType(),
+                add.isNullable,
+                add.comment,
+                pos))
             }
 
           case typeChange: UpdateColumnType =>
@@ -3122,6 +3127,24 @@ class Analyzer(
       val fieldOpt = schema.findNestedField(
         fieldNames, includeCollections = true, conf.resolver)
       fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
+    }
+
+    private def findColumnPosition(
+        position: ColumnPosition,
+        field: String,
+        struct: StructType): ColumnPosition = {
+      position match {
+        case null => null
+        case after: After =>
+          struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
+            case Some(colName) =>
+              ColumnPosition.after(colName)
+            case None =>
+              throw new AnalysisException("Couldn't find the reference column for " +
+                s"$after at $field")
+          }
+        case other => other
+      }
     }
   }
 }

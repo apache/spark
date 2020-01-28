@@ -327,7 +327,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         searchPath: Seq[String],
         normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
       searchPath.headOption.flatMap { searchName =>
-        val found = this.fields.filter(f => resolver(searchName, f.name))
+        val found = struct.fields.filter(f => resolver(searchName, f.name))
         if (found.length > 1) {
           val names = found.map(f => prettyFieldName(normalizedPath :+ f.name))
             .mkString("[", ", ", " ]")
@@ -338,7 +338,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
           None
         } else {
           val field = found.head
-          (fieldNames.tail, field.dataType, includeCollections) match {
+          (searchPath.tail, field.dataType, includeCollections) match {
             case (Seq(), _, _) =>
               Some(normalizedPath -> field)
 

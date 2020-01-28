@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -145,7 +146,8 @@ class PlanResolutionSuite extends AnalysisTest {
       analyzer.ResolveTables,
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,
-      analyzer.ResolveReferences)
+      analyzer.ResolveReferences,
+      analyzer.ResolveAlterTableChanges)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -1069,6 +1071,28 @@ class PlanResolutionSuite extends AnalysisTest {
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  test("alter table: hive style change column") {
+    Seq("v2Table", "testcat.tab").foreach { tblName =>
+      parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
+        case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+          assert(changes.length == 1, "Should only have a comment change")
+          assert(changes.head.isInstanceOf[UpdateColumnComment],
+            s"Expected only a UpdateColumnComment change but got: ${changes.head}")
+        case _ => fail("expect AlterTable")
+      }
+
+      parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
+        case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+          assert(changes.length == 2, "Should have a comment change and type change")
+          assert(changes.exists(_.isInstanceOf[UpdateColumnComment]),
+            s"Expected UpdateColumnComment change but got: ${changes}")
+          assert(changes.exists(_.isInstanceOf[UpdateColumnType]),
+            s"Expected UpdateColumnType change but got: ${changes}")
+        case _ => fail("expect AlterTable")
+      }
     }
   }
 

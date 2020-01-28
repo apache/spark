@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -431,17 +431,37 @@ trait CheckAnalysis extends PredicateHelper {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)
               if (field.isEmpty) {
-                throw new AnalysisException(
-                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+                alter.failAnalysis(
+                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
+                  table.schema.treeString)
               }
               field.get._2
+            }
+            def positionArgumentExists(position: ColumnPosition, dataType: DataType): Boolean = {
+              (position, dataType) match {
+                case (after: After, struct: StructType) =>
+                  struct.fieldNames.contains(after.column())
+                case (after: After, _) => false
+                case _ => true
+              }
             }
 
             alter.changes.foreach {
               case add: AddColumn =>
                 val parent = add.fieldNames.init
                 if (parent.nonEmpty) {
-                  findField("add to", parent)
+                  val parentField = findField("add to", parent)
+                  if (!positionArgumentExists(add.position(), parentField.dataType)) {
+                    alter.failAnalysis(
+                      s"Couldn't resolve positional argument ${add.position()} amongst " +
+                        s"${parent.quoted}")
+                  }
+                } else {
+                  if (!positionArgumentExists(add.position(), table.schema)) {
+                    alter.failAnalysis(
+                      s"Couldn't resolve positional argument ${add.position()} amongst " +
+                        s"${table.schema.treeString}")
+                  }
                 }
                 TypeUtils.failWithIntervalType(add.dataType())
               case update: UpdateColumnType =>
@@ -467,7 +487,7 @@ trait CheckAnalysis extends PredicateHelper {
                     // update is okay
                 }
                 if (!Cast.canUpCast(field.dataType, update.newDataType)) {
-                  throw new AnalysisException(
+                  alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
@@ -476,8 +496,16 @@ trait CheckAnalysis extends PredicateHelper {
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
                 if (!update.nullable && field.nullable) {
-                  throw new AnalysisException(
+                  alter.failAnalysis(
                     s"Cannot change nullable column to non-nullable: $fieldName")
+                }
+              case updatePos: UpdateColumnPosition =>
+                findField("update", updatePos.fieldNames)
+                val parent = findField("update", updatePos.fieldNames.init)
+                if (!positionArgumentExists(updatePos.position(), parent.dataType)) {
+                  alter.failAnalysis(
+                    s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
+                      s"${updatePos.fieldNames.init.quoted}")
                 }
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
