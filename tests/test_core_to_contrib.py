@@ -841,7 +841,7 @@ OPERATOR = [
         "airflow.contrib.operators.gcs_to_gcs.GoogleCloudStorageToGoogleCloudStorageOperator",
     ),
     (
-        "airflow.operators.gcs_to_s3.GCSToS3Operator",
+        "airflow.providers.amazon.aws.operators.gcs_to_s3.GCSToS3Operator",
         "airflow.contrib.operators.gcs_to_s3.GoogleCloudStorageToS3Operator",
     ),
     (
@@ -1300,6 +1300,46 @@ OPERATOR = [
     (
         'airflow.providers.sftp.operators.sftp.SFTPOperator',
         'airflow.contrib.operators.sftp_operator.SFTPOperator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.dynamodb_to_s3.DynamoDBToS3Operator',
+        'airflow.contrib.operators.dynamodb_to_s3.DynamoDBToS3Operator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.hive_to_dynamodb.HiveToDynamoDBTransferOperator',
+        'airflow.contrib.operators.hive_to_dynamodb.HiveToDynamoDBTransferOperator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.imap_attachment_to_s3.ImapAttachmentToS3Operator',
+        'airflow.contrib.operators.imap_attachment_to_s3_operator.ImapAttachmentToS3Operator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.mongo_to_s3.MongoToS3Operator',
+        'airflow.contrib.operators.mongo_to_s3.MongoToS3Operator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.s3_to_sftp.S3ToSFTPOperator',
+        'airflow.contrib.operators.s3_to_sftp_operator.S3ToSFTPOperator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.sftp_to_s3.SFTPToS3Operator',
+        'airflow.contrib.operators.sftp_to_s3_operator.SFTPToS3Operator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.gcs_to_s3.GCSToS3Operator',
+        'airflow.operators.gcs_to_s3.GCSToS3Operator',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.google_api_to_s3_transfer.GoogleApiToS3Transfer',
+        'airflow.operators.google_api_to_s3_transfer.GoogleApiToS3Transfer',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.redshift_to_s3.RedshiftToS3Transfer',
+        'airflow.operators.redshift_to_s3_operator.RedshiftToS3Transfer',
+    ),
+    (
+        'airflow.providers.amazon.aws.operators.s3_to_redshift.S3ToRedshiftTransfer',
+        'airflow.operators.s3_to_redshift_operator.S3ToRedshiftTransfer',
     ),
 ]
 

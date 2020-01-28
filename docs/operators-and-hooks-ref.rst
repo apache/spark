@@ -167,7 +167,7 @@ Foundation.
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Amazon DynamoDB <https://aws.amazon.com/dynamodb/>`__
      -
-     - :mod:`airflow.contrib.operators.hive_to_dynamodb`
+     - :mod:`airflow.providers.amazon.aws.operators.hive_to_dynamodb`
 
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Apache Druid <https://druid.apache.org/>`__
@@ -429,7 +429,7 @@ These integrations allow you to copy data from/to Amazon Web Services.
        All GCP services :ref:`[1] <integration:GCP-Discovery>`
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.operators.google_api_to_s3_transfer`
+     - :mod:`airflow.providers.amazon.aws.operators.google_api_to_s3_transfer`
 
    * - `Amazon DataSync <https://aws.amazon.com/datasync/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
@@ -439,17 +439,17 @@ These integrations allow you to copy data from/to Amazon Web Services.
    * - `Amazon DynamoDB <https://aws.amazon.com/dynamodb/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      -
-     - :mod:`airflow.contrib.operators.dynamodb_to_s3`
+     - :mod:`airflow.providers.amazon.aws.operators.dynamodb_to_s3`
 
    * - `Amazon Redshift <https://aws.amazon.com/redshift/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      -
-     - :mod:`airflow.operators.redshift_to_s3_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.redshift_to_s3`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `Amazon Redshift <https://aws.amazon.com/redshift/>`__
      -
-     - :mod:`airflow.operators.s3_to_redshift_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.s3_to_redshift`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `Snowflake <https://snowflake.com/>`__
@@ -470,32 +470,32 @@ These integrations allow you to copy data from/to Amazon Web Services.
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
      -
-     - :mod:`airflow.contrib.operators.s3_to_sftp_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.s3_to_sftp`
 
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Amazon DynamoDB <https://aws.amazon.com/dynamodb/>`__
      -
-     - :mod:`airflow.contrib.operators.hive_to_dynamodb`
+     - :mod:`airflow.providers.amazon.aws.operators.hive_to_dynamodb`
 
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.operators.gcs_to_s3`
+     - :mod:`airflow.providers.amazon.aws.operators.gcs_to_s3`
 
    * - `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.contrib.operators.imap_attachment_to_s3_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.imap_attachment_to_s3`
 
    * - `MongoDB <https://www.mongodb.com/what-is-mongodb>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.contrib.operators.mongo_to_s3`
+     - :mod:`airflow.providers.amazon.aws.operators.mongo_to_s3`
 
    * - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      -
-     - :mod:`airflow.contrib.operators.sftp_to_s3_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.sftp_to_s3`
 
 :ref:`[1] <integration:AWS-Discovery-ref>` Those discovery-based operators use
 :class:`airflow.gcp.hooks.discovery_api.GoogleDiscoveryApiHook` to communicate with Google
@@ -719,7 +719,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
        All services :ref:`[1] <integration:GCP-Discovery>`
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.operators.google_api_to_s3_transfer`
+     - :mod:`airflow.providers.amazon.aws.operators.google_api_to_s3_transfer`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
@@ -755,7 +755,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.operators.gcs_to_s3`
+     - :mod:`airflow.providers.amazon.aws.operators.gcs_to_s3`
 
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - `Google BigQuery <https://cloud.google.com/bigquery/>`__
@@ -1177,7 +1177,7 @@ These integrations allow you to copy data.
    * - `MongoDB <https://www.mongodb.com/what-is-mongodb>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.contrib.operators.mongo_to_s3`
+     - :mod:`airflow.providers.amazon.aws.operators.mongo_to_s3`
 
    * - `MySQL <https://www.mysql.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
@@ -1320,7 +1320,7 @@ These integrations allow you to copy data.
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
      -
-     - :mod:`airflow.contrib.operators.s3_to_sftp_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.s3_to_sftp`
 
    * - Filesystem
      - `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`__
@@ -1335,9 +1335,9 @@ These integrations allow you to copy data.
    * - `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      -
-     - :mod:`airflow.contrib.operators.imap_attachment_to_s3_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.imap_attachment_to_s3`
 
    * - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      -
-     - :mod:`airflow.contrib.operators.sftp_to_s3_operator`
+     - :mod:`airflow.providers.amazon.aws.operators.sftp_to_s3`
