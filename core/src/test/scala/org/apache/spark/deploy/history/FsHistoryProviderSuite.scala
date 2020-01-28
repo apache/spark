@@ -1460,7 +1460,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         assert(appInfo.id === "app")
         assert(appInfo.name === "app")
 
-        // all events in retained file should be available, even they're related to finished jobs
+        // All events in retained file(s) should be available, including events which would have
+        // been filtered out if compaction is applied. e.g. finished jobs, removed executors, etc.
         val exec1 = appStore.executorSummary("exec1")
         assert(exec1.hostPort === "host1")
         val job2 = appStore.job(2)
