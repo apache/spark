@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -187,42 +186,36 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val length = 5000
-      val expressions = Seq.fill(length) {
-        ToUTCTimestamp(
-          Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
-          Literal.create("PST", StringType))
-      }
-      val plan = GenerateMutableProjection.generate(expressions)
-      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-      val expected = Seq.fill(length)(
-        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
+    val length = 5000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
-      if (actual != expected) {
-        fail(
-          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
-      }
+    if (actual != expected) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
 
   test("SPARK-22226: group splitted expressions into one method per nested class") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val length = 10000
-      val expressions = Seq.fill(length) {
-        ToUTCTimestamp(
-          Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
-          Literal.create("PST", StringType))
-      }
-      val plan = GenerateMutableProjection.generate(expressions)
-      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-      val expected = Seq.fill(length)(
-        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+    val length = 10000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
 
-      if (actual != expected) {
-        fail(
-          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
-      }
+    if (actual != expected) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
 
@@ -519,7 +512,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
-    val appender = new LogAppender
+    val appender = new LogAppender("huge method limit")
     withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)

@@ -21,8 +21,6 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,52 +40,21 @@ import java.util.Map;
 public interface SupportsNamespaces extends CatalogPlugin {
 
   /**
-   * A property to specify the location of the namespace. If the namespace
+   * A reserved property to specify the location of the namespace. If the namespace
    * needs to store files, it should be under this location.
    */
   String PROP_LOCATION = "location";
 
   /**
-   * A property to specify the description of the namespace. The description
+   * A reserved property to specify the description of the namespace. The description
    * will be returned in the result of "DESCRIBE NAMESPACE" command.
    */
   String PROP_COMMENT = "comment";
 
   /**
-   * A property to specify the owner of the namespace.
+   * A reserved property to specify the owner of the namespace.
    */
-  String PROP_OWNER_NAME = "ownerName";
-
-  /**
-   * A property to specify the type of the namespace's owner.
-   */
-  String PROP_OWNER_TYPE = "ownerType";
-
-  /**
-   * The list of reserved namespace properties, which can not be removed or changed directly by
-   * the syntax:
-   * {{
-   *   ALTER NAMESPACE ... SET PROPERTIES ...
-   * }}
-   *
-   * They need specific syntax to modify
-   */
-  List<String> RESERVED_PROPERTIES =
-    Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
-
-  /**
-   * Return a default namespace for the catalog.
-   * <p>
-   * When this catalog is set as the current catalog, the namespace returned by this method will be
-   * set as the current namespace.
-   * <p>
-   * The namespace returned by this method is not required to exist.
-   *
-   * @return a multi-part namespace
-   */
-  default String[] defaultNamespace() {
-    return new String[0];
-  }
+  String PROP_OWNER = "owner";
 
   /**
    * List top-level namespaces from the catalog.

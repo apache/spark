@@ -103,8 +103,6 @@ statement
         SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
     | ALTER namespace multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
-    | ALTER namespace multipartIdentifier
-        SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
@@ -1101,7 +1099,6 @@ ansiNonReserved
     | OVER
     | OVERLAY
     | OVERWRITE
-    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1355,7 +1352,6 @@ nonReserved
     | OVERLAPS
     | OVERLAY
     | OVERWRITE
-    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1615,7 +1611,6 @@ OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
 OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
-OWNER: 'OWNER';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';

@@ -141,7 +141,7 @@
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.18.v20190429</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
-    <chill.version>0.9.3</chill.version>
+    <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
@@ -162,7 +162,7 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.12.10</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalafmt.parameters>--diff --test</scalafmt.parameters>
+    <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
@@ -179,7 +179,7 @@
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
-    <jersey.version>2.29.1</jersey.version>
+    <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -246,10 +246,13 @@
   </properties>
   <repositories>
     <repository>
-      <id>central</id>
-      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
-      <name>Maven Repository</name>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -258,12 +261,10 @@
       </snapshots>
     </repository>
     <repository>
-      <id>central_without_mirror</id>
       <!--
-        This is used as a fallback when a mirror to `central` fail.
-        For example, when we use Google Maven Central in GitHub Action as a mirror of `central`,
-        this will be used when Google Maven Central is out of sync due to its late sync cycle.
+        This is used as a fallback when the first try fails.
       -->
+      <id>central</id>
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
       <releases>
@@ -275,6 +276,21 @@
     </repository>
   </repositories>
   <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
     <pluginRepository>
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
@@ -639,7 +655,7 @@
       <dependency>
         <groupId>org.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.7.0</version>
+        <version>1.7.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -2776,7 +2792,7 @@
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
-          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
           <failOnWarning>false</failOnWarning>
           <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
@@ -2876,6 +2892,27 @@
                 <exclude>log4j.properties</exclude>
               </excludes>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
+        <version>1.0.3</version>
+        <configuration>
+          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <skipSources>${scalafmt.skip}</skipSources>
+          <skipTestSources>${scalafmt.skip}</skipTestSources>
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
+          <onlyChangedFiles>true</onlyChangedFiles>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
@@ -3043,27 +3080,6 @@
       <build>
         <pluginManagement>
           <plugins>
-            <!-- SPARK-29293 currently not able to update to 1.x for Scala 2.13 -->
-            <plugin>
-              <groupId>org.antipathy</groupId>
-              <artifactId>mvn-scalafmt_2.12</artifactId>
-              <version>0.12_1.5.1</version>
-              <configuration>
-                <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-                <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
-                <skipSources>${scalafmt.skip}</skipSources>
-                <skipTestSources>${scalafmt.skip}</skipTestSources>
-                <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
-              </configuration>
-              <executions>
-                <execution>
-                  <phase>validate</phase>
-                  <goals>
-                    <goal>format</goal>
-                  </goals>
-                </execution>
-              </executions>
-            </plugin>
           </plugins>
         </pluginManagement>
       </build>

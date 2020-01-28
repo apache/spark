@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.types;
 
+import org.apache.spark.annotation.Unstable;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -27,8 +29,21 @@ import java.util.Objects;
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
- * The internal representation of interval type.
+ * The class representing calendar intervals. The calendar interval is stored internally in
+ * three components:
+ * <ul>
+ *   <li>an integer value representing the number of `months` in this interval,</li>
+ *   <li>an integer value representing the number of `days` in this interval,</li>
+ *   <li>a long value representing the number of `microseconds` in this interval.</li>
+ * </ul>
+ *
+ * The `months` and `days` are not units of time with a constant length (unlike hours, seconds), so
+ * they are two separated fields from microseconds. One month may be equal to 28, 29, 30 or 31 days
+ * and one day may be equal to 23, 24 or 25 hours (daylight saving).
+ *
+ * @since 3.0.0
  */
+@Unstable
 public final class CalendarInterval implements Serializable {
   public final int months;
   public final int days;

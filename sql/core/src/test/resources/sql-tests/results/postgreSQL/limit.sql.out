@@ -2,24 +2,24 @@
 -- Number of queries: 15
 
 
--- !query 0
+-- !query
 SELECT '' AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 50
 		ORDER BY unique1 LIMIT 2
--- !query 0 schema
+-- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
--- !query 0 output
+-- !query output
 	51	76	ZBAAAA
 	52	985	ACAAAA
 
 
--- !query 1
+-- !query
 SELECT '' AS five, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60
 		ORDER BY unique1 LIMIT 5
--- !query 1 schema
+-- !query schema
 struct<five:string,unique1:int,unique2:int,stringu1:string>
--- !query 1 output
+-- !query output
 	61	560	JCAAAA
 	62	633	KCAAAA
 	63	296	LCAAAA
@@ -27,46 +27,46 @@ struct<five:string,unique1:int,unique2:int,stringu1:string>
 	65	64	NCAAAA
 
 
--- !query 2
+-- !query
 SELECT '' AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60 AND unique1 < 63
 		ORDER BY unique1 LIMIT 5
--- !query 2 schema
+-- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
--- !query 2 output
+-- !query output
 	61	560	JCAAAA
 	62	633	KCAAAA
 
 
--- !query 3
+-- !query
 SELECT '' AS three, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 100
 		ORDER BY unique1 LIMIT 3 OFFSET 20
--- !query 3 schema
+-- !query schema
 struct<three:string,unique1:int,unique2:int,stringu1:string>
--- !query 3 output
+-- !query output
 	121	700	REAAAA
 	122	519	SEAAAA
 	123	777	TEAAAA
 
 
--- !query 4
+-- !query
 SELECT '' AS zero, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 8 OFFSET 99
--- !query 4 schema
+-- !query schema
 struct<zero:string,unique1:int,unique2:int,stringu1:string>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 SELECT '' AS eleven, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 20 OFFSET 39
--- !query 5 schema
+-- !query schema
 struct<eleven:string,unique1:int,unique2:int,stringu1:string>
--- !query 5 output
+-- !query output
 	10	520	KAAAAA
 	9	49	JAAAAA
 	8	653	IAAAAA
@@ -80,21 +80,21 @@ struct<eleven:string,unique1:int,unique2:int,stringu1:string>
 	0	998	AAAAAA
 
 
--- !query 6
+-- !query
 SET spark.sql.forceUsingOffsetWithoutLimit = true
--- !query 6 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 6 output
+-- !query output
 spark.sql.forceUsingOffsetWithoutLimit	true
 
 
--- !query 7
+-- !query
 SELECT '' AS ten, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990
--- !query 7 schema
+-- !query schema
 struct<ten:string,unique1:int,unique2:int,stringu1:string>
--- !query 7 output
+-- !query output
 	990	369	CMAAAA
 	991	426	DMAAAA
 	992	363	EMAAAA
@@ -107,21 +107,21 @@ struct<ten:string,unique1:int,unique2:int,stringu1:string>
 	999	152	LMAAAA
 
 
--- !query 8
+-- !query
 SET spark.sql.forceUsingOffsetWithoutLimit = false
--- !query 8 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 8 output
+-- !query output
 spark.sql.forceUsingOffsetWithoutLimit	false
 
 
--- !query 9
+-- !query
 SELECT '' AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 LIMIT 5 OFFSET 900
--- !query 9 schema
+-- !query schema
 struct<five:string,unique1:int,unique2:int,stringu1:string>
--- !query 9 output
+-- !query output
 	900	913	QIAAAA
 	901	931	RIAAAA
 	902	702	SIAAAA
@@ -129,7 +129,7 @@ struct<five:string,unique1:int,unique2:int,stringu1:string>
 	904	793	UIAAAA
 
 
--- !query 10
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
   (VALUES
     (123, 456),
@@ -138,44 +138,44 @@ CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
   AS v(q1, q2)
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 The limit expression must evaluate to a constant value, but got CASE WHEN (`_nondeterministic` < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END;
 
 
--- !query 12
+-- !query
 select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end)
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 The offset expression must evaluate to a constant value, but got CASE WHEN (`_nondeterministic` < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END;
 
 
--- !query 13
+-- !query
 DROP VIEW INT8_TBL
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 
 
 
--- !query 14
+-- !query
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3
--- !query 14 schema
+-- !query schema
 struct<s1:bigint,s2:double>
--- !query 14 output
+-- !query output
 45000	45000.0
 45010	45010.0
 45020	45020.0
