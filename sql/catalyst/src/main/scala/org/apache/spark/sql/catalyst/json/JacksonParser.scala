@@ -142,7 +142,7 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters))))
+        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters).toArray)))
     }
   }
 
