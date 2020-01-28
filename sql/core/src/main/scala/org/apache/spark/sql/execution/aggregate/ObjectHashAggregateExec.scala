@@ -67,7 +67,8 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with AliasAwareOutputPartitioning {
+  extends AggregateExec(groupingExpressions, aggregateExpressions)
+    with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -142,22 +143,6 @@ case class ObjectHashAggregateExec(
   override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 
   override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
-
-  override def verboseStringWithOperatorId(): String = {
-    val allAggregateExpressions = aggregateExpressions
-
-    val keyString = groupingExpressions.mkString("[", ", ", "]")
-    val functionString = allAggregateExpressions.mkString("[", ", ", "]")
-    val inputString = child.output.mkString("[", ", ", "]")
-    val outputString = output.mkString("[", ", ", "]")
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Input: $inputString
-       |Output: $outputString
-       |Keys: $keyString
-       |Functions: $functionString
-     """.stripMargin
-  }
 
   private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions
