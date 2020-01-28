@@ -1030,14 +1030,15 @@ trait ShowCreateTableCommandBase {
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
+      builder ++= "TBLPROPERTIES "
+      builder ++= concatByMultiLines(props)
     }
   }
 
   protected def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= columns.mkString("(", ", ", ")\n")
+    builder ++= concatByMultiLines(columns)
   }
 
   protected def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
@@ -1048,9 +1049,8 @@ trait ShowCreateTableCommandBase {
     }
 
     if (dataSourceOptions.nonEmpty) {
-      builder ++= "OPTIONS (\n"
-      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
-      builder ++= ")\n"
+      builder ++= "OPTIONS "
+      builder ++= concatByMultiLines(dataSourceOptions)
     }
   }
 
@@ -1086,6 +1086,10 @@ trait ShowCreateTableCommandBase {
     showTableProperties(metadata, builder)
 
     builder.toString()
+  }
+
+  protected def concatByMultiLines(iter: Iterable[String]): String = {
+    iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 }
 
@@ -1170,10 +1174,6 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       }
       builder ++= concatByMultiLines(viewColumns)
     }
-  }
-
-  private def concatByMultiLines(iter: Iterable[String]): String = {
-    iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
