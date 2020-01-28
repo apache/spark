@@ -163,7 +163,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
            """.stripMargin)
         val scan = getHiveTableScanExec(s"SELECT * FROM $table")
         val numDataCols = scan.relation.dataCols.length
-        scan.partitions.foreach(p => assert(p.getCols.size == numDataCols))
+        scan.prunedPartitions.foreach(p => assert(p.getCols.size == numDataCols))
       }
     }
   }

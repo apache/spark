@@ -162,8 +162,11 @@ case class HiveTableScanExec(
     }
   }
 
-  @transient lazy val partitions: Seq[HivePartition] = {
-    if (partitionPruningPred.nonEmpty) {
+  @transient lazy val prunedPartitions: Seq[HivePartition] = {
+    if (relation.prunedPartitions.nonEmpty &&
+      partitionPruningPred.forall(!SubqueryExpression.hasSubquery(_))) {
+      relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    } else if (partitionPruningPred.nonEmpty) {
       val prunedPartitions = prunedPartitionsViaHiveMetaStore()
       if (prunedPartitions.isDefined) {
         prunedPartitions.get
@@ -200,7 +203,7 @@ case class HiveTableScanExec(
       }
     } else {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(partitions)
+        hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }
     val numOutputRows = longMetric("numOutputRows")
