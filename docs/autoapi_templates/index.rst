@@ -68,8 +68,6 @@ All operators are in the following packages:
 
   airflow/contrib/operators/index
 
-  airflow/contrib/sensors/index
-
   airflow/gcp/operators/index
 
   airflow/gcp/sensors/index
@@ -200,8 +198,6 @@ All hooks are in the following packages:
   :maxdepth: 1
 
   airflow/hooks/index
-
-  airflow/contrib/hooks/index
 
   airflow/gcp/hooks/index
 
