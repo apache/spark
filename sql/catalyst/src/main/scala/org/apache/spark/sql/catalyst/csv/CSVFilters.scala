@@ -73,10 +73,7 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
       }
       for (i <- 0 until len) {
         if (!groupedFilters(i).isEmpty) {
-          val reducedExpr = groupedFilters(i)
-            .flatMap(StructFilters.filterToExpression(_, toRef))
-            .reduce(And)
-          groupedPredicates(i) = Predicate.create(reducedExpr)
+          groupedPredicates(i) = toPredicate(groupedFilters(i))
         }
       }
     }

@@ -52,6 +52,17 @@ abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
    */
   def reset(): Unit
 
+  /**
+   * Compiles source filters to a predicate.
+   */
+  def toPredicate(filters: Seq[sources.Filter]): BasePredicate = {
+    val reducedExpr = filters
+      .sortBy(_.references.size)
+      .flatMap(StructFilters.filterToExpression(_, toRef))
+      .reduce(And)
+    Predicate.create(reducedExpr)
+  }
+
   // Finds a filter attribute in the schema and converts it to a `BoundReference`
   def toRef(attr: String): Option[BoundReference] = {
     schema.getFieldIndex(attr).map { index =>

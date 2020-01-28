@@ -75,10 +75,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
         // Combine all filters from the same group by `And` because all filters should
         // return `true` to do not skip a row. The result is compiled to a predicate.
         .map { case (refSet, refsFilters) =>
-          val reducedExpr = refsFilters
-            .flatMap(StructFilters.filterToExpression(_, toRef))
-            .reduce(And)
-          (refSet, JsonPredicate(Predicate.create(reducedExpr), refSet.size, 0))
+          (refSet, JsonPredicate(toPredicate(refsFilters), refSet.size, 0))
         }
       // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields.
       // We cannot set such predicates to a particular position because skipRow() can
