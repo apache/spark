@@ -446,7 +446,8 @@ def _create_pandas_udf(f, returnType, evalType):
 
         if evalType in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-                        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+                        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                        PythonEvalType.SQL_SCALAR_ARROW_UDF]:
             warnings.warn(
                 "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
                 "pandas UDF instead of specifying pandas UDF type which will be deprecated "
