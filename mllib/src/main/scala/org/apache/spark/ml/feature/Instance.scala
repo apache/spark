@@ -36,26 +36,26 @@ private[spark] case class Instance(label: Double, weight: Double, features: Vect
  * Class that represents an block of instance.
  * If all weights are 1, then an empty array is stored.
  */
-private[spark] class InstanceBlock(
-    val labels: Array[Double],
-    val weights: Array[Double],
-    val featureMatrix: Matrix) {
-  require(labels.length == featureMatrix.numRows)
-  require(featureMatrix.isTransposed)
+private[spark] case class InstanceBlock(
+    labels: Array[Double],
+    weights: Array[Double],
+    matrix: Matrix) {
+  require(labels.length == matrix.numRows)
+  require(matrix.isTransposed)
   if (weights.nonEmpty) {
     require(labels.length == weights.length)
   }
 
   def size: Int = labels.length
 
-  def numFeatures: Int = featureMatrix.numCols
+  def numFeatures: Int = matrix.numCols
 
   def instanceIterator: Iterator[Instance] = {
     if (weights.nonEmpty) {
-      labels.iterator.zip(weights.iterator).zip(featureMatrix.rowIter)
+      labels.iterator.zip(weights.iterator).zip(matrix.rowIter)
         .map { case ((label, weight), vec) => Instance(label, weight, vec) }
     } else {
-      labels.iterator.zip(featureMatrix.rowIter)
+      labels.iterator.zip(matrix.rowIter)
         .map { case (label, vec) => Instance(label, 1.0, vec) }
     }
   }
@@ -82,7 +82,7 @@ private[spark] class InstanceBlock(
 
   // directly get the non-zero iterator of i-th row vector without array copy or slice
   @transient lazy val getNonZeroIter: Int => Iterator[(Int, Double)] = {
-    featureMatrix match {
+    matrix match {
       case dm: DenseMatrix =>
         (i: Int) =>
           val start = numFeatures * i
@@ -147,7 +147,7 @@ private[spark] object InstanceBlock {
       new SparseMatrix(numRows, numCols, rowPtrs.result(),
         colIndices.result(), values.result(), true)
     }
-    new InstanceBlock(labels, weights, matrix)
+    InstanceBlock(labels, weights, matrix)
   }
 
   def blokify(instances: RDD[Instance], blockSize: Int): RDD[InstanceBlock] = {

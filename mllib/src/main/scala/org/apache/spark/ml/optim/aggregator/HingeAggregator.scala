@@ -151,9 +151,9 @@ private[ml] class HingeAggregator(
         vec.values(i) = intercept
         i += 1
       }
-      BLAS.gemv(1.0, block.featureMatrix, linear, 1.0, vec)
+      BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
     } else {
-      BLAS.gemv(1.0, block.featureMatrix, linear, 0.0, vec)
+      BLAS.gemv(1.0, block.matrix, linear, 0.0, vec)
     }
 
     // in-place convert dotProducts to gradient scales
@@ -185,12 +185,12 @@ private[ml] class HingeAggregator(
     if (vec.values.forall(_ == 0)) return this
 
     if (fitIntercept) {
-      BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 0.0, linearGradSumVec)
+      BLAS.gemv(1.0, block.matrix.transpose, vec, 0.0, linearGradSumVec)
       linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
       localGradientSumArray(numFeatures) += vec.values.sum
     } else {
       val gradSumVec = new DenseVector(localGradientSumArray)
-      BLAS.gemv(1.0, block.featureMatrix.transpose, vec, 1.0, gradSumVec)
+      BLAS.gemv(1.0, block.matrix.transpose, vec, 1.0, gradSumVec)
     }
 
     this

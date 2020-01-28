@@ -49,7 +49,7 @@ class InstanceSuite extends SparkFunSuite{
       val o2 = ser.deserialize[InstanceBlock](ser.serialize(o))
       assert(o.labels === o2.labels)
       assert(o.weights === o2.weights)
-      assert(o.featureMatrix === o2.featureMatrix)
+      assert(o.matrix === o2.matrix)
     }
   }
 
