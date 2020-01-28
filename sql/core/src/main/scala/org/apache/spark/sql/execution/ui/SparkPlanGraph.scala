@@ -198,7 +198,7 @@ private[ui] class SparkPlanGraphCluster(
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue(id)
+        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
       } else {
         name
       }
