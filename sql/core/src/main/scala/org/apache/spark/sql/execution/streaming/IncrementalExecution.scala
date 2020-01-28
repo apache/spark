@@ -105,6 +105,11 @@ class IncrementalExecution(
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
+    /**
+     * Ensures that this plan DOES NOT have any stateful operation in it whose pipelined execution
+     * depends on this plan. In other words, this function returns true if this plan does
+     * have a narrow dependency on a stateful subplan.
+     */
     private def hasNoStatefulOp(plan: SparkPlan): Boolean = {
       var statefulOpFound = false
 
@@ -114,8 +119,8 @@ class IncrementalExecution(
             statefulOpFound = true
 
           case e: ShuffleExchangeExec =>
-            // Don't search recursively any further as any child stateful operator will have
-            // its iterator fully consumed by ShuffleExchangeExec
+            // Don't search recursively any further as any child stateful operator as we
+            // are only looking for stateful subplans that this plan has narrow dependencies on.
 
           case p: SparkPlan =>
             p.children.foreach(findStatefulOp)

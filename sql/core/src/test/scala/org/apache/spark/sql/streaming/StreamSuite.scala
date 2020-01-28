@@ -36,7 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.SimpleMode
+import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
@@ -1010,7 +1010,6 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1), Row(2, 1)))
   }
 
-
   test("streaming limit after streaming dedup in append mode") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().dropDuplicates().limit(1)
@@ -1057,6 +1056,82 @@ class StreamSuite extends StreamTest {
       CheckAnswerRowsByFunc(
         rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
         false))
+  }
+
+  test("streaming limit should not apply on limits on state subplans") {
+    val streanData = MemoryStream[Int]
+    val streamingDF = streanData.toDF().toDF("value")
+    val staticDF = spark.createDataset(Seq(1)).toDF("value").orderBy("value")
+    testStream(streamingDF.join(staticDF.limit(1), "value"))(
+      AddData(streanData, 1, 2, 3),
+      CheckAnswer(Row(1)),
+      AddData(streanData, 1, 3, 5),
+      CheckAnswer(Row(1), Row(1)))
+  }
+
+  test("streaming limit optimization from StreamingLocalLimitExec to LocalLimitExec") {
+    val inputData = MemoryStream[Int]
+    val inputDF = inputData.toDF()
+
+    /** Verify whether the local limit in the plan is a streaming limit or is a simple */
+    def verifyLocalLimit(
+        df: DataFrame,
+        expectStreamingLimit: Boolean,
+      outputMode: OutputMode = OutputMode.Append): Unit = {
+
+      var execPlan: SparkPlan = null
+      testStream(df, outputMode)(
+        AddData(inputData, 1),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          execPlan = q.lastExecution.executedPlan
+          true
+        }
+      )
+      require(execPlan != null)
+
+      val localLimits = execPlan.collect {
+        case l: LocalLimitExec => l
+        case l: StreamingLocalLimitExec => l
+      }
+
+      require(
+        localLimits.size == 1,
+        s"Cant verify local limit optimization with this plan:\n$execPlan")
+
+      if (expectStreamingLimit) {
+        assert(
+          localLimits.head.isInstanceOf[StreamingLocalLimitExec],
+          s"Local limit was not StreamingLocalLimitExec:\n$execPlan")
+      } else {
+        assert(
+          localLimits.head.isInstanceOf[LocalLimitExec],
+          s"Local limit was not LocalLimitExec:\n$execPlan")
+      }
+    }
+
+    // Should not be optimized, so StreamingLocalLimitExec should be present
+    verifyLocalLimit(inputDF.dropDuplicates().limit(1), expectStreamingLimit = true)
+
+    // Should be optimized from StreamingLocalLimitExec to LocalLimitExec
+    verifyLocalLimit(inputDF.limit(1), expectStreamingLimit = false)
+    verifyLocalLimit(
+      inputDF.limit(1).groupBy().count(),
+      expectStreamingLimit = false,
+      outputMode = OutputMode.Complete())
+
+    // Should be optimized as repartition is sufficient to ensure that the iterators of
+    // StreamingDeduplicationExec should be consumed completely by the repartition exchange.
+    verifyLocalLimit(inputDF.dropDuplicates().repartition(1).limit(1), expectStreamingLimit = false)
+
+    // Should be LocalLimitExec in the first place, not from optimization of StreamingLocalLimitExec
+    val staticDF = spark.range(1).toDF("value").limit(1)
+    verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
+
+    verifyLocalLimit(
+      inputDF.groupBy().count().limit(1),
+      expectStreamingLimit = false,
+      outputMode = OutputMode.Complete())
   }
 
   test("is_continuous_processing property should be false for microbatch processing") {
