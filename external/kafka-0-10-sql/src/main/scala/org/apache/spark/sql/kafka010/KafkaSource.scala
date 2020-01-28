@@ -260,7 +260,7 @@ private[kafka010] class KafkaSource(
         // partition in every batch.
         Some(sortedExecutors(Math.floorMod(tp.hashCode, numExecutors)))
       } else None
-      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
+      KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
       if (range.untilOffset < range.fromOffset) {
         reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +

@@ -91,6 +91,13 @@ private[kafka010] class KafkaOffsetReader(
   private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
+  /** Number of partitions to read from Kafka. If this value is greater than the number of Kafka
+   * topicPartitions, we will not use the CachedConsumer. */
+  val minPartitions =
+    readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
+
+  val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 

@@ -597,6 +597,20 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
   }
+
+  test("SPARK-30656: minPartitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    // Implicit offset values, should default to earliest and latest
+    val df = createDF(topic, Map("minPartitions" -> "6"))
+    val partitions = df.rdd.collectPartitions()
+    assert(partitions.length >= 6)
+    assert(partitions.flatMap(_.map(_.getString(0))).toSet === (0 to 20).map(_.toString).toSet)
+  }
 }
 
 class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {

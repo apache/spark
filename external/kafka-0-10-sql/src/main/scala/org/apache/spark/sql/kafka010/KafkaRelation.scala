@@ -93,7 +93,7 @@ private[kafka010] class KafkaRelation(
         // fromPartitionOffsets
         throw new IllegalStateException(s"$tp doesn't have a from offset"))
       val untilOffset = untilPartitionOffsets(tp)
-      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, None)
+      KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toArray
 
     logInfo("GetBatch generating RDD of offset range: " +

@@ -107,5 +107,7 @@ private[kafka010] case class KafkaOffsetRange(
     fromOffset: Long,
     untilOffset: Long,
     preferredLoc: Option[String]) {
-  lazy val size: Long = untilOffset - fromOffset
+  def topic: String = topicPartition.topic
+  def partition: Int = topicPartition.partition
+  def size: Long = untilOffset - fromOffset
 }
