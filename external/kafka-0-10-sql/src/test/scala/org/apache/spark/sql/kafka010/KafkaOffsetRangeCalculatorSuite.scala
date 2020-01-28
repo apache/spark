@@ -43,16 +43,6 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
     assert(
       calc.getRanges(
-        Seq(KafkaOffsetRange(tp1, 1, 2))) ==
-      Seq(KafkaOffsetRange(tp1, 1, 2, None)))
-
-    assert(
-      calc.getRanges(
-        Seq(KafkaOffsetRange(tp1, 1, 5))) ==
-      Seq(KafkaOffsetRange(tp1, 1, 5, None)))
-
-    assert(
-      calc.getRanges(
         Seq(KafkaOffsetRange(tp1, 1, 2)),
         executorLocations = Seq("location")) ==
       Seq(KafkaOffsetRange(tp1, 1, 2, Some("location"))))
