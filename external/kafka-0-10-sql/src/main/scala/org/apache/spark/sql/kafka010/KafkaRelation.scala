@@ -66,35 +66,15 @@ private[kafka010] class KafkaRelation(
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
-    val (fromPartitionOffsets, untilPartitionOffsets) = {
-      try {
-        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets, isStartingOffsets = true),
-          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets, isStartingOffsets = false))
-      } finally {
-        kafkaOffsetReader.close()
-      }
+    val offsetRanges: Seq[KafkaOffsetRange] = try {
+      val fromPartitionOffsets =
+        kafkaOffsetReader.fetchPartitionOffsets(startingOffsets, isStartingOffsets = true)
+      val untilPartitionOffsets =
+        kafkaOffsetReader.fetchPartitionOffsets(endingOffsets, isStartingOffsets = false)
+      kafkaOffsetReader.getOffsetRanges(fromPartitionOffsets, untilPartitionOffsets)
+    } finally {
+      kafkaOffsetReader.close()
     }
-
-    // Obtain topicPartitions in both from and until partition offset, ignoring
-    // topic partitions that were added and/or deleted between the two above calls.
-    if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
-      implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
-      val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
-      val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
-      throw new IllegalStateException("different topic partitions " +
-        s"for starting offsets topics[${fromTopics}] and " +
-        s"ending offsets topics[${untilTopics}]")
-    }
-
-    // Calculate offset ranges
-    val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.getOrElse(tp,
-        // This should not happen since topicPartitions contains all partitions not in
-        // fromPartitionOffsets
-        throw new IllegalStateException(s"$tp doesn't have a from offset"))
-      val untilOffset = untilPartitionOffsets(tp)
-      KafkaOffsetRange(tp, fromOffset, untilOffset, None)
-    }.toArray
 
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
