@@ -2558,6 +2558,55 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       }
     }
   }
+
+  test("apply filters to malformed rows") {
+    withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        Seq(
+          "{}",
+          """{"invalid": 0}""",
+          """{"i":}""",
+          """{"i": 0}""",
+          """{"i": 1, "t": "2020-01-28 01:00:00"}""",
+          """{"t": "2020-01-28 02:00:00"}""",
+          """{"i": "abc", "t": "2020-01-28 03:00:00"}""",
+          """{"i": 2, "t": "2020-01-28 04:00:00", "d": 3.14}""").toDF("data")
+          .repartition(1)
+          .write.text(path.getAbsolutePath)
+        val schema = "i INTEGER, t TIMESTAMP"
+        val readback = spark.read
+          .schema(schema)
+          .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+          .json(path.getAbsolutePath)
+        // readback:
+        // +----+-------------------+
+        // |i   |t                  |
+        // +----+-------------------+
+        // |null|null               |
+        // |null|null               |
+        // |null|null               |
+        // |0   |null               |
+        // |1   |2020-01-28 01:00:00|
+        // |null|2020-01-28 02:00:00|
+        // |null|2020-01-28 03:00:00|
+        // |2   |2020-01-28 04:00:00|
+        // +----+-------------------+
+        checkAnswer(
+          readback.where($"i".isNull && $"t".isNotNull),
+          Seq(
+            Row(null, Timestamp.valueOf("2020-01-28 02:00:00")),
+            Row(null, Timestamp.valueOf("2020-01-28 03:00:00"))))
+        checkAnswer(
+          readback.where($"i" >= 0 && $"t" > "2020-01-28 00:00:00"),
+          Seq(
+            Row(1, Timestamp.valueOf("2020-01-28 01:00:00")),
+            Row(2, Timestamp.valueOf("2020-01-28 04:00:00"))))
+        checkAnswer(
+          readback.where($"t".isNull).select($"i"),
+          Seq(Row(null), Row(null), Row(null), Row(0)))
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
