@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -88,8 +88,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
 
     override def capabilities(): util.Set[TableCapability] = delegateTable.capabilities
 
-    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-      delegateTable.newWriteBuilder(options)
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      delegateTable.newWriteBuilder(info)
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,6 +31,19 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
+
+  var originalValue: String = _
+  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
 
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
@@ -105,19 +117,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
       p.isInstanceOf[WholeStageCodegenExec] &&
       p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec]).isDefined)
     assert(ds.collect() === Array(0, 6))
-  }
-
-  test("simple typed UDAF should be included in WholeStageCodegen") {
-    import testImplicits._
-
-    val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1)).toDS()
-      .groupByKey(_._1).agg(typed.sum(_._2))
-
-    val plan = ds.queryExecution.executedPlan
-    assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 
   test("cache for primitive type should be in WholeStageCodegen with InMemoryTableScanExec") {

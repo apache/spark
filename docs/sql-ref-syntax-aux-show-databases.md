@@ -27,7 +27,7 @@ and mean the same thing.
 
 ### Syntax
 {% highlight sql %}
-SHOW {DATABASES|SCHEMAS} [LIKE string_pattern]
+SHOW { DATABASES | SCHEMAS } [ LIKE string_pattern ]
 {% endhighlight %}
 
 ### Parameters

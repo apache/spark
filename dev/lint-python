@@ -38,7 +38,7 @@ function compile_python_test {
 
     # compileall: https://docs.python.org/2/library/compileall.html
     echo "starting python compilation test..."
-    COMPILE_REPORT=$( (python -B -mcompileall -q -l $1) 2>&1)
+    COMPILE_REPORT=$( (python -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
     COMPILE_STATUS=$?
 
     if [ $COMPILE_STATUS -ne 0 ]; then

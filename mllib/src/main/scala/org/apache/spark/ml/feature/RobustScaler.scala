@@ -26,10 +26,11 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[RobustScaler]] and [[RobustScalerModel]].
@@ -99,8 +100,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
@@ -117,10 +117,13 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
  * Typically this is done by removing the mean and scaling to unit variance. However,
  * outliers can often influence the sample mean / variance in a negative way.
  * In such cases, the median and the quantile range often give better results.
+ * Note that NaN values are ignored in the computation of medians and ranges.
  */
 @Since("3.0.0")
 class RobustScaler (override val uid: String)
   extends Estimator[RobustScalerModel] with RobustScalerParams with DefaultParamsWritable {
+
+  import RobustScaler._
 
   def this() = this(Identifiable.randomUID("robustScal"))
 
@@ -147,49 +150,29 @@ class RobustScaler (override val uid: String)
 
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val localRelativeError = $(relativeError)
 
-    val summaries = dataset.select($(inputCol)).rdd.map {
-      case Row(vec: Vector) => vec
-    }.mapPartitions { iter =>
-      var agg: Array[QuantileSummaries] = null
-      while (iter.hasNext) {
-        val vec = iter.next()
-        if (agg == null) {
-          agg = Array.fill(vec.size)(
-            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))
-        }
-        require(vec.size == agg.length,
-          s"Number of dimensions must be ${agg.length} but got ${vec.size}")
-        var i = 0
-        while (i < vec.size) {
-          agg(i) = agg(i).insert(vec(i))
-          i += 1
-        }
-      }
-
-      if (agg == null) {
-        Iterator.empty
-      } else {
-        Iterator.single(agg.map(_.compress))
-      }
-    }.treeReduce { (agg1, agg2) =>
-      require(agg1.length == agg2.length)
-      var i = 0
-      while (i < agg1.length) {
-        agg1(i) = agg1(i).merge(agg2(i))
-        i += 1
-      }
-      agg1
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val vectors = dataset.select($(inputCol)).rdd.map {
+      case Row(vec: Vector) =>
+        require(vec.size == numFeatures,
+          s"Number of dimensions must be $numFeatures but got ${vec.size}")
+        vec
     }
 
-    val (range, median) = summaries.map { s =>
-      (s.query($(upper)).get - s.query($(lower)).get,
-        s.query(0.5).get)
-    }.unzip
+    val localUpper = $(upper)
+    val localLower = $(lower)
 
-    copyValues(new RobustScalerModel(uid, Vectors.dense(range).compressed,
-      Vectors.dense(median).compressed).setParent(this))
+    val (ranges, medians) = computeSummaries(vectors, numFeatures, $(relativeError))
+      .mapValues { s =>
+        val range = s.query(localUpper).get - s.query(localLower).get
+        val median = s.query(0.5).get
+        (range, median)
+      }.collect().sortBy(_._1).map(_._2).unzip
+    require(ranges.length == numFeatures,
+      "QuantileSummaries on some features are missing")
+
+    copyValues(new RobustScalerModel(uid, Vectors.dense(ranges).compressed,
+      Vectors.dense(medians).compressed).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -201,6 +184,39 @@ class RobustScaler (override val uid: String)
 
 @Since("3.0.0")
 object RobustScaler extends DefaultParamsReadable[RobustScaler] {
+
+  // compute QuantileSummaries for each feature
+  private[spark] def computeSummaries(
+      vectors: RDD[Vector],
+      numFeatures: Int,
+      relativeError: Double): RDD[(Int, QuantileSummaries)] = {
+    if (numFeatures <= 1000) {
+      vectors.mapPartitions { iter =>
+        if (iter.hasNext) {
+          val summaries = Array.fill(numFeatures)(
+            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
+          while (iter.hasNext) {
+            val vec = iter.next
+            vec.foreach { (i, v) => if (!v.isNaN) summaries(i) = summaries(i).insert(v) }
+          }
+          Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
+        } else Iterator.empty
+      }.reduceByKey { case (s1, s2) => s1.merge(s2) }
+    } else {
+      val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
+      vectors.mapPartitionsWithIndex { case (pid, iter) =>
+        val p = pid % scale
+        iter.flatMap { vec =>
+          Iterator.tabulate(numFeatures)(i => ((p, i), vec(i)))
+        }.filter(!_._2.isNaN)
+      }.aggregateByKey(
+        new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
+        seqOp = (s, v) => s.insert(v),
+        combOp = (s1, s2) => s1.compress.merge(s2.compress)
+      ).map { case ((_, i), s) => (i, s)
+      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+    }
+  }
 
   override def load(path: String): RobustScaler = super.load(path)
 }
@@ -227,7 +243,7 @@ class RobustScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val shift = if ($(withCentering)) median.toArray else Array.emptyDoubleArray
     val scale = if ($(withScaling)) {
@@ -238,11 +254,17 @@ class RobustScalerModel private[ml] (
       shift, scale, $(withCentering), $(withScaling))
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), median.size)
+    }
+    outputSchema
   }
 
   override def copy(extra: ParamMap): RobustScalerModel = {
@@ -269,7 +291,7 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = new Data(instance.range, instance.median)
+      val data = Data(instance.range, instance.median)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }

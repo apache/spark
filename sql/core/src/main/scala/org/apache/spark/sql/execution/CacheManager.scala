@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -80,12 +81,20 @@ class CacheManager extends Logging {
     } else {
       val sparkSession = query.sparkSession
       val qe = sparkSession.sessionState.executePlan(planToCache)
-      val inMemoryRelation = InMemoryRelation(
-        sparkSession.sessionState.conf.useCompression,
-        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
-        qe.executedPlan,
-        tableName,
-        optimizedPlan = qe.optimizedPlan)
+      val originalValue = sparkSession.sessionState.conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
+      val inMemoryRelation = try {
+        // Avoiding changing the output partitioning, here disable AQE.
+        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+        InMemoryRelation(
+          sparkSession.sessionState.conf.useCompression,
+          sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+          qe.executedPlan,
+          tableName,
+          optimizedPlan = qe.optimizedPlan)
+      } finally {
+        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, originalValue)
+      }
+
       this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
@@ -261,7 +270,7 @@ class CacheManager extends Logging {
         case _ => false
       }
 
-      case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+      case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
         refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
 
       case _ => false

@@ -71,6 +71,7 @@ private[execution] object SparkPlanInfo {
       plan.nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics)
   }
 }

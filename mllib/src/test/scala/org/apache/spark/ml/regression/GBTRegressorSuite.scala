@@ -274,9 +274,9 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      assert(modelWithoutValidation.numTrees === numIter)
+      assert(modelWithoutValidation.getNumTrees === numIter)
       // early stop
-      assert(modelWithValidation.numTrees < numIter)
+      assert(modelWithValidation.getNumTrees < numIter)
 
       val errorWithoutValidation = GradientBoostedTrees.computeWeightedError(
         validationData.map(_.toInstance),
@@ -294,10 +294,10 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Regression)
       assert(evaluationArray.length === numIter)
-      assert(evaluationArray(modelWithValidation.numTrees) >
-        evaluationArray(modelWithValidation.numTrees - 1))
+      assert(evaluationArray(modelWithValidation.getNumTrees) >
+        evaluationArray(modelWithValidation.getNumTrees - 1))
       var i = 1
-      while (i < modelWithValidation.numTrees) {
+      while (i < modelWithValidation.getNumTrees) {
         assert(evaluationArray(i) <= evaluationArray(i - 1))
         i += 1
       }
@@ -321,29 +321,31 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
   test("training with sample weights") {
     val df = linearRegressionData
     val numClasses = 0
-    // (maxIter, maxDepth)
+    // (maxIter, maxDepth, subsamplingRate, fractionInTol)
     val testParams = Seq(
-      (5, 5),
-      (5, 10)
+      (5, 5, 1.0, 0.98),
+      (5, 10, 1.0, 0.98),
+      (5, 10, 0.95, 0.6)
     )
 
-    for ((maxIter, maxDepth) <- testParams) {
+    for ((maxIter, maxDepth, subsamplingRate, tol) <- testParams) {
       val estimator = new GBTRegressor()
         .setMaxIter(maxIter)
         .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
         .setSeed(seed)
         .setMinWeightFractionPerNode(0.1)
 
       MLTestingUtils.testArbitrarilyScaledWeights[GBTRegressionModel,
         GBTRegressor](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, 0.95))
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, tol))
       MLTestingUtils.testOutliersWithSmallWeights[GBTRegressionModel,
         GBTRegressor](df.as[LabeledPoint], estimator, numClasses,
-        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, 0.95),
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, tol),
         outlierRatio = 2)
       MLTestingUtils.testOversamplingVsWeighting[GBTRegressionModel,
         GBTRegressor](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.01, 0.95), seed)
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, tol), seed)
     }
   }
 

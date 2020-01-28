@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
@@ -48,6 +50,13 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
   extends IsolatedRpcEndpoint with Logging {
+
+  // Mapping from executor id to the block manager's local disk directories.
+  private val executorIdToLocalDirs =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
+      .build[String, Array[String]]()
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -393,6 +402,7 @@ class BlockManagerMasterEndpoint(
       topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
+    executorIdToLocalDirs.put(id.executorId, localDirs)
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
@@ -416,7 +426,7 @@ class BlockManagerMasterEndpoint(
           None
         }
 
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), localDirs,
+      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
@@ -496,15 +506,16 @@ class BlockManagerMasterEndpoint(
 
     if (locations.nonEmpty && status.isDefined) {
       val localDirs = locations.find { loc =>
-          if (loc.port != externalShuffleServicePort && loc.host == requesterHost) {
+        // When the external shuffle service running on the same host is found among the block
+        // locations then the block must be persisted on the disk. In this case the executorId
+        // can be used to access this block even when the original executor is already stopped.
+        loc.host == requesterHost &&
+          (loc.port == externalShuffleServicePort ||
             blockManagerInfo
               .get(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
-              .getOrElse(false)
-          } else {
-            false
-          }
-      }.map(blockManagerInfo(_).localDirs)
+              .getOrElse(false))
+      }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None
@@ -556,7 +567,6 @@ object BlockStatus {
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
-    val localDirs: Array[String],
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val slaveEndpoint: RpcEndpointRef,

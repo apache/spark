@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.analysis.ViewType
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -87,6 +89,20 @@ case class CreateTableAsSelectStatement(
 }
 
 /**
+ * A CREATE VIEW statement, as parsed from SQL.
+ */
+case class CreateViewStatement(
+    viewName: Seq[String],
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewType: ViewType) extends ParsedStatement
+
+/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement
@@ -126,7 +142,12 @@ case class ReplaceTableAsSelectStatement(
 /**
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
-case class QualifiedColType(name: Seq[String], dataType: DataType, comment: Option[String])
+case class QualifiedColType(
+    name: Seq[String],
+    dataType: DataType,
+    nullable: Boolean,
+    comment: Option[String],
+    position: Option[ColumnPosition])
 
 /**
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
@@ -142,7 +163,9 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
-    comment: Option[String]) extends ParsedStatement
+    nullable: Option[Boolean],
+    comment: Option[String],
+    position: Option[ColumnPosition]) extends ParsedStatement
 
 /**
  * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
@@ -247,6 +270,14 @@ case class AlterViewAsStatement(
     query: LogicalPlan) extends ParsedStatement
 
 /**
+ * ALTER TABLE ... RENAME TO command, as parsed from SQL.
+ */
+case class RenameTableStatement(
+    oldName: Seq[String],
+    newName: Seq[String],
+    isView: Boolean) extends ParsedStatement
+
+/**
  * A DROP TABLE statement, as parsed from SQL.
  */
 case class DropTableStatement(
@@ -260,14 +291,6 @@ case class DropTableStatement(
 case class DropViewStatement(
     viewName: Seq[String],
     ifExists: Boolean) extends ParsedStatement
-
-/**
- * A DESCRIBE TABLE tbl_name statement, as parsed from SQL.
- */
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
 
 /**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
@@ -308,9 +331,12 @@ case class InsertIntoStatement(
 }
 
 /**
- * A SHOW TABLES statement, as parsed from SQL.
+ * A SHOW TABLE EXTENDED statement, as parsed from SQL.
  */
-case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
+case class ShowTableStatement(
+    namespace: Option[Seq[String]],
+    pattern: String,
+    partitionSpec: Option[TablePartitionSpec])
   extends ParsedStatement
 
 /**
@@ -320,25 +346,6 @@ case class CreateNamespaceStatement(
     namespace: Seq[String],
     ifNotExists: Boolean,
     properties: Map[String, String]) extends ParsedStatement
-
-object CreateNamespaceStatement {
-  val COMMENT_PROPERTY_KEY: String = "comment"
-  val LOCATION_PROPERTY_KEY: String = "location"
-}
-
-/**
- * A DROP NAMESPACE statement, as parsed from SQL.
- */
-case class DropNamespaceStatement(
-    namespace: Seq[String],
-    ifExists: Boolean,
-    cascade: Boolean) extends ParsedStatement
-
-/**
- * A SHOW NAMESPACES statement, as parsed from SQL.
- */
-case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
 
 /**
  * A USE statement, as parsed from SQL.
@@ -434,8 +441,36 @@ case class ShowColumnsStatement(
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
 
 /**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
+ * A DESCRIBE FUNCTION statement, as parsed from SQL
  */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
+case class DescribeFunctionStatement(
+    functionName: Seq[String],
+    isExtended: Boolean) extends ParsedStatement
+
+/**
+ *  SHOW FUNCTIONS statement, as parsed from SQL
+ */
+case class ShowFunctionsStatement(
+    userScope: Boolean,
+    systemScope: Boolean,
+    pattern: Option[String],
+    functionName: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ *  DROP FUNCTION statement, as parsed from SQL
+ */
+case class DropFunctionStatement(
+    functionName: Seq[String],
+    ifExists: Boolean,
+    isTemp: Boolean) extends ParsedStatement
+
+/**
+ *  CREATE FUNCTION statement, as parsed from SQL
+ */
+case class CreateFunctionStatement(
+    functionName: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    isTemp: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends ParsedStatement
