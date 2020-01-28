@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -50,7 +50,8 @@ import org.apache.spark.util.VersionUtils
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth
+  with HasBlockSize  {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -430,6 +431,15 @@ class LogisticRegression @Since("1.2.0") (
   @Since("2.2.0")
   def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -482,23 +492,16 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
-
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
-    val instances = extractInstances(dataset)
-
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
+  override protected[spark] def train(
+      dataset: Dataset[_]): LogisticRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
       fitIntercept)
+
+    val sc = dataset.sparkSession.sparkContext
+    val instances = extractInstances(dataset)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
       (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
@@ -582,8 +585,9 @@ class LogisticRegression @Since("1.2.0") (
             s"dangerous ground, so the algorithm may not converge.")
         }
 
-        val featuresMean = summarizer.mean.toArray
-        val featuresStd = summarizer.std.toArray
+        val featuresMean = summarizer.mean.compressed
+        val featuresStd = summarizer.std.compressed
+        val bcFeaturesStd = sc.broadcast(featuresStd)
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -595,9 +599,8 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
-        val bcFeaturesStd = instances.context.broadcast(featuresStd)
-        val getAggregatorFunc = new LogisticAggregator(bcFeaturesStd, numClasses, $(fitIntercept),
-          multinomial = isMultinomial)(_)
+        val getAggregatorFunc = new LogisticAggregator(numFeatures, numClasses, $(fitIntercept),
+          multinomial = isMultinomial, $(blockSize))(_)
         val getFeaturesStd = (j: Int) => if (j >= 0 && j < numCoefficientSets * numFeatures) {
           featuresStd(j / numCoefficientSets)
         } else {
@@ -612,7 +615,21 @@ class LogisticRegression @Since("1.2.0") (
           None
         }
 
-        val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+        val standardized = instances.map {
+          case Instance(label, weight, features) =>
+            val featuresStd = bcFeaturesStd.value
+            val array = Array.ofDim[Double](numFeatures)
+            features.foreachNonZero { (i, v) =>
+              val std = featuresStd(i)
+              if (std != 0) array(i) = v / std
+            }
+            Instance(label, weight, Vectors.dense(array))
+        }
+        val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+          .persist(StorageLevel.MEMORY_AND_DISK)
+          .setName(s"training dataset (blockSize=${$(blockSize)})")
+
+        val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,
           $(aggregationDepth))
 
         val numCoeffsPlusIntercepts = numFeaturesPlusIntercept * numCoefficientSets
@@ -806,6 +823,7 @@ class LogisticRegression @Since("1.2.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
+        blocks.unpersist()
         bcFeaturesStd.destroy()
 
         if (state == null) {
@@ -874,8 +892,6 @@ class LogisticRegression @Since("1.2.0") (
         (denseCoefficientMatrix.compressed, interceptVec.compressed, arrayBuilder.result())
       }
     }
-
-    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, isMultinomial))
