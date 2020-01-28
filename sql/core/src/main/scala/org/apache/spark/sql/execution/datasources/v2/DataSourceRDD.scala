@@ -71,7 +71,7 @@ class DataSourceRDD(
   }
 }
 
-class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[T] {
+private class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[T] {
   private[this] var valuePrepared = false
 
   override def hasNext: Boolean = {
@@ -90,7 +90,7 @@ class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[T] {
   }
 }
 
-class MetricsHandler extends Logging with Serializable {
+private class MetricsHandler extends Logging with Serializable {
   private val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
   private val startingBytesRead = inputMetrics.bytesRead
   private val getBytesRead = SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
