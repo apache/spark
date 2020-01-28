@@ -323,7 +323,7 @@ HOOK = [
         'airflow.contrib.hooks.dingding_hook.DingdingHook',
     ),
     (
-        'airflow.providers.ddiscord.hooks.discord_webhook.DiscordWebhookHook',
+        'airflow.providers.discord.hooks.discord_webhook.DiscordWebhookHook',
         'airflow.contrib.hooks.discord_webhook_hook.DiscordWebhookHook',
     ),
     (
@@ -331,7 +331,7 @@ HOOK = [
         'airflow.contrib.hooks.gdrive_hook.GoogleDriveHook',
     ),
     (
-        'airflow.providers.jenking.hooks.jenkins.JenkinsHook',
+        'airflow.providers.jenkins.hooks.jenkins.JenkinsHook',
         'airflow.contrib.hooks.jenkins_hook.JenkinsHook',
     ),
     (
@@ -413,6 +413,10 @@ HOOK = [
     (
         'airflow.providers.amazon.aws.hooks.aws_dynamodb_hook.AwsDynamoDBHook',
         'airflow.contrib.hooks.aws_dynamodb_hook.AwsDynamoDBHook',
+    ),
+    (
+        'airflow.providers.sftp.hooks.sftp.SFTPHook',
+        'airflow.contrib.hooks.sftp_hook.SFTPHook',
     ),
 ]
 
@@ -1217,7 +1221,7 @@ OPERATOR = [
         'airflow.contrib.operators.databricks_operator.DatabricksSubmitRunOperator',
     ),
     (
-        'airflow.providers.dindding.operators.dingding.DingdingOperator',
+        'airflow.providers.dingding.operators.dingding.DingdingOperator',
         'airflow.contrib.operators.dingding_operator.DingdingOperator',
     ),
     (
@@ -1225,7 +1229,7 @@ OPERATOR = [
         'airflow.contrib.operators.discord_webhook_operator.DiscordWebhookOperator',
     ),
     (
-        'airflow.providers.jenking.operators.jenkins_job_trigger.JenkinsJobTriggerOperator',
+        'airflow.providers.jenkins.operators.jenkins_job_trigger.JenkinsJobTriggerOperator',
         'airflow.contrib.operators.jenkins_job_trigger_operator.JenkinsJobTriggerOperator',
     ),
     (
@@ -1292,6 +1296,10 @@ OPERATOR = [
     (
         'airflow.providers.jdbc.operators.jdbc.JdbcOperator',
         'airflow.operators.jdbc_operator.JdbcOperator',
+    ),
+    (
+        'airflow.providers.sftp.operators.sftp.SFTPOperator',
+        'airflow.contrib.operators.sftp_operator.SFTPOperator',
     ),
 ]
 
@@ -1483,6 +1491,10 @@ SENSOR = [
         'airflow.providers.http.sensors.http.HttpSensor',
         'airflow.sensors.http_sensor.HttpSensor',
     ),
+    (
+        'airflow.providers.sftp.sensors.sftp.SFTPSensor',
+        'airflow.contrib.sensors.sftp_sensor.SFTPSensor',
+    )
 ]
 
 PROTOCOLS = [

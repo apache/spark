@@ -882,12 +882,12 @@ These integrations allow you to perform various operations within various servic
    * - `Dingding <https://oapi.dingtalk.com>`__
      - :doc:`How to use <howto/operator/dingding>`
      - :mod:`airflow.providers.dingding.hooks.dingding`
-     - :mod:`airflow.providers.dindding.operators.dingding`
+     - :mod:`airflow.providers.dingding.operators.dingding`
      -
 
    * - `Discord <https://discordapp.com>`__
      -
-     - :mod:`airflow.providers.ddiscord.hooks.discord_webhook`
+     - :mod:`airflow.providers.discord.hooks.discord_webhook`
      - :mod:`airflow.providers.discord.operators.discord_webhook`
      -
 
@@ -929,8 +929,8 @@ These integrations allow you to perform various operations within various servic
 
    * - `Jenkins <https://jenkins.io/>`__
      -
-     - :mod:`airflow.providers.jenking.hooks.jenkins`
-     - :mod:`airflow.providers.jenking.operators.jenkins_job_trigger`
+     - :mod:`airflow.providers.jenkins.hooks.jenkins`
+     - :mod:`airflow.providers.jenkins.operators.jenkins_job_trigger`
      -
 
    * - `Opsgenie <https://www.opsgenie.com/>`__
@@ -1275,8 +1275,8 @@ communication protocols or interface.
 
    * - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__
      -
-     - :mod:`airflow.providers.sftp.hooks.sftp_hook`
-     - :mod:`airflow.providers.sftp.operators.sftp_operator`
+     - :mod:`airflow.providers.sftp.hooks.sftp`
+     - :mod:`airflow.providers.sftp.operators.sftp`
      - :mod:`airflow.providers.sftp.sensors.sftp_sensor`
 
    * - `Secure Shell (SSH) <https://tools.ietf.org/html/rfc4251>`__
