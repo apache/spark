@@ -22,11 +22,9 @@ import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
-
 import com.fasterxml.jackson.core._
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources.Filter
@@ -82,7 +80,7 @@ class JacksonParser(
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     val jsonFilters = new JsonFilters(filters, st)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => convertRootObject(parser, st, fieldConverters, jsonFilters)
+      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -142,7 +140,7 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
+        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters))))
     }
   }
 
@@ -263,7 +261,7 @@ class JacksonParser(
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
-        case START_OBJECT => convertObject(parser, st, fieldConverters)
+        case START_OBJECT => convertObject(parser, st, fieldConverters).get
       }
 
     case at: ArrayType =>
@@ -329,22 +327,26 @@ class JacksonParser(
         s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
   }
 
-  private def convertRootObject(
+  /**
+   * Parse an object from the token stream into a new Row representing the schema.
+   * Fields in the json that are not defined in the requested schema will be dropped.
+   */
+  private def convertObject(
     parser: JsonParser,
     schema: StructType,
     fieldConverters: Array[ValueConverter],
-    jsonFilters: JsonFilters): Option[InternalRow] = {
+    structFilters: StructFilters = new NoopFilters()): Option[InternalRow] = {
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
 
-    jsonFilters.reset()
+    structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
-            skipRow = jsonFilters.skipRow(row, index)
+            skipRow = structFilters.skipRow(row, index)
           } catch {
             case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
@@ -363,39 +365,6 @@ class JacksonParser(
       } else {
         throw PartialResultException(row, badRecordException.get)
       }
-    }
-  }
-
-  /**
-   * Parse an object from the token stream into a new Row representing the schema.
-   * Fields in the json that are not defined in the requested schema will be dropped.
-   */
-  private def convertObject(
-      parser: JsonParser,
-      schema: StructType,
-      fieldConverters: Array[ValueConverter]): InternalRow = {
-    val row = new GenericInternalRow(schema.length)
-    var badRecordException: Option[Throwable] = None
-
-    while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      schema.getFieldIndex(parser.getCurrentName) match {
-        case Some(index) =>
-          try {
-            row.update(index, fieldConverters(index).apply(parser))
-          } catch {
-            case NonFatal(e) =>
-              badRecordException = badRecordException.orElse(Some(e))
-              parser.skipChildren()
-          }
-        case None =>
-          parser.skipChildren()
-      }
-    }
-
-    if (badRecordException.isEmpty) {
-      row
-    } else {
-      throw PartialResultException(row, badRecordException.get)
     }
   }
 

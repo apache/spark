@@ -154,3 +154,8 @@ object StructFilters {
     translate(filter)
   }
 }
+
+class NoopFilters extends StructFilters(Seq.empty, new StructType()) {
+  override def skipRow(row: InternalRow, index: Int): Boolean = false
+  override def reset(): Unit = {}
+}
