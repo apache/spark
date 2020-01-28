@@ -368,28 +368,24 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         """
         return self._set(k=value)
 
-    @since("2.0.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
-    @since("2.0.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    @since("2.0.0")
     def setPredictionCol(self, value):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
-    @since("2.0.0")
     def setProbabilityCol(self, value):
         """
         Sets the value of :py:attr:`probabilityCol`.
@@ -403,14 +399,12 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         """
         return self._set(weightCol=value)
 
-    @since("2.0.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
 
-    @since("2.0.0")
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
@@ -695,28 +689,24 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(maxIter=value)
 
-    @since("1.5.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    @since("1.5.0")
     def setPredictionCol(self, value):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
-    @since("1.5.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
 
-    @since("1.5.0")
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
@@ -952,28 +942,24 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
         """
         return self._set(distanceMeasure=value)
 
-    @since("2.0.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
-    @since("2.0.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    @since("2.0.0")
     def setPredictionCol(self, value):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
-    @since("2.0.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -1417,14 +1403,12 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    @since("2.0.0")
     def setCheckpointInterval(self, value):
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
-    @since("2.0.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -1542,14 +1526,12 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(keepLastCheckpoint=value)
 
-    @since("2.0.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
-    @since("2.0.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
@@ -1712,14 +1694,12 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
         """
         return self._set(dstCol=value)
 
-    @since("2.4.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
-    @since("2.4.0")
     def setWeightCol(self, value):
         """
         Sets the value of :py:attr:`weightCol`.

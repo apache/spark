@@ -415,18 +415,6 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
         """
         return self._set(bucketLength=value)
 
-    def setInputCol(self, value):
-        """
-        Sets the value of :py:attr:`inputCol`.
-        """
-        return self._set(inputCol=value)
-
-    def setOutputCol(self, value):
-        """
-        Sets the value of :py:attr:`outputCol`.
-        """
-        return self._set(outputCol=value)
-
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -1626,7 +1614,6 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(missingValue=value)
 
-    @since("2.2.0")
     def setInputCols(self, value):
         """
         Sets the value of :py:attr:`inputCols`.
@@ -4631,7 +4618,6 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(seed=value)
 
-    @since("1.4.0")
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.
