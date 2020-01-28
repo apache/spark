@@ -164,7 +164,7 @@ case class HiveTableScanExec(
 
   @transient lazy val prunedPartitions: Seq[HivePartition] = {
     if (relation.prunedPartitions.nonEmpty &&
-      partitionPruningPred.forall(!SubqueryExpression.hasSubquery(_))) {
+      partitionPruningPred.forall(!ExecSubqueryExpression.hasSubquery(_))) {
       relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
     } else if (partitionPruningPred.nonEmpty) {
       val prunedPartitions = prunedPartitionsViaHiveMetaStore()
