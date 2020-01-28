@@ -3005,6 +3005,7 @@ class Analyzer(
     }
   }
 
+  /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
@@ -3013,8 +3014,10 @@ class Analyzer(
           case add: AddColumn =>
             val parent = add.fieldNames().init
             if (parent.nonEmpty) {
+              // Adding a nested field, need to normalize the parent column and position
               val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
               if (target.isEmpty) {
+                // Leave unresolved. Throws error in CheckAnalysis
                 Some(add)
               } else {
                 val (normalizedName, sf) = target.get
@@ -3034,6 +3037,7 @@ class Analyzer(
                 }
               }
             } else {
+              // Adding to the root. Just need to normalize position
               val pos = findColumnPosition(add.position(), "root", schema)
               Some(TableChange.addColumn(
                 add.fieldNames(),
@@ -3062,6 +3066,7 @@ class Analyzer(
               }
             }
           case n: UpdateColumnNullability =>
+            // Need to resolve column
             resolveFieldNames(
               schema,
               n.fieldNames(),
@@ -3069,7 +3074,8 @@ class Analyzer(
 
           case position: UpdateColumnPosition =>
             position.position() match {
-              case after: After => // resolve this column as well
+              case after: After =>
+                // Need to resolve column as well as position reference
                 val fieldOpt = schema.findNestedField(
                   position.fieldNames(), includeCollections = true, conf.resolver)
 
@@ -3081,7 +3087,7 @@ class Analyzer(
                     normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
                   if (targetCol.isEmpty) {
                     throw new AnalysisException("Couldn't find the reference column for " +
-                      s"AFTER ${after.column()} at ${UnresolvedAttribute(normalizedPath).name}")
+                      s"$after at ${normalizedPath.quoted}")
                   } else {
                     Some(TableChange.updateColumnPosition(
                       (normalizedPath :+ field.name).toArray,
@@ -3089,6 +3095,7 @@ class Analyzer(
                   }
                 }
               case _ =>
+                // Need to resolve column
                 resolveFieldNames(
                   schema,
                   position.fieldNames(),
@@ -3121,6 +3128,10 @@ class Analyzer(
         a.copy(changes = normalizedChanges)
     }
 
+    /**
+     * Returns the table change if the field can be resolved, returns None if the column is not
+     * found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
+     */
     private def resolveFieldNames(
         schema: StructType,
         fieldNames: Array[String],
