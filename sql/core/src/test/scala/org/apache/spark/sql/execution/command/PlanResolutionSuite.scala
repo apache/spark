@@ -26,11 +26,11 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -104,6 +104,8 @@ class PlanResolutionSuite extends AnalysisTest {
       invocation.getArgument[String](0) match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name =>
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
@@ -139,6 +141,7 @@ class PlanResolutionSuite extends AnalysisTest {
     // TODO: run the analyzer directly.
     val rules = Seq(
       CTESubstitution,
+      ResolveInlineTables(conf),
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
@@ -1069,6 +1072,54 @@ class PlanResolutionSuite extends AnalysisTest {
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  val DSV2ResolutionTests = {
+    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.v2Table"
+    Seq(
+      ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
+      ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
+      (s"ALTER TABLE $v2SessionCatalogTable ALTER COLUMN i TYPE bigint", true),
+      ("INSERT INTO TABLE tab VALUES (1)", false),
+      ("INSERT INTO TABLE testcat.tab VALUES (1)", false),
+      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1)", true),
+      ("DESC TABLE tab", false),
+      ("DESC TABLE testcat.tab", false),
+      (s"DESC TABLE $v2SessionCatalogTable", true),
+      ("SHOW TBLPROPERTIES tab", false),
+      ("SHOW TBLPROPERTIES testcat.tab", false),
+      (s"SHOW TBLPROPERTIES $v2SessionCatalogTable", true),
+      ("SELECT * from tab", false),
+      ("SELECT * from testcat.tab", false),
+      (s"SELECT * from ${CatalogManager.SESSION_CATALOG_NAME}.v2Table", true)
+    )
+  }
+
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+    test(s"Data source V2 relation resolution '$sql'") {
+      val parsed = parseAndResolve(sql, withDefault = true)
+      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
+      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      parsed match {
+        case AlterTable(_, _, r: DataSourceV2Relation, _) =>
+          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.identifier.exists(_.name() == tableIdent))
+        case Project(_, r: DataSourceV2Relation) =>
+          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.identifier.exists(_.name() == tableIdent))
+        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
+          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.identifier.exists(_.name() == tableIdent))
+        case DescribeRelation(r: ResolvedTable, _, _) =>
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
+        case ShowTableProperties(r: ResolvedTable, _) =>
+          assert(r.catalog == catlogIdent)
+          assert(r.identifier.name() == tableIdent)
+        case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
+          assert(t.identifier == tableIdent)
+      }
     }
   }
 

@@ -2,885 +2,885 @@
 -- Number of queries: 110
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 select date_part('millennium', c) from t
--- !query 1 schema
+-- !query schema
 struct<date_part('millennium', t.`c`):int>
--- !query 1 output
+-- !query output
 3
 
 
--- !query 2
+-- !query
 select date_part('millennia', c) from t
--- !query 2 schema
+-- !query schema
 struct<date_part('millennia', t.`c`):int>
--- !query 2 output
+-- !query output
 3
 
 
--- !query 3
+-- !query
 select date_part('mil', c) from t
--- !query 3 schema
+-- !query schema
 struct<date_part('mil', t.`c`):int>
--- !query 3 output
+-- !query output
 3
 
 
--- !query 4
+-- !query
 select date_part('mils', c) from t
--- !query 4 schema
+-- !query schema
 struct<date_part('mils', t.`c`):int>
--- !query 4 output
+-- !query output
 3
 
 
--- !query 5
+-- !query
 select date_part('century', c) from t
--- !query 5 schema
+-- !query schema
 struct<date_part('century', t.`c`):int>
--- !query 5 output
+-- !query output
 21
 
 
--- !query 6
+-- !query
 select date_part('centuries', c) from t
--- !query 6 schema
+-- !query schema
 struct<date_part('centuries', t.`c`):int>
--- !query 6 output
+-- !query output
 21
 
 
--- !query 7
+-- !query
 select date_part('c', c) from t
--- !query 7 schema
+-- !query schema
 struct<date_part('c', t.`c`):int>
--- !query 7 output
+-- !query output
 21
 
 
--- !query 8
+-- !query
 select date_part('cent', c) from t
--- !query 8 schema
+-- !query schema
 struct<date_part('cent', t.`c`):int>
--- !query 8 output
+-- !query output
 21
 
 
--- !query 9
+-- !query
 select date_part('decade', c) from t
--- !query 9 schema
+-- !query schema
 struct<date_part('decade', t.`c`):int>
--- !query 9 output
+-- !query output
 201
 
 
--- !query 10
+-- !query
 select date_part('decades', c) from t
--- !query 10 schema
+-- !query schema
 struct<date_part('decades', t.`c`):int>
--- !query 10 output
+-- !query output
 201
 
 
--- !query 11
+-- !query
 select date_part('dec', c) from t
--- !query 11 schema
+-- !query schema
 struct<date_part('dec', t.`c`):int>
--- !query 11 output
+-- !query output
 201
 
 
--- !query 12
+-- !query
 select date_part('decs', c) from t
--- !query 12 schema
+-- !query schema
 struct<date_part('decs', t.`c`):int>
--- !query 12 output
+-- !query output
 201
 
 
--- !query 13
+-- !query
 select date_part('year', c) from t
--- !query 13 schema
+-- !query schema
 struct<date_part('year', t.`c`):int>
--- !query 13 output
+-- !query output
 2011
 
 
--- !query 14
+-- !query
 select date_part('y', c) from t
--- !query 14 schema
+-- !query schema
 struct<date_part('y', t.`c`):int>
--- !query 14 output
+-- !query output
 2011
 
 
--- !query 15
+-- !query
 select date_part('years', c) from t
--- !query 15 schema
+-- !query schema
 struct<date_part('years', t.`c`):int>
--- !query 15 output
+-- !query output
 2011
 
 
--- !query 16
+-- !query
 select date_part('yr', c) from t
--- !query 16 schema
+-- !query schema
 struct<date_part('yr', t.`c`):int>
--- !query 16 output
+-- !query output
 2011
 
 
--- !query 17
+-- !query
 select date_part('yrs', c) from t
--- !query 17 schema
+-- !query schema
 struct<date_part('yrs', t.`c`):int>
--- !query 17 output
+-- !query output
 2011
 
 
--- !query 18
+-- !query
 select date_part('quarter', c) from t
--- !query 18 schema
+-- !query schema
 struct<date_part('quarter', t.`c`):int>
--- !query 18 output
+-- !query output
 2
 
 
--- !query 19
+-- !query
 select date_part('qtr', c) from t
--- !query 19 schema
+-- !query schema
 struct<date_part('qtr', t.`c`):int>
--- !query 19 output
+-- !query output
 2
 
 
--- !query 20
+-- !query
 select date_part('month', c) from t
--- !query 20 schema
+-- !query schema
 struct<date_part('month', t.`c`):int>
--- !query 20 output
+-- !query output
 5
 
 
--- !query 21
+-- !query
 select date_part('mon', c) from t
--- !query 21 schema
+-- !query schema
 struct<date_part('mon', t.`c`):int>
--- !query 21 output
+-- !query output
 5
 
 
--- !query 22
+-- !query
 select date_part('mons', c) from t
--- !query 22 schema
+-- !query schema
 struct<date_part('mons', t.`c`):int>
--- !query 22 output
+-- !query output
 5
 
 
--- !query 23
+-- !query
 select date_part('months', c) from t
--- !query 23 schema
+-- !query schema
 struct<date_part('months', t.`c`):int>
--- !query 23 output
+-- !query output
 5
 
 
--- !query 24
+-- !query
 select date_part('week', c) from t
--- !query 24 schema
+-- !query schema
 struct<date_part('week', t.`c`):int>
--- !query 24 output
+-- !query output
 18
 
 
--- !query 25
+-- !query
 select date_part('w', c) from t
--- !query 25 schema
+-- !query schema
 struct<date_part('w', t.`c`):int>
--- !query 25 output
+-- !query output
 18
 
 
--- !query 26
+-- !query
 select date_part('weeks', c) from t
--- !query 26 schema
+-- !query schema
 struct<date_part('weeks', t.`c`):int>
--- !query 26 output
+-- !query output
 18
 
 
--- !query 27
+-- !query
 select date_part('day', c) from t
--- !query 27 schema
+-- !query schema
 struct<date_part('day', t.`c`):int>
--- !query 27 output
+-- !query output
 6
 
 
--- !query 28
+-- !query
 select date_part('d', c) from t
--- !query 28 schema
+-- !query schema
 struct<date_part('d', t.`c`):int>
--- !query 28 output
+-- !query output
 6
 
 
--- !query 29
+-- !query
 select date_part('days', c) from t
--- !query 29 schema
+-- !query schema
 struct<date_part('days', t.`c`):int>
--- !query 29 output
+-- !query output
 6
 
 
--- !query 30
+-- !query
 select date_part('dayofweek', c) from t
--- !query 30 schema
+-- !query schema
 struct<date_part('dayofweek', t.`c`):int>
--- !query 30 output
+-- !query output
 6
 
 
--- !query 31
+-- !query
 select date_part('dow', c) from t
--- !query 31 schema
+-- !query schema
 struct<date_part('dow', t.`c`):int>
--- !query 31 output
+-- !query output
 5
 
 
--- !query 32
+-- !query
 select date_part('isodow', c) from t
--- !query 32 schema
+-- !query schema
 struct<date_part('isodow', t.`c`):int>
--- !query 32 output
+-- !query output
 5
 
 
--- !query 33
+-- !query
 select date_part('doy', c) from t
--- !query 33 schema
+-- !query schema
 struct<date_part('doy', t.`c`):int>
--- !query 33 output
+-- !query output
 126
 
 
--- !query 34
+-- !query
 select date_part('hour', c) from t
--- !query 34 schema
+-- !query schema
 struct<date_part('hour', t.`c`):int>
--- !query 34 output
+-- !query output
 7
 
 
--- !query 35
+-- !query
 select date_part('h', c) from t
--- !query 35 schema
+-- !query schema
 struct<date_part('h', t.`c`):int>
--- !query 35 output
+-- !query output
 7
 
 
--- !query 36
+-- !query
 select date_part('hours', c) from t
--- !query 36 schema
+-- !query schema
 struct<date_part('hours', t.`c`):int>
--- !query 36 output
+-- !query output
 7
 
 
--- !query 37
+-- !query
 select date_part('hr', c) from t
--- !query 37 schema
+-- !query schema
 struct<date_part('hr', t.`c`):int>
--- !query 37 output
+-- !query output
 7
 
 
--- !query 38
+-- !query
 select date_part('hrs', c) from t
--- !query 38 schema
+-- !query schema
 struct<date_part('hrs', t.`c`):int>
--- !query 38 output
+-- !query output
 7
 
 
--- !query 39
+-- !query
 select date_part('minute', c) from t
--- !query 39 schema
+-- !query schema
 struct<date_part('minute', t.`c`):int>
--- !query 39 output
+-- !query output
 8
 
 
--- !query 40
+-- !query
 select date_part('m', c) from t
--- !query 40 schema
+-- !query schema
 struct<date_part('m', t.`c`):int>
--- !query 40 output
+-- !query output
 8
 
 
--- !query 41
+-- !query
 select date_part('min', c) from t
--- !query 41 schema
+-- !query schema
 struct<date_part('min', t.`c`):int>
--- !query 41 output
+-- !query output
 8
 
 
--- !query 42
+-- !query
 select date_part('mins', c) from t
--- !query 42 schema
+-- !query schema
 struct<date_part('mins', t.`c`):int>
--- !query 42 output
+-- !query output
 8
 
 
--- !query 43
+-- !query
 select date_part('minutes', c) from t
--- !query 43 schema
+-- !query schema
 struct<date_part('minutes', t.`c`):int>
--- !query 43 output
+-- !query output
 8
 
 
--- !query 44
+-- !query
 select date_part('second', c) from t
--- !query 44 schema
+-- !query schema
 struct<date_part('second', t.`c`):decimal(8,6)>
--- !query 44 output
+-- !query output
 9.123456
 
 
--- !query 45
+-- !query
 select date_part('s', c) from t
--- !query 45 schema
+-- !query schema
 struct<date_part('s', t.`c`):decimal(8,6)>
--- !query 45 output
+-- !query output
 9.123456
 
 
--- !query 46
+-- !query
 select date_part('sec', c) from t
--- !query 46 schema
+-- !query schema
 struct<date_part('sec', t.`c`):decimal(8,6)>
--- !query 46 output
+-- !query output
 9.123456
 
 
--- !query 47
+-- !query
 select date_part('seconds', c) from t
--- !query 47 schema
+-- !query schema
 struct<date_part('seconds', t.`c`):decimal(8,6)>
--- !query 47 output
+-- !query output
 9.123456
 
 
--- !query 48
+-- !query
 select date_part('secs', c) from t
--- !query 48 schema
+-- !query schema
 struct<date_part('secs', t.`c`):decimal(8,6)>
--- !query 48 output
+-- !query output
 9.123456
 
 
--- !query 49
+-- !query
 select date_part('not_supported', c) from t
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Literals of type 'not_supported' are currently not supported for the string type.;; line 1 pos 7
 
 
--- !query 50
+-- !query
 select date_part(c, c) from t
--- !query 50 schema
+-- !query schema
 struct<>
--- !query 50 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 The field parameter needs to be a foldable string value.;; line 1 pos 7
 
 
--- !query 51
+-- !query
 select date_part(null, c) from t
--- !query 51 schema
+-- !query schema
 struct<date_part(NULL, t.`c`):double>
--- !query 51 output
+-- !query output
 NULL
 
 
--- !query 52
+-- !query
 CREATE TEMPORARY VIEW t2 AS select interval 1010 year 9 month 8 day 7 hour 6 minute 5 second 4 millisecond 3 microsecond as c
--- !query 52 schema
+-- !query schema
 struct<>
--- !query 52 output
+-- !query output
 
 
 
--- !query 53
+-- !query
 select date_part('millennium', c) from t2
--- !query 53 schema
+-- !query schema
 struct<date_part('millennium', t2.`c`):int>
--- !query 53 output
+-- !query output
 1
 
 
--- !query 54
+-- !query
 select date_part('millennia', c) from t2
--- !query 54 schema
+-- !query schema
 struct<date_part('millennia', t2.`c`):int>
--- !query 54 output
+-- !query output
 1
 
 
--- !query 55
+-- !query
 select date_part('mil', c) from t2
--- !query 55 schema
+-- !query schema
 struct<date_part('mil', t2.`c`):int>
--- !query 55 output
+-- !query output
 1
 
 
--- !query 56
+-- !query
 select date_part('mils', c) from t2
--- !query 56 schema
+-- !query schema
 struct<date_part('mils', t2.`c`):int>
--- !query 56 output
+-- !query output
 1
 
 
--- !query 57
+-- !query
 select date_part('century', c) from t2
--- !query 57 schema
+-- !query schema
 struct<date_part('century', t2.`c`):int>
--- !query 57 output
+-- !query output
 10
 
 
--- !query 58
+-- !query
 select date_part('centuries', c) from t2
--- !query 58 schema
+-- !query schema
 struct<date_part('centuries', t2.`c`):int>
--- !query 58 output
+-- !query output
 10
 
 
--- !query 59
+-- !query
 select date_part('c', c) from t2
--- !query 59 schema
+-- !query schema
 struct<date_part('c', t2.`c`):int>
--- !query 59 output
+-- !query output
 10
 
 
--- !query 60
+-- !query
 select date_part('cent', c) from t2
--- !query 60 schema
+-- !query schema
 struct<date_part('cent', t2.`c`):int>
--- !query 60 output
+-- !query output
 10
 
 
--- !query 61
+-- !query
 select date_part('decade', c) from t2
--- !query 61 schema
+-- !query schema
 struct<date_part('decade', t2.`c`):int>
--- !query 61 output
+-- !query output
 101
 
 
--- !query 62
+-- !query
 select date_part('decades', c) from t2
--- !query 62 schema
+-- !query schema
 struct<date_part('decades', t2.`c`):int>
--- !query 62 output
+-- !query output
 101
 
 
--- !query 63
+-- !query
 select date_part('dec', c) from t2
--- !query 63 schema
+-- !query schema
 struct<date_part('dec', t2.`c`):int>
--- !query 63 output
+-- !query output
 101
 
 
--- !query 64
+-- !query
 select date_part('decs', c) from t2
--- !query 64 schema
+-- !query schema
 struct<date_part('decs', t2.`c`):int>
--- !query 64 output
+-- !query output
 101
 
 
--- !query 65
+-- !query
 select date_part('year', c) from t2
--- !query 65 schema
+-- !query schema
 struct<date_part('year', t2.`c`):int>
--- !query 65 output
+-- !query output
 1010
 
 
--- !query 66
+-- !query
 select date_part('y', c) from t2
--- !query 66 schema
+-- !query schema
 struct<date_part('y', t2.`c`):int>
--- !query 66 output
+-- !query output
 1010
 
 
--- !query 67
+-- !query
 select date_part('years', c) from t2
--- !query 67 schema
+-- !query schema
 struct<date_part('years', t2.`c`):int>
--- !query 67 output
+-- !query output
 1010
 
 
--- !query 68
+-- !query
 select date_part('yr', c) from t2
--- !query 68 schema
+-- !query schema
 struct<date_part('yr', t2.`c`):int>
--- !query 68 output
+-- !query output
 1010
 
 
--- !query 69
+-- !query
 select date_part('yrs', c) from t2
--- !query 69 schema
+-- !query schema
 struct<date_part('yrs', t2.`c`):int>
--- !query 69 output
+-- !query output
 1010
 
 
--- !query 70
+-- !query
 select date_part('quarter', c) from t2
--- !query 70 schema
+-- !query schema
 struct<date_part('quarter', t2.`c`):tinyint>
--- !query 70 output
+-- !query output
 4
 
 
--- !query 71
+-- !query
 select date_part('qtr', c) from t2
--- !query 71 schema
+-- !query schema
 struct<date_part('qtr', t2.`c`):tinyint>
--- !query 71 output
+-- !query output
 4
 
 
--- !query 72
+-- !query
 select date_part('month', c) from t2
--- !query 72 schema
+-- !query schema
 struct<date_part('month', t2.`c`):tinyint>
--- !query 72 output
+-- !query output
 9
 
 
--- !query 73
+-- !query
 select date_part('mon', c) from t2
--- !query 73 schema
+-- !query schema
 struct<date_part('mon', t2.`c`):tinyint>
--- !query 73 output
+-- !query output
 9
 
 
--- !query 74
+-- !query
 select date_part('mons', c) from t2
--- !query 74 schema
+-- !query schema
 struct<date_part('mons', t2.`c`):tinyint>
--- !query 74 output
+-- !query output
 9
 
 
--- !query 75
+-- !query
 select date_part('months', c) from t2
--- !query 75 schema
+-- !query schema
 struct<date_part('months', t2.`c`):tinyint>
--- !query 75 output
+-- !query output
 9
 
 
--- !query 76
+-- !query
 select date_part('day', c) from t2
--- !query 76 schema
+-- !query schema
 struct<date_part('day', t2.`c`):int>
--- !query 76 output
+-- !query output
 8
 
 
--- !query 77
+-- !query
 select date_part('d', c) from t2
--- !query 77 schema
+-- !query schema
 struct<date_part('d', t2.`c`):int>
--- !query 77 output
+-- !query output
 8
 
 
--- !query 78
+-- !query
 select date_part('days', c) from t2
--- !query 78 schema
+-- !query schema
 struct<date_part('days', t2.`c`):int>
--- !query 78 output
+-- !query output
 8
 
 
--- !query 79
+-- !query
 select date_part('hour', c) from t2
--- !query 79 schema
+-- !query schema
 struct<date_part('hour', t2.`c`):bigint>
--- !query 79 output
+-- !query output
 7
 
 
--- !query 80
+-- !query
 select date_part('h', c) from t2
--- !query 80 schema
+-- !query schema
 struct<date_part('h', t2.`c`):bigint>
--- !query 80 output
+-- !query output
 7
 
 
--- !query 81
+-- !query
 select date_part('hours', c) from t2
--- !query 81 schema
+-- !query schema
 struct<date_part('hours', t2.`c`):bigint>
--- !query 81 output
+-- !query output
 7
 
 
--- !query 82
+-- !query
 select date_part('hr', c) from t2
--- !query 82 schema
+-- !query schema
 struct<date_part('hr', t2.`c`):bigint>
--- !query 82 output
+-- !query output
 7
 
 
--- !query 83
+-- !query
 select date_part('hrs', c) from t2
--- !query 83 schema
+-- !query schema
 struct<date_part('hrs', t2.`c`):bigint>
--- !query 83 output
+-- !query output
 7
 
 
--- !query 84
+-- !query
 select date_part('minute', c) from t2
--- !query 84 schema
+-- !query schema
 struct<date_part('minute', t2.`c`):tinyint>
--- !query 84 output
+-- !query output
 6
 
 
--- !query 85
+-- !query
 select date_part('m', c) from t2
--- !query 85 schema
+-- !query schema
 struct<date_part('m', t2.`c`):tinyint>
--- !query 85 output
+-- !query output
 6
 
 
--- !query 86
+-- !query
 select date_part('min', c) from t2
--- !query 86 schema
+-- !query schema
 struct<date_part('min', t2.`c`):tinyint>
--- !query 86 output
+-- !query output
 6
 
 
--- !query 87
+-- !query
 select date_part('mins', c) from t2
--- !query 87 schema
+-- !query schema
 struct<date_part('mins', t2.`c`):tinyint>
--- !query 87 output
+-- !query output
 6
 
 
--- !query 88
+-- !query
 select date_part('minutes', c) from t2
--- !query 88 schema
+-- !query schema
 struct<date_part('minutes', t2.`c`):tinyint>
--- !query 88 output
+-- !query output
 6
 
 
--- !query 89
+-- !query
 select date_part('second', c) from t2
--- !query 89 schema
+-- !query schema
 struct<date_part('second', t2.`c`):decimal(8,6)>
--- !query 89 output
+-- !query output
 5.004003
 
 
--- !query 90
+-- !query
 select date_part('s', c) from t2
--- !query 90 schema
+-- !query schema
 struct<date_part('s', t2.`c`):decimal(8,6)>
--- !query 90 output
+-- !query output
 5.004003
 
 
--- !query 91
+-- !query
 select date_part('sec', c) from t2
--- !query 91 schema
+-- !query schema
 struct<date_part('sec', t2.`c`):decimal(8,6)>
--- !query 91 output
+-- !query output
 5.004003
 
 
--- !query 92
+-- !query
 select date_part('seconds', c) from t2
--- !query 92 schema
+-- !query schema
 struct<date_part('seconds', t2.`c`):decimal(8,6)>
--- !query 92 output
+-- !query output
 5.004003
 
 
--- !query 93
+-- !query
 select date_part('secs', c) from t2
--- !query 93 schema
+-- !query schema
 struct<date_part('secs', t2.`c`):decimal(8,6)>
--- !query 93 output
+-- !query output
 5.004003
 
 
--- !query 94
+-- !query
 select date_part('milliseconds', c) from t2
--- !query 94 schema
+-- !query schema
 struct<date_part('milliseconds', t2.`c`):decimal(8,3)>
--- !query 94 output
+-- !query output
 5004.003
 
 
--- !query 95
+-- !query
 select date_part('msec', c) from t2
--- !query 95 schema
+-- !query schema
 struct<date_part('msec', t2.`c`):decimal(8,3)>
--- !query 95 output
+-- !query output
 5004.003
 
 
--- !query 96
+-- !query
 select date_part('msecs', c) from t2
--- !query 96 schema
+-- !query schema
 struct<date_part('msecs', t2.`c`):decimal(8,3)>
--- !query 96 output
+-- !query output
 5004.003
 
 
--- !query 97
+-- !query
 select date_part('millisecon', c) from t2
--- !query 97 schema
+-- !query schema
 struct<date_part('millisecon', t2.`c`):decimal(8,3)>
--- !query 97 output
+-- !query output
 5004.003
 
 
--- !query 98
+-- !query
 select date_part('mseconds', c) from t2
--- !query 98 schema
+-- !query schema
 struct<date_part('mseconds', t2.`c`):decimal(8,3)>
--- !query 98 output
+-- !query output
 5004.003
 
 
--- !query 99
+-- !query
 select date_part('ms', c) from t2
--- !query 99 schema
+-- !query schema
 struct<date_part('ms', t2.`c`):decimal(8,3)>
--- !query 99 output
+-- !query output
 5004.003
 
 
--- !query 100
+-- !query
 select date_part('microseconds', c) from t2
--- !query 100 schema
+-- !query schema
 struct<date_part('microseconds', t2.`c`):bigint>
--- !query 100 output
+-- !query output
 5004003
 
 
--- !query 101
+-- !query
 select date_part('usec', c) from t2
--- !query 101 schema
+-- !query schema
 struct<date_part('usec', t2.`c`):bigint>
--- !query 101 output
+-- !query output
 5004003
 
 
--- !query 102
+-- !query
 select date_part('usecs', c) from t2
--- !query 102 schema
+-- !query schema
 struct<date_part('usecs', t2.`c`):bigint>
--- !query 102 output
+-- !query output
 5004003
 
 
--- !query 103
+-- !query
 select date_part('useconds', c) from t2
--- !query 103 schema
+-- !query schema
 struct<date_part('useconds', t2.`c`):bigint>
--- !query 103 output
+-- !query output
 5004003
 
 
--- !query 104
+-- !query
 select date_part('microsecon', c) from t2
--- !query 104 schema
+-- !query schema
 struct<date_part('microsecon', t2.`c`):bigint>
--- !query 104 output
+-- !query output
 5004003
 
 
--- !query 105
+-- !query
 select date_part('us', c) from t2
--- !query 105 schema
+-- !query schema
 struct<date_part('us', t2.`c`):bigint>
--- !query 105 output
+-- !query output
 5004003
 
 
--- !query 106
+-- !query
 select date_part('epoch', c) from t2
--- !query 106 schema
+-- !query schema
 struct<date_part('epoch', t2.`c`):decimal(18,6)>
--- !query 106 output
+-- !query output
 31897220765.004003
 
 
--- !query 107
+-- !query
 select date_part('not_supported', c) from t2
--- !query 107 schema
+-- !query schema
 struct<>
--- !query 107 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Literals of type 'not_supported' are currently not supported for the interval type.;; line 1 pos 7
 
 
--- !query 108
+-- !query
 select date_part(c, c) from t2
--- !query 108 schema
+-- !query schema
 struct<>
--- !query 108 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 The field parameter needs to be a foldable string value.;; line 1 pos 7
 
 
--- !query 109
+-- !query
 select date_part(null, c) from t2
--- !query 109 schema
+-- !query schema
 struct<date_part(NULL, t2.`c`):double>
--- !query 109 output
+-- !query output
 NULL
