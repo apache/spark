@@ -216,7 +216,7 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     >>> model.getThreshold()
     0.5
     >>> model.getBlockSize()
-    4096
+    1024
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -571,7 +571,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     >>> blor.clear(blor.maxIter)
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.getBlockSize()
-    4096
+    1024
     >>> blorModel.setFeaturesCol("features")
     LogisticRegressionModel...
     >>> blorModel.setProbabilityCol("newProbability")
