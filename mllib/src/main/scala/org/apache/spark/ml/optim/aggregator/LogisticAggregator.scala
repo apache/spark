@@ -208,7 +208,6 @@ private[ml] class LogisticAggregator(
       s"got type ${bcCoefficients.value.getClass}.)")
   }
 
-  // Helper vectors and matrices for binary:
   @transient private lazy val binaryLinear = {
     if (!multinomial) {
       if (fitIntercept) {
@@ -221,21 +220,6 @@ private[ml] class LogisticAggregator(
     }
   }
 
-  @transient private lazy val binaryIntercept =
-    if (!multinomial && fitIntercept) bcCoefficients.value(numFeatures) else 0.0
-
-  @transient private lazy val binaryLinearGradSumVec = {
-    if (!multinomial && fitIntercept) {
-      new DenseVector(Array.ofDim[Double](numFeatures))
-    } else {
-      null
-    }
-  }
-
-  @transient private lazy val auxiliaryVec =
-    new DenseVector(Array.ofDim[Double](blockSize))
-
-  // Helper vectors and matrices for multinomial
   @transient private lazy val multinomialLinear = {
     if (multinomial) {
       if (fitIntercept) {
@@ -248,29 +232,6 @@ private[ml] class LogisticAggregator(
     }
   }
 
-  @transient private lazy val multinomialIntercept = {
-    if (multinomial && fitIntercept) {
-      new DenseVector(coefficientsArray.takeRight(numClasses))
-    } else {
-      null
-    }
-  }
-
-  @transient private lazy val multinomialLinearGradSumMat = {
-    if (multinomial) {
-      new DenseMatrix(numFeatures, numClasses, Array.ofDim[Double](numClasses * numFeatures))
-    } else {
-      null
-    }
-  }
-
-  @transient private lazy val multinomialAuxiliaryMat = {
-    if (multinomial) {
-      new DenseMatrix(blockSize, numClasses, Array.ofDim[Double](blockSize * numClasses))
-    } else {
-      null
-    }
-  }
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
@@ -317,17 +278,13 @@ private[ml] class LogisticAggregator(
     val localGradientSumArray = gradientSumArray
 
     // vec here represents margins or negative dotProducts
-    val vec = if (size == blockSize) {
-      auxiliaryVec
-    } else {
-      // the last block within one partition may be of size less than blockSize
-      new DenseVector(Array.ofDim[Double](size))
-    }
+    val vec = new DenseVector(Array.ofDim[Double](size))
 
     if (fitIntercept) {
+      val intercept = coefficientsArray.last
       var i = 0
       while (i < size) {
-        vec.values(i) = binaryIntercept
+        vec.values(i) = intercept
         i += 1
       }
       BLAS.gemv(-1.0, block.matrix, binaryLinear, -1.0, vec)
@@ -359,8 +316,11 @@ private[ml] class LogisticAggregator(
     }
 
     if (fitIntercept) {
-      BLAS.gemv(1.0, block.matrix.transpose, vec, 0.0, binaryLinearGradSumVec)
-      binaryLinearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
+      // localGradientSumArray is of size numFeatures+1, so can not
+      // be directly used as the output of BLAS.gemv
+      val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
+      BLAS.gemv(1.0, block.matrix.transpose, vec, 0.0, linearGradSumVec)
+      linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
       localGradientSumArray(numFeatures) += vec.values.sum
     } else {
       val gradSumVec = new DenseVector(localGradientSumArray)
@@ -453,19 +413,15 @@ private[ml] class LogisticAggregator(
     val localGradientSumArray = gradientSumArray
 
     // mat here represents margins, shape: S X C
-    val mat = if (size == blockSize) {
-      multinomialAuxiliaryMat
-    } else {
-      // the last block within one partition may be of size less than blockSize
-      new DenseMatrix(size, numClasses, Array.ofDim[Double](size * numClasses))
-    }
+    val mat = new DenseMatrix(size, numClasses, Array.ofDim[Double](size * numClasses))
 
     if (fitIntercept) {
+      val intercept = coefficientsArray.takeRight(numClasses)
       var i = 0
       while (i < size) {
         var j = 0
         while (j < numClasses) {
-          mat.update(i, j, multinomialIntercept(j))
+          mat.update(i, j, intercept(j))
           j += 1
         }
         i += 1
@@ -530,7 +486,6 @@ private[ml] class LogisticAggregator(
 
     // block.matrix:                  S X F, unknown type
     // mat (multipliers):             S X C, dense
-    // multinomialLinearGradSumMat:   F X C, dense
     // gradSumMat(gradientSumArray):  C X FPI (numFeaturesPlusIntercept), dense
     block.matrix match {
       case dm: DenseMatrix if !fitIntercept =>
@@ -540,11 +495,12 @@ private[ml] class LogisticAggregator(
         BLAS.gemm(1.0, mat.transpose, dm, 1.0, gradSumMat)
 
       case _ =>
-        // Otherwise, use multinomialLinearGradSumMat as a temp matrix:
-        // multinomialLinearGradSumMat = matrix.T X mat
-        BLAS.gemm(1.0, block.matrix.transpose, mat,
-          0.0, multinomialLinearGradSumMat)
-        multinomialLinearGradSumMat.foreachActive { (i, j, v) =>
+        // Otherwise, use linearGradSumVec (F X C) as a temp matrix:
+        // linearGradSumVec = matrix.T X mat
+        val linearGradSumMat = new DenseMatrix(numFeatures, numClasses,
+          Array.ofDim[Double](numFeatures * numClasses))
+        BLAS.gemm(1.0, block.matrix.transpose, mat, 0.0, linearGradSumMat)
+        linearGradSumMat.foreachActive { (i, j, v) =>
           if (v != 0) localGradientSumArray(i * numClasses + j) += v
         }
 
