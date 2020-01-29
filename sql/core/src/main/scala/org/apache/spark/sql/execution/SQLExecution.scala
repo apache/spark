@@ -62,9 +62,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
       name: Option[String] = None)(body: => T): T = {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
