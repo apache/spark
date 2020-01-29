@@ -20,9 +20,9 @@ package org.apache.spark.sql.connector.read.streaming;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A mix-in interface for {@link MicroBatchStream} streaming sources to signal that they can control
- * the rate of data ingested into the system per micro-batch. These rate limits can come implicitly
- * from the contract of triggers, e.g. Trigger.Once() requires that a micro-batch process all data
+ * A mix-in interface for {@link SparkDataStream} streaming sources to signal that they can control
+ * the rate of data ingested into the system. These rate limits can come implicitly from the
+ * contract of triggers, e.g. Trigger.Once() requires that a micro-batch process all data
  * available to the system at the start of the micro-batch. Alternatively, sources can decide to
  * limit ingest through data source options.
  *

@@ -82,6 +82,10 @@ private[kafka010] class KafkaMicroBatchStream(
     maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
   }
 
+  override def latestOffset(): Offset = {
+    throw new IllegalStateException("This method should not be called")
+  }
+
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{IOException, InterruptedIOException, UncheckedIOException}
+import java.io.{InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SparkDataStream, Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
@@ -424,7 +424,7 @@ abstract class StreamExecution(
 
   /** Stops all streaming sources safely. */
   protected def stopSources(): Unit = {
-    uniqueSources.foreach { source =>
+    uniqueSources.foreach { case (source, _) =>
       try {
         source.stop()
       } catch {
