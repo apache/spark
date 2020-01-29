@@ -1174,6 +1174,44 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("maxFilesPerTrigger: ignored when using Trigger.Once") {
+    withTempDir { src =>
+      var lastFileModTime: Option[Long] = None
+
+      /** Create a text file with a single data item */
+      def createFile(data: Int): File = {
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+        lastFileModTime = Some(file.lastModified)
+        file
+      }
+
+      createFile(1)
+      createFile(2)
+      createFile(3)
+
+      // Set up a query to read text files one at a time
+      val df = spark
+        .readStream
+        .option("maxFilesPerTrigger", 1)
+        .text(src.getCanonicalPath)
+      val q = df
+        .writeStream
+        .format("memory")
+        .queryName("triggerOnceTest")
+        .trigger(Trigger.Once)
+        .start()
+
+      try {
+        assert(q.awaitTermination(streamingTimeout.toMillis))
+        assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
+        checkAnswer(sql("SELECT * from triggerOnceTest"), (1 to 3).map(_.toString).toDF)
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
   test("explain") {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
