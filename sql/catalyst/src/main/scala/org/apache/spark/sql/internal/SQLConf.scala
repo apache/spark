@@ -2038,12 +2038,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val UTC_TIMESTAMP_FUNC_ENABLED = buildConf("spark.sql.legacy.utcTimestampFunc.enabled")
-    .doc("The configuration property enables the to_utc_timestamp() " +
-         "and from_utc_timestamp() functions.")
-    .booleanConf
-    .createWithDefault(false)
-
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
       "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
@@ -2122,11 +2116,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE = buildConf("spark.sql.legacy.addDirectory.recursive")
-    .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
-      "command of SQL. If false, then only a single file can be added.")
-    .booleanConf
-    .createWithDefault(true)
+  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE =
+    buildConf("spark.sql.legacy.addDirectory.recursive.enabled")
+      .internal()
+      .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
+        "command of SQL. If false, then only a single file can be added.")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
@@ -2422,8 +2418,6 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
-
-  def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
   def addDirectoryRecursiveEnabled: Boolean = getConf(LEGACY_ADD_DIRECTORY_USING_RECURSIVE)
 

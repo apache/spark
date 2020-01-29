@@ -270,7 +270,7 @@ class CacheManager extends Logging {
         case _ => false
       }
 
-      case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+      case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
         refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
 
       case _ => false

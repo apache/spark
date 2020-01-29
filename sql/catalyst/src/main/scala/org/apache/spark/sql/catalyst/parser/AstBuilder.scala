@@ -1392,9 +1392,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             throw new ParseException("Invalid escape string." +
               "Escape string must contains only one character.", ctx)
           }
-          str.charAt(0)
+          str
         }.getOrElse('\\')
-        invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+        invertIfNotDefined(Like(e, expression(ctx.pattern), Literal(escapeChar)))
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
