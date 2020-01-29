@@ -1341,6 +1341,51 @@ OPERATOR = [
         'airflow.providers.amazon.aws.operators.s3_to_redshift.S3ToRedshiftTransfer',
         'airflow.operators.s3_to_redshift_operator.S3ToRedshiftTransfer',
     ),
+    (
+        'airflow.providers.apache.hive.operators.vertica_to_hive.VerticaToHiveTransfer',
+        'airflow.contrib.operators.vertica_to_hive.VerticaToHiveTransfer',
+    ),
+    (
+        'airflow.providers.apache.druid.operators.hive_to_druid.HiveToDruidTransfer',
+        'airflow.operators.hive_to_druid.HiveToDruidTransfer',
+    ),
+    (
+        'airflow.providers.apache.hive.operators.hive_to_mysql.HiveToMySqlTransfer',
+        'airflow.operators.hive_to_mysql.HiveToMySqlTransfer',
+    ),
+    (
+        'airflow.providers.apache.hive.operators.hive_to_samba.Hive2SambaOperator',
+        'airflow.operators.hive_to_samba_operator.Hive2SambaOperator',
+    ),
+    (
+        'airflow.providers.apache.hive.operators.mssql_to_hive.MsSqlToHiveTransfer',
+        'airflow.operators.mssql_to_hive.MsSqlToHiveTransfer',
+    ),
+    (
+        'airflow.providers.microsoft.azure.operators.file_to_wasb.FileToWasbOperator',
+        'airflow.contrib.operators.file_to_wasb.FileToWasbOperator',
+    ),
+    (
+        'airflow.providers.google.suite.operators.gcs_to_gdrive_operator.GCSToGoogleDriveOperator',
+        'airflow.contrib.operators.gcs_to_gdrive_operator.GCSToGoogleDriveOperator',
+    ),
+    (
+        'airflow.providers.microsoft.azure.operators.oracle_to_azure_data_lake_transfer'
+        '.OracleToAzureDataLakeTransfer',
+        'airflow.contrib.operators.oracle_to_azure_data_lake_transfer.OracleToAzureDataLakeTransfer',
+    ),
+    (
+        'airflow.providers.oracle.operators.oracle_to_oracle_transfer.OracleToOracleTransfer',
+        'airflow.contrib.operators.oracle_to_oracle_transfer.OracleToOracleTransfer',
+    ),
+    (
+        'airflow.providers.google.cloud.operators.s3_to_gcs.S3ToGCSOperator',
+        'airflow.contrib.operators.s3_to_gcs_operator.S3ToGCSOperator',
+    ),
+    (
+        'airflow.providers.mysql.operators.vertica_to_mysql.VerticaToMySqlTransfer',
+        'airflow.contrib.operators.vertica_to_mysql.VerticaToMySqlTransfer',
+    ),
 ]
 
 SENSOR = [

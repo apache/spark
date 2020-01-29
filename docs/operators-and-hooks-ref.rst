@@ -157,7 +157,7 @@ Foundation.
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.s3_to_hive_operator`
+     - :mod:`airflow.providers.apache.hive.operators.s3_to_hive`
 
    * - `Apache Cassandra <http://cassandra.apache.org/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
@@ -172,32 +172,32 @@ Foundation.
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Apache Druid <https://druid.apache.org/>`__
      -
-     - :mod:`airflow.operators.hive_to_druid`
+     - :mod:`airflow.providers.apache.druid.operators.hive_to_druid`
 
    * - `Apache Hive <https://hive.apache.org/>`__
      - `MySQL <https://www.mysql.com/>`__
      -
-     - :mod:`airflow.operators.hive_to_mysql`
+     - :mod:`airflow.providers.apache.hive.operators.hive_to_mysql`
 
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Samba <https://www.samba.org/>`__
      -
-     - :mod:`airflow.operators.hive_to_samba_operator`
+     - :mod:`airflow.providers.apache.hive.operators.hive_to_samba`
 
    * - `Microsoft SQL Server (MSSQL) <https://www.microsoft.com/pl-pl/sql-server/sql-server-downloads>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.mssql_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.mssql_to_hive`
 
    * - `MySQL <https://www.mysql.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.mysql_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.mysql_to_hive`
 
    * - `Vertica <https://www.vertica.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.contrib.operators.vertica_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.vertica_to_hive`
 
 .. _Azure:
 
@@ -269,12 +269,12 @@ These integrations allow you to copy data from/to Microsoft Azure.
    * - Local
      - `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`__
      -
-     - :mod:`airflow.contrib.operators.file_to_wasb`
+     - :mod:`airflow.providers.microsoft.azure.operators.file_to_wasb`
 
    * - `Oracle <https://www.oracle.com/pl/database/>`__
      - `Azure Data Lake Storage <https://azure.microsoft.com/en-us/services/storage/data-lake-storage/>`__
      -
-     - :mod:`airflow.contrib.operators.oracle_to_azure_data_lake_transfer`
+     - :mod:`airflow.providers.microsoft.azure.operators.oracle_to_azure_data_lake_transfer`
 
 
 .. _AWS:
@@ -459,12 +459,12 @@ These integrations allow you to copy data from/to Amazon Web Services.
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.s3_to_hive_operator`
+     - :mod:`airflow.providers.apache.hive.operators.s3_to_hive`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - :doc:`How to use <howto/operator/gcp/cloud_storage_transfer_service>`
-     - :mod:`airflow.contrib.operators.s3_to_gcs_operator`,
+     - :mod:`airflow.providers.google.cloud.operators.s3_to_gcs`,
        :mod:`airflow.gcp.operators.cloud_storage_transfer_service`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`_
@@ -724,7 +724,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - :doc:`How to use <howto/operator/gcp/cloud_storage_transfer_service>`
-     - :mod:`airflow.contrib.operators.s3_to_gcs_operator`,
+     - :mod:`airflow.providers.google.cloud.operators.s3_to_gcs`,
        :mod:`airflow.gcp.operators.cloud_storage_transfer_service`
 
    * - `Apache Cassandra <http://cassandra.apache.org/>`__
@@ -772,7 +772,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - `Google Drive <https://www.google.com/drive/>`__
      -
-     - :mod:`airflow.contrib.operators.gcs_to_gdrive_operator`
+     - :mod:`airflow.providers.google.suite.operators.gcs_to_gdrive_operator`
 
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - SFTP
@@ -858,9 +858,9 @@ These integrations allow you to perform various operations within various servic
 
    * - `Atlassian Jira <https://www.atlassian.com/pl/software/jira>`__
      -
-     - :mod:`airflow.contrib.hooks.jira_hook`
-     - :mod:`airflow.contrib.operators.jira_operator`
-     - :mod:`airflow.contrib.sensors.jira_sensor`
+     - :mod:`airflow.providers.jira.hooks.jira`
+     - :mod:`airflow.providers.jira.operators.jira`
+     - :mod:`airflow.providers.jira.sensors.jira`
 
    * - `Databricks <https://databricks.com/>`__
      -
@@ -1002,17 +1002,17 @@ These integrations allow you to perform various operations within various servic
    * - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
      - `Google Drive <https://www.google.com/drive/>`__
      -
-     - :mod:`airflow.contrib.operators.gcs_to_gdrive_operator`
+     - :mod:`airflow.providers.google.suite.operators.gcs_to_gdrive_operator`
 
    * - `Vertica <https://www.vertica.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.contrib.operators.vertica_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.vertica_to_hive`
 
    * - `Vertica <https://www.vertica.com/>`__
      - `MySQL <https://www.mysql.com/>`__
      -
-     - :mod:`airflow.contrib.operators.vertica_to_mysql`
+     - :mod:`airflow.providers.mysql.operators.vertica_to_mysql`
 
 .. _software:
 
@@ -1080,7 +1080,7 @@ These integrations allow you to perform various operations using various softwar
 
 
    * - `MySQL <https://www.mysql.com/products/>`__
-     -
+     - :mod:`airflow.providers.mysql.operators.mysql`
      - :mod:`airflow.providers.mysql.hooks.mysql`
      - :mod:`airflow.providers.mssql.operators.mysql`
      -
@@ -1157,7 +1157,7 @@ These integrations allow you to copy data.
    * - `Apache Hive <https://hive.apache.org/>`__
      - `Samba <https://www.samba.org/>`__
      -
-     - :mod:`airflow.operators.hive_to_samba_operator`
+     - :mod:`airflow.providers.apache.hive.operators.hive_to_samba`
 
    * - `BigQuery <https://cloud.google.com/bigquery/>`__
      - `MySQL <https://www.mysql.com/>`__
@@ -1167,7 +1167,7 @@ These integrations allow you to copy data.
    * - `Microsoft SQL Server (MSSQL) <https://www.microsoft.com/pl-pl/sql-server/sql-server-downloads>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.mssql_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.mssql_to_hive`
 
    * - `Microsoft SQL Server (MSSQL) <https://www.microsoft.com/pl-pl/sql-server/sql-server-downloads>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
@@ -1182,7 +1182,7 @@ These integrations allow you to copy data.
    * - `MySQL <https://www.mysql.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.operators.mysql_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.mysql_to_hive`
 
    * - `MySQL <https://www.mysql.com/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
@@ -1192,12 +1192,12 @@ These integrations allow you to copy data.
    * - `Oracle <https://www.oracle.com/pl/database/>`__
      - `Azure Data Lake Storage <https://azure.microsoft.com/en-us/services/storage/data-lake-storage/>`__
      -
-     - :mod:`airflow.contrib.operators.oracle_to_azure_data_lake_transfer`
+     - :mod:`airflow.providers.microsoft.azure.operators.oracle_to_azure_data_lake_transfer`
 
    * - `Oracle <https://www.oracle.com/pl/database/>`__
      - `Oracle <https://www.oracle.com/pl/database/>`__
      -
-     - :mod:`airflow.contrib.operators.oracle_to_oracle_transfer`
+     - :mod:`airflow.providers.oracle.operators.oracle_to_oracle_transfer`
 
    * - `PostgresSQL <https://www.postgresql.org/>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
@@ -1217,12 +1217,12 @@ These integrations allow you to copy data.
    * - `Vertica <https://www.vertica.com/>`__
      - `Apache Hive <https://hive.apache.org/>`__
      -
-     - :mod:`airflow.contrib.operators.vertica_to_hive`
+     - :mod:`airflow.providers.apache.hive.operators.vertica_to_hive`
 
    * - `Vertica <https://www.vertica.com/>`__
      - `MySQL <https://www.mysql.com/>`__
      -
-     - :mod:`airflow.contrib.operators.vertica_to_mysql`
+     - :mod:`airflow.providers.mysql.operators.vertica_to_mysql`
 
 .. _protocol:
 
@@ -1278,7 +1278,7 @@ communication protocols or interface.
      -
      - :mod:`airflow.providers.sftp.hooks.sftp`
      - :mod:`airflow.providers.sftp.operators.sftp`
-     - :mod:`airflow.providers.sftp.sensors.sftp_sensor`
+     - :mod:`airflow.providers.sftp.sensors.sftp`
 
    * - `Secure Shell (SSH) <https://tools.ietf.org/html/rfc4251>`__
      -
@@ -1325,7 +1325,7 @@ These integrations allow you to copy data.
    * - Filesystem
      - `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`__
      -
-     - :mod:`airflow.contrib.operators.file_to_wasb`
+     - :mod:`airflow.providers.microsoft.azure.operators.file_to_wasb`
 
    * - Filesystem
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
