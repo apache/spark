@@ -600,7 +600,7 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
         val getAggregatorFunc = new LogisticAggregator(numFeatures, numClasses, $(fitIntercept),
-          multinomial = isMultinomial, $(blockSize))(_)
+          multinomial = isMultinomial)(_)
         val getFeaturesStd = (j: Int) => if (j >= 0 && j < numCoefficientSets * numFeatures) {
           featuresStd(j / numCoefficientSets)
         } else {

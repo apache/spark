@@ -185,8 +185,7 @@ private[ml] class LogisticAggregator(
     numFeatures: Int,
     numClasses: Int,
     fitIntercept: Boolean,
-    multinomial: Boolean,
-    blockSize: Int = 1024)(bcCoefficients: Broadcast[Vector])
+    multinomial: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, LogisticAggregator] with Logging {
 
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
