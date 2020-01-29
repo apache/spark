@@ -221,6 +221,7 @@ span.expand-dag-viz, span.collapse-table {
 }
 
 .tooltip {
+  font-size: 0.786rem;
   font-weight: normal;
 }
 
