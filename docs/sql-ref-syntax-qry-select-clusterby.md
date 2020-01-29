@@ -20,9 +20,10 @@ license: |
 ---
 The <code>CLUSTER BY</code> clause is used to first repartition the data based
 on the input expressions and then sort the data within each partition. This is
-semantically equivalent to performing a <code>DISTRIBUTE BY</code> followed by 
-a <code>SORT BY</code>. This clause only ensures that the resultant rows are
-sorted within each partition and does not guarantee a total order of output.
+semantically equivalent to performing a
+[DISTRIBUTE BY](sql-ref-syntax-qry-select-distribute-by.html) followed by a
+[SORT BY](sql-ref-syntax-qry-select-sortby.html). This clause only ensures that the
+resultant rows are sorted within each partition and does not guarantee a total order of output.
 
 ### Syntax
 {% highlight sql %}
@@ -86,3 +87,13 @@ SELECT age, name FROM person CLUSTER BY age;
   |16 |Jack N |
   +---+-------+
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
