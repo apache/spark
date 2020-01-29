@@ -548,7 +548,7 @@ class MicroBatchExecution(
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] =
       reportTimeTaken("addBatch") {
-      SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
+      SQLExecution.withNewExecutionId(lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
           case _: SupportsWrite =>

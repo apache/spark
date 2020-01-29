@@ -3472,7 +3472,7 @@ class Dataset[T] private[sql](
    * an execution.
    */
   private def withNewExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
+    SQLExecution.withNewExecutionId(queryExecution)(body)
   }
 
   /**
@@ -3481,7 +3481,7 @@ class Dataset[T] private[sql](
    * reset.
    */
   private def withNewRDDExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+    SQLExecution.withNewExecutionId(rddQueryExecution) {
       rddQueryExecution.executedPlan.resetMetrics()
       body
     }
@@ -3492,7 +3492,7 @@ class Dataset[T] private[sql](
    * user-registered callback functions.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
+    SQLExecution.withNewExecutionId(qe, Some(name)) {
       qe.executedPlan.resetMetrics()
       action(qe.executedPlan)
     }
