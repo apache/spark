@@ -93,12 +93,16 @@ private[kafka010] class KafkaOffsetReader(
   private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
-  /** Number of partitions to read from Kafka. If this value is greater than the number of Kafka
-   * topicPartitions, we will not use the CachedConsumer. */
-  val minPartitions =
+  /**
+   * Number of partitions to read from Kafka. If this value is greater than the number of Kafka
+   * topicPartitions, we will split up  the read tasks of the skewed partitions to multiple Spark
+   * tasks. The number of Spark tasks will be *approximately* `numPartitions`. It can be less or
+   * more depending on rounding errors or Kafka partitions that didn't receive any new data.
+   */
+  private val minPartitions =
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
 
-  val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+  private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
@@ -389,16 +393,12 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   /**
-   * Return the offset ranges. This is used by Kafka batch queries which resolve the offsets in
-   * executors.
-   * `fromPartitionOffsets` and `untilPartitionOffsets` may contain unresolved offsets (such latest
-   * or earliest).
-   *
-   * Since offsets can be early and late binding which are evaluated on the executors, in
-   * order to divvy up the partitions we need to perform some substitutions. We don't want
-   * to send exact offsets to the executors, because data may age out before we can consume
-   * the data. This method makes some approximate splitting, and replaces the special offset values
-   * in the final output.
+   * Return the offset ranges for a Kafka batch query. If `minPartitions` is set, this method may
+   * split partitions to respect it. Since offsets can be early and late binding which are evaluated
+   * on the executors, in order to divvy up the partitions we need to perform some substitutions. We
+   * don't want to send exact offsets to the executors, because data may age out before we can
+   * consume the data. This method makes some approximate splitting, and replaces the special offset
+   * values in the final output.
    */
   def getOffsetRangesFromUnresolvedOffsets(
       startingOffsets: KafkaOffsetRangeLimit,
@@ -472,6 +472,11 @@ private[kafka010] class KafkaOffsetReader(
       .map(_.toString)
   }
 
+  /**
+   * Return the offset ranges for a Kafka streaming batch. If `minPartitions` is set, this method
+   * may split partitions to respect it. If any data lost issue is detected, `reportDataLoss` will
+   * be called.
+   */
   def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,
