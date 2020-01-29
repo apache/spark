@@ -39,10 +39,11 @@ WHERE boolean_expression
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (id INT, name STRING, age INT);
-INSERT INTO person VALUES (100, 'John', 30),
-                          (200, 'Mary', NULL),
-                          (300, 'Mike', 80),
-                          (400, 'Dan',  50);
+INSERT INTO person VALUES
+    (100, 'John', 30),
+    (200, 'Mary', NULL),
+    (300, 'Mike', 80),
+    (400, 'Dan',  50);
 
 -- Comparison operator in `WHERE` clause.
 SELECT * FROM person WHERE id > 200 ORDER BY id;
@@ -111,3 +112,13 @@ WHERE EXISTS (
   +---+----+----+
 
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
