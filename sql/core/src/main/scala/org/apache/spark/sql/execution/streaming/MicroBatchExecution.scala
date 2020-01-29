@@ -389,7 +389,7 @@ class MicroBatchExecution(
           (s, Option(s.latestOffset()))
         }
       case (s, _) =>
-        // for some reason, the compiler is unhappy
+        // for some reason, the compiler is unhappy and thinks the match is not exhaustive
         throw new IllegalStateException(s"Unexpected source: $s")
     }
     availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
