@@ -44,7 +44,15 @@ public interface SupportsAdmissionControl extends SparkDataStream {
 
     /**
      * Returns the most recent offset available given a read limit. The start offset can be used
-     * to figure out
+     * to figure out how much new data should be read given the limit. Users should implement this
+     * method instead of latestOffset for a MicroBatchStream or getOffset for Source.
+     *
+     * When this method is called on a `Source`, the source can return `null` if there is no
+     * data to process. In addition, for the very first micro-batch, the `startOffset` will be
+     * null as well.
+     *
+     * When this method is called on a MicroBatchStream, the `startOffset` will be `initialOffset`
+     * for the very first micro-batch. The source can return `null` if there is no data to process.
      */
     Offset latestOffset(Offset startOffset, ReadLimit limit);
 }

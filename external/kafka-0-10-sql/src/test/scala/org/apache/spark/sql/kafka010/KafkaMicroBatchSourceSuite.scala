@@ -298,14 +298,15 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       )
     )
 
+    val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
     // When Trigger.Once() is used, the read limit should be ignored
     testStream(mapped)(
-      StartStream(Trigger.Once(), clock),
-      waitUntilBatchProcessed,
-      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
-        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        12, 117, 118, 119, 120, 121, 122, 123, 124, 125,
-        13, 126, 127, 128, 129, 130, 131, 132, 133, 134)
+      StartStream(Trigger.Once()),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        true
+      },
+      CheckAnswer(allData: _*)
     )
   }
 

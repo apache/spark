@@ -20,23 +20,36 @@ package org.apache.spark.sql.connector.read.streaming;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Interface representing limits on how much to read from a {@link MicroBatchStream} when it
- * implements {@link SupportsAdmissionControl}. There are several child interfaces representing
- * various kinds of limits.
+ * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan approximately the
+ * given maximum number of files.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
- * @see ReadAllAvailable
- * @see ReadMaxRows
+ * @since 3.0.0
  */
 @Evolving
-public interface ReadLimit {
-    static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
+public class ReadMaxFiles implements ReadLimit {
+    private int files;
 
-    static ReadLimit maxFiles(int files) {
-        return new ReadMaxFiles(files);
+    ReadMaxFiles(int maxFiles) {
+        this.files = maxFiles;
     }
 
-    static ReadLimit allAvailable() {
-        return ReadAllAvailable.SINGLETON;
+    /** Approximate maximum rows to scan. */
+    public int maxFiles() { return this.files; }
+
+    @Override
+    public String toString() {
+        return "MaxFiles: " + maxFiles();
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ReadMaxFiles other = (ReadMaxFiles) o;
+        return other.maxFiles() == maxFiles();
+    }
+
+    @Override
+    public int hashCode() { return files; }
 }

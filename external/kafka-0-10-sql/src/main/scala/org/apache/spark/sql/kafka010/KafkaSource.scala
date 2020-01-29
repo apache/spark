@@ -128,7 +128,8 @@ private[kafka010] class KafkaSource(
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
-    throw new IllegalStateException("latestOffset should be called instead of this method")
+    throw new IllegalStateException(
+      "latestOffset(Offset, ReadLimit) should be called instead of this method")
   }
 
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {

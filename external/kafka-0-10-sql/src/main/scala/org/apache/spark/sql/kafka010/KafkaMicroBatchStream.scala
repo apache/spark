@@ -83,7 +83,8 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   override def latestOffset(): Offset = {
-    throw new IllegalStateException("This method should not be called")
+    throw new IllegalStateException(
+      "latestOffset(Offset, ReadLimit) should be called instead of this method")
   }
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {

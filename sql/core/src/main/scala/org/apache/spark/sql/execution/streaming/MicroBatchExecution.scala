@@ -368,9 +368,14 @@ class MicroBatchExecution(
       case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
-          val startOffset = availableOffsets
-            .get(s).map(off => s.deserializeOffset(off.json))
-            .getOrElse(s.initialOffset())
+          val startOffsetOpt = availableOffsets.get(s)
+          val startOffset = s match {
+            case _: Source =>
+              startOffsetOpt.orNull
+            case v2: MicroBatchStream =>
+              startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
+                .getOrElse(v2.initialOffset())
+          }
           (s, Option(s.latestOffset(startOffset, limit)))
         }
       case (s: Source, _) =>
