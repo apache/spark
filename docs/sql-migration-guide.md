@@ -324,7 +324,7 @@ license: |
         </tr>
     </table>
 
-  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive` to false.
+  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive.enabled` to false.
 
   - Since Spark 3.0, `SHOW TBLPROPERTIES` will cause `AnalysisException` if the table does not exist. In Spark version 2.4 and earlier, this scenario caused `NoSuchTableException`. Also, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
 
