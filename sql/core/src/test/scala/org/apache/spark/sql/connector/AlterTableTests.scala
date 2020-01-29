@@ -146,9 +146,9 @@ trait AlterTableTests extends SharedSparkSession {
         .add("point", new StructType().add("x", IntegerType))
         .add("b", StringType))
 
-      val e1 = intercept[SparkException](
+      val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
-      assert(e1.getMessage().contains("AFTER column not found"))
+      assert(e1.getMessage().contains("Couldn't find the reference column"))
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -169,7 +169,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val e2 = intercept[SparkException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
-      assert(e2.getMessage().contains("AFTER column not found"))
+      assert(e2.getMessage().contains("Couldn't find the reference column"))
     }
   }
 

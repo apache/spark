@@ -350,21 +350,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
             case (Seq("key"), MapType(keyType, _, _), true) =>
               // return the key type as a struct field to include nullability
-              Some(normalizedPath -> StructField("key", keyType, nullable = false))
+              Some((normalizedPath :+ field.name) -> StructField("key", keyType, nullable = false))
 
             case (Seq("key", names @ _*), MapType(struct: StructType, _, _), true) =>
               findField(struct, names, normalizedPath ++ Seq(field.name, "key"))
 
             case (Seq("value"), MapType(_, valueType, isNullable), true) =>
               // return the value type as a struct field to include nullability
-              Some(normalizedPath -> StructField("value", valueType, nullable = isNullable))
+              Some((normalizedPath :+ field.name) ->
+                StructField("value", valueType, nullable = isNullable))
 
             case (Seq("value", names @ _*), MapType(_, struct: StructType, _), true) =>
               findField(struct, names, normalizedPath ++ Seq(field.name, "value"))
 
             case (Seq("element"), ArrayType(elementType, isNullable), true) =>
               // return the element type as a struct field to include nullability
-              Some(normalizedPath -> StructField("element", elementType, nullable = isNullable))
+              Some((normalizedPath :+ field.name) ->
+                StructField("element", elementType, nullable = isNullable))
 
             case (Seq("element", names @ _*), ArrayType(struct: StructType, _), true) =>
               findField(struct, names, normalizedPath ++ Seq(field.name, "element"))
