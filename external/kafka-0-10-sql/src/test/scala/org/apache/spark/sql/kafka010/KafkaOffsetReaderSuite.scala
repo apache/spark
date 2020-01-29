@@ -114,4 +114,26 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp1, 33, 66, None),
       KafkaOffsetRange(tp1, 66, LATEST, None)))
   }
+
+  test("SPARK-30656: getOffsetRangesFromResolvedOffsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
+    val tp1 = new TopicPartition(topic, 0)
+    val tp2 = new TopicPartition(topic, 1)
+    val reader = createKafkaReader(topic, minPartitions = Some(3))
+
+    val fromPartitionOffsets = Map(tp1 -> 0L, tp2 -> 0L)
+    val untilPartitionOffsets = Map(tp1 -> 100L, tp2 -> 3L)
+    val offsetRanges = reader.getOffsetRangesFromResolvedOffsets(
+      fromPartitionOffsets,
+      untilPartitionOffsets,
+      _ => {})
+    assert(offsetRanges === Seq(
+      KafkaOffsetRange(tp1, 0, 33, None),
+      KafkaOffsetRange(tp1, 33, 66, None),
+      KafkaOffsetRange(tp1, 66, 100, None),
+      KafkaOffsetRange(tp2, 0, 3, None)))
+  }
 }
