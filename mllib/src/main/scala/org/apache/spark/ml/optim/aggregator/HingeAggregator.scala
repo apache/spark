@@ -36,7 +36,7 @@ import org.apache.spark.ml.linalg._
 private[ml] class HingeAggregator(
     numFeatures: Int,
     fitIntercept: Boolean,
-    blockSize: Int = 4096)(bcCoefficients: Broadcast[Vector])
+    blockSize: Int = 1024)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, HingeAggregator] {
 
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
