@@ -106,7 +106,7 @@ private[kafka010] class KafkaOffsetReader(
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
-  def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
+  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
     minPartitions.map(_ > numTopicPartitions).getOrElse(false)
   }
 
@@ -405,15 +405,16 @@ private[kafka010] class KafkaOffsetReader(
       endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange] = {
     val fromPartitionOffsets = fetchPartitionOffsets(startingOffsets, isStartingOffsets = true)
     val untilPartitionOffsets = fetchPartitionOffsets(endingOffsets, isStartingOffsets = false)
-    // Check topicPartitions got in two `fetchPartitionOffsets" calls`. Throw an error if there is
-    // any inconsistency (either the user spcified invalid options or added/deleted partitions
-    // between two calls)
+
+    // Obtain topicPartitions in both from and until partition offset, ignoring
+    // topic partitions that were added and/or deleted between the two above calls.
     if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
-      val fromTopicPartitions = fromPartitionOffsets.keySet.toSeq.sortBy(_.topic)
-      val untilTopicPartitions = untilPartitionOffsets.keySet.toSeq.sortBy(_.topic)
+      implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
+      val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
+      val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
       throw new IllegalStateException("different topic partitions " +
-        s"for starting offsets[${fromTopicPartitions.mkString(", ")}] and " +
-        s"ending offsets[${untilTopicPartitions.mkString(", ")}]")
+        s"for starting offsets topics[${fromTopics}] and " +
+        s"ending offsets topics[${untilTopics}]")
     }
 
     // Calculate offset ranges

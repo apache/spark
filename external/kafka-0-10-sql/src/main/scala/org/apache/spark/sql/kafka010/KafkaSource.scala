@@ -210,66 +210,10 @@ private[kafka010] class KafkaSource(
         initialPartitionOffsets
     }
 
-    // Find the new partitions, and get their earliest offsets
-    val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
-    val newPartitionOffsets = kafkaReader.fetchEarliestOffsets(newPartitions.toSeq)
-    if (newPartitionOffsets.keySet != newPartitions) {
-      // We cannot get from offsets for some partitions. It means they got deleted.
-      val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
-      reportDataLoss(
-        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
-    }
-    logInfo(s"Partitions added: $newPartitionOffsets")
-    newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
-      reportDataLoss(
-        s"Added partition $p starts from $o instead of 0. Some data may have been missed")
-    }
-
-    val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
-    if (deletedPartitions.nonEmpty) {
-      val message = if (kafkaReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
-      } else {
-        s"$deletedPartitions are gone. Some data may have been missed."
-      }
-      reportDataLoss(message)
-    }
-
-    // Use the until partitions to calculate offset ranges to ignore partitions that have
-    // been deleted
-    val topicPartitions = untilPartitionOffsets.keySet.filter { tp =>
-      // Ignore partitions that we don't know the from offsets.
-      newPartitionOffsets.contains(tp) || fromPartitionOffsets.contains(tp)
-    }.toSeq
-    logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
-
-    val sortedExecutors = getSortedExecutorList(sc)
-    val numExecutors = sortedExecutors.length
-    logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
-
-    // Calculate offset ranges
-    val offsetRanges = topicPartitions.map { tp =>
-      val fromOffset = fromPartitionOffsets.getOrElse(tp, newPartitionOffsets.getOrElse(tp, {
-        // This should not happen since newPartitionOffsets contains all partitions not in
-        // fromPartitionOffsets
-        throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }))
-      val untilOffset = untilPartitionOffsets(tp)
-      val preferredLoc = if (numExecutors > 0) {
-        // This allows cached KafkaConsumers in the executors to be re-used to read the same
-        // partition in every batch.
-        Some(sortedExecutors(Math.floorMod(tp.hashCode, numExecutors)))
-      } else None
-      KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
-    }.filter { range =>
-      if (range.untilOffset < range.fromOffset) {
-        reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +
-          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
-        false
-      } else {
-        true
-      }
-    }.toArray
+    val offsetRanges = kafkaReader.getOffsetRangesFromResolvedOffsets(
+      fromPartitionOffsets,
+      untilPartitionOffsets,
+      reportDataLoss)
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = if (includeHeaders) {
