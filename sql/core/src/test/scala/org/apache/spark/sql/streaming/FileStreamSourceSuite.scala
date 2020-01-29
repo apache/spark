@@ -1175,7 +1175,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("maxFilesPerTrigger: ignored when using Trigger.Once") {
-    withTempDir { src =>
+    withTempDirs { (src, target) =>
+      val checkpoint = new File(target, "chk").getCanonicalPath
+      val targetDir = new File(target, "data").getCanonicalPath
       var lastFileModTime: Option[Long] = None
 
       /** Create a text file with a single data item */
@@ -1195,19 +1197,35 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .readStream
         .option("maxFilesPerTrigger", 1)
         .text(src.getCanonicalPath)
-      val q = df
-        .writeStream
-        .format("memory")
-        .queryName("triggerOnceTest")
-        .trigger(Trigger.Once)
-        .start()
+
+      def startQuery(): StreamingQuery = {
+        df.writeStream
+          .format("parquet")
+          .trigger(Trigger.Once)
+          .option("checkpointLocation", checkpoint)
+          .start(targetDir)
+      }
+      val q = startQuery()
 
       try {
         assert(q.awaitTermination(streamingTimeout.toMillis))
         assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql("SELECT * from triggerOnceTest"), (1 to 3).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF)
       } finally {
         q.stop()
+      }
+
+      createFile(4)
+      createFile(5)
+
+      // run a second batch
+      val q2 = startQuery()
+      try {
+        assert(q2.awaitTermination(streamingTimeout.toMillis))
+        assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF)
+      } finally {
+        q2.stop()
       }
     }
   }
