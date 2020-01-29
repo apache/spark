@@ -27,7 +27,7 @@ import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
@@ -54,7 +54,7 @@ private[kafka010] class KafkaMicroBatchStream(
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean) extends SupportsAdmissionControl with Logging {
+    failOnDataLoss: Boolean) extends SupportsAdmissionControl with MicroBatchStream with Logging {
 
   private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
@@ -78,13 +78,18 @@ private[kafka010] class KafkaMicroBatchStream(
     KafkaSourceOffset(getOrCreateInitialPartitionOffsets())
   }
 
-  override def latestOffset(start: Offset): Offset = {
+  override def getDefaultReadLimit: ReadLimit = {
+    maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+  }
+
+  override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
-    endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
-      rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
-    }.getOrElse {
-      latestPartitionOffsets
+    endPartitionOffsets = KafkaSourceOffset(readLimit match {
+      case rows: ReadMaxRows =>
+        rateLimit(rows.maxRows(), startPartitionOffsets, latestPartitionOffsets)
+      case _: ReadAllAvailable =>
+        latestPartitionOffsets
     })
     endPartitionOffsets
   }

@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatch
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, SparkDataStream, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, Offset => OffsetV2}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{StreamWriterCommitProgress, StreamingDataSourceV2Relation, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
@@ -79,7 +79,7 @@ class MicroBatchExecution(
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation@StreamingRelation(dataSourceV1, sourceName, output) =>
+      case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
@@ -122,7 +122,18 @@ class MicroBatchExecution(
       // v2 source
       case r: StreamingDataSourceV2Relation => r.stream
     }
-    uniqueSources = sources.distinct
+    uniqueSources = sources.distinct.map {
+      case source: SupportsAdmissionControl =>
+        val limit = source.getDefaultReadLimit
+        if (trigger == OneTimeTrigger && limit != ReadLimit.allAvailable()) {
+          logWarning(s"The read limit $limit for $source is ignored when Trigger.Once() is used.")
+          source -> ReadLimit.allAvailable()
+        } else {
+          source -> limit
+        }
+      case other =>
+        other -> ReadLimit.allAvailable()
+    }.toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
@@ -354,20 +365,22 @@ class MicroBatchExecution(
 
     // Generate a map from each unique source to the next available offset.
     val latestOffsets: Map[SparkDataStream, Option[OffsetV2]] = uniqueSources.map {
-      case s: Source =>
-        updateStatusMessage(s"Getting offsets from $s")
-        reportTimeTaken("getOffset") {
-          (s, s.getOffset)
-        }
-      case s: SupportsAdmissionControl =>
+      case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           val startOffset = availableOffsets
             .get(s).map(off => s.deserializeOffset(off.json))
             .getOrElse(s.initialOffset())
-          (s, Option(s.latestOffset(startOffset)))
+          (s, Option(s.latestOffset(startOffset, limit)))
         }
-      case s: MicroBatchStream =>
+
+      case (s: Source, _) =>
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("getOffset") {
+          (s, s.getOffset)
+        }
+
+      case (s: MicroBatchStream, _) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           (s, Option(s.latestOffset()))

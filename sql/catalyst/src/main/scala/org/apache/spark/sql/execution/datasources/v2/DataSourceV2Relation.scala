@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
-import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsReportStatistics, Statistics => V2Statistics}
+import org.apache.spark.sql.connector.read.streaming.{Offset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils

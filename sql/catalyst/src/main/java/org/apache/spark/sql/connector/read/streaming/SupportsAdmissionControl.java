@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A mix-in interface for {@link MicroBatchStream} streaming sources to signal that they can control
@@ -33,16 +32,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsAdmissionControl extends MicroBatchStream {
+public interface SupportsAdmissionControl extends SparkDataStream {
 
-    default ReadLimit getReadLimit(CaseInsensitiveStringMap options) {
+    /**
+     * Returns the read limits potentially passed to the data source through options when creating
+     * the data source.
+     */
+    default ReadLimit getDefaultReadLimit() {
         return ReadLimit.allAvailable();
-    }
-
-    @Override
-    default Offset latestOffset() {
-        throw new RuntimeException(
-            "latestOffset should not be called for sources that SupportsAdmissionControl");
     }
 
     /**
