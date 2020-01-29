@@ -300,7 +300,26 @@ Security options for the Spark History Server are covered more detail in the
         Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
     </td>
   </tr>
-
+  <tr>
+    <td>spark.history.fs.eventLog.rolling.maxFilesToRetain</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The maximum number of event log files which will be retained as non-compacted. By default,
+      all event log files will be retained.<br/>
+      Please note that compaction will happen in Spark History Server, which means this configuration
+      should be set to the configuration of Spark History server, and the same value will be applied
+      across applications which are being loaded in Spark History Server. This also means compaction
+      and cleanup would require running Spark History Server.<br/>
+      Please set the configuration in Spark History Server, and <code>spark.eventLog.rolling.maxFileSize</code>
+      in each application accordingly if you want to control the overall size of event log files.
+      The event log files older than these retained files will be compacted into single file and
+      deleted afterwards.<br/>
+      NOTE: Spark History Server may not compact the old event log files if it figures
+      out not a lot of space would be reduced during compaction. For streaming query
+      (including Structured Streaming) we normally expect compaction will run, but for
+      batch query compaction won't run in many cases.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,

@@ -325,6 +325,25 @@ $(document).ready(function () {
     $('[data-toggle="tooltip"]').tooltip();
     var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
+        // rendering the UI page
+        $.get(createTemplateURI(appId, "stagespage"), function(template) {
+          tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+
+          $("#additionalMetrics").click(function(){
+              $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
+              $("#toggle-metrics").toggle();
+              if (window.localStorage) {
+                  window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
+              }
+          });
+
+          $("#aggregatedMetrics").click(function(){
+              $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
+              $("#toggle-aggregatedMetrics").toggle();
+              if (window.localStorage) {
+                  window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
+              }
+          });
 
         var endPoint = stageEndPoint(appId);
         var stageAttemptId = getStageAttemptId();
@@ -472,27 +491,6 @@ $(document).ready(function () {
             // prepare data for accumulatorUpdates
             var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>
                 !(accumUpdate.name).toString().includes("internal."));
-
-            // rendering the UI page
-            var data = {"executors": response};
-            $.get(createTemplateURI(appId, "stagespage"), function(template) {
-                tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html(), data));
-
-                $("#additionalMetrics").click(function(){
-                    $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-metrics").toggle();
-                    if (window.localStorage) {
-                        window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
-                    }
-                });
-
-                $("#aggregatedMetrics").click(function(){
-                    $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-aggregatedMetrics").toggle();
-                    if (window.localStorage) {
-                        window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
-                    }
-                });
 
                 var quantiles = "0,0.25,0.5,0.75,1.0";
                 $.getJSON(endPoint + "/" + stageAttemptId + "/taskSummary?quantiles=" + quantiles,
