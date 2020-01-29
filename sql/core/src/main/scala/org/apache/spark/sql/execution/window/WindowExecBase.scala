@@ -170,7 +170,7 @@ abstract class WindowExecBase(
               MutableProjection.create(expressions, schema))
         }
 
-        // Create the factory
+        // Create the factory to produce [[WindowFunctionFrame]]
         val factory = key match {
           // Offset Frame
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
@@ -223,7 +223,7 @@ abstract class WindowExecBase(
         // Keep track of the number of expressions. This is a side-effect in a map...
         numExpressions += expressions.size
 
-        // Create the Frame Expression - Factory pair.
+        // Create the Window Expression - Frame Factory pair.
         (expressions, factory)
     }
   }
