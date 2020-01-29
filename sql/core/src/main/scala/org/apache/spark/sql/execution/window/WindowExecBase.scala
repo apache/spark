@@ -114,7 +114,7 @@ abstract class WindowExecBase(
 
   /**
    * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the WindowFrameFunction.
+   * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Expression, Expression)
