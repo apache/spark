@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  *   rows to this frame.
  * - Moving frame: Every time we move to a new row to process, we remove some rows from the frame
  *   and we add some rows to the frame. Examples are:
- *     1 PRECEDING AND CURRENT ROW and 1 FOLLOWING AND 2 FOLLOWING.
+ *     1 PRECEDING AND CURRENT ROW and 1 PRECEDING AND 2 FOLLOWING.
  * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
  *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame.
  *
