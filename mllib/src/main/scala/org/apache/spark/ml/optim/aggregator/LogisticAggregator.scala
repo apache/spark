@@ -495,8 +495,8 @@ private[ml] class LogisticAggregator(
         BLAS.gemm(1.0, mat.transpose, dm, 1.0, gradSumMat)
 
       case _ =>
-        // Otherwise, use linearGradSumVec (F X C) as a temp matrix:
-        // linearGradSumVec = matrix.T X mat
+        // Otherwise, use linearGradSumMat (F X C) as a temp matrix:
+        // linearGradSumMat = matrix.T X mat
         val linearGradSumMat = new DenseMatrix(numFeatures, numClasses,
           Array.ofDim[Double](numFeatures * numClasses))
         BLAS.gemm(1.0, block.matrix.transpose, mat, 0.0, linearGradSumMat)
