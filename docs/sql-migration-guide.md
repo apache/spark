@@ -883,11 +883,11 @@ Spark SQL supports the vast majority of Hive features, such as:
       SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t1.a = t2.a AND t2.a > 10)
       SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t2.a > 10)
       ```
-    * Non-correlated IN and NOT IN statement in Join Condition
+    * Non-correlated IN and NOT IN statement in JOIN Condition
     
       ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND t1.a IN (SELECT a FROM t3)```
    
-    * Non-correlated EXISTS and NOT EXISTS statement in Join Condition
+    * Non-correlated EXISTS and NOT EXISTS statement in JOIN Condition
        
       ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND EXISTS (SELECT * FRIM t3 WHERE t3.a > 10)``` 
        
