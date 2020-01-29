@@ -93,6 +93,7 @@ test_that("rdd GC across sparkR.stop", {
   countRDD(rdd3)
   countRDD(rdd4)
   sparkR.session.stop()
+  expect_true(TRUE)
 })
 
 test_that("job group functions can be called", {
@@ -105,6 +106,7 @@ test_that("job group functions can be called", {
   suppressWarnings(cancelJobGroup(sc, "groupId"))
   suppressWarnings(clearJobGroup(sc))
   sparkR.session.stop()
+  expect_true(TRUE)
 })
 
 test_that("job description and local properties can be set and got", {
@@ -143,6 +145,7 @@ test_that("utility function can be called", {
   sparkR.sparkContext(master = sparkRTestMaster)
   setLogLevel("ERROR")
   sparkR.session.stop()
+  expect_true(TRUE)
 })
 
 test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
@@ -246,4 +249,5 @@ test_that("SPARK-25234: parallelize should not have integer overflow", {
   # 47000 * 47000 exceeds integer range
   parallelize(sc, 1:47000, 47000)
   sparkR.session.stop()
+  expect_true(TRUE)
 })
