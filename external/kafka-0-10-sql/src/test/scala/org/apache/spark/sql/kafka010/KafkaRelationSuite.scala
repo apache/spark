@@ -607,9 +607,17 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
     // Implicit offset values, should default to earliest and latest
     val df = createDF(topic, Map("minPartitions" -> "6"))
-    val partitions = df.rdd.collectPartitions()
+    val rdd = df.rdd
+    val partitions = rdd.collectPartitions()
     assert(partitions.length >= 6)
     assert(partitions.flatMap(_.map(_.getString(0))).toSet === (0 to 20).map(_.toString).toSet)
+
+    // Because of late binding, reused `rdd` and `df` should see the new data.
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray)
+    assert(rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
+      === (0 to 30).map(_.toString).toSet)
+    assert(df.rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
+      === (0 to 30).map(_.toString).toSet)
   }
 }
 

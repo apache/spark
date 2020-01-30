@@ -104,5 +104,10 @@ private[kafka010] case class KafkaOffsetRange(
     preferredLoc: Option[String] = None) {
   def topic: String = topicPartition.topic
   def partition: Int = topicPartition.partition
+  /**
+   * The estimated size of messages in the range. It may be different than the real number of
+   * messages due to log compaction or transaction metadata. It should not be used to provide
+   * answers directly.
+   */
   def size: Long = untilOffset - fromOffset
 }
