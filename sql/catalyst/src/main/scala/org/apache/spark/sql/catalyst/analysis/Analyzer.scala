@@ -731,12 +731,11 @@ class Analyzer(
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
-        s.copy(namespace =
-          ResolvedNamespace(currentCatalog.asNamespaceCatalog, catalogManager.currentNamespace))
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
-        ResolvedNamespace(currentCatalog.asNamespaceCatalog, Seq.empty[String])
+        ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
-        ResolvedNamespace(catalog.asNamespaceCatalog, ns)
+        ResolvedNamespace(catalog, ns)
     }
   }
 
@@ -755,14 +754,12 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident)
-          .map(_ => UnresolvedTableWithViewExists(
-            ResolvedView(ident.asIdentifier, isTempView = true)))
-          .getOrElse(u)
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
       case u @ UnresolvedTableOrView(ident) =>
-        lookupTempView(ident)
-          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
-          .getOrElse(u)
+        lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -816,6 +813,14 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
+
+      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => alter.copy(table = rel))
+          .getOrElse(alter)
+
+      case u: UnresolvedV2Relation =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -825,7 +830,8 @@ class Analyzer(
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
-            case Some(table) => Some(DataSourceV2Relation.create(table))
+            case Some(table) =>
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
             case None => None
           }
         case _ => None
@@ -882,7 +888,8 @@ class Analyzer(
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView => UnresolvedTableWithViewExists(v)
+          case v: ResolvedView =>
+            u.failAnalysis(s"${v.identifier.quoted} is a view not table.")
           case table => table
         }.getOrElse(u)
 
@@ -895,7 +902,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident, isTempView = false)
+              ResolvedView(ident)
             case table =>
               ResolvedTable(catalog.asTableCatalog, ident, table)
           }
@@ -910,14 +917,14 @@ class Analyzer(
     private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadTable(catalog, ident).map {
+          def loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              val key = catalog.name +: ident.namespace :+ ident.name
-              AnalysisContext.get.relationCache.getOrElseUpdate(
-                key, v1SessionCatalog.getRelation(v1Table.v1Table))
+              v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              DataSourceV2Relation.create(table)
+              DataSourceV2Relation.create(table, Some(catalog), Some(ident))
           }
+          val key = catalog.name +: ident.namespace :+ ident.name
+          Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
         case _ => None
       }
     }
@@ -1326,33 +1333,43 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
-        val newMatchedActions = m.matchedActions.map {
-          case DeleteAction(deleteCondition) =>
-            val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
-            DeleteAction(resolvedDeleteCondition)
-          case UpdateAction(updateCondition, assignments) =>
-            val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            // The update value can access columns from both target and source tables.
-            UpdateAction(
-              resolvedUpdateCondition,
-              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
-          case o => o
+
+        EliminateSubqueryAliases(targetTable) match {
+          case r: NamedRelation if r.skipSchemaResolution =>
+            // Do not resolve the expression if the target table accepts any schema.
+            // This allows data sources to customize their own resolution logic using
+            // custom resolution rules.
+            m
+
+          case _ =>
+            val newMatchedActions = m.matchedActions.map {
+              case DeleteAction(deleteCondition) =>
+                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+                DeleteAction(resolvedDeleteCondition)
+              case UpdateAction(updateCondition, assignments) =>
+                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+                // The update value can access columns from both target and source tables.
+                UpdateAction(
+                  resolvedUpdateCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+              case o => o
+            }
+            val newNotMatchedActions = m.notMatchedActions.map {
+              case InsertAction(insertCondition, assignments) =>
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition =
+                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+              case o => o
+            }
+            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            m.copy(mergeCondition = resolvedMergeCondition,
+              matchedActions = newMatchedActions,
+              notMatchedActions = newNotMatchedActions)
         }
-        val newNotMatchedActions = m.notMatchedActions.map {
-          case InsertAction(insertCondition, assignments) =>
-            // The insert action is used when not matched, so its condition and value can only
-            // access columns from the source table.
-            val resolvedInsertCondition =
-              insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
-            InsertAction(
-              resolvedInsertCondition,
-              resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
-          case o => o
-        }
-        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-        m.copy(mergeCondition = resolvedMergeCondition,
-          matchedActions = newMatchedActions,
-          notMatchedActions = newNotMatchedActions)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")

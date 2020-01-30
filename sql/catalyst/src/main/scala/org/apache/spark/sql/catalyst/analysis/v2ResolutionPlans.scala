@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, Table, TableCatalog}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -42,16 +42,6 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
 }
 
 /**
- * Holds the resolved view. It is used in a scenario where table is expected but the identifier
- * is resolved to a (temp) view.
- */
-case class UnresolvedTableWithViewExists(view: ResolvedView) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
-
-/**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
@@ -63,7 +53,7 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
 /**
  * A plan containing resolved namespace.
  */
-case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])
+case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
@@ -81,6 +71,6 @@ case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: T
  */
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier, isTempView: Boolean) extends LeafNode {
+case class ResolvedView(identifier: Identifier) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

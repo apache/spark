@@ -93,6 +93,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       assert(envs(v) === v)
     }
     assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
+    assert(envs(ENV_APPLICATION_ID) === kubernetesConf.appId)
 
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)

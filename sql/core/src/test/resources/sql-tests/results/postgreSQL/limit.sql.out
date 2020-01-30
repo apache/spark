@@ -2,24 +2,24 @@
 -- Number of queries: 7
 
 
--- !query 0
+-- !query
 SELECT '' AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 50
 		ORDER BY unique1 LIMIT 2
--- !query 0 schema
+-- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
--- !query 0 output
+-- !query output
 	51	76	ZBAAAA
 	52	985	ACAAAA
 
 
--- !query 1
+-- !query
 SELECT '' AS five, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60
 		ORDER BY unique1 LIMIT 5
--- !query 1 schema
+-- !query schema
 struct<five:string,unique1:int,unique2:int,stringu1:string>
--- !query 1 output
+-- !query output
 	61	560	JCAAAA
 	62	633	KCAAAA
 	63	296	LCAAAA
@@ -27,18 +27,18 @@ struct<five:string,unique1:int,unique2:int,stringu1:string>
 	65	64	NCAAAA
 
 
--- !query 2
+-- !query
 SELECT '' AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60 AND unique1 < 63
 		ORDER BY unique1 LIMIT 5
--- !query 2 schema
+-- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
--- !query 2 output
+-- !query output
 	61	560	JCAAAA
 	62	633	KCAAAA
 
 
--- !query 3
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
   (VALUES
     (123, 456),
@@ -47,35 +47,35 @@ CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
   AS v(q1, q2)
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 The limit expression must evaluate to a constant value, but got CASE WHEN (`_nondeterministic` < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END;
 
 
--- !query 5
+-- !query
 DROP VIEW INT8_TBL
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3
--- !query 6 schema
+-- !query schema
 struct<s1:bigint,s2:double>
--- !query 6 output
+-- !query output
 45000	45000.0
 45010	45010.0
 45020	45020.0

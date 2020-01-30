@@ -317,7 +317,7 @@ final class ShuffleBlockFetcherIterator(
         collectFetchRequests(address, blockInfos, collectedRemoteRequests)
       }
     }
-    val totalBytes = localBlockBytes + remoteBlockBytes
+    val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
     logInfo(s"Getting $numBlocksToFetch (${Utils.bytesToString(totalBytes)}) non-empty blocks " +
       s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local and " +
       s"${hostLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) " +

@@ -82,13 +82,15 @@ object StreamingQueryListener {
    * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
    * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
    * @param name User-specified name of the query, null if not specified.
+   * @param submissionTime The timestamp to start a query.
    * @since 2.1.0
    */
   @Evolving
   class QueryStartedEvent private[sql](
       val id: UUID,
       val runId: UUID,
-      val name: String) extends Event
+      val name: String,
+      val submissionTime: Long) extends Event
 
   /**
    * Event representing any progress updates in a query.

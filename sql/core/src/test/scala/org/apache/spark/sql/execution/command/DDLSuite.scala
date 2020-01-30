@@ -2779,7 +2779,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("tmp_v is a temp view not a table"))
+      assert(e.message.contains("'tmp_v' is a view not a table"))
     }
   }
 
@@ -2789,8 +2789,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains(
-        "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
     }
   }
 
@@ -2967,14 +2966,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive set to true") {
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled set to true") {
     val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive not set to true") {
+  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled not set to true") {
     withTempDir { testDir =>
       withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
         val msg = intercept[SparkException] {

@@ -100,7 +100,7 @@ class PandasConversionMixin(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.pandas.types import _check_dataframe_localize_timestamps
+                    from pyspark.sql.pandas.types import _check_series_localize_timestamps
                     import pyarrow
                     batches = self._collect_as_arrow()
                     if len(batches) > 0:
@@ -109,7 +109,11 @@ class PandasConversionMixin(object):
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pdf = table.to_pandas(date_as_object=True)
-                        return _check_dataframe_localize_timestamps(pdf, timezone)
+                        for field in self.schema:
+                            if isinstance(field.dataType, TimestampType):
+                                pdf[field.name] = \
+                                    _check_series_localize_timestamps(pdf[field.name], timezone)
+                        return pdf
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
                 except Exception as e:
