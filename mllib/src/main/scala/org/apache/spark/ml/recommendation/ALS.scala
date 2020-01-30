@@ -672,6 +672,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
    */
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
+  setDefault(blockSize -> 4096)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    *
