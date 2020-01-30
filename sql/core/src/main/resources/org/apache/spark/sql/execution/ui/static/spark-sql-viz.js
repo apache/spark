@@ -83,7 +83,6 @@ function setupTooltipForSparkPlanNode(nodeId) {
 function preprocessGraphLayout(g) {
   g.graph().ranksep = "90";
   var nodes = g.nodes();
-
   for (var i = 0; i < nodes.length; i++) {
       var node = g.node(nodes[i]);
       node.padding = "5";
