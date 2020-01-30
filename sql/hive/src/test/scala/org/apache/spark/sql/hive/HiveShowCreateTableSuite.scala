@@ -23,15 +23,48 @@ import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
+  private var origCreateHiveTableConfig = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    origCreateHiveTableConfig =
+      SQLConf.get.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+      origCreateHiveTableConfig)
+  }
+
   test("simple hive table") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |TBLPROPERTIES (
+           |  'prop1' = 'value1',
+           |  'prop2' = 'value2'
+           |)
+         """.stripMargin
+      )
+
+      checkCreateTable("t1")
+    }
+  }
+
+  test("simple external hive table") {
+    withTempDir { dir =>
       withTable("t1") {
         sql(
           s"""CREATE TABLE t1 (
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
+             |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
              |  'prop2' = 'value2'
@@ -44,174 +77,129 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     }
   }
 
-  test("simple external hive table") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTempDir { dir =>
-        withTable("t1") {
-          sql(
-            s"""CREATE TABLE t1 (
-               |  c1 INT COMMENT 'bla',
-               |  c2 STRING
-               |)
-               |LOCATION '${dir.toURI}'
-               |TBLPROPERTIES (
-               |  'prop1' = 'value1',
-               |  'prop2' = 'value2'
-               |)
-             """.stripMargin
-          )
-
-          checkCreateTable("t1")
-        }
-      }
-    }
-  }
-
   test("partitioned hive table") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        sql(
-          s"""CREATE TABLE t1 (
-             |  c1 INT COMMENT 'bla',
-             |  c2 STRING
-             |)
-             |COMMENT 'bla'
-             |PARTITIONED BY (
-             |  p1 BIGINT COMMENT 'bla',
-             |  p2 STRING
-             |)
-           """.stripMargin
-        )
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |COMMENT 'bla'
+           |PARTITIONED BY (
+           |  p1 BIGINT COMMENT 'bla',
+           |  p2 STRING
+           |)
+         """.stripMargin
+      )
 
-        checkCreateTable("t1")
-      }
+      checkCreateTable("t1")
     }
   }
 
   test("hive table with explicit storage info") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        sql(
-          s"""CREATE TABLE t1 (
-             |  c1 INT COMMENT 'bla',
-             |  c2 STRING
-             |)
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |COLLECTION ITEMS TERMINATED BY '@'
-             |MAP KEYS TERMINATED BY '#'
-             |NULL DEFINED AS 'NaN'
-           """.stripMargin
-        )
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+           |COLLECTION ITEMS TERMINATED BY '@'
+           |MAP KEYS TERMINATED BY '#'
+           |NULL DEFINED AS 'NaN'
+         """.stripMargin
+      )
 
-        checkCreateTable("t1")
-      }
+      checkCreateTable("t1")
     }
   }
 
   test("hive table with STORED AS clause") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        sql(
-          s"""CREATE TABLE t1 (
-             |  c1 INT COMMENT 'bla',
-             |  c2 STRING
-             |)
-             |STORED AS PARQUET
-           """.stripMargin
-        )
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |STORED AS PARQUET
+         """.stripMargin
+      )
 
-        checkCreateTable("t1")
-      }
+      checkCreateTable("t1")
     }
   }
 
   test("hive table with serde info") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        sql(
-          s"""CREATE TABLE t1 (
-             |  c1 INT COMMENT 'bla',
-             |  c2 STRING
-             |)
-             |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-             |WITH SERDEPROPERTIES (
-             |  'mapkey.delim' = ',',
-             |  'field.delim' = ','
-             |)
-             |STORED AS
-             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-           """.stripMargin
-        )
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+           |WITH SERDEPROPERTIES (
+           |  'mapkey.delim' = ',',
+           |  'field.delim' = ','
+           |)
+           |STORED AS
+           |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+           |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+         """.stripMargin
+      )
 
-        checkCreateTable("t1")
-      }
+      checkCreateTable("t1")
     }
   }
 
   test("hive bucketing is supported") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        sql(
-          s"""CREATE TABLE t1 (a INT, b STRING)
-             |CLUSTERED BY (a)
-             |SORTED BY (b)
-             |INTO 2 BUCKETS
-           """.stripMargin
-        )
-        checkCreateTable("t1")
-      }
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (a INT, b STRING)
+           |CLUSTERED BY (a)
+           |SORTED BY (b)
+           |INTO 2 BUCKETS
+         """.stripMargin
+      )
+      checkCreateTable("t1")
     }
   }
 
   test("hive partitioned view is not supported") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        withView("v1") {
-          sql(
-            s"""
-               |CREATE TABLE t1 (c1 INT, c2 STRING)
-               |PARTITIONED BY (
-               |  p1 BIGINT COMMENT 'bla',
-               |  p2 STRING )
-             """.stripMargin)
+    withTable("t1") {
+      withView("v1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (c1 INT, c2 STRING)
+             |PARTITIONED BY (
+             |  p1 BIGINT COMMENT 'bla',
+             |  p2 STRING )
+           """.stripMargin)
 
-          createRawHiveTable(
-            s"""
-               |CREATE VIEW v1
-               |PARTITIONED ON (p1, p2)
-               |AS SELECT * from t1
-             """.stripMargin
-          )
+        createRawHiveTable(
+          s"""
+             |CREATE VIEW v1
+             |PARTITIONED ON (p1, p2)
+             |AS SELECT * from t1
+           """.stripMargin
+        )
 
-          val cause = intercept[AnalysisException] {
-            sql("SHOW CREATE TABLE v1")
-          }
-
-          assert(cause.getMessage.contains(" - partitioned view"))
+        val cause = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE v1")
         }
+
+        assert(cause.getMessage.contains(" - partitioned view"))
       }
     }
   }
 
   test("SPARK-24911: keep quotes for nested fields in hive") {
-    withSQLConf(
-        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("t1") {
-        val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>) USING hive"
-        sql(createTable)
-        val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-        assert(shownDDL == createTable.dropRight(" USING hive".length))
+    withTable("t1") {
+      val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>) USING hive"
+      sql(createTable)
+      val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
+      assert(shownDDL == createTable.dropRight(" USING hive".length))
 
-        checkCreateTable("t1")
-      }
+      checkCreateTable("t1")
     }
   }
 
