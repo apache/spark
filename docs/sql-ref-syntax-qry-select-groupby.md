@@ -73,14 +73,15 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
 ### Examples
 {% highlight sql %}
 CREATE TABLE dealer (id INT, city STRING, car_model STRING, quantity INT);
-INSERT INTO dealer VALUES (100, 'Fremont', 'Honda Civic', 10),
-                          (100, 'Fremont', 'Honda Accord', 15),
-                          (100, 'Fremont', 'Honda CRV', 7),
-                          (200, 'Dublin', 'Honda Civic', 20),
-                          (200, 'Dublin', 'Honda Accord', 10),
-                          (200, 'Dublin', 'Honda CRV', 3),
-                          (300, 'San Jose', 'Honda Civic', 5),
-                          (300, 'San Jose', 'Honda Accord', 8);
+INSERT INTO dealer VALUES 
+    (100, 'Fremont', 'Honda Civic', 10),
+    (100, 'Fremont', 'Honda Accord', 15),
+    (100, 'Fremont', 'Honda CRV', 7),
+    (200, 'Dublin', 'Honda Civic', 20),
+    (200, 'Dublin', 'Honda Accord', 10),
+    (200, 'Dublin', 'Honda CRV', 3),
+    (300, 'San Jose', 'Honda Civic', 5),
+    (300, 'San Jose', 'Honda Accord', 8);
 
 -- Sum of quantity per dealership. Group by `id`.
 SELECT id, sum(quantity) FROM dealer GROUP BY id ORDER BY id;
@@ -223,3 +224,13 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
   +--------+------------+---+
 
 {% endhighlight %}
+
+### Related clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
