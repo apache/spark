@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Properties, Timer, TimerTask}
 
@@ -88,7 +89,7 @@ class BarrierTaskContext private[spark] (
     // Log the update of global sync every 60 seconds.
     timer.schedule(timerTask, 60000, 60000)
 
-    var messages: Array[Byte] = Array[Byte]()
+    var messagesSerialized: Array[Byte] = Array[Byte]()
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[Byte]](
@@ -105,7 +106,7 @@ class BarrierTaskContext private[spark] (
         while (!abortableRpcFuture.toFuture.isCompleted) {
           // wait RPC future for at most 1 second
           try {
-            messages = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+            messagesSerialized = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
           } catch {
             case _: TimeoutException | _: InterruptedException =>
               // If `TimeoutException` thrown, waiting RPC future reach 1 second.
@@ -135,7 +136,7 @@ class BarrierTaskContext private[spark] (
       timerTask.cancel()
       timer.purge()
     }
-    messages
+    messagesSerialized
   }
 
   /**
@@ -187,11 +188,12 @@ class BarrierTaskContext private[spark] (
 
   @Experimental
   @Since("3.0.0")
-  def allGather(message: String): ArrayBuffer[String] = {
-    val bytes = runBarrier(RequestMethod.ALL_GATHER, message.getBytes(UTF_8))
-    val jsonArray = parse(new String(bytes, UTF_8))
-    implicit val formats = DefaultFormats
-    ArrayBuffer(jsonArray.extract[Array[String]]: _*)
+  def allGather(message: Array[Byte]): ArrayBuffer[Array[Byte]] = {
+    val messagesSerialized = runBarrier(RequestMethod.ALL_GATHER, message)
+    val ois = new ObjectInputStream(new ByteArrayInputStream(messagesSerialized))
+    val messages = ois.readObject.asInstanceOf[Array[Array[Byte]]]
+    ois.close()
+    ArrayBuffer(messages: _*)
   }
 
   /**

@@ -127,7 +127,7 @@ def _load_from_socket(port, auth_secret, function, all_gather_message=None):
     elif function == ALL_GATHER_FUNCTION:
         # Make a all_gather() function call.
         write_int(function, sockfile)
-        write_with_length(all_gather_message.encode("utf-8"), sockfile)
+        write_with_length(all_gather_message, sockfile)
     else:
         raise ValueError("Unrecognized function type")
     sockfile.flush()
@@ -212,7 +212,7 @@ class BarrierTaskContext(TaskContext):
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
 
-    def allGather(self, message=""):
+    def allGather(self, message=b""):
         """
         .. note:: Experimental
 
@@ -224,8 +224,8 @@ class BarrierTaskContext(TaskContext):
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
         """
-        if not isinstance(message, str):
-            raise ValueError("Argument `message` must be of type `str`")
+        if not isinstance(message, bytes):
+            raise ValueError("Argument `message` must be of type `bytes`")
         elif self._port is None or self._secret is None:
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
@@ -236,7 +236,7 @@ class BarrierTaskContext(TaskContext):
                 ALL_GATHER_FUNCTION,
                 message,
             )
-            return [e for e in json.loads(gathered_items)]
+            return [e.encode("utf-8") for e in json.loads(gathered_items)]
 
     def getTaskInfos(self):
         """

@@ -256,7 +256,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                       val length = input.readInt()
                       val message = new Array[Byte](length)
                       input.readFully(message)
-                      allGatherAndServe(sock, new String(message, UTF_8))
+                      allGatherAndServe(sock, message)
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -427,7 +427,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     /**
      * Gateway to call BarrierTaskContext.all_gather(message).
      */
-    def allGatherAndServe(sock: Socket, message: String): Unit = {
+    def allGatherAndServe(sock: Socket, message: Array[Byte]): Unit = {
       require(
         serverSocket.isDefined,
         "No available ServerSocket to redirect the all_gather() call."
@@ -435,12 +435,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        val messages: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+        val msgs: ArrayBuffer[Array[Byte]] = context.asInstanceOf[BarrierTaskContext].allGather(
           message
         )
         val json: String = compact(render(JArray(
-          messages.map(
-            (message) => JString(message)
+          msgs.map(
+            (message) => JString(new String(message, UTF_8))
           ).toList
         )))
         writeUTF(json, out)

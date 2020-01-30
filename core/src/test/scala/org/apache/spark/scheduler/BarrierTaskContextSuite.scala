@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -65,12 +66,15 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
-      val message = context.partitionId().toString
+      val message = context.partitionId().toString.getBytes(UTF_8)
       val messages = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages
     val messages = stableSort(rdd2.collect().head)
+    messages.foreach(
+      (bytes) => new String(bytes, UTF_8)
+    )
     // All the task partitionIds are shared
     for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
   }

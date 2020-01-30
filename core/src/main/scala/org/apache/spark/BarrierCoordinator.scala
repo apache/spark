@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Timer, TimerTask}
 import java.util.concurrent.ConcurrentHashMap
@@ -204,13 +205,15 @@ private[spark] class BarrierCoordinator(
           requesters.foreach(_.reply(Array[Byte]()))
         }
         else if (requestMethod == RequestMethod.ALL_GATHER) {
-          val jsonArray = JArray(
-            requests.map(
-              (request) => JString(new String(request.allGatherMessage, UTF_8))
-            ).toList
+          val msgs = requests.map(
+            (request) => request.allGatherMessage
           )
-          val bytes: Array[Byte] = compact(render(jsonArray)).getBytes(UTF_8)
-          requesters.foreach(_.reply(bytes))
+          val msgsArray = Array[Array[Byte]](msgs: _*)
+          val b = new ByteArrayOutputStream();
+          val o = new ObjectOutputStream(b);
+          o.writeObject(msgsArray);
+          val msgsSerialized = b.toByteArray();
+          requesters.foreach(_.reply(msgsSerialized))
         }
         true
       } else {
