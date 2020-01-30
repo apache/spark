@@ -338,7 +338,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertListEqual(actual, expected)
 
     def test_higher_order_function_failures(self):
-        from pyspark.sql.functions import col, transform
+        from pyspark.sql.functions import col, exists, transform
 
         # Should fail with varargs
         with self.assertRaises(ValueError):
@@ -359,6 +359,10 @@ class FunctionsTests(ReusedSQLTestCase):
         # Should fail if function doesn't return Column
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
+
+        # Should fail if arity doesn't match expectations
+        with self.assertRaises(ValueError):
+            exists('numbers', lambda x, y, z: x < 0)
 
 
 if __name__ == "__main__":

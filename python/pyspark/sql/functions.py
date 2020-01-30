@@ -2846,7 +2846,8 @@ def _invoke_higher_order_function(name):
     return a function that takes
 
     - a list of columns
-    - a list of functions (*Column) -> Column
+    - a list of tuples ((*Column) -> Column, Iterable[int])
+      where the second element represent allowed arities
 
     invokes expression, and wraps result in a Column
     (first Scala one, then Python).
@@ -2858,7 +2859,7 @@ def _invoke_higher_order_function(name):
         expr = getattr(expressions, name)
 
         jcols = [_to_java_column(col).expr() for col in cols]
-        jfuns = [_create_lambda(f) for f in funs]
+        jfuns = [_create_lambda(f, a) for f, a in funs]
 
         return Column(sc._jvm.Column(expr(*jcols + jfuns)))
 
@@ -2902,7 +2903,7 @@ def transform(col, f):
     |[1, -2, 3, -4]|
     +--------------+
     """
-    return _invoke_higher_order_function("ArrayTransform")([col], [f])
+    return _invoke_higher_order_function("ArrayTransform")([col], [(f, {1, 2})])
 
 
 @since(3.0)
@@ -2927,7 +2928,7 @@ def exists(col, f):
     |        true|
     +------------+
     """
-    return _invoke_higher_order_function("ArrayExists")([col], [f])
+    return _invoke_higher_order_function("ArrayExists")([col], [(f, {1})])
 
 
 @since(3.0)
@@ -2956,7 +2957,7 @@ def forall(col, f):
     |   true|
     +-------+
     """
-    return _invoke_higher_order_function("ArrayForAll")([col], [f])
+    return _invoke_higher_order_function("ArrayForAll")([col], [(f, {1})])
 
 
 @since(3.0)
@@ -2994,7 +2995,7 @@ def filter(col, f):
     |[2018-09-20, 2019-07-01]|
     +------------------------+
     """
-    return _invoke_higher_order_function("ArrayFilter")([col], [f])
+    return _invoke_higher_order_function("ArrayFilter")([col], [(f, {1, 2})])
 
 
 @since(3.0)
@@ -3041,11 +3042,11 @@ def aggregate(col, zero, merge, finish=None):
 
     if finish is not None:
         return _invoke_higher_order_function("ArrayAggregate")(
-            [col, zero], [merge, finish]
+            [col, zero], [(merge, {2}), (finish, {1})]
         )
 
     else:
-        return _invoke_higher_order_function("ArrayAggregate")([col, zero], [merge])
+        return _invoke_higher_order_function("ArrayAggregate")([col, zero], [(merge, {2})])
 
 
 @since(3.0)
@@ -3080,7 +3081,7 @@ def zip_with(col1, col2, f):
     |[foo_1, bar_2, 3]|
     +-----------------+
     """
-    return _invoke_higher_order_function("ZipWith")([col1, col2], [f])
+    return _invoke_higher_order_function("ZipWith")([col1, col2], [(f, {2})])
 
 
 @since(3.0)
@@ -3107,7 +3108,7 @@ def transform_keys(col, f):
     |[BAR -> 2.0, FOO -> -2.0]|
     +-------------------------+
     """
-    return _invoke_higher_order_function("TransformKeys")([col], [f])
+    return _invoke_higher_order_function("TransformKeys")([col], [(f, {2})])
 
 
 @since(3.0)
@@ -3134,7 +3135,7 @@ def transform_values(col, f):
     |[OPS -> 34.0, IT -> 20.0, SALES -> 2.0]|
     +---------------------------------------+
     """
-    return _invoke_higher_order_function("TransformValues")([col], [f])
+    return _invoke_higher_order_function("TransformValues")([col], [(f, {2})])
 
 
 @since(3.0)
@@ -3160,7 +3161,7 @@ def map_filter(col, f):
     |[baz -> 32.0, foo -> 42.0]|
     +--------------------------+
     """
-    return _invoke_higher_order_function("MapFilter")([col], [f])
+    return _invoke_higher_order_function("MapFilter")([col], [(f, {2})])
 
 
 @since(3.0)
@@ -3190,7 +3191,7 @@ def map_zip_with(col1, col2, f):
     |[SALES -> 16.8, IT -> 48.0]|
     +---------------------------+
     """
-    return _invoke_higher_order_function("MapZipWith")([col1, col2], [f])
+    return _invoke_higher_order_function("MapZipWith")([col1, col2], [(f, {3})])
 
 
 # ---------------------------- User Defined Function ----------------------------------

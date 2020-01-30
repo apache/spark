@@ -192,7 +192,7 @@ def _get_lambda_parameters_legacy(f):
     return spec.args
 
 
-def _create_lambda(f):
+def _create_lambda(f, allowed_arities):
     """
     Create o.a.s.sql.expressions.LambdaFunction corresponding
     to transformation described by f
@@ -201,11 +201,19 @@ def _create_lambda(f):
             - (Column) -> Column: ...
             - (Column, Column) -> Column: ...
             - (Column, Column, Column) -> Column: ...
+    :param allowed_arities: Set[int] Expected arities
     """
     if sys.version_info >= (3, 3):
         parameters = _get_lambda_parameters(f)
     else:
         parameters = _get_lambda_parameters_legacy(f)
+
+    if len(parameters) not in allowed_arities:
+        raise ValueError(
+            """f arity expected to be in {} but is {}""".format(
+                allowed_arities, len(parameters)
+            )
+        )
 
     sc = SparkContext._active_spark_context
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
