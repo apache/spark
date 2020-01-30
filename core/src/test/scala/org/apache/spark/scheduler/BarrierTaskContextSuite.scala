@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
-import scala.util.Sorting.stableSort
 
 import org.apache.spark._
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
@@ -72,10 +71,9 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     }
     // Take a sorted list of all the partitionId messages
     val output = rdd2.collect().head
-    output.foreach(
+    val messages = output.map(
       (bytes) => new String(bytes, UTF_8)
-    )
-    val messages = stableSort(output)
+    ).sorted
     // All the task partitionIds are shared
     for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
   }
