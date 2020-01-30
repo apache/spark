@@ -164,7 +164,7 @@ def _get_lambda_parameters(f):
     # function arity is between 1 and 3
     if not (1 <= len(parameters) <= 3):
         raise ValueError(
-            "f should take between 1 and 3 arguments, but provided function takes".format(
+            "f should take between 1 and 3 arguments, but provided function takes {}".format(
                 len(parameters)
             )
         )
@@ -185,7 +185,7 @@ def _get_lambda_parameters_legacy(f):
     spec = inspect.getargspec(f)
     if not 1 <= len(spec.args) <= 3 or spec.varargs or spec.keywords:
         raise ValueError(
-            "f should take between 1 and 3 arguments, but provided function takes".format(
+            "f should take between 1 and 3 arguments, but provided function takes {}".format(
                 spec
             )
         )
