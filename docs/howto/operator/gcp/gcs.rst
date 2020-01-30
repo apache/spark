@@ -35,7 +35,7 @@ GoogleCloudStorageToBigQueryOperator
 ------------------------------------
 
 Use the
-:class:`~airflow.operators.gcs_to_bq.GoogleCloudStorageToBigQueryOperator`
+:class:`~airflow.providers.google.cloud.operators.gcs_to_bigquery.GoogleCloudStorageToBigQueryOperator`
 to execute a BigQuery load job.
 
 .. exampleinclude:: ../../../../airflow/providers/google/cloud/example_dags/example_gcs_to_bq.py
@@ -58,7 +58,7 @@ Arguments
 
 Some arguments in the example DAG are taken from the OS environment variables:
 
-.. exampleinclude:: ../../../../airflow/gcp/example_dags/example_gcs.py
+.. exampleinclude:: ../../../../airflow/providers/google/cloud/example_dags/example_gcs.py
     :language: python
     :start-after: [START howto_operator_gcs_acl_args_common]
     :end-before: [END howto_operator_gcs_acl_args_common]
@@ -66,7 +66,7 @@ Some arguments in the example DAG are taken from the OS environment variables:
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: ../../../../airflow/gcp/example_dags/example_gcs.py
+.. exampleinclude:: ../../../../airflow/providers/google/cloud/example_dags/example_gcs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_gcs_bucket_create_acl_entry_task]
@@ -75,7 +75,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: ../../../../airflow/gcp/operators/gcs.py
+.. literalinclude:: ../../../../airflow/providers/google/cloud/operators/gcs.py
     :language: python
     :dedent: 4
     :start-after: [START gcs_bucket_create_acl_template_fields]
@@ -102,7 +102,7 @@ Arguments
 
 Some arguments in the example DAG are taken from the OS environment variables:
 
-.. exampleinclude:: ../../../../airflow/gcp/example_dags/example_gcs.py
+.. exampleinclude:: ../../../../airflow/providers/google/cloud/example_dags/example_gcs.py
     :language: python
     :start-after: [START howto_operator_gcs_acl_args_common]
     :end-before: [END howto_operator_gcs_acl_args_common]
@@ -110,7 +110,7 @@ Some arguments in the example DAG are taken from the OS environment variables:
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: ../../../../airflow/gcp/example_dags/example_gcs.py
+.. exampleinclude:: ../../../../airflow/providers/google/cloud/example_dags/example_gcs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_gcs_object_create_acl_entry_task]
@@ -119,7 +119,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: ../../../../airflow/gcp/operators/gcs.py
+.. literalinclude:: ../../../../airflow/providers/google/cloud/operators/gcs.py
     :language: python
     :dedent: 4
     :start-after: [START gcs_object_create_acl_template_fields]
