@@ -62,7 +62,7 @@ class JavaRegressionModel(JavaPredictionModel, _JavaPredictorParams):
 
 class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
                               HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
-                              HasAggregationDepth, HasLoss):
+                              HasAggregationDepth, HasLoss, HasBlockSize):
     """
     Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
 
@@ -124,6 +124,8 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     >>> lr.setRegParam(0.0)
     LinearRegression...
     >>> model = lr.fit(df)
+    >>> model.getBlockSize()
+    1024
     >>> model.setFeaturesCol("features")
     LinearRegressionModel...
     >>> model.setPredictionCol("newPrediction")
@@ -169,17 +171,18 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                 loss="squaredError", epsilon=1.35):
+                 loss="squaredError", epsilon=1.35, blockSize=1024):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35)
+                 loss="squaredError", epsilon=1.35, blockSize=1024)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
+                         blockSize=1024)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -188,12 +191,12 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                  loss="squaredError", epsilon=1.35):
+                  loss="squaredError", epsilon=1.35, blockSize=1024):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35)
+                  loss="squaredError", epsilon=1.35, blockSize=1024)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -268,6 +271,13 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
         Sets the value of :py:attr:`loss`.
         """
         return self._set(lossType=value)
+
+    @since("3.0.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 class LinearRegressionModel(JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
