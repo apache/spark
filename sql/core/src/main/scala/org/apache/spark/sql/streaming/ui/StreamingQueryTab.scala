@@ -14,21 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.streaming.ui
 
-package org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.internal.Logging
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+private[sql] class StreamingQueryTab(
+    val statusListener: StreamingQueryStatusListener,
+    sparkUI: SparkUI) extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
 
-/**
- * A logical node that represents a non-query command to be executed by the system.  For example,
- * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
- * eagerly executed.
- */
-trait Command extends LogicalPlan {
-  override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
-  // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
-  // is created. That said, the statistics of a command is useless. Here we just return a dummy
-  // statistics to avoid unnecessary statistics calculation of command's children.
-  override def stats: Statistics = Statistics.DUMMY
+  override val name = "Structured Streaming"
+
+  val parent = sparkUI
+
+  attachPage(new StreamingQueryPage(this))
+  attachPage(new StreamingQueryStatisticsPage(this))
+  parent.attachTab(this)
+
+  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
+}
+
+object StreamingQueryTab {
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }
