@@ -170,7 +170,7 @@ abstract class WindowExecBase(
               MutableProjection.create(expressions, schema))
         }
 
-        // Create the factory to produce [[WindowFunctionFrame]]
+        // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Offset Frame
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
