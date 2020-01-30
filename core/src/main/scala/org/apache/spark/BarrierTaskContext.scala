@@ -27,11 +27,6 @@ import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
@@ -186,6 +181,13 @@ class BarrierTaskContext private[spark] (
     ()
   }
 
+  /**
+   * :: Experimental ::
+   * Blocks until all tasks in the same stage have reached this routine.  Each task passes in
+   * a message and returns with a list of all the messages passed in by each of those tasks.
+   *
+   * CAUTION! The allGather method requires the same precautions as the barrier method
+   */
   @Experimental
   @Since("3.0.0")
   def allGather(message: Array[Byte]): ArrayBuffer[Array[Byte]] = {
