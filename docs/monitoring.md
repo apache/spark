@@ -95,6 +95,40 @@ The history server can be configured as follows:
   </tr>
 </table>
 
+### Applying compaction of old event log files
+
+A long-running streaming application can bring a huge single event log file which may cost a lot to maintain and
+also requires bunch of resource to replay per each update in Spark History Server.
+
+Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.rolling.maxFileSize</code> would
+let you have multiple event log files instead of single huge event log file which may help some scenarios on its own,
+but it still doesn't help you reducing the overall size of logs.
+
+Spark History Server can apply 'compaction' on the rolling event log files to reduce the overall size of
+logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
+Spark History Server.
+
+When the compaction happens, History Server lists the all available event log files, and considers the event log files older than
+retained log files as a target of compaction. For example, if the application A has 5 event log files and
+<code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, first 3 log files will be selected to be compacted.
+
+Once it selects the files, it analyzes these files to figure out which events can be excluded, and rewrites these files
+into one compact file with discarding some events. Once rewriting is done, original log files will be deleted.
+
+The compaction tries to exclude the events which point to the outdated things like jobs, and so on. As of now, below describes
+the candidates of events to be excluded:
+
+* Events for the job which is finished, and related stage/tasks events
+* Events for the executor which is terminated
+* Events for the SQL execution which is finished, and related job/stage/tasks events
+
+but the details can be changed afterwards.
+
+Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
+would be reduced during compaction. For streaming query (including Structured Streaming) we normally expect compaction
+will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
+in many cases for batch query.
+
 ### Spark History Server Configuration Options
 
 Security options for the Spark History Server are covered more detail in the
@@ -305,19 +339,8 @@ Security options for the Spark History Server are covered more detail in the
     <td>Int.MaxValue</td>
     <td>
       The maximum number of event log files which will be retained as non-compacted. By default,
-      all event log files will be retained.<br/>
-      Please note that compaction will happen in Spark History Server, which means this configuration
-      should be set to the configuration of Spark History server, and the same value will be applied
-      across applications which are being loaded in Spark History Server. This also means compaction
-      and cleanup would require running Spark History Server.<br/>
-      Please set the configuration in Spark History Server, and <code>spark.eventLog.rolling.maxFileSize</code>
-      in each application accordingly if you want to control the overall size of event log files.
-      The event log files older than these retained files will be compacted into single file and
-      deleted afterwards.<br/>
-      NOTE: Spark History Server may not compact the old event log files if it figures
-      out not a lot of space would be reduced during compaction. For streaming query
-      (including Structured Streaming) we normally expect compaction will run, but for
-      batch query compaction won't run in many cases.
+      all event log files will be retained. The lowest value is 1 for technical reason.<br/>
+      Please read the section of "Applying compaction of old event log files" for more details.
     </td>
   </tr>
 </table>
