@@ -78,7 +78,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
-    val resources = parseOrFindResources(resourcesFileOpt)
+    var resources = Map.empty[String, ResourceInformation]
+    try {
+      resources = parseOrFindResources(resourcesFileOpt)
+    } catch {
+      case NonFatal(e) =>
+        exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
+    }
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
