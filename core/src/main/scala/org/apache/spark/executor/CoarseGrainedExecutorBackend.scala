@@ -107,12 +107,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   private def createClassLoader(): MutableURLClassLoader = {
     val currentLoader = Utils.getContextOrSparkClassLoader
     val urls = userClassPath.toArray
-    logWarning(s"adding ursl $urls to classloader")
     if (env.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)) {
-      logWarning("creating child first classloader")
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
-      logWarning("creating mutable class loader")
       new MutableURLClassLoader(urls, currentLoader)
     }
   }

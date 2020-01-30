@@ -36,6 +36,8 @@ import org.apache.spark.util.Utils
  * Resource identifier.
  * @param componentName spark.driver / spark.executor / spark.task
  * @param resourceName  gpu, fpga, etc
+ *
+ * @since 3.0.0
  */
 @DeveloperApi
 class ResourceID(val componentName: String, val resourceName: String) {
@@ -70,6 +72,8 @@ class ResourceID(val componentName: String, val resourceName: String) {
  *               fractional resources does not make sense, so amount is an integer.
  * @param discoveryScript optional discovery script file name
  * @param vendor optional vendor name
+ *
+ * @since 3.0.0
  */
 @DeveloperApi
 class ResourceRequest(
