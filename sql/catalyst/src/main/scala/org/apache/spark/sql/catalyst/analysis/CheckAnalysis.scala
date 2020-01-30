@@ -501,11 +501,19 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               case updatePos: UpdateColumnPosition =>
                 findField("update", updatePos.fieldNames)
-                val parent = findField("update", updatePos.fieldNames.init)
-                if (!positionArgumentExists(updatePos.position(), parent.dataType)) {
-                  alter.failAnalysis(
-                    s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
-                      s"${updatePos.fieldNames.init.quoted}")
+                if (updatePos.fieldNames().length == 1) {
+                  if (!positionArgumentExists(updatePos.position(), table.schema)) {
+                    alter.failAnalysis(
+                      s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
+                        s"${table.schema.fieldNames.mkString("[", ", ", "]")}")
+                  }
+                } else {
+                  val parent = findField("update", updatePos.fieldNames.init)
+                  if (!positionArgumentExists(updatePos.position(), parent.dataType)) {
+                    alter.failAnalysis(
+                      s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
+                        s"${updatePos.fieldNames.init.quoted}")
+                  }
                 }
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)

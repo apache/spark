@@ -3086,8 +3086,8 @@ class Analyzer(
                   val targetCol = schema.findNestedField(
                     normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
                   if (targetCol.isEmpty) {
-                    throw new AnalysisException("Couldn't find the reference column for " +
-                      s"$after at ${normalizedPath.quoted}")
+                    // Leave unchanged to CheckAnalysis
+                    Some(position)
                   } else {
                     Some(TableChange.updateColumnPosition(
                       (normalizedPath :+ field.name).toArray,
