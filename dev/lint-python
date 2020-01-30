@@ -38,7 +38,7 @@ function compile_python_test {
 
     # compileall: https://docs.python.org/2/library/compileall.html
     echo "starting python compilation test..."
-    COMPILE_REPORT=$( (python -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
+    COMPILE_REPORT=$( (python3 -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
     COMPILE_STATUS=$?
 
     if [ $COMPILE_STATUS -ne 0 ]; then
@@ -70,7 +70,7 @@ function pycodestyle_test {
     RUN_LOCAL_PYCODESTYLE="False"
     if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
         VERSION=$( $PYCODESTYLE_BUILD --version 2> /dev/null)
-        EXPECTED_PYCODESTYLE=$( (python -c 'from distutils.version import LooseVersion;
+        EXPECTED_PYCODESTYLE=$( (python3 -c 'from distutils.version import LooseVersion;
                                 print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_PYCODESTYLE'"""))')\
                                 2> /dev/null)
 
@@ -96,7 +96,7 @@ function pycodestyle_test {
         fi
 
         echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( (python "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
+        PYCODESTYLE_REPORT=$( (python3 "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
         PYCODESTYLE_STATUS=$?
     else
         # we have the right version installed, so run locally
@@ -130,7 +130,7 @@ function flake8_test {
 
     FLAKE8_VERSION="$($FLAKE8_BUILD --version  2> /dev/null)"
     VERSION=($FLAKE8_VERSION)
-    EXPECTED_FLAKE8=$( (python -c 'from distutils.version import LooseVersion;
+    EXPECTED_FLAKE8=$( (python3 -c 'from distutils.version import LooseVersion;
                        print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_FLAKE8'"""))') \
                        2> /dev/null)
 
@@ -175,7 +175,7 @@ function pydocstyle_test {
     fi
 
     PYDOCSTYLE_VERSION="$($PYDOCSTYLEBUILD --version 2> /dev/null)"
-    EXPECTED_PYDOCSTYLE=$(python -c 'from distutils.version import LooseVersion; \
+    EXPECTED_PYDOCSTYLE=$(python3 -c 'from distutils.version import LooseVersion; \
                              print(LooseVersion("""'$PYDOCSTYLE_VERSION'""") >= LooseVersion("""'$MINIMUM_PYDOCSTYLE'"""))' \
                              2> /dev/null)
 
