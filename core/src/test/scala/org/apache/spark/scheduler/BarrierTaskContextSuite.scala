@@ -70,10 +70,10 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       messages.toList.iterator
     }
     // Take a list of all the partitionId messages
-    val output = rdd2.collect().head
+    val output: List[Byte] = rdd2.collect().head
     val messages = Array[String](output.length)
-    for ((x, i) <- output.view.zipWithIndex)) {
-      messages(i) = new String(x, UTF_8)
+    for (i <- 0 to output.length - 1) {
+      messages(i) = new String(output(i), UTF_8)
     }
     // All the task partitionIds are shared
     for((x, i) <- messages.sorted.view.zipWithIndex) assert(x == i.toString)
