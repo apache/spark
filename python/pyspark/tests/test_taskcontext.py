@@ -152,7 +152,7 @@ class TaskContextTests(PySparkTestCase):
             return [pids]
 
         pids = rdd.barrier().mapPartitions(f).map(context_barrier).collect()[0]
-        self.assertTrue(sorted(pids) = [0, 1, 2, 3])
+        self.assertTrue(sorted(pids) == [0, 1, 2, 3])
 
     def test_barrier_infos(self):
         """
