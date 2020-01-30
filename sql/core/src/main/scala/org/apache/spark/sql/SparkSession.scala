@@ -341,7 +341,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
@@ -371,7 +371,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
@@ -383,7 +383,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
@@ -412,7 +412,7 @@ class SparkSession private(
    *          SELECT * queries will return the columns in an undefined order.
    * @since 1.6.0
    */
-  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
     val attrSeq = getSchema(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
