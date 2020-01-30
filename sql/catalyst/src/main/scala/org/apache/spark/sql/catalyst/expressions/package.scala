@@ -141,8 +141,7 @@ package object expressions  {
         (long.length >= short.length) &&
           long.takeRight(short.length)
             .zip(short)
-            .filterNot(x => resolver(x._1, x._2))
-            .isEmpty
+            .forall(x => resolver(x._1, x._2))
       }
 
       // Collect attributes that match the given name and qualifier.
