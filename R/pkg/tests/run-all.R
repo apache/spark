@@ -20,7 +20,6 @@ library(SparkR)
 
 # SPARK-25572
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-
   # Turn all warnings into errors
   options("warn" = 2)
 
@@ -60,11 +59,23 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     # set random seed for predictable results. mostly for base's sample() in tree and classification
     set.seed(42)
-    # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-    testthat:::run_tests("SparkR",
-                         file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                         NULL,
-                         "summary")
+
+    # TODO (SPARK-30663) To be removed once testthat 1.x is removed from all builds
+    if (grepl("^1\\..*", packageVersion("testthat"))) {
+      # testthat 1.x
+      test_runner <- testthat:::run_tests
+      reporter <- "summary"
+
+    } else {
+      # testthat >= 2.0.0
+      test_runner <- testthat:::test_package_dir
+      reporter <- testthat::default_reporter()
+    }
+
+    test_runner("SparkR",
+                file.path(sparkRDir, "pkg", "tests", "fulltests"),
+                NULL,
+                reporter)
   }
 
   SparkR:::uninstallDownloadedSpark()
