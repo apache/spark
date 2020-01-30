@@ -72,7 +72,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     // Take a sorted list of all the partitionId messages
     val messages = stableSort(rdd2.collect().head)
     // All the task partitionIds are shared
-    for((x,i) <- messages.view.zipWithIndex) assert(x == i.toString)
+    for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
   }
 
   test("support multiple barrier() call within a single task") {
