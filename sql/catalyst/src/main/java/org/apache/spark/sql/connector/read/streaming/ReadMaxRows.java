@@ -28,28 +28,28 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class ReadMaxRows implements ReadLimit {
-    private long rows;
+  private long rows;
 
-    ReadMaxRows(long rows) {
-        this.rows = rows;
-    }
+  ReadMaxRows(long rows) {
+    this.rows = rows;
+  }
 
-    /** Approximate maximum rows to scan. */
-    public long maxRows() { return this.rows; }
+  /** Approximate maximum rows to scan. */
+  public long maxRows() { return this.rows; }
 
-    @Override
-    public String toString() {
-        return "MaxRows: " + maxRows();
-    }
+  @Override
+  public String toString() {
+    return "MaxRows: " + maxRows();
+  }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ReadMaxRows other = (ReadMaxRows) o;
-        return other.maxRows() == maxRows();
-    }
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    ReadMaxRows other = (ReadMaxRows) o;
+    return other.maxRows() == maxRows();
+  }
 
-    @Override
-    public int hashCode() { return Long.hashCode(this.rows); }
+  @Override
+  public int hashCode() { return Long.hashCode(this.rows); }
 }
