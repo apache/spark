@@ -1646,7 +1646,7 @@ Apart from these, the following properties are also available, and may be useful
     executor metrics.
     <br />
     <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
-    exists and <code>spark.eventLog.logStageExecutorMetrics.enabled</code> is true as well.
+    exists.
   </td>
 <tr>
   <td><code>spark.executor.metrics.pollingInterval</code></td>
@@ -1654,8 +1654,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How often to collect executor metrics.
     <br />
-    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval).
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
     If positive, the polling is done at this interval.
+    The unit is millisecond.
   </td>
 </tr>
 </table>

@@ -58,11 +58,9 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
           logWarning("Exception checking for procfs dir", ioe)
           false
       }
-      val shouldLogStageExecutorMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
       val shouldPollProcessTreeMetrics =
         SparkEnv.get.conf.get(config.EXECUTOR_PROCESS_TREE_METRICS_ENABLED)
-      procDirExists.get && shouldLogStageExecutorMetrics && shouldPollProcessTreeMetrics
+      procDirExists.get && shouldPollProcessTreeMetrics
     }
   }
 

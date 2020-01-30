@@ -640,7 +640,7 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information. Metrics `peakExecutorMetrics.*` are only enabled if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 A list of the available metrics, with a short description:
 
 <table class="table">
@@ -1083,8 +1083,7 @@ when running in local mode.
     - ProcessTreeOtherRSSMemory
     - **note:** "ProcessTree*" metrics are collected only under certain conditions.
       The conditions are the logical AND of the following: `/proc` filesystem exists,
-      `spark.executor.processTreeMetrics.enabled=true`,
-      `spark.eventLog.logStageExecutorMetrics.enabled=true`.
+      `spark.executor.processTreeMetrics.enabled=true`.
       "ProcessTree*" metrics report 0 when those conditions are not met.
 
 - namespace=JVMCPU
