@@ -19,36 +19,19 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
   test("simple hive table") {
-    withTable("t1") {
-      sql(
-        s"""CREATE TABLE t1 (
-           |  c1 INT COMMENT 'bla',
-           |  c2 STRING
-           |)
-           |TBLPROPERTIES (
-           |  'prop1' = 'value1',
-           |  'prop2' = 'value2'
-           |)
-         """.stripMargin
-      )
-
-      checkCreateTable("t1")
-    }
-  }
-
-  test("simple external hive table") {
-    withTempDir { dir =>
+    withSQLConf(
+        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
       withTable("t1") {
         sql(
           s"""CREATE TABLE t1 (
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
-             |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
              |  'prop2' = 'value2'
@@ -57,6 +40,30 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
         )
 
         checkCreateTable("t1")
+      }
+    }
+  }
+
+  test("simple external hive table") {
+    withSQLConf(
+        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        withTable("t1") {
+          sql(
+            s"""CREATE TABLE t1 (
+               |  c1 INT COMMENT 'bla',
+               |  c2 STRING
+               |)
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  'prop1' = 'value1',
+               |  'prop2' = 'value2'
+               |)
+             """.stripMargin
+          )
+
+          checkCreateTable("t1")
+        }
       }
     }
   }
@@ -136,15 +143,18 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   test("hive bucketing is supported") {
-    withTable("t1") {
-      sql(
-        s"""CREATE TABLE t1 (a INT, b STRING)
-           |CLUSTERED BY (a)
-           |SORTED BY (b)
-           |INTO 2 BUCKETS
-         """.stripMargin
-      )
-      checkCreateTable("t1")
+    withSQLConf(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTable("t1") {
+        sql(
+          s"""CREATE TABLE t1 (a INT, b STRING)
+             |CLUSTERED BY (a)
+             |SORTED BY (b)
+             |INTO 2 BUCKETS
+           """.stripMargin
+        )
+        checkCreateTable("t1")
+      }
     }
   }
 
