@@ -64,8 +64,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
-      val message: String = context.partitionId().toString
-      val messages: ArrayBuffer<String> = context.allGather(message)
+      val message = context.partitionId().toString
+      val messages = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages
