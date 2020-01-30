@@ -112,7 +112,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listPartitionData(partitionFilters)
+    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
@@ -168,7 +168,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
         if (partitionFilters.isEmpty) {
           (fileIndex.partitionSpec().partitions.size, None)
         } else {
-          val partitions = fileIndex.listPartitionData(partitionFilters)
+          val partitions = fileIndex.listFiles(partitionFilters, dataFilters)
           (partitions.size, Some(partitions))
         }
       if (partitionNum <= conf.maxPartNumForStatsCalculateViaFS) {

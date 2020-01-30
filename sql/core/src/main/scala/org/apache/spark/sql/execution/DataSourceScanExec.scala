@@ -207,8 +207,8 @@ case class FileSourceScanExec(
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret =
-      relation.location.listPartitionData(
-        partitionFilters.filterNot(isDynamicPruningFilter))
+      relation.location.listFiles(
+        partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
     if (relation.partitionSchemaOption.isDefined) {
       driverMetrics("numPartitions") = ret.length
     }
