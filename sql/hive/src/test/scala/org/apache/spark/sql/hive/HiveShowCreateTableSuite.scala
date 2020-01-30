@@ -25,6 +25,21 @@ import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
+  private var origCreateHiveTableConfig = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    origCreateHiveTableConfig =
+      SQLConf.get.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+      origCreateHiveTableConfig)
+    super.afterAll()
+  }
+
   test("simple hive table") {
     withTable("t1") {
       sql(

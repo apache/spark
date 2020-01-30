@@ -105,7 +105,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
-    assert(model.computeCost(dataset) < 0.1)
+    assert(model.summary.trainingCost < 0.1)
     assert(model.hasParent)
 
     testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
@@ -132,7 +132,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(clusterSizes.forall(_ >= 0))
     assert(summary.numIter == 20)
     assert(summary.trainingCost < 0.1)
-    assert(model.computeCost(dataset) == summary.trainingCost)
+    assert(model.summary.trainingCost == summary.trainingCost)
 
     model.setSummary(None)
     assert(!model.hasSummary)
@@ -320,7 +320,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   test("BisectingKMeans with Array input") {
     def trainAndComputeCost(dataset: DataFrame): Double = {
       val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      model.computeCost(dataset)
+      model.summary.trainingCost
     }
 
     val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
