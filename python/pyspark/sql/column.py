@@ -129,6 +129,103 @@ def _reverse_op(name, doc="binary operator"):
     return _
 
 
+def _unresolved_named_lambda_variable(*name_parts):
+    """
+    Create o.a.s.sql.expressions.UnresolvedNamedLambdaVariable and
+    convert it to o.s.sql.Column
+
+    :param name_parts: str
+    """
+    sc = SparkContext._active_spark_context
+    name_parts_seq = _to_seq(sc, name_parts)
+    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+    return Column(
+        sc._jvm.Column(
+            expressions.UnresolvedNamedLambdaVariable(name_parts_seq)
+        )
+    )
+
+
+def _get_lambda_parameters(f):
+    import inspect
+
+    signature = inspect.signature(f)
+    parameters = signature.parameters.values()
+
+    # We should exclude functions that use
+    # variable args and keyword argnames
+    # as well as keyword only args
+    supported_parmeter_types = {
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.POSITIONAL_ONLY,
+    }
+
+    # Validate that
+    # function arity is between 1 and 3
+    if not (1 <= len(parameters) <= 3):
+        raise ValueError(
+            "f should take between 1 and 3 arguments, but provided function takes".format(
+                len(parameters)
+            )
+        )
+
+    # and all arguments can be used as positional
+    if not all(p.kind in supported_parmeter_types for p in parameters):
+        raise ValueError(
+            "f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
+        )
+
+    return parameters
+
+
+def _get_lambda_parameters_legacy(f):
+    # TODO (SPARK-29909) Remove once 2.7 support is dropped
+    import inspect
+
+    spec = inspect.getargspec(f)
+    if not 1 <= len(spec.args) <= 3 or spec.varargs or spec.keywords:
+        raise ValueError(
+            "f should take between 1 and 3 arguments, but provided function takes".format(
+                spec
+            )
+        )
+    return spec.args
+
+
+def _create_lambda(f):
+    """
+    Create o.a.s.sql.expressions.LambdaFunction corresponding
+    to transformation described by f
+
+    :param f: A Python of one of the following forms:
+            - (Column) -> Column: ...
+            - (Column, Column) -> Column: ...
+            - (Column, Column, Column) -> Column: ...
+    """
+    if sys.version_info >= (3, 3):
+        parameters = _get_lambda_parameters(f)
+    else:
+        parameters = _get_lambda_parameters_legacy(f)
+
+    sc = SparkContext._active_spark_context
+    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+
+    argnames = ["x", "y", "z"]
+    args = [
+        _unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]
+    ]
+
+    result = f(*args)
+
+    if not isinstance(result, Column):
+        raise ValueError("f should return Column, got {}".format(type(result)))
+
+    jexpr = result._jc.expr()
+    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])
+
+    return expressions.LambdaFunction(jexpr, jargs, False)
+
+
 class Column(object):
 
     """
