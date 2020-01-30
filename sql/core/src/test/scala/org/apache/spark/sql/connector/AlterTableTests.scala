@@ -312,6 +312,30 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column - new column should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq("id", "point.x", "arr.element.x", "mk.key.x", "mv.value.x").foreach { field =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS $field double")
+        }
+        assert(e.getMessage.contains("add"))
+        assert(e.getMessage.contains(s"$field already exists"))
+      }
+    }
+  }
+
   test("AlterTable: update column type int -> long") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -846,6 +870,37 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(exc.getMessage.contains("point.x"))
       assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: rename column - new name should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |user_id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq(
+        "id" -> "user_id",
+        "point.x" -> "y",
+        "arr.element.x" -> "y",
+        "mk.key.x" -> "y",
+        "mv.value.x" -> "y").foreach { case (field, newName) =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+        }
+        assert(e.getMessage.contains("rename"))
+        assert(e.getMessage.contains((field.split("\\.").init :+ newName).mkString(".")))
+        assert(e.getMessage.contains("already exists"))
+      }
     }
   }
 

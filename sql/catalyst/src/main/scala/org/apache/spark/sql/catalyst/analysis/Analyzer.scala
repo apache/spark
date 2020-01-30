@@ -3032,8 +3032,7 @@ class Analyzer(
                       pos))
 
                   case other =>
-                    throw new AnalysisException(
-                      s"Columns can only be added to struct types. Found ${other.simpleString}.")
+                    Some(add)
                 }
               }
             } else {

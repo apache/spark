@@ -136,7 +136,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       val field = ref.split("\\.")
       alterTableTest(
         TableChange.addColumn(field, LongType),
-        Seq("add to", field.head)
+        Seq("add", field.head)
       )
     }
   }

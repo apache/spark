@@ -425,7 +425,7 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
-          case alter: AlterTable if alter.childrenResolved =>
+          case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
@@ -437,32 +437,44 @@ trait CheckAnalysis extends PredicateHelper {
               }
               field.get._2
             }
-            def positionArgumentExists(position: ColumnPosition, dataType: DataType): Boolean = {
-              (position, dataType) match {
-                case (after: After, struct: StructType) =>
-                  struct.fieldNames.contains(after.column())
-                case (after: After, _) => false
-                case _ => true
+            def positionArgumentExists(position: ColumnPosition, struct: StructType): Unit = {
+              position match {
+                case after: After =>
+                  if (!struct.fieldNames.contains(after.column())) {
+                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
+                      s"${struct.fieldNames.mkString("[", ", ", "]")}")
+                  }
+                case _ =>
+              }
+            }
+            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
+              val parent = fieldNames.init
+              val field = if (parent.nonEmpty) {
+                findField(operation, parent).dataType
+              } else {
+                table.schema
+              }
+              field match {
+                case s: StructType => s
+                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
+                  s"its parent is not a StructType. Found $o")
+              }
+            }
+            def checkColumnNotExists(
+                operation: String,
+                fieldNames: Array[String],
+                struct: StructType): Unit = {
+              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
+                  s"already exists in ${struct.treeString}")
               }
             }
 
             alter.changes.foreach {
               case add: AddColumn =>
-                val parent = add.fieldNames.init
-                if (parent.nonEmpty) {
-                  val parentField = findField("add to", parent)
-                  if (!positionArgumentExists(add.position(), parentField.dataType)) {
-                    alter.failAnalysis(
-                      s"Couldn't resolve positional argument ${add.position()} amongst " +
-                        s"${parent.quoted}")
-                  }
-                } else {
-                  if (!positionArgumentExists(add.position(), table.schema)) {
-                    alter.failAnalysis(
-                      s"Couldn't resolve positional argument ${add.position()} amongst " +
-                        s"${table.schema.treeString}")
-                  }
-                }
+                checkColumnNotExists("add", add.fieldNames(), table.schema)
+                val parent = findParentStruct("add", add.fieldNames())
+                positionArgumentExists(add.position(), parent)
                 TypeUtils.failWithIntervalType(add.dataType())
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
@@ -501,22 +513,12 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               case updatePos: UpdateColumnPosition =>
                 findField("update", updatePos.fieldNames)
-                if (updatePos.fieldNames().length == 1) {
-                  if (!positionArgumentExists(updatePos.position(), table.schema)) {
-                    alter.failAnalysis(
-                      s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
-                        s"${table.schema.fieldNames.mkString("[", ", ", "]")}")
-                  }
-                } else {
-                  val parent = findField("update", updatePos.fieldNames.init)
-                  if (!positionArgumentExists(updatePos.position(), parent.dataType)) {
-                    alter.failAnalysis(
-                      s"Couldn't resolve positional argument ${updatePos.position()} amongst " +
-                        s"${updatePos.fieldNames.init.quoted}")
-                  }
-                }
+                val parent = findParentStruct("update", updatePos.fieldNames())
+                positionArgumentExists(updatePos.position(), parent)
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
+                checkColumnNotExists(
+                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
               case update: UpdateColumnComment =>
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>

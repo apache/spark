@@ -319,7 +319,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       includeCollections: Boolean = false,
       resolver: Resolver = _ == _): Option[(Seq[String], StructField)] = {
     def prettyFieldName(nameParts: Seq[String]): String = {
-      nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      nameParts.quoted
     }
 
     def findField(
