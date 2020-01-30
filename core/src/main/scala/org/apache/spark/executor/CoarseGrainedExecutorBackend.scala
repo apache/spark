@@ -98,7 +98,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     val resources = getOrDiscoverAllResourcesForResourceProfile(
       resourcesFileOpt,
       SPARK_EXECUTOR_PREFIX,
-      resourceProfile)
+      resourceProfile,
+      env.conf)
     logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
     resources
   }

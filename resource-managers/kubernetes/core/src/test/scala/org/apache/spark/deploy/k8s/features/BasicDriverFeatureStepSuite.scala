@@ -47,7 +47,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
 
   test("Check the pod respects all configurations from the user.") {
-    val resourceID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+    val resourceID = new ResourceID(SPARK_DRIVER_PREFIX, GPU)
     val resources =
       Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
     val sparkConf = new SparkConf()

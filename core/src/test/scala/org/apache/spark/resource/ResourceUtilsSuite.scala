@@ -19,6 +19,7 @@ package org.apache.spark.resource
 
 import java.io.File
 import java.nio.file.{Files => JavaFiles}
+import java.util.Optional
 
 import org.json4s.{DefaultFormats, Extraction}
 
@@ -35,7 +36,7 @@ class ResourceUtilsSuite extends SparkFunSuite
   test("ResourceID") {
     val componentName = "spark.test"
     val resourceName = "p100"
-    val id = ResourceID(componentName, resourceName)
+    val id = new ResourceID(componentName, resourceName)
     val confPrefix = s"$componentName.resource.$resourceName."
     assert(id.confPrefix === confPrefix)
     assert(id.amountConf === s"${confPrefix}amount")
@@ -91,7 +92,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       // test one with amount 0 to make sure ignored
       val fooDiscovery = createTempScriptWithExpectedOutput(dir, "fooDiscoverScript",
         """{"name": "foo", "addresses": ["f1", "f2", "f3"]}""")
-      val fooId = ResourceID(SPARK_EXECUTOR_PREFIX, "foo")
+      val fooId = new ResourceID(SPARK_EXECUTOR_PREFIX, "foo")
       conf.set(fooId.amountConf, "0")
       conf.set(fooId.discoveryScriptConf, fooDiscovery)
 
@@ -153,7 +154,8 @@ class ResourceUtilsSuite extends SparkFunSuite
       val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(
         Some(resourcesFile),
         SPARK_EXECUTOR_PREFIX,
-        ResourceProfile.getOrCreateDefaultProfile(conf))
+        ResourceProfile.getOrCreateDefaultProfile(conf),
+        conf)
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
@@ -165,7 +167,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val treqs = new TaskResourceRequests().resource(GPU, 1)
       val rp = rpBuilder.require(ereqs).require(treqs).build
       val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
-        Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp)
+        Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp, conf)
       val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
       assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
@@ -240,11 +242,11 @@ class ResourceUtilsSuite extends SparkFunSuite
       val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
         """{"name": "fpga", "addresses": ["0", "1"]}""")
       val request =
-        ResourceRequest(
+        new ResourceRequest(
           DRIVER_GPU_ID,
           2,
-          Some(gpuDiscovery),
-          None)
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
 
       val error = intercept[SparkException] {
         discoverResource(request)
@@ -263,11 +265,11 @@ class ResourceUtilsSuite extends SparkFunSuite
         """{"addresses": ["0", "1"]}""")
 
       val request =
-        ResourceRequest(
+        new ResourceRequest(
           EXECUTOR_GPU_ID,
           2,
-          Some(gpuDiscovery),
-          None)
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
 
       val error = intercept[SparkException] {
         discoverResource(request)
@@ -283,11 +285,11 @@ class ResourceUtilsSuite extends SparkFunSuite
       val file1 = new File(dir, "bogusfilepath")
       try {
         val request =
-          ResourceRequest(
+          new ResourceRequest(
             EXECUTOR_GPU_ID,
             2,
-            Some(file1.getPath()),
-            None)
+            Optional.of(file1.getPath()),
+            Optional.empty[String])
 
         val error = intercept[SparkException] {
           discoverResource(request)
@@ -301,7 +303,8 @@ class ResourceUtilsSuite extends SparkFunSuite
   }
 
   test("gpu's specified but not a discovery script") {
-    val request = ResourceRequest(EXECUTOR_GPU_ID, 2, None, None)
+    val request = new ResourceRequest(EXECUTOR_GPU_ID, 2, Optional.empty[String],
+      Optional.empty[String])
 
     val error = intercept[SparkException] {
       discoverResource(request)

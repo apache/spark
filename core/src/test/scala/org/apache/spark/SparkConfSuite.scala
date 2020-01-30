@@ -449,7 +449,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.remove(TASK_FPGA_ID.amountConf)
     // Ignore invalid prefix
-    conf.set(ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
+    conf.set(new ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
     taskResourceRequirement =
       parseResourceRequirements(conf, SPARK_TASK_PREFIX)
         .map(req => (req.resourceName, req.amount)).toMap
