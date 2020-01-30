@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
 class CatalogV2UtilSuite extends SparkFunSuite {
   test("Load relation should encode the identifiers for V2Relations") {
     val testCatalog = mock(classOf[TableCatalog])
-    val ident = mock(classOf[Identifier])
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     val table = mock(classOf[Table])
     when(table.schema()).thenReturn(mock(classOf[StructType]))
     when(testCatalog.loadTable(ident)).thenReturn(table)
