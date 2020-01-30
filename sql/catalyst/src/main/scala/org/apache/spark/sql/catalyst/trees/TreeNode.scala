@@ -27,7 +27,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.IdentifierWithDatabase
+import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.errors._
@@ -780,6 +780,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case exprId: ExprId => true
     case field: StructField => true
     case id: IdentifierWithDatabase => true
+    case alias: AliasIdentifier => true
     case join: JoinType => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true

@@ -22,8 +22,9 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -285,8 +286,14 @@ private[sql] object CatalogV2Util {
       case _: NoSuchNamespaceException => None
     }
 
-  def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
+  def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[LogicalPlan] = {
+    loadTable(catalog, ident).map(getRelation(catalog, ident, _))
+  }
+
+  def getRelation(catalog: CatalogPlugin, ident: Identifier, table: Table): LogicalPlan = {
+    SubqueryAlias(
+      ident,
+      DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

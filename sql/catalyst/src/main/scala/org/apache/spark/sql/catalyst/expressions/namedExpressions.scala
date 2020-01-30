@@ -236,8 +236,6 @@ case class AttributeReference(
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
-  // currently can only handle qualifier of length 2
-  require(qualifier.length <= 2)
   /**
    * Returns true iff the expression id is the same for both attributes.
    */

@@ -812,7 +812,11 @@ class Analyzer(
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
-          .map(v2Relation => i.copy(table = v2Relation))
+          .map {
+            EliminateSubqueryAliases(_) match {
+              case r: DataSourceV2Relation => i.copy(table = r)
+            }
+          }
           .getOrElse(i)
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
@@ -827,14 +831,10 @@ class Analyzer(
     /**
      * Performs the lookup of DataSourceV2 Tables from v2 catalog.
      */
-    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
+    private def lookupV2Relation(identifier: Seq[String]): Option[LogicalPlan] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadTable(catalog, ident) match {
-            case Some(table) =>
-              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
-            case None => None
-          }
+          CatalogV2Util.loadRelation(catalog, ident)
         case _ => None
       }
   }
@@ -922,7 +922,7 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+              CatalogV2Util.getRelation(catalog, ident, table)
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
