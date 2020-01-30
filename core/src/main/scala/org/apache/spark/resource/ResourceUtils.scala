@@ -45,6 +45,18 @@ class ResourceID(val componentName: String, val resourceName: String) {
   private[spark] def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
   private[spark] def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
   private[spark] def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ResourceID =>
+        that.getClass == this.getClass &&
+          that.componentName == componentName && that.resourceName == resourceName
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(componentName, resourceName).hashCode()
 }
 
 /**
@@ -64,7 +76,21 @@ class ResourceRequest(
     val id: ResourceID,
     val amount: Long,
     val discoveryScript: Optional[String],
-    val vendor: Optional[String])
+    val vendor: Optional[String]) {
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ResourceRequest =>
+        that.getClass == this.getClass &&
+          that.id == id && that.amount == amount && discoveryScript == discoveryScript &&
+          vendor == vendor
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(id, amount, discoveryScript, vendor).hashCode()
+}
 
 /**
  * Case class that represents resource requirements for a component in a
