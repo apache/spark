@@ -58,7 +58,7 @@ class DataSourceRDD(
       (iter, batchReader)
     } else {
       val rowReader = partitionReaderFactory.createReader(inputPartition)
-      val iter = new MetricsIterator(new PartitionIterator[InternalRow](rowReader))
+      val iter = new MetricsRowIterator(new PartitionIterator[InternalRow](rowReader))
       (iter, rowReader)
     }
     context.addTaskCompletionListener[Unit](_ => reader.close())
@@ -105,7 +105,7 @@ private class MetricsHandler extends Logging with Serializable {
   }
 }
 
-private class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
+private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
   protected val metricsHandler = new MetricsHandler
 
   override def hasNext: Boolean = {
@@ -116,8 +116,11 @@ private class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
       false
     }
   }
+}
 
-  override def next(): I = {
+private class MetricsRowIterator(
+    iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
+  override def next(): InternalRow = {
     val item = iter.next
     metricsHandler.updateMetrics(1)
     item
