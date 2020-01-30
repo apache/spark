@@ -66,14 +66,6 @@ jobs:
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         mkdir -p ~/.m2
-        # `Maven Central` is too flaky in terms of downloading artifacts in `GitHub Action` environment.
-        # `Google Maven Central Mirror` is too slow in terms of sycing upstream. To get the best combination,
-        #   1) we set `Google Maven Central` as a mirror of `central` in `GitHub Action` environment only.
-        #   2) we duplicates `Maven Central` in pom.xml with ID `central_without_mirror`.
-        # In other words, in GitHub Action environment, `central` is mirrored by `Google Maven Central` first.
-        # If `Google Maven Central` doesn't provide the artifact due to its slowness, `central_without_mirror` will be used.
-        # Note that we aim to achieve the above while keeping the existing behavior of non-`GitHub Action` environment unchanged.
-        echo "<settings><mirrors><mirror><id>google-maven-central</id><name>GCS Maven Central mirror</name><url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url><mirrorOf>central</mirrorOf></mirror></mirrors></settings>" > ~/.m2/settings.xml
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -P${{ matrix.hive }} -Phive-thriftserver -P${{ matrix.hadoop }} -Phadoop-cloud -Djava.version=${{ matrix.java }} install
         rm -rf ~/.m2/repository/org/apache/spark
 

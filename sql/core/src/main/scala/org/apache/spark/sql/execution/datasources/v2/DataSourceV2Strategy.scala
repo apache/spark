@@ -232,27 +232,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
       DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
 
-    case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
+    case desc @ DescribeRelation(r: ResolvedTable, partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
       }
-      DescribeTableExec(desc.output, table, isExtended) :: Nil
+      DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
 
-    case a @ AlterTableSetLocation(r: ResolvedTable, partitionSpec, _) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-      }
-      AlterTableExec(r.catalog, r.identifier, a.changes) :: Nil
-
-    case a: AlterTable =>
-      a.table match {
-        case r: ResolvedTable => AlterTableExec(r.catalog, r.identifier, a.changes) :: Nil
-        case _ => Nil
-      }
+    case AlterTable(catalog, ident, _, changes) =>
+      AlterTableExec(catalog, ident, changes) :: Nil
 
     case RenameTable(catalog, oldIdent, newIdent) =>
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil
@@ -294,8 +284,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(ResolvedTable(_, _, table), propertyKey) =>
-      ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
+      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
     case _ => Nil
   }
