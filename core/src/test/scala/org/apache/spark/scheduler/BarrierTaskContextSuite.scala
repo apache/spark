@@ -71,10 +71,11 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages
-    val messages = stableSort(rdd2.collect().head)
-    messages.foreach(
+    val output = rdd2.collect().head
+    output.foreach(
       (bytes) => new String(bytes, UTF_8)
     )
+    val messages = stableSort(output)
     // All the task partitionIds are shared
     for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
   }
