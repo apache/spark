@@ -227,7 +227,7 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, bytes):
             raise ValueError("Argument `message` must be of type `bytes`")
         elif self._port is None or self._secret is None:
-            raise Exception("Not supported to call barrier() before initialize " +
+            raise Exception("Not supported to call allGather() before initialize " +
                             "BarrierTaskContext.")
         else:
             gathered_items = _load_from_socket(
