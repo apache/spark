@@ -2878,14 +2878,14 @@ def transform(col, f):
         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
             a 0-based index of the element.
 
-        and an use methods of :class:`pyspark.sql.Column`, functions defined in
+        and can use methods of :class:`pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     :return: a :class:`pyspark.sql.Column`
 
-    >>> df = spark.createDataFrame([(1, [1, 2, 3, 4])],("key", "values"))
+    >>> df = spark.createDataFrame([(1, [1, 2, 3, 4])], ("key", "values"))
     >>> df.select(transform("values", lambda x: x * 2).alias("doubled")).show()
     +------------+
     |     doubled|
