@@ -2210,14 +2210,18 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     ...     (1.0, Vectors.dense([0.0, 1.0])),
     ...     (1.0, Vectors.dense([1.0, 0.0])),
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
-    >>> mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], blockSize=1, seed=123)
+    >>> mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
     >>> mlp.setMaxIter(100)
     MultilayerPerceptronClassifier...
     >>> mlp.getMaxIter()
     100
-    >>> model = mlp.fit(df)
-    >>> model.getBlockSize()
+    >>> mlp.getBlockSize()
     128
+    >>> mlp.setBlockSize(1)
+    MultilayerPerceptronClassifier...
+    >>> mlp.getBlockSize()
+    1
+    >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
     MultilayerPerceptronClassificationModel...
     >>> model.getMaxIter()
