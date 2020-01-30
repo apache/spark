@@ -216,12 +216,11 @@ class BarrierTaskContext(TaskContext):
         """
         .. note:: Experimental
 
-        Sets a global barrier and waits until all tasks in this stage hit this barrier.
-        Similar to `MPI_Barrier` function in MPI, this function blocks until all tasks
-        in the same stage have reached this routine. Each task passes in a message and
-        returns with a list of all the messages passed in by each of those tasks.        
+        This function blocks until all tasks in the same stage have reached this routine.
+        Each task passes in a message and returns with a list of all the messages passed in
+        by each of those tasks.
 
-        .. warning:: In a barrier stage, each task much have the same number of `all_gather()`
+        .. warning:: In a barrier stage, each task much have the same number of `allGather()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
         """
