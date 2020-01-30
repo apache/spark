@@ -212,7 +212,7 @@ class BarrierTaskContext(TaskContext):
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
 
-    def all_gather(self, message=""):
+    def allGather(self, message=""):
         """
         .. note:: Experimental
 
