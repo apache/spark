@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
+import scala.util.Sorting.stableSort
 
 import org.apache.spark._
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
