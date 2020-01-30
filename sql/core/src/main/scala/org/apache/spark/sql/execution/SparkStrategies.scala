@@ -477,7 +477,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ReturnAnswer(Limit(IntegerLiteral(limit), child)) if generatesStreamingAppends(child) =>
         StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
 
-      case Limit(IntegerLiteral(limit), child) if generatesStreamingAppends (child) =>
+      case Limit(IntegerLiteral(limit), child) if generatesStreamingAppends(child) =>
         StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
 
       case _ => Nil

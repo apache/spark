@@ -976,7 +976,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer(1 to 3: _*))
   }
 
-  test("streaming limit before agg in complete mode") {
+  test("streaming limit before agg in complete mode (SPARK-30658)") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(5).groupBy("value").count()
     testStream(limited, OutputMode.Complete())(
