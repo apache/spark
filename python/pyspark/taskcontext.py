@@ -230,7 +230,12 @@ class BarrierTaskContext(TaskContext):
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-            gathered_items = _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
+            gathered_items = _load_from_socket(
+                self._port,
+                self._secret,
+                ALL_GATHER_FUNCTION,
+                message,
+            )
             return [e for e in json.loads(gathered_items)]
 
     def getTaskInfos(self):
