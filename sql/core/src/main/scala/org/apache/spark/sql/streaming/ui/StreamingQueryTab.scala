@@ -14,35 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.streaming.ui
+package org.apache.spark.sql.streaming.ui
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-/**
- * Spark Web UI tab that shows statistics of a streaming job.
- * This assumes the given SparkContext has enabled its SparkUI.
- */
-private[spark] class StreamingTab(val ssc: StreamingContext, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "streaming") with Logging {
+private[sql] class StreamingQueryTab(
+    val statusListener: StreamingQueryStatusListener,
+    sparkUI: SparkUI) extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
 
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  override val name = "Structured Streaming"
 
   val parent = sparkUI
-  val listener = ssc.progressListener
 
-  attachPage(new StreamingPage(this))
-  attachPage(new BatchPage(this))
+  attachPage(new StreamingQueryPage(this))
+  attachPage(new StreamingQueryStatisticsPage(this))
+  parent.attachTab(this)
 
-  def attach(): Unit = {
-    parent.attachTab(this)
-    parent.addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
-  }
+  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
+}
 
-  def detach(): Unit = {
-    parent.detachTab(this)
-    parent.detachHandler("/static/streaming")
-  }
+object StreamingQueryTab {
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }

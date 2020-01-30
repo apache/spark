@@ -37,15 +37,29 @@ installed. Also install the following libraries:
 
 ```sh
 $ sudo gem install jekyll jekyll-redirect-from rouge
-# Following is needed only for generating API docs
-$ sudo pip install sphinx pypandoc mkdocs
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
 ```
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
+### R Documentation
+
+If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
+and install these libraries:
+
+```sh
+$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
+```
+
 Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 5.0.1, which is updated if the version is mismatched.
+
+### API Documentation
+
+To generate API docs for any language, you'll need to install these libraries:
+
+```sh
+$ sudo pip install sphinx mkdocs numpy
+```
 
 ## Generating the Documentation HTML
 

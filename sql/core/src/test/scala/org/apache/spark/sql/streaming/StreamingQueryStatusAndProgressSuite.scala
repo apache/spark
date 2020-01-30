@@ -312,6 +312,7 @@ object StreamingQueryStatusAndProgressSuite {
     name = "myName",
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
+    batchDuration = 0L,
     durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
     eventTime = new java.util.HashMap(Map(
       "max" -> "2016-12-05T20:54:20.827Z",
@@ -346,6 +347,7 @@ object StreamingQueryStatusAndProgressSuite {
     name = null, // should not be present in the json
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
+    batchDuration = 0L,
     durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),

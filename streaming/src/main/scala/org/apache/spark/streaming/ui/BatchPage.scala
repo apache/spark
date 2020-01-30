@@ -325,7 +325,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         throw new IllegalArgumentException(s"Missing id parameter")
       }
     val formattedBatchTime =
-      UIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
+      SparkUIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
