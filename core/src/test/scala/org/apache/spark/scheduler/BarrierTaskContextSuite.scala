@@ -52,6 +52,27 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(times.max - times.min <= 1000)
   }
 
+  test("share messages with allGather() call") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(1 to 10, 4)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // Sleep for a random time before global sync.
+      Thread.sleep(Random.nextInt(1000))
+      // Pass partitionId message in
+      val message: String = context.partitionId().toString
+      val messages: ArrayBuffer<String> = context.allGather(message)
+      messages.toList.iterator
+    }
+    // Take a sorted list of all the partitionId messages
+    val messages = stableSort(rdd2.first())
+    // All the task partitionIds are shared
+    for((x,i) <- messages.view.zipWithIndex) assert(x == i.toString)
+  }
+
   test("support multiple barrier() call within a single task") {
     initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)

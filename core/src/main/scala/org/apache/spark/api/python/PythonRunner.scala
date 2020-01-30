@@ -24,7 +24,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
+
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -244,7 +249,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                       // before the function finishes.
                       sock.setSoTimeout(0)
                       barrierAndServe(sock)
-
+                    case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+                      // The allGather() function may wait infinitely, socket shall not timeout
+                      // before the function finishes.
+                      sock.setSoTimeout(0)
+                      val length = input.readInt()
+                      val message = new Array[Byte](length)
+                      input.readFully(message)
+                      allGatherAndServe(sock, new String(message, UTF_8))
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -404,6 +416,34 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       try {
         context.asInstanceOf[BarrierTaskContext].barrier()
         writeUTF(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS, out)
+      } catch {
+        case e: SparkException =>
+          writeUTF(e.getMessage, out)
+      } finally {
+        out.close()
+      }
+    }
+
+    /**
+     * Gateway to call BarrierTaskContext.all_gather(message).
+     */
+    def allGatherAndServe(sock: Socket, message: String): Unit = {
+      require(
+        serverSocket.isDefined,
+        "No available ServerSocket to redirect the all_gather() call."
+      )
+
+      val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+      try {
+        val messages: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+          message
+        )
+        val json: String = compact(render(JArray(
+          messages.map(
+            (message) => JString(message)
+          ).toList
+        )))
+        writeUTF(json, out)
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)
@@ -638,6 +678,7 @@ private[spark] object SpecialLengths {
 
 private[spark] object BarrierTaskContextMessageProtocol {
   val BARRIER_FUNCTION = 1
+  val ALL_GATHER_FUNCTION = 2
   val BARRIER_RESULT_SUCCESS = "success"
   val ERROR_UNRECOGNIZED_FUNCTION = "Not recognized function call from python side."
 }
