@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * and gets the json output back and contructs ResourceInformation objects from that.
  */
 class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging {
-  override def discoverResource (request: ResourceRequest): ResourceInformation = {
+  override def discoverResource(request: ResourceRequest): ResourceInformation = {
     val script = request.discoveryScript
     val resourceName = request.id.resourceName
     val result = if (script.isPresent) {

@@ -56,7 +56,7 @@ package object config {
 
   private[spark] val RESOURCES_DISCOVERY_PLUGIN =
     ConfigBuilder("spark.resourceDiscovery.plugin")
-      .doc("Comma-separated list of class names implementing " +
+      .doc("A class name implementing " +
         "org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.")
       .stringConf
       .createWithDefault("org.apache.spark.resource.ResourceDiscoveryScriptPlugin")

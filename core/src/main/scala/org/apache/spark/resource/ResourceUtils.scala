@@ -26,6 +26,7 @@ import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
@@ -36,15 +37,18 @@ import org.apache.spark.util.Utils
  * @param componentName spark.driver / spark.executor / spark.task
  * @param resourceName  gpu, fpga, etc
  */
+@DeveloperApi
 class ResourceID(val componentName: String, val resourceName: String) {
-  def confPrefix: String = s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
-  def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-  def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
-  def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+  private[spark] def confPrefix: String = {
+    s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
+  }
+  private[spark] def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
+  private[spark] def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
+  private[spark] def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
 }
 
 /**
- * Case class that represents a resource request.
+ * Class that represents a resource request.
  *
  * The class used when discovering resources (using the discovery script),
  * or via the context as it is parsing configuration for the ResourceID.
@@ -55,6 +59,7 @@ class ResourceID(val componentName: String, val resourceName: String) {
  * @param discoveryScript optional discovery script file name
  * @param vendor optional vendor name
  */
+@DeveloperApi
 class ResourceRequest(
     val id: ResourceID,
     val amount: Long,
@@ -275,6 +280,15 @@ private[spark] object ResourceUtils extends Logging {
     resourceInfoMap
   }
 
+  // create an empty Optional if the string is empty
+  private def emptyStringToOptional(optStr: String): Optional[String] = {
+    if (optStr.isEmpty) {
+      Optional.empty[String]
+    } else {
+      Optional.of(optStr)
+    }
+  }
+
   /**
    * This function is similar to getOrDiscoverallResources, except for it uses the ResourceProfile
    * information instead of the application level configs.
@@ -300,16 +314,8 @@ private[spark] object ResourceUtils extends Logging {
     val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
     val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
       val resourceId = new ResourceID(componentName, rName)
-      val scriptOpt = if (execRequest.discoveryScript.isEmpty) {
-        Optional.empty[String]
-      } else {
-        Optional.of(execRequest.discoveryScript)
-      }
-      val vendorOpt = if (execRequest.vendor.isEmpty) {
-        Optional.empty[String]
-      } else {
-        Optional.of(execRequest.vendor)
-      }
+      val scriptOpt = emptyStringToOptional(execRequest.discoveryScript)
+      val vendorOpt = emptyStringToOptional(execRequest.vendor)
       val resourceReq = new ResourceRequest(resourceId, execRequest.amount, scriptOpt, vendorOpt)
       val addrs = discoverResource(sparkConf, resourceReq).addresses
       (rName, new ResourceInformation(rName, addrs))
