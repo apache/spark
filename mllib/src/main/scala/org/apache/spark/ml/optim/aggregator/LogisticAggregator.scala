@@ -277,15 +277,14 @@ private[ml] class LogisticAggregator(
     val localGradientSumArray = gradientSumArray
 
     // vec here represents margins or negative dotProducts
-    val vec = new DenseVector(Array.ofDim[Double](size))
+    val vec = if (fitIntercept && coefficientsArray.last != 0) {
+      val intercept = coefficientsArray.last
+      new DenseVector(Array.fill(size)(intercept))
+    } else {
+      new DenseVector(Array.ofDim[Double](size))
+    }
 
     if (fitIntercept) {
-      val intercept = coefficientsArray.last
-      var i = 0
-      while (i < size) {
-        vec.values(i) = intercept
-        i += 1
-      }
       BLAS.gemv(-1.0, block.matrix, binaryLinear, -1.0, vec)
     } else {
       BLAS.gemv(-1.0, block.matrix, binaryLinear, 0.0, vec)
