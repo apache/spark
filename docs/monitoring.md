@@ -129,6 +129,10 @@ would be reduced during compaction. For streaming query (including Structured St
 will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
 in many cases for batch query.
 
+Please also note that this is a new feature introduced in Spark 3.0, and may not be completely stable. In some circumstance,
+the compaction may exclude more events than you expect, leading some UI issues on History Server for the application.
+Use with caution.
+
 ### Spark History Server Configuration Options
 
 Security options for the Spark History Server are covered more detail in the
