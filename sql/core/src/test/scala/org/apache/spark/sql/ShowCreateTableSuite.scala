@@ -213,6 +213,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
     val db = table.database.getOrElse("default")
     val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
+    println(s"expected: ${expected.provider}")
     val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
     sql(s"DROP $checkType ${table.quotedString}")
 

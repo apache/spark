@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
@@ -257,21 +258,24 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   test("simple hive table as spark") {
-    withTable("t1") {
-      sql(
-        s"""
-           |CREATE TABLE t1 (
-           |  c1 STRING COMMENT 'bla',
-           |  c2 STRING
-           |)
-           |TBLPROPERTIES (
-           |  'prop1' = 'value1',
-           |  'prop2' = 'value2'
-           |)
-         """.stripMargin
-      )
+    withSQLConf(
+        SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTable("t1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (
+             |  c1 STRING COMMENT 'bla',
+             |  c2 STRING
+             |)
+             |TBLPROPERTIES (
+             |  'prop1' = 'value1',
+             |  'prop2' = 'value2'
+             |)
+           """.stripMargin
+        )
 
-      checkCreateSparkTable("t1")
+        checkCreateSparkTable("t1")
+      }
     }
   }
 
@@ -296,23 +300,26 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   test("simple external hive table as spark") {
-    withTempDir { dir =>
-      withTable("t1") {
-        sql(
-          s"""
-             |CREATE TABLE t1 (
-             |  c1 STRING COMMENT 'bla',
-             |  c2 STRING
-             |)
-             |LOCATION '${dir.toURI}'
-             |TBLPROPERTIES (
-             |  'prop1' = 'value1',
-             |  'prop2' = 'value2'
-             |)
-           """.stripMargin
-        )
+    withSQLConf(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        withTable("t1") {
+          sql(
+            s"""
+               |CREATE TABLE t1 (
+               |  c1 STRING COMMENT 'bla',
+               |  c2 STRING
+               |)
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  'prop1' = 'value1',
+               |  'prop2' = 'value2'
+               |)
+             """.stripMargin
+          )
 
-        checkCreateSparkTable("t1")
+          checkCreateSparkTable("t1")
+        }
       }
     }
   }
@@ -415,28 +422,31 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   test("transactional hive table as spark") {
-    withTable("t1") {
-      sql(
-        s"""
-           |CREATE TABLE t1 (
-           |  c1 STRING COMMENT 'bla',
-           |  c2 STRING
-           |)
-           |TBLPROPERTIES (
-           |  'transactional' = 'true',
-           |  'prop1' = 'value1',
-           |  'prop2' = 'value2'
-           |)
-         """.stripMargin
-      )
+    withSQLConf(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTable("t1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (
+             |  c1 STRING COMMENT 'bla',
+             |  c2 STRING
+             |)
+             |TBLPROPERTIES (
+             |  'transactional' = 'true',
+             |  'prop1' = 'value1',
+             |  'prop2' = 'value2'
+             |)
+           """.stripMargin
+        )
 
 
-      val cause = intercept[AnalysisException] {
-        sql("SHOW CREATE TABLE t1 AS SPARK")
+        val cause = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE t1 AS SPARK")
+        }
+
+        assert(cause.getMessage.contains(
+          "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table"))
       }
-
-      assert(cause.getMessage.contains(
-        "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table"))
     }
   }
 }
