@@ -30,12 +30,12 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class ReadAllAvailable implements ReadLimit {
-    static final ReadAllAvailable SINGLETON = new ReadAllAvailable();
+  static final ReadAllAvailable SINGLETON = new ReadAllAvailable();
 
-    private ReadAllAvailable() {}
+  private ReadAllAvailable() {}
 
-    @Override
-    public String toString() {
-        return "All Available";
-    }
+  @Override
+  public String toString() {
+    return "All Available";
+  }
 }
