@@ -1284,7 +1284,7 @@ case class ShowCreateTableAsSparkCommand(table: TableIdentifier)
       // scalastyle:off caselocale
       if (tableMetadata.properties.getOrElse("transactional", "false").toLowerCase.equals("true")) {
         throw new AnalysisException(
-          "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table")
+          "SHOW CREATE TABLE AS SPARK doesn't support transactional Hive table")
       }
       // scalastyle:on caselocale
 

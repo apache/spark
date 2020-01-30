@@ -436,6 +436,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
              |  'prop1' = 'value1',
              |  'prop2' = 'value2'
              |)
+             |CLUSTERED BY (c1) INTO 10 BUCKETS
+             |STORED AS ORC
            """.stripMargin
         )
 
@@ -445,7 +447,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
         }
 
         assert(cause.getMessage.contains(
-          "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table"))
+          "SHOW CREATE TABLE AS SPARK doesn't support transactional Hive table"))
       }
     }
   }
