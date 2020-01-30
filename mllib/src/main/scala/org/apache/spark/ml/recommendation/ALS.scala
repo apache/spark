@@ -126,6 +126,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(blockSize -> 4096)
 }
 
 /**
@@ -497,7 +499,7 @@ class ALSModel private[ml] (
    */
   private def blockify(
       factors: Dataset[(Int, Array[Float])],
-      blockSize: Int = 4096): Dataset[Seq[(Int, Array[Float])]] = {
+      blockSize: Int): Dataset[Seq[(Int, Array[Float])]] = {
     import factors.sparkSession.implicits._
     factors.mapPartitions(_.grouped(blockSize))
   }
@@ -672,7 +674,6 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
    */
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 4096)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
