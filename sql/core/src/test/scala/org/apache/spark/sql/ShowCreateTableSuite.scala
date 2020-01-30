@@ -187,7 +187,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == s"$createTable USING json")
+      assert(shownDDL == createTable)
 
       checkCreateTable("t1")
     }
@@ -199,7 +199,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       .getString(0)
       .split("\n")
       .map(_.trim)
-    if (result.length > 1) result(0) + " " + result(1) else result.head
+    if (result.length > 1) result(0) + result(1) else result.head
   }
 
   protected def checkCreateTable(table: String): Unit = {
