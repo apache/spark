@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -42,7 +43,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -78,7 +79,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
-    val resources = parseOrFindResources(resourcesFileOpt)
+    var resources = Map.empty[String, ResourceInformation]
+    try {
+      resources = parseOrFindResources(resourcesFileOpt)
+    } catch {
+      case NonFatal(e) =>
+        exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
+    }
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
@@ -92,16 +99,39 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
+  /**
+   * Create a ClassLoader for use for resource discovery. The user could provide a class
+   * as a substitute for the default one so we have to be able to load it from a user specified
+   * jar.
+   */
+  private def createClassLoader(): MutableURLClassLoader = {
+    val currentLoader = Utils.getContextOrSparkClassLoader
+    val urls = userClassPath.toArray
+    logWarning(s"adding ursl $urls to classloader")
+    if (env.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)) {
+      logWarning("creating child first classloader")
+      new ChildFirstURLClassLoader(urls, currentLoader)
+    } else {
+      logWarning("creating mutable class loader")
+      new MutableURLClassLoader(urls, currentLoader)
+    }
+  }
+
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
+    // use a classloader that includes the user classpath in case they specified a class for
+    // resource discovery
+    val urlClassLoader = createClassLoader()
     logDebug(s"Resource profile id is: ${resourceProfile.id}")
-    val resources = getOrDiscoverAllResourcesForResourceProfile(
-      resourcesFileOpt,
-      SPARK_EXECUTOR_PREFIX,
-      resourceProfile,
-      env.conf)
-    logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
-    resources
+    Utils.withContextClassLoader(urlClassLoader) {
+      val resources = getOrDiscoverAllResourcesForResourceProfile(
+        resourcesFileOpt,
+        SPARK_EXECUTOR_PREFIX,
+        resourceProfile,
+        env.conf)
+      logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+      resources
+    }
   }
 
   def extractLogUrls: Map[String, String] = {

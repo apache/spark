@@ -17,7 +17,6 @@
 
 package org.apache.spark.resource
 
-import java.io.File
 import java.nio.file.{Files, Paths}
 import java.util.Optional
 
@@ -31,7 +30,6 @@ import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.util.Utils
-import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
  * Resource identifier.
@@ -221,7 +219,7 @@ private[spark] object ResourceUtils extends Logging {
     val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
-        Some(ResourceAllocation(id, discoverResources(sparkConf, request).addresses))
+        Some(ResourceAllocation(id, discoverResource(sparkConf, request).addresses))
       } else {
         None
       }
@@ -313,7 +311,7 @@ private[spark] object ResourceUtils extends Logging {
         Optional.of(execRequest.vendor)
       }
       val resourceReq = new ResourceRequest(resourceId, execRequest.amount, scriptOpt, vendorOpt)
-      val addrs = discoverResources(sparkConf, resourceReq).addresses
+      val addrs = discoverResource(sparkConf, resourceReq).addresses
       (rName, new ResourceInformation(rName, addrs))
     }
     val allAllocations = fileAllocResMap ++ rpAllocations
@@ -328,44 +326,7 @@ private[spark] object ResourceUtils extends Logging {
     logInfo("==============================================================")
   }
 
-
-  // visible for test
   private[spark] def discoverResource(
-      resourceName: String,
-      script: Option[String]): ResourceInformation = {
-    val result = if (script.nonEmpty) {
-      val scriptFile = new File(script.get)
-      // check that script exists and try to execute
-      if (scriptFile.exists()) {
-        val output = executeAndGetOutput(Seq(script.get), new File("."))
-        ResourceInformation.parseJson(output)
-      } else {
-        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
-          "doesn't exist!")
-      }
-    } else {
-      throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
-        "didn't specify a discovery script!")
-    }
-    if (!result.name.equals(resourceName)) {
-      throw new SparkException(s"Error running the resource discovery script ${script.get}: " +
-        s"script returned resource name ${result.name} and we were expecting $resourceName.")
-    }
-    result
-  }
-
-  // visible for test
-  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
-    val resourceName = resourceRequest.id.resourceName
-    val script = if (resourceRequest.discoveryScript.isPresent()) {
-      Some(resourceRequest.discoveryScript.get())
-    } else {
-      None
-    }
-    discoverResource(resourceName, script)
-  }
-
-  private[spark] def discoverResources(
       sparkConf: SparkConf,
       resourceRequest: ResourceRequest): ResourceInformation = {
     // we only have configure accept a single plugin

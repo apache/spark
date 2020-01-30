@@ -249,7 +249,7 @@ class ResourceUtilsSuite extends SparkFunSuite
           Optional.empty[String])
 
       val error = intercept[SparkException] {
-        discoverResource(request)
+        discoverResource(conf, request)
       }.getMessage()
 
       assert(error.contains(s"Error running the resource discovery script $gpuDiscovery: " +
@@ -272,7 +272,7 @@ class ResourceUtilsSuite extends SparkFunSuite
           Optional.empty[String])
 
       val error = intercept[SparkException] {
-        discoverResource(request)
+        discoverResource(conf, request)
       }.getMessage()
 
       assert(error.contains("Error parsing JSON into ResourceInformation"))
@@ -292,7 +292,7 @@ class ResourceUtilsSuite extends SparkFunSuite
             Optional.empty[String])
 
         val error = intercept[SparkException] {
-          discoverResource(request)
+          discoverResource(conf, request)
         }.getMessage()
 
         assert(error.contains("doesn't exist"))
@@ -307,7 +307,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       Optional.empty[String])
 
     val error = intercept[SparkException] {
-      discoverResource(request)
+      discoverResource(new SparkConf(), request)
     }.getMessage()
 
     assert(error.contains("User is expecting to use resource: gpu, but " +

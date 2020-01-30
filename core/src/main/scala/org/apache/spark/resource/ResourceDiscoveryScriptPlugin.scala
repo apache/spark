@@ -20,28 +20,28 @@ package org.apache.spark.resource
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
- *
+ * The default plugin that is loaded into a Spark application to control how custom
+ * resources are discovered. This executes the discovery script specified by the user
+ * and gets the json output back and contructs ResourceInformation objects from that.
  */
-@DeveloperApi
-class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin {
+class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging {
   override def discoverResource (request: ResourceRequest): ResourceInformation = {
     val script = request.discoveryScript
     val resourceName = request.id.resourceName
     val result = if (script.isPresent) {
       val scriptFile = new File(script.get)
+      logInfo(s"Discovering resources for $resourceName with script: $scriptFile")
       // check that script exists and try to execute
       if (scriptFile.exists()) {
         val output = executeAndGetOutput(Seq(script.get), new File("."))
         ResourceInformation.parseJson(output)
-      } else {
-        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
-          "doesn't exist!")
-      }
+      } else throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
+        "doesn't exist!")
     } else {
       throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
         "didn't specify a discovery script!")
