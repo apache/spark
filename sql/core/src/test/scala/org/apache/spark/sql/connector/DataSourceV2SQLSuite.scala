@@ -678,6 +678,44 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("qualified column names for v2 tables") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, point struct<x: bigint, y: bigint>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, (10, 20))")
+
+      checkAnswer(
+        sql(s"SELECT testcat.ns1.ns2.tbl.id, testcat.ns1.ns2.tbl.point.x FROM $t"),
+        Row(1, 10))
+      checkAnswer(sql(s"SELECT ns1.ns2.tbl.id, ns1.ns2.tbl.point.x FROM $t"), Row(1, 10))
+      checkAnswer(sql(s"SELECT ns2.tbl.id, ns2.tbl.point.x FROM $t"), Row(1, 10))
+      checkAnswer(sql(s"SELECT tbl.id, tbl.point.x FROM $t"), Row(1, 10))
+
+      val ex = intercept[AnalysisException] {
+        sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
+      }
+      assert(ex.getMessage.contains("cannot resolve '`ns1.ns2.ns3.tbl.id`"))
+    }
+  }
+
+  test("qualified column names for v1 tables") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+      checkAnswer(sql("select default.t.i from spark_catalog.t"), Row(1))
+      checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
+      checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
+
+      // catalog name cannot be used for v1 tables.
+      val ex = intercept[AnalysisException] {
+        sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
+      }
+      assert(ex.getMessage.contains("cannot resolve '`spark_catalog.default.t.i`"))
+    }
+  }
+
   test("InsertInto: append - across catalog") {
     val t1 = "testcat.ns1.ns2.tbl"
     val t2 = "testcat2.db.tbl"

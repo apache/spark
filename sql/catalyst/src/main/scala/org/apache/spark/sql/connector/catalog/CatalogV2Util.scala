@@ -292,7 +292,7 @@ private[sql] object CatalogV2Util {
 
   def getRelation(catalog: CatalogPlugin, ident: Identifier, table: Table): LogicalPlan = {
     SubqueryAlias(
-      ident,
+      Identifier.of(catalog.name +: ident.namespace, ident.name),
       DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
   }
 
