@@ -122,11 +122,10 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   test("command should report a dummy stats") {
     val plan = CommentOnNamespace(
       ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
-    val stats = Statistics(Long.MaxValue)
     checkStats(
       plan,
-      expectedStatsCboOn = stats,
-      expectedStatsCboOff = stats)
+      expectedStatsCboOn = Statistics.DUMMY,
+      expectedStatsCboOff = Statistics.DUMMY)
   }
 
   /** Check estimated stats when cbo is turned on/off. */

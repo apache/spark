@@ -30,5 +30,5 @@ trait Command extends LogicalPlan {
   // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
   // is created. That said, the statistics of a command is useless. Here we just return a dummy
   // statistics to avoid unnecessary statistics calculation of command's children.
-  override def stats: Statistics = Statistics(Long.MaxValue)
+  override def stats: Statistics = Statistics.DUMMY
 }
