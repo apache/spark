@@ -314,6 +314,24 @@ class DDLParserSuite extends AnalysisTest {
       "Found duplicate clauses: PARTITIONED BY")
   }
 
+  test("create/replace table - without using") {
+    val createSql = "CREATE TABLE 1m.2g(a INT)"
+    val replaceSql = "REPLACE TABLE 1m.2g(a INT)"
+    val expectedTableSpec = TableSpec(
+      Seq("1m", "2g"),
+      Some(new StructType().add("a", IntegerType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      conf.defaultDataSourceName,
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
   test("support for other types in OPTIONS") {
     val createSql =
       """
