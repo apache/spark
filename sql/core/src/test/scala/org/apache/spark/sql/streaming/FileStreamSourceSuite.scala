@@ -1174,7 +1174,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("maxFilesPerTrigger: ignored when using Trigger.Once") {
+  test("SPARK-30669: maxFilesPerTrigger - ignored when using Trigger.Once") {
     withTempDirs { (src, target) =>
       val checkpoint = new File(target, "chk").getCanonicalPath
       val targetDir = new File(target, "data").getCanonicalPath
