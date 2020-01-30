@@ -293,7 +293,7 @@ case class ArrayTransform(
 @ExpressionDescription(
   usage = """_FUNC_(expr, func) - Sorts the input array. If func is omitted, sort
     in ascending order. The elements of the input array must be orderable. Null elements
-    will be placed at the end of the returned. Since 3.0.0 this function also sorts and
+    will be placed at the end of the returned array. Since 3.0.0 this function also sorts
     and returns the array based on the given comparator function. The comparator will
     take two arguments representing two elements of the array.
     It returns -1, 0, or 1 as the first element is less than, equal to, or greater
