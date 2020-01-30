@@ -202,7 +202,7 @@ private[ui] class SparkPlanGraphCluster(
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
-      if (metricsValue.contains(duration(0).accumulatorId)) {
+      if (metricsValue.contains(id)) {
         name + "\n \n" + duration(0).name + ": " + metricsValue(id)
       } else {
         name
