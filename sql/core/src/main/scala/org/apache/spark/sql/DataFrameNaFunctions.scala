@@ -437,12 +437,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    */
   private def fillCol[T](col: StructField, replacement: T): Column = {
     val quotedColName = "`" + col.name + "`"
-    val colValue = col.dataType match {
+    fillCol(col.dataType, col.name, df.col(quotedColName), replacement)
+  }
+
+  /**
+   * Returns a [[Column]] expression that replaces null value in `expr` with `replacement`.
+   * It uses the given `expr` as a column.
+   */
+  private def fillCol[T](dataType: DataType, name: String, expr: Column, replacement: T): Column = {
+    val colValue = dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
-      case _ => df.col(quotedColName)
+        nanvl(expr, lit(null)) // nanvl only supports these types
+      case _ => expr
     }
-    coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
+    coalesce(colValue, lit(replacement).cast(dataType)).as(name)
   }
 
   /**
@@ -489,6 +497,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
+
     val projections = df.schema.fields.map { f =>
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
@@ -499,7 +508,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[T](f, value)
+        fillCol(f.dataType, f.name, Column(f.name), value)
       } else {
         df.col(f.name)
       }
