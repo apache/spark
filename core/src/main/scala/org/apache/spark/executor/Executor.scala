@@ -42,7 +42,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
@@ -64,7 +64,6 @@ private[spark] class Executor(
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
     uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler,
-    resourceProfile: ResourceProfile,
     resources: immutable.Map[String, ResourceInformation])
   extends Logging {
 
@@ -156,7 +155,7 @@ private[spark] class Executor(
 
   // Plugins need to load using a class loader that includes the executor's user classpath
   private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env, resourceProfile, resources.asJava)
+    PluginContainer(env, resources.asJava)
   }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager

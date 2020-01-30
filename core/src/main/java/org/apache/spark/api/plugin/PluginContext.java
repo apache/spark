@@ -25,7 +25,6 @@ import com.codahale.metrics.MetricRegistry;
 import org.apache.spark.SparkConf;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.resource.ResourceInformation;
-import org.apache.spark.resource.ResourceProfile;
 
 /**
  * :: DeveloperApi ::
@@ -56,9 +55,6 @@ public interface PluginContext {
 
   /** The host name which is being used by the Spark process for communication. */
   String hostname();
-
-  /** ResourceProfile for the executor, or null on the driver since it doesn't apply. */
-  ResourceProfile resourceProfile();
 
   /** The custom resources (GPUs, FPGAs, etc) allocated to driver or executor. */
   Map<String, ResourceInformation> resources();

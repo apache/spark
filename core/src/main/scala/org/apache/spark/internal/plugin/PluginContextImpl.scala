@@ -26,7 +26,7 @@ import org.apache.spark.api.plugin.PluginContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.RpcUtils
 
@@ -36,7 +36,6 @@ private class PluginContextImpl(
     metricsSystem: MetricsSystem,
     override val conf: SparkConf,
     override val executorID: String,
-    override val resourceProfile: ResourceProfile,
     override val resources: util.Map[String, ResourceInformation])
   extends PluginContext with Logging {
 

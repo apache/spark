@@ -36,7 +36,7 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.util.Utils
@@ -67,8 +67,6 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
 
     assert(TestSparkPlugin.executorContext != null)
     assert(TestSparkPlugin.executorContext.resources.isEmpty)
-    assert(TestSparkPlugin.executorContext.resourceProfile
-      === ResourceProfile.getOrCreateDefaultProfile(conf))
 
     // One way messages don't block, so need to loop checking whether it arrives.
     TestSparkPlugin.executorContext.send("oneway")
@@ -113,8 +111,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     val conf = new SparkConf()
     val env = mock(classOf[SparkEnv])
     when(env.conf).thenReturn(conf)
-    val container = PluginContainer(env, ResourceProfile.getOrCreateDefaultProfile(conf),
-      Map.empty[String, ResourceInformation].asJava)
+    val container = PluginContainer(env, Map.empty[String, ResourceInformation].asJava)
     assert(container === None)
   }
 
@@ -195,7 +192,6 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       assert(driverResources.size === 1)
       assert(driverResources.get(GPU).addresses === Array("5", "6"))
       assert(driverResources.get(GPU).name === GPU)
-      assert(NonLocalModeSparkPlugin.driverContext.resourceProfile() === null)
     }
   }
 }
@@ -217,7 +213,7 @@ class NonLocalModeSparkPlugin extends SparkPlugin {
     new ExecutorPlugin() {
       override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
         NonLocalModeSparkPlugin.writeFile(NonLocalModeSparkPlugin.executorFileStr, ctx.conf(),
-        ctx.executorID(), ctx.resources().asScala.toMap, ctx.resourceProfile())
+        ctx.executorID(), ctx.resources().asScala.toMap)
       }
     }
   }
@@ -229,21 +225,13 @@ object NonLocalModeSparkPlugin {
   val executorFileStr = "EXECUTOR_FILE_"
   val driverFileStr = "DRIVER_FILE_"
 
-
   private def createFileStringWithGpuAddrs(
       id: String,
-      resources: Map[String, ResourceInformation],
-      resourceProfile: ResourceProfile): String = {
+      resources: Map[String, ResourceInformation]): String = {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
     val resourcesString = resources.filterKeys(_.equals(GPU)).map {
       case (name, ri) =>
-        val execReq = resourceProfile.executorResources.getOrElse(name,
-            throw new IllegalArgumentException(s"ResourceProfile doesn't contain $name"))
-        if (execReq.amount <= 0 || execReq.amount != ri.addresses.size) {
-          throw new IllegalArgumentException("ResourceProfile size doesn't match " +
-            s"resource profile amount: ${execReq.amount}, addrs size: ${ri.addresses.size}")
-        }
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")
     s"$id&$resourcesString"
@@ -262,17 +250,16 @@ object NonLocalModeSparkPlugin {
       filePrefix: String,
       conf: SparkConf,
       id: String): Unit = {
-    writeFile(filePrefix, conf, id, Map.empty, null)
+    writeFile(filePrefix, conf, id, Map.empty)
   }
 
   def writeFile(
       filePrefix: String,
       conf: SparkConf,
       id: String,
-      resources: Map[String, ResourceInformation],
-      resourceProfile: ResourceProfile): Unit = {
+      resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
-    val strToWrite = createFileStringWithGpuAddrs(id, resources, resourceProfile)
+    val strToWrite = createFileStringWithGpuAddrs(id, resources)
     Files.write(strToWrite, new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8)
   }
 

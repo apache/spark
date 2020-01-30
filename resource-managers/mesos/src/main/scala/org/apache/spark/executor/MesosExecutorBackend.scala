@@ -31,7 +31,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
 import org.apache.spark.util.Utils
@@ -85,7 +84,6 @@ private[spark] class MesosExecutorBackend
       executorId,
       slaveInfo.getHostname,
       env,
-      resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf),
       resources = Map.empty[String, ResourceInformation])
   }
 
