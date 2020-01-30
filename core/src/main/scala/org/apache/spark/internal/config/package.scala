@@ -148,6 +148,8 @@ package object config {
 
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
     ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
+      .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
+        "to the event log.")
       .booleanConf
       .createWithDefault(false)
 
@@ -230,11 +232,16 @@ package object config {
 
   private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
     ConfigBuilder("spark.executor.processTreeMetrics.enabled")
+      .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
+        "executor metrics.")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")
+      .doc("How often to collect executor metrics (in milliseconds). " +
+        "If 0, the polling is done on executor heartbeats. " +
+        "If positive, the polling is done at this interval.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
