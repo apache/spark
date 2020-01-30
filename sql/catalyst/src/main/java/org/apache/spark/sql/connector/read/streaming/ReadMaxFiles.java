@@ -28,28 +28,28 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public class ReadMaxFiles implements ReadLimit {
-    private int files;
+  private int files;
 
-    ReadMaxFiles(int maxFiles) {
-        this.files = maxFiles;
-    }
+  ReadMaxFiles(int maxFiles) {
+    this.files = maxFiles;
+  }
 
-    /** Approximate maximum rows to scan. */
-    public int maxFiles() { return this.files; }
+  /** Approximate maximum rows to scan. */
+  public int maxFiles() { return this.files; }
 
-    @Override
-    public String toString() {
-        return "MaxFiles: " + maxFiles();
-    }
+  @Override
+  public String toString() {
+    return "MaxFiles: " + maxFiles();
+  }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ReadMaxFiles other = (ReadMaxFiles) o;
-        return other.maxFiles() == maxFiles();
-    }
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    ReadMaxFiles other = (ReadMaxFiles) o;
+    return other.maxFiles() == maxFiles();
+  }
 
-    @Override
-    public int hashCode() { return files; }
+  @Override
+  public int hashCode() { return files; }
 }
