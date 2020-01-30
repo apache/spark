@@ -195,8 +195,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     var request = parseResourceRequest(conf, DRIVER_GPU_ID)
     assert(request.id.resourceName === GPU, "should only have GPU for resource")
     assert(request.amount === 2, "GPU count should be 2")
-    assert(request.discoveryScript === None, "discovery script should be empty")
-    assert(request.vendor === None, "vendor should be empty")
+    assert(request.discoveryScript === Optional.empty(), "discovery script should be empty")
+    assert(request.vendor === Optional.empty(), "vendor should be empty")
 
     val vendor = "nvidia.com"
     val discoveryScript = "discoveryScriptGPU"
@@ -254,6 +254,28 @@ class ResourceUtilsSuite extends SparkFunSuite
 
       assert(error.contains(s"Error running the resource discovery script $gpuDiscovery: " +
         "script returned resource name fpga and we were expecting gpu"))
+    }
+  }
+
+  test("Resource discoverer with invalid class") {
+    val conf = new SparkConf()
+      .set(RESOURCES_DISCOVERY_PLUGIN, "someinvalidclass")
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "fpga", "addresses": ["0", "1"]}""")
+      val request =
+        new ResourceRequest(
+          DRIVER_GPU_ID,
+          2,
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
+
+      val error = intercept[ClassNotFoundException] {
+        discoverResource(conf, request)
+      }.getMessage()
+
+      assert(error.contains(s"someinvalidclass"))
     }
   }
 

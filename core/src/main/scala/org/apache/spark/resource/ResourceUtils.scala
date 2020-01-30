@@ -365,13 +365,13 @@ private[spark] object ResourceUtils extends Logging {
   private[spark] def discoverResource(
       sparkConf: SparkConf,
       resourceRequest: ResourceRequest): ResourceInformation = {
-    // we only have configure accept a single plugin
+    // we only accept a single plugin
     val pluginClass = Seq(sparkConf.get(RESOURCES_DISCOVERY_PLUGIN))
     val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClass,
       sparkConf)
     if (resourcePlugins.nonEmpty) {
       val resourcePlugin = resourcePlugins.head
-      resourcePlugin.discoverResource(resourceRequest)
+      resourcePlugin.discoverResource(resourceRequest, sparkConf)
     } else {
       throw new SparkException(s"Unable to load the resource discovery plugin $pluginClass")
     }

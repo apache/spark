@@ -18,6 +18,7 @@
 package org.apache.spark.api.resource;
 
 import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.SparkConf;
 import org.apache.spark.resource.ResourceInformation;
 import org.apache.spark.resource.ResourceRequest;
 
@@ -32,5 +33,5 @@ import org.apache.spark.resource.ResourceRequest;
  */
 @DeveloperApi
 public interface ResourceDiscoveryPlugin {
-  ResourceInformation discoverResource(ResourceRequest request);
+  ResourceInformation discoverResource(ResourceRequest request, SparkConf sparkConf);
 }
