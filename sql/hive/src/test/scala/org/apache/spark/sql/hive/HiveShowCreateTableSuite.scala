@@ -33,9 +33,9 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   protected override def afterAll(): Unit = {
-    super.afterAll()
     SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
       origCreateHiveTableConfig)
+    super.afterAll()
   }
 
   test("simple hive table") {
