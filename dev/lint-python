@@ -36,7 +36,7 @@ function compile_python_test {
         exit 1;
     fi
 
-    # compileall: https://docs.python.org/2/library/compileall.html
+    # compileall: https://docs.python.org/3/library/compileall.html
     echo "starting python compilation test..."
     COMPILE_REPORT=$( (python3 -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
     COMPILE_STATUS=$?
