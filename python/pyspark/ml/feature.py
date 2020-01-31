@@ -1614,6 +1614,7 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(missingValue=value)
 
+    @since("2.2.0")
     def setInputCols(self, value):
         """
         Sets the value of :py:attr:`inputCols`.
@@ -4618,6 +4619,7 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(seed=value)
 
+    @since("1.4.0")
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.

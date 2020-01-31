@@ -286,48 +286,56 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
 
+    @since("2.2.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
+    @since("2.2.0")
     def setRegParam(self, value):
         """
         Sets the value of :py:attr:`regParam`.
         """
         return self._set(regParam=value)
 
+    @since("2.2.0")
     def setTol(self, value):
         """
         Sets the value of :py:attr:`tol`.
         """
         return self._set(tol=value)
 
+    @since("2.2.0")
     def setFitIntercept(self, value):
         """
         Sets the value of :py:attr:`fitIntercept`.
         """
         return self._set(fitIntercept=value)
 
+    @since("2.2.0")
     def setStandardization(self, value):
         """
         Sets the value of :py:attr:`standardization`.
         """
         return self._set(standardization=value)
 
+    @since("2.2.0")
     def setThreshold(self, value):
         """
         Sets the value of :py:attr:`threshold`.
         """
         return self._set(threshold=value)
 
+    @since("2.2.0")
     def setWeightCol(self, value):
         """
         Sets the value of :py:attr:`weightCol`.
         """
         return self._set(weightCol=value)
 
+    @since("2.2.0")
     def setAggregationDepth(self, value):
         """
         Sets the value of :py:attr:`aggregationDepth`.
@@ -1296,6 +1304,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
         """
         return self._set(impurity=value)
 
+    @since("1.4.0")
     def setCheckpointInterval(self, value):
         """
         Sets the value of :py:attr:`checkpointInterval`.
@@ -1852,24 +1861,28 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
         """
         return self._set(validationIndicatorCol=value)
 
+    @since("1.4.0")
     def setMaxIter(self, value):
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
+    @since("1.4.0")
     def setCheckpointInterval(self, value):
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
+    @since("1.4.0")
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
 
+    @since("1.4.0")
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.
