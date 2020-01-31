@@ -32,6 +32,8 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.read.streaming
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
@@ -79,7 +81,7 @@ private[kafka010] class KafkaSource(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends Source with Logging {
+  extends SupportsAdmissionControl with Source with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -114,6 +116,10 @@ private[kafka010] class KafkaSource(
     }.partitionToOffsets
   }
 
+  override def getDefaultReadLimit: ReadLimit = {
+    maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+  }
+
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
 
   private val converter = new KafkaRecordToRowConverter()
@@ -122,23 +128,30 @@ private[kafka010] class KafkaSource(
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
+    throw new UnsupportedOperationException(
+      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  }
+
+  override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
     val latest = kafkaReader.fetchLatestOffsets(
       currentPartitionOffsets.orElse(Some(initialPartitionOffsets)))
-    val offsets = maxOffsetsPerTrigger match {
-      case None =>
+    val offsets = limit match {
+      case rows: ReadMaxRows =>
+        if (currentPartitionOffsets.isEmpty) {
+          rateLimit(rows.maxRows(), initialPartitionOffsets, latest)
+        } else {
+          rateLimit(rows.maxRows(), currentPartitionOffsets.get, latest)
+        }
+      case _: ReadAllAvailable =>
         latest
-      case Some(limit) if currentPartitionOffsets.isEmpty =>
-        rateLimit(limit, initialPartitionOffsets, latest)
-      case Some(limit) =>
-        rateLimit(limit, currentPartitionOffsets.get, latest)
     }
 
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
-    Some(KafkaSourceOffset(offsets))
+    KafkaSourceOffset(offsets)
   }
 
   /** Proportionally distribute limit number of offsets among topicpartitions */
