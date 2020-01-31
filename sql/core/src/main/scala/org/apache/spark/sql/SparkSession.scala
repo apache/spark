@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
-import java.util.Map
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicReference
 
@@ -38,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
-import org.apache.spark.sql.connector.ExternalCommandRunnerProvider
+import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -616,28 +615,24 @@ class SparkSession private(
    * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
    * creating cores for Solr and so on.
    *
-   * The command will be eagerly executed after `executeCommand` called and the returned
+   * The command will be eagerly executed after this method is called and the returned
    * DataFrame will contain the output of the command(if any).
    *
-   * Data source should implement `ExternalCommandRunnableProvider` to perform its
-   * own logic of command execution.
-   *
-   * @param command the target command to be executed
-   * @param source data source format
-   * @param options data source-specific parameters
+   * @param runner The class name of the runner that implements `ExternalCommandRunner`.
+   * @param command The target command to be executed
+   * @param options The options for the runner.
    *
    * @since 3.0.0
    */
   @Unstable
-  def executeCommand(command: String, source: String, options: Map[String, String]): DataFrame = {
-    DataSource.lookupDataSource(source, sessionState.conf) match {
-      case provider if classOf[ExternalCommandRunnerProvider].isAssignableFrom(provider) =>
-        Dataset.ofRows(self,
-          ExternalCommandExecutor(command, options,
-            provider.newInstance().asInstanceOf[ExternalCommandRunnerProvider]))
+  def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
+    DataSource.lookupDataSource(runner, sessionState.conf) match {
+      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
+        Dataset.ofRows(self, ExternalCommandExecutor(
+          source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>
-        throw new AnalysisException(s"Command execution is not supported in source $source")
+        throw new AnalysisException(s"Command execution is not supported in runner $runner")
     }
   }
 

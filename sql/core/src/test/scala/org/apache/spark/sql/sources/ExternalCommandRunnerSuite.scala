@@ -20,28 +20,31 @@ package org.apache.spark.sql.sources
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.ExternalCommandRunnerProvider
+import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class ExternalCommandRunnerProviderSuite extends QueryTest with SharedSparkSession {
+class ExternalCommandRunnerSuite extends QueryTest with SharedSparkSession {
   test("execute command") {
-    System.setProperty("command", "hello")
-    val parameters = Map("one" -> "1", "two" -> "2").asJava
-    assert(System.getProperty("command") === "hello")
-    val df = spark.executeCommand("hello", "cmdSource", parameters)
-    // executeCommand should execute the command eagerly
-    assert(System.getProperty("command") === "world")
-    checkAnswer(df, Seq(Row("hello".reverse), Row(parameters.toString)))
-    System.clearProperty("command")
+    try {
+      System.setProperty("command", "hello")
+      assert(System.getProperty("command") === "hello")
+
+      val options = Map("one" -> "1", "two" -> "2")
+      val df = spark.executeCommand(classOf[FakeCommandRunner].getName, "world", options)
+      // executeCommand should execute the command eagerly
+      assert(System.getProperty("command") === "world")
+      checkAnswer(df, Seq(Row("one"), Row("two")))
+    } finally {
+      System.clearProperty("command")
+    }
   }
 }
 
-class CommandRunnableDataSource extends DataSourceRegister with ExternalCommandRunnerProvider {
-  override def shortName(): String = "cmdSource"
+class FakeCommandRunner extends ExternalCommandRunner {
 
-  override def executeCommand(command: String, parameters: java.util.Map[String, String])
-    : Array[String] = {
-    System.setProperty("command", "world")
-    Array(command.reverse, parameters.toString())
+  override def executeCommand(command: String, options: CaseInsensitiveStringMap): Array[String] = {
+    System.setProperty("command", command)
+    options.keySet().iterator().asScala.toSeq.sorted.toArray
   }
 }
