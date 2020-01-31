@@ -98,7 +98,7 @@ The history server can be configured as follows:
 ### Applying compaction of old event log files
 
 A long-running streaming application can bring a huge single event log file which may cost a lot to maintain and
-also requires bunch of resource to replay per each update in Spark History Server.
+also requires a bunch of resource to replay per each update in Spark History Server.
 
 Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.rolling.maxFileSize</code> would
 let you have multiple event log files instead of single huge event log file which may help some scenarios on its own,
@@ -108,7 +108,7 @@ Spark History Server can apply 'compaction' on the rolling event log files to re
 logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
 Spark History Server.
 
-When the compaction happens, History Server lists the all available event log files, and considers the event log files older than
+When the compaction happens, History Server lists all the available event log files, and considers the event log files older than
 retained log files as a target of compaction. For example, if the application A has 5 event log files and
 <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, first 3 log files will be selected to be compacted.
 
