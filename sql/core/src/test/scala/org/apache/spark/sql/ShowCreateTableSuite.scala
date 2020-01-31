@@ -211,7 +211,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+  protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     def normalize(table: CatalogTable): CatalogTable = {
       val nondeterministicProps = Set(
         "CreateTime",
