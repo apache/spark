@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.exceptions.ResourceNotFoundException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
@@ -42,6 +43,7 @@ private object ResourceRequestHelper extends Logging {
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
+  @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
       sparkConf: SparkConf,
@@ -177,6 +179,7 @@ private object ResourceRequestHelper extends Logging {
         }
         logDebug(s"Registering resource with name: $name, amount: $amount, unit: $unit")
         val resourceInformation = createResourceInformation(name, amount, unit, resInfoClass)
+
         setResourceInformationMethod.invoke(
           resource, name, resourceInformation.asInstanceOf[AnyRef])
       } catch {
@@ -185,7 +188,20 @@ private object ResourceRequestHelper extends Logging {
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
         case CausedBy(e: IllegalArgumentException) =>
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
-        case e: InvocationTargetException if e.getCause != null => throw e.getCause
+        case e: InvocationTargetException =>
+          if (e.getCause != null) {
+            if (e.getCause.isInstanceOf[ResourceNotFoundException]) {
+              // warn a couple times and then stop so we don't spam the logs
+              if (numResourceErrors < 2) {
+                logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+                  s"has to handle properly discovering and isolating the resource! Error: " +
+                  s"${e.getCause().getMessage}")
+                numResourceErrors += 1
+              }
+            } else {
+              throw e.getCause
+            }
+          }
       }
     }
   }
