@@ -163,10 +163,15 @@ case class HiveTableScanExec(
   }
 
   @transient lazy val prunedPartitions: Seq[HivePartition] = {
-    if (relation.prunedPartitions.nonEmpty &&
-      partitionPruningPred.forall(!ExecSubqueryExpression.hasSubquery(_))) {
-      relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
-    } else if (partitionPruningPred.nonEmpty) {
+    if (relation.prunedPartitions.nonEmpty) {
+      val hivePartitions =
+        relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+      if (partitionPruningPred.forall(!ExecSubqueryExpression.hasSubquery(_))) {
+        hivePartitions
+      } else {
+        prunePartitions(hivePartitions)
+      }
+    } else {
       val prunedPartitions = prunedPartitionsViaHiveMetaStore()
       if (prunedPartitions.isDefined) {
         prunedPartitions.get
@@ -175,9 +180,6 @@ case class HiveTableScanExec(
           sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
             .map(HiveClientImpl.toHivePartition(_, hiveQlTable)))
       }
-    } else {
-      sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
-        .map(HiveClientImpl.toHivePartition(_, hiveQlTable))
     }
   }
 
