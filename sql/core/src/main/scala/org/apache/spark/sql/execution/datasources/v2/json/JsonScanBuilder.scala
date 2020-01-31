@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.datasources.v2.json
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
-import org.apache.spark.sql.catalyst.json.JsonFilters
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -47,7 +46,7 @@ class JsonScanBuilder (
   private var _pushedFilters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.csvFilterPushDown) {
+    if (sparkSession.sessionState.conf.jsonFilterPushDown) {
       _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
     filters
