@@ -38,10 +38,16 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * - Entire partition: The frame is the entire partition, i.e.
  *   UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING. For this case, window function will take all
  *   rows as inputs and be evaluated once.
- * - Growing frame: We only add new rows into the frame, i.e. UNBOUNDED PRECEDING AND ....
+ * - Growing frame: We only add new rows into the frame. Examples are:
+ *     1. UNBOUNDED PRECEDING AND 1 PRECEDING
+ *     2. UNBOUNDED PRECEDING AND CURRENT ROW
+ *     3. UNBOUNDED PRECEDING AND 1 FOLLOWING
  *   Every time we move to a new row to process, we add some rows to the frame. We do not remove
  *   rows from this frame.
- * - Shrinking frame: We only remove rows from the frame, i.e. ... AND UNBOUNDED FOLLOWING.
+ * - Shrinking frame: We only remove rows from the frame. Examples are:
+ *     1. 1 PRECEDING AND UNBOUNDED FOLLOWING
+ *     2. CURRENT ROW AND UNBOUNDED FOLLOWING
+ *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING
  *   Every time we move to a new row to process, we remove some rows from the frame. We do not add
  *   rows to this frame.
  * - Moving frame: Every time we move to a new row to process, we remove some rows from the frame
