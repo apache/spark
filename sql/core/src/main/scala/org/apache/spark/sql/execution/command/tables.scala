@@ -1035,58 +1035,6 @@ trait ShowCreateTableCommandBase {
     }
   }
 
-  protected def showDataSourceTableDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= concatByMultiLines(columns)
-  }
-
-  protected def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    builder ++= s"USING ${metadata.provider.get}\n"
-
-    val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
-      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
-    }
-
-    if (dataSourceOptions.nonEmpty) {
-      builder ++= "OPTIONS "
-      builder ++= concatByMultiLines(dataSourceOptions)
-    }
-  }
-
-  protected def showDataSourceTableNonDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val partCols = metadata.partitionColumnNames
-    if (partCols.nonEmpty) {
-      builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
-    }
-
-    metadata.bucketSpec.foreach { spec =>
-      if (spec.bucketColumnNames.nonEmpty) {
-        builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
-
-        if (spec.sortColumnNames.nonEmpty) {
-          builder ++= s"SORTED BY ${spec.sortColumnNames.mkString("(", ", ", ")")}\n"
-        }
-
-        builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
-      }
-    }
-  }
-
-  protected def showCreateDataSourceTable(metadata: CatalogTable): String = {
-    val builder = StringBuilder.newBuilder
-
-    builder ++= s"CREATE TABLE ${table.quotedString} "
-    showDataSourceTableDataColumns(metadata, builder)
-    showDataSourceTableOptions(metadata, builder)
-    showDataSourceTableNonDataColumns(metadata, builder)
-    showTableComment(metadata, builder)
-    showTableLocation(metadata, builder)
-    showTableProperties(metadata, builder)
-
-    builder.toString()
-  }
 
   protected def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
@@ -1181,6 +1129,59 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       val newStorage = tableMetadata.storage.copy(properties = Map.empty)
       tableMetadata.copy(provider = source, storage = newStorage)
     }
+  }
+
+  private def showDataSourceTableDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val columns = metadata.schema.fields.map(_.toDDL)
+    builder ++= concatByMultiLines(columns)
+  }
+
+  private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    builder ++= s"USING ${metadata.provider.get}\n"
+
+    val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
+      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
+    }
+
+    if (dataSourceOptions.nonEmpty) {
+      builder ++= "OPTIONS "
+      builder ++= concatByMultiLines(dataSourceOptions)
+    }
+  }
+
+  private def showDataSourceTableNonDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val partCols = metadata.partitionColumnNames
+    if (partCols.nonEmpty) {
+      builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
+    }
+
+    metadata.bucketSpec.foreach { spec =>
+      if (spec.bucketColumnNames.nonEmpty) {
+        builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
+
+        if (spec.sortColumnNames.nonEmpty) {
+          builder ++= s"SORTED BY ${spec.sortColumnNames.mkString("(", ", ", ")")}\n"
+        }
+
+        builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
+      }
+    }
+  }
+
+  private def showCreateDataSourceTable(metadata: CatalogTable): String = {
+    val builder = StringBuilder.newBuilder
+
+    builder ++= s"CREATE TABLE ${table.quotedString} "
+    showDataSourceTableDataColumns(metadata, builder)
+    showDataSourceTableOptions(metadata, builder)
+    showDataSourceTableNonDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
+    showTableProperties(metadata, builder)
+
+    builder.toString()
   }
 }
 
