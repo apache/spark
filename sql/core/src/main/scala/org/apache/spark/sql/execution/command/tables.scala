@@ -1136,13 +1136,10 @@ case class ShowCreateTableCommand(table: TableIdentifier)
           throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
         }
 
-        // scalastyle:off caselocale
-        if (tableMetadata.properties.getOrElse("transactional", "false")
-            .toLowerCase.equals("true")) {
+        if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
           throw new AnalysisException(
             "SHOW CREATE TABLE doesn't support transactional Hive table")
         }
-        // scalastyle:on caselocale
 
         convertTableMetadata(tableMetadata)
       }
@@ -1198,7 +1195,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
     extends RunnableCommand with ShowCreateTableCommandBase {
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("sparktab_stmt", StringType, nullable = false)()
+    AttributeReference("createtab_stmt", StringType, nullable = false)()
   )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

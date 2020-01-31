@@ -73,7 +73,7 @@ CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet;
 CREATE VIEW view_SPARK_30302 (aaa, bbb)
 AS SELECT a, b FROM tbl;
 
-SHOW CREATE TABLE view_SPARK_30302;
+SHOW CREATE TABLE view_SPARK_30302 AS SERDE;
 DROP VIEW view_SPARK_30302;
 
 
@@ -82,13 +82,20 @@ CREATE VIEW view_SPARK_30302 (aaa COMMENT 'comment with \'quoted text\' for aaa'
 COMMENT 'This is a comment with \'quoted text\' for view'
 AS SELECT a, b FROM tbl;
 
-SHOW CREATE TABLE view_SPARK_30302;
+SHOW CREATE TABLE view_SPARK_30302 AS SERDE;
 DROP VIEW view_SPARK_30302;
 
 
 -- tblproperties
 CREATE VIEW view_SPARK_30302 (aaa, bbb)
 TBLPROPERTIES ('a' = '1', 'b' = '2')
+AS SELECT a, b FROM tbl;
+
+SHOW CREATE TABLE view_SPARK_30302 AS SERDE;
+DROP VIEW view_SPARK_30302;
+
+-- SHOW CREATE TABLE does not support view
+CREATE VIEW view_SPARK_30302 (aaa, bbb)
 AS SELECT a, b FROM tbl;
 
 SHOW CREATE TABLE view_SPARK_30302;
