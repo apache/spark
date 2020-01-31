@@ -437,7 +437,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       JObject(
         "product-class" -> JString(classOf[AliasIdentifier].getName),
           "name" -> "alias",
-          "namespace" -> "[ns1, ns2]"))
+          "qualifier" -> "[ns1, ns2]"))
 
     // Converts SubqueryAlias to JSON
     assertJSON(
@@ -448,7 +448,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "num-children" -> 1,
           "identifier" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
             "name" -> "t1",
-            "namespace" -> JArray(Nil)),
+            "qualifier" -> JArray(Nil)),
           "child" -> 0),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,

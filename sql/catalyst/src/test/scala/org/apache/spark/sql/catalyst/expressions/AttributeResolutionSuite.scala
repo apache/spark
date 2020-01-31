@@ -27,60 +27,77 @@ class AttributeResolutionSuite extends SparkFunSuite {
 
   test("basic attribute resolution with namespaces") {
     val attrs = Seq(
-      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2")),
-      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2", "ns3")))
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2", "t1")),
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2", "ns3", "t2")))
 
-    // Try to match attribute reference with name "a" with qualifier "ns1.ns2".
-    Seq(Seq("ns2", "a"), Seq("ns1", "ns2", "a")).foreach { nameParts =>
+    // Try to match attribute reference with name "a" with qualifier "ns1.ns2.t1".
+    Seq(Seq("t1", "a"), Seq("ns2", "t1", "a"), Seq("ns1", "ns2", "t1", "a")).foreach { nameParts =>
       attrs.resolve(nameParts, resolver) match {
         case Some(attr) => assert(attr.semanticEquals(attrs(0)))
         case _ => fail()
       }
     }
 
-    // Resolution is ambiguous.
-    val ex = intercept[AnalysisException] {
-      attrs.resolve(Seq("a"), resolver)
-    }
-    assert(ex.getMessage.contains(
-      "Reference 'a' is ambiguous, could be: ns1.ns2.a, ns1.ns2.ns3.a."))
-
     // Non-matching cases.
-    Seq(Seq("ns1", "ns2"), Seq("ns1", "a")).foreach { nameParts =>
+    Seq(Seq("ns1", "ns2", "t1"), Seq("ns2", "a")).foreach { nameParts =>
       val resolved = attrs.resolve(nameParts, resolver)
       assert(resolved.isEmpty)
     }
   }
 
+  test("attribute resolution ambiguity at the attribute name level") {
+    val attrs = Seq(
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t1")),
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2", "t2")))
+
+    val ex = intercept[AnalysisException] {
+      attrs.resolve(Seq("a"), resolver)
+    }
+    assert(ex.getMessage.contains(
+      "Reference 'a' is ambiguous, could be: ns1.t1.a, ns1.ns2.t2.a."))
+  }
+
+  test("attribute resolution ambiguity at the qualifier level") {
+    val attrs = Seq(
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t")),
+      AttributeReference("a", IntegerType)(qualifier = Seq("ns2", "ns1", "t")))
+
+    val ex = intercept[AnalysisException] {
+      attrs.resolve(Seq("ns1", "t", "a"), resolver)
+    }
+    assert(ex.getMessage.contains(
+      "Reference 'ns1.t.a' is ambiguous, could be: ns1.t.a, ns2.ns1.t.a."))
+  }
+
   test("attribute resolution with nested fields") {
     val attrType = StructType(Seq(StructField("aa", IntegerType), StructField("bb", IntegerType)))
-    val attrs = Seq(AttributeReference("a", attrType)(qualifier = Seq("ns1", "ns2")))
+    val attrs = Seq(AttributeReference("a", attrType)(qualifier = Seq("ns1", "t")))
 
-    val resolved = attrs.resolve(Seq("ns1", "ns2", "a", "aa"), resolver)
+    val resolved = attrs.resolve(Seq("ns1", "t", "a", "aa"), resolver)
     resolved match {
       case Some(Alias(_, name)) => assert(name == "aa")
       case _ => fail()
     }
 
     val ex = intercept[AnalysisException] {
-      attrs.resolve(Seq("ns1", "ns2", "a", "cc"), resolver)
+      attrs.resolve(Seq("ns1", "t", "a", "cc"), resolver)
     }
     assert(ex.getMessage.contains("No such struct field cc in aa, bb"))
   }
 
   test("attribute resolution with case insensitive resolver") {
-    val attrs = Seq(AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2")))
-    attrs.resolve(Seq("Ns1", "nS2", "A"), caseInsensitiveResolution) match {
+    val attrs = Seq(AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t")))
+    attrs.resolve(Seq("Ns1", "T", "A"), caseInsensitiveResolution) match {
       case Some(attr) => assert(attr.semanticEquals(attrs(0)) && attr.name == "A")
       case _ => fail()
     }
   }
 
   test("attribute resolution with case sensitive resolver") {
-    val attrs = Seq(AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2")))
-    assert(attrs.resolve(Seq("Ns1", "nS2", "A"), caseSensitiveResolution).isEmpty)
-    assert(attrs.resolve(Seq("ns1", "ns2", "A"), caseSensitiveResolution).isEmpty)
-    attrs.resolve(Seq("ns1", "ns2", "a"), caseSensitiveResolution) match {
+    val attrs = Seq(AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t")))
+    assert(attrs.resolve(Seq("Ns1", "T", "A"), caseSensitiveResolution).isEmpty)
+    assert(attrs.resolve(Seq("ns1", "t", "A"), caseSensitiveResolution).isEmpty)
+    attrs.resolve(Seq("ns1", "t", "a"), caseSensitiveResolution) match {
       case Some(attr) => assert(attr.semanticEquals(attrs(0)))
       case _ => fail()
     }

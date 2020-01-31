@@ -20,24 +20,21 @@ package org.apache.spark.sql.connector.catalog
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.StructType
 
 class CatalogV2UtilSuite extends SparkFunSuite {
   test("Load relation should encode the identifiers for V2Relations") {
     val testCatalog = mock(classOf[TableCatalog])
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    val ident = mock(classOf[Identifier])
     val table = mock(classOf[Table])
     when(table.schema()).thenReturn(mock(classOf[StructType]))
     when(testCatalog.loadTable(ident)).thenReturn(table)
     val r = CatalogV2Util.loadRelation(testCatalog, ident)
     assert(r.isDefined)
-    r.get match {
-      case SubqueryAlias(_, v2Relation: DataSourceV2Relation) =>
-        assert(v2Relation.catalog.exists(_ == testCatalog))
-        assert(v2Relation.identifier.exists(_ == ident))
-      case _ => fail()
-    }
+    assert(r.get.isInstanceOf[DataSourceV2Relation])
+    val v2Relation = r.get.asInstanceOf[DataSourceV2Relation]
+    assert(v2Relation.catalog.exists(_ == testCatalog))
+    assert(v2Relation.identifier.exists(_ == ident))
   }
 }

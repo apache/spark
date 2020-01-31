@@ -798,6 +798,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
+          .map(SubqueryAlias(u.multipartIdentifier, _))
           .getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
@@ -812,11 +813,7 @@ class Analyzer(
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
-          .map {
-            EliminateSubqueryAliases(_) match {
-              case r: DataSourceV2Relation => i.copy(table = r)
-            }
-          }
+          .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
@@ -825,16 +822,22 @@ class Analyzer(
           .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(SubqueryAlias(u.originalNameParts, _))
+          .getOrElse(u)
     }
 
     /**
      * Performs the lookup of DataSourceV2 Tables from v2 catalog.
      */
-    private def lookupV2Relation(identifier: Seq[String]): Option[LogicalPlan] =
+    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadRelation(catalog, ident)
+          CatalogV2Util.loadTable(catalog, ident) match {
+            case Some(table) =>
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+            case None => None
+          }
         case _ => None
       }
   }
@@ -885,7 +888,13 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
+        lookupRelation(u.multipartIdentifier)
+          .map {
+            case r: DataSourceV2Relation => SubqueryAlias(u.multipartIdentifier, r)
+            case other => other
+          }
+          .map(resolveViews)
+          .getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
@@ -922,7 +931,7 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              CatalogV2Util.getRelation(catalog, ident, table)
+              DataSourceV2Relation.create(table, Some(catalog), Some(ident))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))

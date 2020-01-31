@@ -389,7 +389,7 @@ case class DropTable(
 case class AlterTable(
     catalog: TableCatalog,
     ident: Identifier,
-    table: LogicalPlan,
+    table: NamedRelation,
     changes: Seq[TableChange]) extends Command {
 
   override lazy val resolved: Boolean = table.resolved && {

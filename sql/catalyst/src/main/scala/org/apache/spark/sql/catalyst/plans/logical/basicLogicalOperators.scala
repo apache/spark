@@ -861,7 +861,7 @@ case class SubqueryAlias(
   def alias: String = identifier.name
 
   override def output: Seq[Attribute] = {
-    val qualifierList = identifier.namespace :+ alias
+    val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
   override def doCanonicalize(): LogicalPlan = child.canonicalized
@@ -882,9 +882,9 @@ object SubqueryAlias {
   }
 
   def apply(
-      identifier: Identifier,
+      multipartIdentifier: Seq[String],
       child: LogicalPlan): SubqueryAlias = {
-    SubqueryAlias(AliasIdentifier(identifier.name, identifier.namespace), child)
+    SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
 }
 /**

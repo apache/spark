@@ -52,14 +52,14 @@ sealed trait IdentifierWithDatabase {
  * name and a namespace.
  * The SubqueryAlias node keeps track of the qualifier using the information in this structure
  * @param name - Is an alias name or a table name
- * @param namespace - Is a namespace
+ * @param qualifier - Is a qualifier
  */
-case class AliasIdentifier(name: String, namespace: Seq[String]) {
+case class AliasIdentifier(name: String, qualifier: Seq[String]) {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   def this(identifier: String) = this(identifier, Seq())
 
-  override def toString: String = (namespace :+ name).quoted
+  override def toString: String = (qualifier :+ name).quoted
 }
 
 object AliasIdentifier {
