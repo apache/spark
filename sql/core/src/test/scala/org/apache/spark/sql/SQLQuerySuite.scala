@@ -27,9 +27,11 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
@@ -44,7 +46,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -174,27 +176,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-      parFuncs.foreach { funcId =>
-        // Examples can change settings. We clone the session to prevent tests clashing.
-        val clonedSpark = spark.cloneSession()
-        val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-        val className = info.getClassName
-        if (!ignoreSet.contains(className)) {
-          withClue(s"Function '${info.getName}', Expression class '$className'") {
-            val example = info.getExamples
-            checkExampleSyntax(example)
-            example.split("  > ").toList.foreach(_ match {
-              case exampleRe(sql, output) =>
-                val df = clonedSpark.sql(sql)
-                val actual = unindentAndTrim(
-                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-                val expected = unindentAndTrim(output)
-                assert(actual === expected)
-              case _ =>
-            })
-          }
+    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+    parFuncs.foreach { funcId =>
+      // Examples can change settings. We clone the session to prevent tests clashing.
+      val clonedSpark = spark.cloneSession()
+      val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
+      val className = info.getClassName
+      if (!ignoreSet.contains(className)) {
+        withClue(s"Function '${info.getName}', Expression class '$className'") {
+          val example = info.getExamples
+          checkExampleSyntax(example)
+          example.split("  > ").toList.foreach(_ match {
+            case exampleRe(sql, output) =>
+              val df = clonedSpark.sql(sql)
+              val actual = unindentAndTrim(
+                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val expected = unindentAndTrim(output)
+              assert(actual === expected)
+            case _ =>
+          })
         }
       }
     }
@@ -2842,16 +2842,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: HashAggregateExec => agg.aggregateExpressions
         case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(funcToResult._2) :: Nil)
+      checkAnswer(df, Row(funcToResult._2))
     }
   }
 
@@ -2859,15 +2861,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
       val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: SortAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(3) :: Nil)
+      checkAnswer(df, Row(3))
     }
   }
 
@@ -3278,7 +3282,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
              |on leftside.a = rightside.a
            """.stripMargin)
 
-        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+        val inMemoryTableScan = collect(queryDf.queryExecution.executedPlan) {
           case i: InMemoryTableScanExec => i
         }
         assert(inMemoryTableScan.size == 2)
@@ -3371,17 +3375,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-28670: create function should throw AnalysisException if UDF class not found") {
-    Seq(true, false).foreach { isTemporary =>
-      val exp = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udtf_test
-             |AS 'org.apache.spark.sql.hive.execution.UDFTest'
-             |USING JAR '/var/invalid/invalid.jar'
-        """.stripMargin)
-      }
-      assert(exp.getMessage.contains("Resources not found"))
+  test("SPARK-30447: fix constant propagation inside NOT") {
+    withTempView("t") {
+      Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
+      val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
+
+      checkAnswer(df, Row(1))
     }
   }
 }

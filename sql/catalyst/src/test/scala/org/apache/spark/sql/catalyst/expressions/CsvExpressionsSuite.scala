@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
   val badCsv = "\u0000\u0000\u0000A\u0001AAA"
@@ -236,5 +236,15 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
         child = Literal.create("a"),
         timeZoneId = gmtId),
       expectedErrMsg = "The field for corrupt records must be string type and nullable")
+  }
+
+  test("from/to csv with intervals") {
+    val schema = new StructType().add("a", "interval")
+    checkEvaluation(
+      StructsToCsv(Map.empty, Literal.create(create_row(new CalendarInterval(1, 2, 3)), schema)),
+       "1 months 2 days 0.000003 seconds")
+    checkEvaluation(
+      CsvToStructs(schema, Map.empty, Literal.create("1 day")),
+      InternalRow(new CalendarInterval(0, 1, 0)))
   }
 }

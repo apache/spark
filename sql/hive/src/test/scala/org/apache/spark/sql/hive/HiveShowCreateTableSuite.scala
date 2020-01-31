@@ -19,8 +19,24 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
+
+  private var origCreateHiveTableConfig = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    origCreateHiveTableConfig =
+      SQLConf.get.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+      origCreateHiveTableConfig)
+    super.afterAll()
+  }
 
   test("simple hive table") {
     withTable("t1") {
@@ -180,11 +196,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     withTable("t1") {
       val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>) USING hive"
       sql(createTable)
-      val shownDDL = sql(s"SHOW CREATE TABLE t1")
-        .head()
-        .getString(0)
-        .split("\n")
-        .head
+      val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
       assert(shownDDL == createTable.dropRight(" USING hive".length))
 
       checkCreateTable("t1")

@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableChange}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -742,7 +742,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       actual: scala.collection.Map[String, String]): Unit = {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.filter(expected.contains)
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filter(expected.contains)
     assert(expected -- toRemove === actual)
   }
 
@@ -995,31 +995,18 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove location") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
 
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
+      val exc = intercept[UnsupportedOperationException] {
+        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+      }
+      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+
     }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
-
-    catalog.dropNamespace(testNs)
-  }
-
-  test("alterNamespace: fail to remove comment") {
-    val catalog = newCatalog()
-
-    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
-
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
-    }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
-
     catalog.dropNamespace(testNs)
   }
 }

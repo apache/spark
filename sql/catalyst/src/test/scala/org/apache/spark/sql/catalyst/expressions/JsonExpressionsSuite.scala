@@ -25,12 +25,10 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
   val json =
@@ -680,25 +678,18 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       output)
   }
 
-  test("to_json: verify MapType's value type instead of key type") {
-    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
-    val mapType1 = MapType(CalendarIntervalType, IntegerType)
-    val schema1 = StructType(StructField("a", mapType1) :: Nil)
-    val struct1 = Literal.create(null, schema1)
+  test("from/to json - interval support") {
+    val schema = StructType(StructField("i", CalendarIntervalType) :: Nil)
     checkEvaluation(
-      StructsToJson(Map.empty, struct1, gmtId),
-      null
-    )
+      JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType)),
+      InternalRow(new CalendarInterval(12, 1, 0)))
 
-    // The value type must be valid for converting to JSON.
-    val mapType2 = MapType(IntegerType, CalendarIntervalType)
-    val schema2 = StructType(StructField("a", mapType2) :: Nil)
-    val struct2 = Literal.create(null, schema2)
-    StructsToJson(Map.empty, struct2, gmtId).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("Unable to convert column a of type interval to JSON"))
-      case _ => fail("from_json should not work on interval map value type.")
-    }
+    Seq(MapType(CalendarIntervalType, IntegerType), MapType(IntegerType, CalendarIntervalType))
+      .foreach { dt =>
+        val schema = StructField("a", dt) :: Nil
+        val struct = Literal.create(null, StructType(schema))
+        assert(StructsToJson(Map.empty, struct).checkInputDataTypes().isSuccess)
+      }
   }
 
   test("from_json missing fields") {

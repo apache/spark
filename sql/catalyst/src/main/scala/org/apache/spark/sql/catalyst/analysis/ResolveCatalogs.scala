@@ -115,14 +115,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
-    case DescribeTableStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
-      }
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      DescribeTable(r, isExtended)
-
     case DescribeColumnStatement(
          NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
@@ -147,7 +139,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         ignoreIfExists = c.ifNotExists)
 
     case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
@@ -173,7 +165,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options.filterKeys(_ != "path"),
+        writeOptions = c.options,
         orCreate = c.orCreate)
 
     case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>
@@ -199,11 +191,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
-
-    case ShowTablePropertiesStatement(
-      nameParts @ NonSessionCatalogAndTable(catalog, tbl), propertyKey) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-      ShowTableProperties(r, propertyKey)
   }
 
   object NonSessionCatalogAndTable {

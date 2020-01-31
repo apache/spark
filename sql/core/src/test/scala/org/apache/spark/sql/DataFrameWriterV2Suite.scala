@@ -22,11 +22,16 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.util.Utils
 
 class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -36,6 +41,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   private def catalog(name: String): TableCatalog = {
     spark.sessionState.catalogManager.catalog(name).asTableCatalog
   }
+
+  private val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -49,6 +56,45 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   after {
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
+  }
+
+  test("DataFrameWriteV2 encode identifiers correctly") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+
+    spark.table("source").writeTo("testcat.table_name").append()
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[AppendData])
+    checkV2Identifiers(plan.asInstanceOf[AppendData].table)
+
+    spark.table("source").writeTo("testcat.table_name").overwrite(lit(true))
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[OverwriteByExpression])
+    checkV2Identifiers(plan.asInstanceOf[OverwriteByExpression].table)
+
+    spark.table("source").writeTo("testcat.table_name").overwritePartitions()
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(plan.isInstanceOf[OverwritePartitionsDynamic])
+    checkV2Identifiers(plan.asInstanceOf[OverwritePartitionsDynamic].table)
+  }
+
+  private def checkV2Identifiers(
+      plan: LogicalPlan,
+      identifier: String = "table_name",
+      catalogPlugin: TableCatalog = catalog("testcat")): Unit = {
+    assert(plan.isInstanceOf[DataSourceV2Relation])
+    val v2 = plan.asInstanceOf[DataSourceV2Relation]
+    assert(v2.identifier.exists(_.name() == identifier))
+    assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
   test("Append: basic append") {
@@ -234,7 +280,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
-    assert(table.properties.isEmpty)
+    assert(table.properties == defaultOwnership.asJava)
   }
 
   test("Create: with using") {
@@ -249,7 +295,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
-    assert(table.properties === Map("provider" -> "foo").asJava)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
 
   test("Create: with property") {
@@ -264,7 +310,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
-    assert(table.properties === Map("prop" -> "value").asJava)
+    assert(table.properties === (Map("prop" -> "value") ++ defaultOwnership).asJava)
   }
 
   test("Create: identity partitioned table") {
@@ -279,7 +325,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
-    assert(table.properties.isEmpty)
+    assert(table.properties == defaultOwnership.asJava)
   }
 
   test("Create: partitioned by years(ts)") {
@@ -368,7 +414,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
-    assert(table.properties === Map("provider" -> "foo").asJava)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
 
   test("Replace: basic behavior") {
@@ -386,7 +432,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
-    assert(table.properties === Map("provider" -> "foo").asJava)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
     spark.table("source2")
         .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
@@ -405,7 +451,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .add("data", StringType)
         .add("even_or_odd", StringType))
     assert(replaced.partitioning.isEmpty)
-    assert(replaced.properties.isEmpty)
+    assert(replaced.properties === defaultOwnership.asJava)
   }
 
   test("Replace: partitioned table") {
@@ -422,7 +468,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
-    assert(table.properties === Map("provider" -> "foo").asJava)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
     spark.table("source2")
         .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
@@ -441,7 +487,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .add("data", StringType)
         .add("even_or_odd", StringType))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
-    assert(replaced.properties.isEmpty)
+    assert(replaced.properties === defaultOwnership.asJava)
   }
 
   test("Replace: fail if table does not exist") {
@@ -465,7 +511,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(replaced.name === "testcat.table_name")
     assert(replaced.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(replaced.partitioning.isEmpty)
-    assert(replaced.properties.isEmpty)
+    assert(replaced.properties === defaultOwnership.asJava)
   }
 
   test("CreateOrReplace: table exists") {
@@ -483,7 +529,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
-    assert(table.properties === Map("provider" -> "foo").asJava)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
     spark.table("source2")
         .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
@@ -502,6 +548,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .add("data", StringType)
         .add("even_or_odd", StringType))
     assert(replaced.partitioning.isEmpty)
-    assert(replaced.properties.isEmpty)
+    assert(replaced.properties === defaultOwnership.asJava)
   }
 }

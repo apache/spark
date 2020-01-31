@@ -25,11 +25,14 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
@@ -40,6 +43,7 @@ class DataSourceV2SQLSuite
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
   override protected val catalogAndNamespace = "testcat.ns1.ns2."
+  private val defaultUser: String = Utils.getCurrentUserName()
 
   private def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
@@ -93,7 +97,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
       .add("id", LongType, nullable = false)
       .add("data", StringType))
@@ -119,6 +123,11 @@ class DataSourceV2SQLSuite
       Row("", "", ""),
       Row("# Partitioning", "", ""),
       Row("Part 0", "id", "")))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
+    }
+    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
@@ -154,6 +163,7 @@ class DataSourceV2SQLSuite
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
+      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
 
   }
@@ -166,7 +176,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -181,7 +191,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // run a second create query that should fail
@@ -195,7 +205,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -212,7 +222,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     spark.sql("CREATE TABLE IF NOT EXISTS testcat.table_name (id bigint, data string) USING bar")
@@ -221,7 +231,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -238,12 +248,34 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is empty
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+  }
+
+  test("CreateTable/RepalceTable: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id array<interval>) USING $v2Format"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
+  }
+
+  test("CTAS/RTAS: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
@@ -260,7 +292,7 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType()
           .add("id", LongType)
           .add("data", StringType))
@@ -287,7 +319,7 @@ class DataSourceV2SQLSuite
         assert(replacedTable != originalTable, "Table should have been replaced.")
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
-        assert(replacedTable.properties == Map("provider" -> "foo").asJava)
+        assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
@@ -425,7 +457,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -442,7 +474,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -462,7 +494,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -480,7 +512,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -511,7 +543,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -551,7 +583,7 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType().add("i", "int"))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -868,8 +900,9 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateNameSpace: reserved properties") {
+    import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         val exception = intercept[ParseException] {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
         }
@@ -877,7 +910,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
@@ -886,7 +919,89 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) === null, "reserved properties should not have side effects")
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
+        }
+      }
+    }
+  }
+
+  test("create/replace/alter table - reserved properties") {
+    import TableCatalog._
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+            }
+            assert(e.getMessage.contains(s"$key is a reserved table property"))
+          }
+        }
+
+        val e1 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='bar')")
+        }
+        assert(e1.getMessage.contains(s"$key is a reserved table property"))
+
+        val e2 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+        }
+        assert(e2.getMessage.contains(s"$key is a reserved table property"))
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          withTable("testcat.reservedTest") {
+            Seq("CREATE", "REPLACE").foreach { action =>
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+              val tableCatalog = catalog("testcat").asTableCatalog
+              val identifier = Identifier.of(Array(), "reservedTest")
+              val originValue = tableCatalog.loadTable(identifier).properties().get(key)
+              assert(originValue != "bar", "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='newValue')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("create/replace - path property") {
+    Seq("true", "false").foreach { conf =>
+      withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, conf)) {
+        withTable("testcat.reservedTest") {
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e1 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' OPTIONS" +
+                s" ('path'='bar')")
+            }
+            assert(e1.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
+
+            val e2 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo OPTIONS" +
+                s" ('path'='foo', 'PaTh'='bar')")
+            }
+            assert(e2.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
+
+            sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' TBLPROPERTIES" +
+              s" ('path'='bar', 'Path'='noop')")
+            val tableCatalog = catalog("testcat").asTableCatalog
+            val identifier = Identifier.of(Array(), "reservedTest")
+            assert(tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION) == "foo",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("Path") == "noop",
+              "path as a table property should not have side effects")
+          }
         }
       }
     }
@@ -968,9 +1083,10 @@ class DataSourceV2SQLSuite
       val description = descriptionDf.collect()
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
   }
 
@@ -982,16 +1098,18 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test"),
-        Row("Properties", "((a,b),(b,a),(c,c))")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", "((a,b),(b,a),(c,c))"))
+      )
     }
   }
 
   test("AlterNamespaceSetProperties: reserved properties") {
+    import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql("CREATE NAMESPACE testcat.reservedTest")
           val exception = intercept[ParseException] {
@@ -1002,7 +1120,7 @@ class DataSourceV2SQLSuite
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace("testcat.reservedTest") {
           sql(s"CREATE NAMESPACE testcat.reservedTest")
           sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
@@ -1012,7 +1130,8 @@ class DataSourceV2SQLSuite
             .isEmpty, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) === null, "reserved properties should not have side effects")
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
         }
       }
     }
@@ -1026,9 +1145,10 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_2")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
   }
 
@@ -1810,22 +1930,23 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t")
+      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row("owner", owner),
+        Row(TableCatalog.PROP_OWNER, defaultUser),
         Row("provider", provider),
-        Row("status", status))
+        Row("status", status),
+        Row("user", user))
 
       assert(properties.schema === schema)
       assert(expected === properties.collect())
@@ -1835,11 +1956,11 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES(key): v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
 
@@ -1854,7 +1975,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       val nonExistingKey = "nonExistingKey"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
-        s"TBLPROPERTIES ('owner'='andrew', 'status'='new')")
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
 
@@ -2051,7 +2172,7 @@ class DataSourceV2SQLSuite
       Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
-      .where("k='Description'")
+      .where(s"k='${SupportsNamespaces.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
@@ -2089,7 +2210,7 @@ class DataSourceV2SQLSuite
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where("k='Comment'")
+      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
@@ -2110,7 +2231,7 @@ class DataSourceV2SQLSuite
 
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends TableProvider {
+class FakeV2Provider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }

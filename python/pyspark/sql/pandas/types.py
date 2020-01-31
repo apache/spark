@@ -165,22 +165,6 @@ def _check_series_localize_timestamps(s, timezone):
         return s
 
 
-def _check_dataframe_localize_timestamps(pdf, timezone):
-    """
-    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
-
-    :param pdf: pandas.DataFrame
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
-    """
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    for column, series in pdf.iteritems():
-        pdf[column] = _check_series_localize_timestamps(series, timezone)
-    return pdf
-
-
 def _check_series_convert_timestamps_internal(s, timezone):
     """
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
