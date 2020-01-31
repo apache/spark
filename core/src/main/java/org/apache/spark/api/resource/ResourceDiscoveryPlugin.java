@@ -33,5 +33,24 @@ import org.apache.spark.resource.ResourceRequest;
  */
 @DeveloperApi
 public interface ResourceDiscoveryPlugin {
+  /**
+   * Discover the addresses of the requested resource.
+   * <p>
+   * This method is called early in the initialization of the Spark Executor/Driver/Worker.
+   * This function is responsible for discovering the addresses of the resource which Spark will
+   * then use for scheduling and eventually providing to the user.
+   * Depending on the deployment mode and and configuration of custom resources, this could be
+   * called by the Spark Driver, the Spark Executors, in standalone mode the Workers, or all of
+   * them. The ResourceRequest has a ResourceID component that can be used to distinguish which
+   * component it is called from and what resource its being called for.
+   * This will get called once for each resource type requested and its the responsibility of
+   * this function to return enough addresses of that resource based on the request. If
+   * the addresses do not meet the requested amount, Spark will fail.
+   *
+   * @param request The ResourceRequest that to be discovered.
+   * @param sparkConf SparkConf
+   * @return A ResourceInformation object containing the resource name and the addresses
+   *         of the resource that the executor should use.
+   */
   ResourceInformation discoverResource(ResourceRequest request, SparkConf sparkConf);
 }
