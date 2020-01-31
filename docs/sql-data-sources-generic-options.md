@@ -71,7 +71,7 @@ the contents that have been read will still be returned.
 
 ### Path Global Filter
 
-`pathGlobFilter` is used to only include files with paths matching the pattern.
+`pathGlobFilter` is used to only include files with file names matching the pattern.
 The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
 It does not change the behavior of partition discovery.
 
