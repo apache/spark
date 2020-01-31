@@ -33,7 +33,7 @@
 }
 
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child {
+#plan-viz-graph svg text :first-child, #plan-viz-graph svg text :nth-child(2) {
   font-weight: bold;
 }
 
