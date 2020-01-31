@@ -128,9 +128,16 @@ public class JavaSQLDataSourceExample {
     Dataset<Row> partitionedUsersDF = spark.read().format("orc")
             .option("pathGlobFilter", "*.orc")
             .load("examples/src/main/resources/partitioned_users.orc");
+    partitionedUsersDF.show();
+    // +------+----------------+--------------+
+    // |  name|favorite_numbers|favorite_color|
+    // +------+----------------+--------------+
+    // |Alyssa|  [3, 9, 15, 20]|          null|
+    // |   Ben|              []|           red|
+    // +------+----------------+--------------+
     // $example off:load_with_path_glob_filter$
     // $example on:recursive_file_lookup$
-    Dataset<Row>  recursiveLoadedDF = spark.read().format("parquet")
+    Dataset<Row> recursiveLoadedDF = spark.read().format("parquet")
             .option("recursiveFileLookup", "true")
             .load("examples/src/main/resources/dir1");
     recursiveLoadedDF.show();

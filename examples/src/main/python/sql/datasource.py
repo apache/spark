@@ -49,6 +49,13 @@ def generic_file_source_options_example(spark):
     # $example on:load_with_path_glob_filter$
     df = spark.read.load("examples/src/main/resources/partitioned_users.orc",
                          format="orc", pathGlobFilter="*.orc")
+    df.show()
+    # +------+----------------+--------------+
+    # |  name|favorite_numbers|favorite_color|
+    # +------+----------------+--------------+
+    # |Alyssa|  [3, 9, 15, 20]|          null|
+    # |   Ben|              []|           red|
+    # +------+----------------+--------------+
     # $example off:load_with_path_glob_filter$
 
     # $example on:recursive_file_lookup$

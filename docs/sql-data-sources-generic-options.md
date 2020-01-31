@@ -24,16 +24,23 @@ license: |
 
 These generic options/configurations are effective only when using file-based sources: parquet, orc, avro, json, csv, text.
 
-Please note that the hierarchy of directory used in examples below is:
+Please note that the hierarchy of directories used in examples below are:
 
 {% highlight text %}
 
 dir1/
  ├── dir2/
- │    └── file2.parquet (schema: <file, string>, content: "file2.parquet")
+ │    └── file2.parquet (schema: <file: string>, content: "file2.parquet")
  └── file1.parquet (schema: <file, string>, content: "file1.parquet")
  └── file3.json (schema: <file, string>, content: "{'file':'corrupt.json'}")
- 
+
+partitioned_users.orc/
+ ├── favorite_color=__HIVE_DEFAULT_PARTITION__/
+ │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
+ ├── favorite_color=red/
+ │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
+ └── do_not_read_this.txt
+
 {% endhighlight %}
 
 ### Ignore Corrupt Files
