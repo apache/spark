@@ -179,7 +179,6 @@ private object ResourceRequestHelper extends Logging {
         }
         logDebug(s"Registering resource with name: $name, amount: $amount, unit: $unit")
         val resourceInformation = createResourceInformation(name, amount, unit, resInfoClass)
-
         setResourceInformationMethod.invoke(
           resource, name, resourceInformation.asInstanceOf[AnyRef])
       } catch {

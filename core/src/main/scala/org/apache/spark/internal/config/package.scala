@@ -58,7 +58,7 @@ package object config {
     ConfigBuilder("spark.resources.discovery.plugin")
       .doc("A class name implementing " +
         "org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application." +
-        "This is for advanced user to replace the resource discovery class with a " +
+        "This is for advanced users to replace the resource discovery class with a " +
         "custom implementation.")
       .stringConf
       .createWithDefault("org.apache.spark.resource.ResourceDiscoveryScriptPlugin")

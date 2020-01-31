@@ -100,7 +100,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   /**
-   * Create a ClassLoader for use for resource discovery. The user could provide a class
+   * Create a classLoader for use for resource discovery. The user could provide a class
    * as a substitute for the default one so we have to be able to load it from a user specified
    * jar.
    */

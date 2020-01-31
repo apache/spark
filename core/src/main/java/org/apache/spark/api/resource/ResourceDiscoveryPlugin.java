@@ -50,7 +50,7 @@ public interface ResourceDiscoveryPlugin {
    * @param request The ResourceRequest that to be discovered.
    * @param sparkConf SparkConf
    * @return A ResourceInformation object containing the resource name and the addresses
-   *         of the resource that the executor should use.
+   *         of the resource.
    */
   ResourceInformation discoverResource(ResourceRequest request, SparkConf sparkConf);
 }

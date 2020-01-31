@@ -28,7 +28,6 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
@@ -58,7 +57,6 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
-        logWarning(s"children are ${children.mkString(",")}")
         assert(children != null)
         assert(children.length >= 4)
         val gpuFiles = children.filter(f => f.getName().contains(GPU))
@@ -80,7 +78,7 @@ object TestResourceDiscoveryPlugin {
   }
 }
 
-private class TestResourceDiscoveryPlugin extends ResourceDiscoveryPlugin with Logging {
+private class TestResourceDiscoveryPlugin extends ResourceDiscoveryPlugin {
 
   override def discoverResource(request: ResourceRequest, conf: SparkConf): ResourceInformation = {
     TestResourceDiscoveryPlugin.writeFile(conf, request.id.resourceName)
