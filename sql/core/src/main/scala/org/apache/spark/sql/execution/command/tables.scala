@@ -1119,7 +1119,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
         builder ++= s" OUTPUTFORMAT: $format"
       }
       throw new AnalysisException(
-        "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
+        "Failed to execute SHOW CREATE TABLE against table " +
           s"${tableMetadata.identifier}, which is created by Hive and uses the " +
           "following unsupported serde configuration\n" +
           builder.toString()
@@ -1138,6 +1138,8 @@ case class ShowCreateTableCommand(table: TableIdentifier)
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    // For datasource table, there is a provider there in the metadata.
+    // If it is a Hive table, we already convert its metadata and fill in a provider.
     builder ++= s"USING ${metadata.provider.get}\n"
 
     val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
