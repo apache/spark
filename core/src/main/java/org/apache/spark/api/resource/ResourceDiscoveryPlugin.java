@@ -17,6 +17,8 @@
 
 package org.apache.spark.api.resource;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.SparkConf;
 import org.apache.spark.resource.ResourceInformation;
@@ -25,7 +27,8 @@ import org.apache.spark.resource.ResourceRequest;
 /**
  * :: DeveloperApi ::
  * A plugin that can be dynamically loaded into a Spark application to control how custom
- * resources are discovered.
+ * resources are discovered. Plugins can be chained to allow different plugins to handle
+ * different resource types.
  * <p>
  * Plugins must implement the function discoveryResource.
  *
@@ -46,11 +49,15 @@ public interface ResourceDiscoveryPlugin {
    * This will get called once for each resource type requested and its the responsibility of
    * this function to return enough addresses of that resource based on the request. If
    * the addresses do not meet the requested amount, Spark will fail.
+   * If this plugin doesn't handle a particular resource, it should return an empty Optional
+   * and Spark will try other plugins and then last fall back to the default discovery script
+   * plugin.
    *
    * @param request The ResourceRequest that to be discovered.
    * @param sparkConf SparkConf
-   * @return A ResourceInformation object containing the resource name and the addresses
-   *         of the resource.
+   * @return An {@link Optional} containing a {@link ResourceInformation} object containing
+   * the resource name and the addresses of the resource. If it returns {@link Optional#EMPTY}
+   * other plugins will be called.
    */
-  ResourceInformation discoverResource(ResourceRequest request, SparkConf sparkConf);
+  Optional<ResourceInformation> discoverResource(ResourceRequest request, SparkConf sparkConf);
 }

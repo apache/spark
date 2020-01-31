@@ -19,6 +19,7 @@ package org.apache.spark.resource
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.Optional
 import java.util.UUID
 
 import scala.concurrent.duration._
@@ -27,6 +28,7 @@ import com.google.common.io.Files
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
+import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
@@ -34,16 +36,16 @@ import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.Utils
 
-class
-ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext {
+class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext {
 
-  test("plugin initialization in non-local mode") {
+  test("plugin initialization in non-local mode fpga and gpu") {
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val conf = new SparkConf()
         .setAppName(getClass().getName())
         .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
-        .set(RESOURCES_DISCOVERY_PLUGIN, classOf[TestResourceDiscoveryPlugin].getName())
+        .set(RESOURCES_DISCOVERY_PLUGIN, Seq(classOf[TestResourceDiscoveryPluginGPU].getName(),
+          classOf[TestResourceDiscoveryPluginFPGA].getName()))
         .set(TestResourceDiscoveryPlugin.TEST_PATH_CONF, dir.getAbsolutePath())
         .set(WORKER_GPU_ID.amountConf, "2")
         .set(TASK_GPU_ID.amountConf, "1")
@@ -67,6 +69,81 @@ ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext {
       }
     }
   }
+
+  test("single plugin gpu") {
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val conf = new SparkConf()
+        .setAppName(getClass().getName())
+        .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+        .set(RESOURCES_DISCOVERY_PLUGIN, Seq(classOf[TestResourceDiscoveryPluginGPU].getName()))
+        .set(TestResourceDiscoveryPlugin.TEST_PATH_CONF, dir.getAbsolutePath())
+        .set(WORKER_GPU_ID.amountConf, "2")
+        .set(TASK_GPU_ID.amountConf, "1")
+        .set(EXECUTOR_GPU_ID.amountConf, "1")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        val children = dir.listFiles()
+        assert(children != null)
+        assert(children.length >= 2)
+        val gpuFiles = children.filter(f => f.getName().contains(GPU))
+        assert(gpuFiles.length == 2)
+      }
+    }
+  }
+
+  test("multiple plugins with one empty") {
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val conf = new SparkConf()
+        .setAppName(getClass().getName())
+        .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+        .set(RESOURCES_DISCOVERY_PLUGIN, Seq(classOf[TestResourceDiscoveryPluginEmpty].getName(),
+          classOf[TestResourceDiscoveryPluginGPU].getName()))
+        .set(TestResourceDiscoveryPlugin.TEST_PATH_CONF, dir.getAbsolutePath())
+        .set(WORKER_GPU_ID.amountConf, "2")
+        .set(TASK_GPU_ID.amountConf, "1")
+        .set(EXECUTOR_GPU_ID.amountConf, "1")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        val children = dir.listFiles()
+        assert(children != null)
+        assert(children.length >= 2)
+        val gpuFiles = children.filter(f => f.getName().contains(GPU))
+        assert(gpuFiles.length == 2)
+      }
+    }
+  }
+
+  test("empty plugin fallback to discovery script") {
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+      val conf = new SparkConf()
+        .setAppName(getClass().getName())
+        .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+        .set(RESOURCES_DISCOVERY_PLUGIN, Seq(classOf[TestResourceDiscoveryPluginEmpty].getName()))
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(DRIVER_GPU_ID.amountConf, "2")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
 }
 
 object TestResourceDiscoveryPlugin {
@@ -79,14 +156,39 @@ object TestResourceDiscoveryPlugin {
   }
 }
 
-private class TestResourceDiscoveryPlugin extends ResourceDiscoveryPlugin {
+private class TestResourceDiscoveryPluginGPU extends ResourceDiscoveryPlugin {
 
-  override def discoverResource(request: ResourceRequest, conf: SparkConf): ResourceInformation = {
-    TestResourceDiscoveryPlugin.writeFile(conf, request.id.resourceName)
+  override def discoverResource(
+      request: ResourceRequest,
+      conf: SparkConf): Optional[ResourceInformation] = {
     if (request.id.resourceName.equals(GPU)) {
-      new ResourceInformation(GPU, Array("0", "1", "2", "3"))
+      TestResourceDiscoveryPlugin.writeFile(conf, request.id.resourceName)
+      Optional.of(new ResourceInformation(GPU, Array("0", "1", "2", "3")))
     } else {
-      new ResourceInformation(FPGA, Array("0", "1", "2", "3"))
+      Optional.empty()
+    }
+  }
+}
+
+private class TestResourceDiscoveryPluginEmpty extends ResourceDiscoveryPlugin {
+
+  override def discoverResource(
+      request: ResourceRequest,
+      conf: SparkConf): Optional[ResourceInformation] = {
+    Optional.empty()
+  }
+}
+
+private class TestResourceDiscoveryPluginFPGA extends ResourceDiscoveryPlugin {
+
+  override def discoverResource(
+      request: ResourceRequest,
+      conf: SparkConf): Optional[ResourceInformation] = {
+    if (request.id.resourceName.equals(FPGA)) {
+      TestResourceDiscoveryPlugin.writeFile(conf, request.id.resourceName)
+      Optional.of(new ResourceInformation(FPGA, Array("0", "1", "2", "3")))
+    } else {
+      Optional.empty()
     }
   }
 }

@@ -365,16 +365,21 @@ private[spark] object ResourceUtils extends Logging {
   private[spark] def discoverResource(
       sparkConf: SparkConf,
       resourceRequest: ResourceRequest): ResourceInformation = {
-    // we only accept a single plugin
-    val pluginClass = Seq(sparkConf.get(RESOURCES_DISCOVERY_PLUGIN))
-    val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClass,
+    // always put the discovery script plugin as last plugin
+    val discoveryScriptPlugin = "org.apache.spark.resource.ResourceDiscoveryScriptPlugin"
+    val pluginClasses = sparkConf.get(RESOURCES_DISCOVERY_PLUGIN) :+ discoveryScriptPlugin
+    val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClasses,
       sparkConf)
-    if (resourcePlugins.nonEmpty) {
-      val resourcePlugin = resourcePlugins.head
-      resourcePlugin.discoverResource(resourceRequest, sparkConf)
-    } else {
-      throw new SparkException(s"Unable to load the resource discovery plugin $pluginClass")
+    // apply each plugin until one of them returns the information for this resource
+    var riOption: Optional[ResourceInformation] = Optional.empty()
+    resourcePlugins.foreach { plugin =>
+      val riOption = plugin.discoverResource(resourceRequest, sparkConf)
+      if (riOption.isPresent()) {
+        return riOption.get()
+      }
     }
+    throw new SparkException(s"None of the discovery plugins returned ResourceInformation for " +
+      s"${resourceRequest.id.resourceName}")
   }
 
   // known types of resources

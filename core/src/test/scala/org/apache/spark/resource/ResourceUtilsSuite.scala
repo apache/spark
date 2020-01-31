@@ -259,7 +259,7 @@ class ResourceUtilsSuite extends SparkFunSuite
 
   test("Resource discoverer with invalid class") {
     val conf = new SparkConf()
-      .set(RESOURCES_DISCOVERY_PLUGIN, "someinvalidclass")
+      .set(RESOURCES_DISCOVERY_PLUGIN, Seq("someinvalidclass"))
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
