@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -425,24 +425,56 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
-          case alter: AlterTable if alter.childrenResolved =>
+          case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)
               if (field.isEmpty) {
-                throw new AnalysisException(
-                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+                alter.failAnalysis(
+                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
+                  table.schema.treeString)
               }
-              field.get
+              field.get._2
+            }
+            def positionArgumentExists(position: ColumnPosition, struct: StructType): Unit = {
+              position match {
+                case after: After =>
+                  if (!struct.fieldNames.contains(after.column())) {
+                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
+                      s"${struct.fieldNames.mkString("[", ", ", "]")}")
+                  }
+                case _ =>
+              }
+            }
+            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
+              val parent = fieldNames.init
+              val field = if (parent.nonEmpty) {
+                findField(operation, parent).dataType
+              } else {
+                table.schema
+              }
+              field match {
+                case s: StructType => s
+                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
+                  s"its parent is not a StructType. Found $o")
+              }
+            }
+            def checkColumnNotExists(
+                operation: String,
+                fieldNames: Array[String],
+                struct: StructType): Unit = {
+              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
+                  s"already exists in ${struct.treeString}")
+              }
             }
 
             alter.changes.foreach {
               case add: AddColumn =>
-                val parent = add.fieldNames.init
-                if (parent.nonEmpty) {
-                  findField("add to", parent)
-                }
+                checkColumnNotExists("add", add.fieldNames(), table.schema)
+                val parent = findParentStruct("add", add.fieldNames())
+                positionArgumentExists(add.position(), parent)
                 TypeUtils.failWithIntervalType(add.dataType())
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
@@ -467,7 +499,7 @@ trait CheckAnalysis extends PredicateHelper {
                     // update is okay
                 }
                 if (!Cast.canUpCast(field.dataType, update.newDataType)) {
-                  throw new AnalysisException(
+                  alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
@@ -476,11 +508,17 @@ trait CheckAnalysis extends PredicateHelper {
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
                 if (!update.nullable && field.nullable) {
-                  throw new AnalysisException(
+                  alter.failAnalysis(
                     s"Cannot change nullable column to non-nullable: $fieldName")
                 }
+              case updatePos: UpdateColumnPosition =>
+                findField("update", updatePos.fieldNames)
+                val parent = findParentStruct("update", updatePos.fieldNames())
+                positionArgumentExists(updatePos.position(), parent)
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
+                checkColumnNotExists(
+                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
               case update: UpdateColumnComment =>
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>

@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, 
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
 import org.apache.spark.sql.execution.RowDataSourceScanExec
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -120,7 +121,7 @@ object V1ReadFallbackCatalog {
   val schema = new StructType().add("i", "int").add("j", "int")
 }
 
-class V1ReadFallbackTableProvider extends TableProvider {
+class V1ReadFallbackTableProvider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new TableWithV1ReadFallback("v1-read-fallback")
   }

@@ -30,6 +30,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.read.streaming
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -45,7 +47,7 @@ class FileStreamSource(
     override val schema: StructType,
     partitionColumns: Seq[String],
     metadataPath: String,
-    options: Map[String, String]) extends Source with Logging {
+    options: Map[String, String]) extends SupportsAdmissionControl with Source with Logging {
 
   import FileStreamSource._
 
@@ -115,15 +117,17 @@ class FileStreamSource(
    * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
    * there is no race here, so the cost of `synchronized` should be rare.
    */
-  private def fetchMaxOffset(): FileStreamSourceOffset = synchronized {
+  private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
     // All the new files found - ignore aged files and files that we have seen.
     val newFiles = fetchAllFiles().filter {
       case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
     }
 
     // Obey user's setting to limit the number of files in this batch trigger.
-    val batchFiles =
-      if (maxFilesPerBatch.nonEmpty) newFiles.take(maxFilesPerBatch.get) else newFiles
+    val batchFiles = limit match {
+      case files: ReadMaxFiles => newFiles.take(files.maxFiles())
+      case _: ReadAllAvailable => newFiles
+    }
 
     batchFiles.foreach { file =>
       seenFiles.add(file._1, file._2)
@@ -148,6 +152,10 @@ class FileStreamSource(
     }
 
     FileStreamSourceOffset(metadataLogCurrentOffset)
+  }
+
+  override def getDefaultReadLimit: ReadLimit = {
+    maxFilesPerBatch.map(ReadLimit.maxFiles).getOrElse(super.getDefaultReadLimit)
   }
 
   /**
@@ -269,7 +277,14 @@ class FileStreamSource(
     files
   }
 
-  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.logOffset == -1)
+  override def getOffset: Option[Offset] = {
+    throw new UnsupportedOperationException(
+      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  }
+
+  override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
+    Some(fetchMaxOffset(limit)).filterNot(_.logOffset == -1).orNull
+  }
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 

@@ -40,7 +40,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   private val emptyMap = CaseInsensitiveStringMap.empty
   private def createStreamingRelation(table: Table, v1Relation: Option[StreamingRelation]) = {
     StreamingRelationV2(
-      TestTableProvider,
+      new FakeV2Provider,
       "fake",
       table,
       CaseInsensitiveStringMap.empty(),
@@ -209,12 +209,6 @@ private object TableCapabilityCheckSuite {
 private case object TestRelation extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
   override def output: Seq[AttributeReference] = TableCapabilityCheckSuite.schema.toAttributes
-}
-
-private object TestTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException
-  }
 }
 
 private case class CapabilityTable(_capabilities: TableCapability*) extends Table {

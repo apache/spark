@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.types.StructType
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -29,9 +28,9 @@ import org.apache.spark.sql.types.StructType
 private[sql] object CatalogV2Implicits {
   import LogicalExpressions._
 
-  implicit class PartitionTypeHelper(partitionType: StructType) {
+  implicit class PartitionTypeHelper(colNames: Seq[String]) {
     def asTransforms: Array[Transform] = {
-      partitionType.names.map(col => identity(reference(Seq(col)))).toArray
+      colNames.map(col => identity(reference(Seq(col)))).toArray
     }
   }
 

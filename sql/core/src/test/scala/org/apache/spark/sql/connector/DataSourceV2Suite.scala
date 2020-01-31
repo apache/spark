@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -418,7 +419,7 @@ object SimpleReaderFactory extends PartitionReaderFactory {
 
 abstract class SimpleBatchTable extends Table with SupportsRead  {
 
-  override def schema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def schema(): StructType = TestingV2Source.schema
 
   override def name(): String = this.getClass.toString
 
@@ -432,12 +433,31 @@ abstract class SimpleScanBuilder extends ScanBuilder
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
 }
 
-class SimpleSinglePartitionSource extends TableProvider {
+trait TestingV2Source extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    TestingV2Source.schema
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+
+  def getTable(options: CaseInsensitiveStringMap): Table
+}
+
+object TestingV2Source {
+  val schema = new StructType().add("i", "int").add("j", "int")
+}
+
+class SimpleSinglePartitionSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -452,9 +472,10 @@ class SimpleSinglePartitionSource extends TableProvider {
   }
 }
 
+
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
-class SimpleDataSourceV2 extends TableProvider {
+class SimpleDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -469,7 +490,7 @@ class SimpleDataSourceV2 extends TableProvider {
   }
 }
 
-class AdvancedDataSourceV2 extends TableProvider {
+class AdvancedDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -481,7 +502,7 @@ class AdvancedDataSourceV2 extends TableProvider {
 class AdvancedScanBuilder extends ScanBuilder
   with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
 
-  var requiredSchema = new StructType().add("i", "int").add("j", "int")
+  var requiredSchema = TestingV2Source.schema
   var filters = Array.empty[Filter]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -567,11 +588,16 @@ class SchemaRequiredDataSource extends TableProvider {
     override def readSchema(): StructType = schema
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def supportsExternalMetadata(): Boolean = true
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     throw new IllegalArgumentException("requires a user-supplied schema")
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
@@ -583,7 +609,7 @@ class SchemaRequiredDataSource extends TableProvider {
   }
 }
 
-class ColumnarDataSourceV2 extends TableProvider {
+class ColumnarDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
 
@@ -648,7 +674,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TableProvider {
+class PartitionAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning{
@@ -716,7 +742,7 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   }
 }
 
-class ReportStatisticsDataSource extends TableProvider {
+class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
