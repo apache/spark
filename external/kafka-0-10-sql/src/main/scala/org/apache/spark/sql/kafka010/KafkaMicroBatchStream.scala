@@ -66,8 +66,6 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
-  private val rangeCalculator = KafkaOffsetRangeCalculator(options)
-
   private var endPartitionOffsets: KafkaSourceOffset = _
 
   /**
@@ -94,57 +92,11 @@ private[kafka010] class KafkaMicroBatchStream(
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val endPartitionOffsets = end.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
-    // Find the new partitions, and get their earliest offsets
-    val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
-    val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-    if (newPartitionInitialOffsets.keySet != newPartitions) {
-      // We cannot get from offsets for some partitions. It means they got deleted.
-      val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
-      reportDataLoss(
-        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
-    }
-    logInfo(s"Partitions added: $newPartitionInitialOffsets")
-    newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
-      reportDataLoss(
-        s"Added partition $p starts from $o instead of 0. Some data may have been missed")
-    }
-
-    // Find deleted partitions, and report data loss if required
-    val deletedPartitions = startPartitionOffsets.keySet.diff(endPartitionOffsets.keySet)
-    if (deletedPartitions.nonEmpty) {
-      val message =
-        if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-          s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
-        } else {
-          s"$deletedPartitions are gone. Some data may have been missed."
-        }
-      reportDataLoss(message)
-    }
-
-    // Use the end partitions to calculate offset ranges to ignore partitions that have
-    // been deleted
-    val topicPartitions = endPartitionOffsets.keySet.filter { tp =>
-      // Ignore partitions that we don't know the from offsets.
-      newPartitionInitialOffsets.contains(tp) || startPartitionOffsets.contains(tp)
-    }.toSeq
-    logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
-
-    val fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets
-    val untilOffsets = endPartitionOffsets
-    untilOffsets.foreach { case (tp, untilOffset) =>
-      fromOffsets.get(tp).foreach { fromOffset =>
-        if (untilOffset < fromOffset) {
-          reportDataLoss(s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed")
-        }
-      }
-    }
-
-    // Calculate offset ranges
-    val offsetRanges = rangeCalculator.getRanges(
-      fromOffsets = fromOffsets,
-      untilOffsets = untilOffsets,
-      executorLocations = getSortedExecutorList())
+    val offsetRanges = kafkaOffsetReader.getOffsetRangesFromResolvedOffsets(
+      startPartitionOffsets,
+      endPartitionOffsets,
+      reportDataLoss
+    )
 
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
@@ -240,23 +192,6 @@ private[kafka010] class KafkaMicroBatchStream(
           }.getOrElse(end)
       }
     }
-  }
-
-  private def getSortedExecutorList(): Array[String] = {
-
-    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-      if (a.host == b.host) {
-        a.executorId > b.executorId
-      } else {
-        a.host > b.host
-      }
-    }
-
-    val bm = SparkEnv.get.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
   }
 
   /**
