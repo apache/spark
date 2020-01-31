@@ -38,9 +38,7 @@ public interface SupportsAdmissionControl extends SparkDataStream {
    * Returns the read limits potentially passed to the data source through options when creating
    * the data source.
    */
-  default ReadLimit getDefaultReadLimit() {
-      return ReadLimit.allAvailable();
-  }
+  default ReadLimit getDefaultReadLimit() { return ReadLimit.allAvailable(); }
 
   /**
    * Returns the most recent offset available given a read limit. The start offset can be used
