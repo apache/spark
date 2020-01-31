@@ -34,7 +34,8 @@ import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.Utils
 
-class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext {
+class
+ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext {
 
   test("plugin initialization in non-local mode") {
     assume(!(Utils.isWindows))
