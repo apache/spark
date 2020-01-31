@@ -181,7 +181,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
       assert(execFiles.size === 1)
-      val allLines = Files.readLines(execFiles(0), StandardCharsets.US_ASCII)
+      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
       assert(addrs.size === 2)
@@ -213,7 +213,7 @@ class NonLocalModeSparkPlugin extends SparkPlugin {
     new ExecutorPlugin() {
       override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
         NonLocalModeSparkPlugin.writeFile(NonLocalModeSparkPlugin.executorFileStr, ctx.conf(),
-        ctx.executorID(), ctx.resources().asScala.toMap)
+          ctx.executorID(), ctx.resources().asScala.toMap)
       }
     }
   }
