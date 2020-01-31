@@ -44,6 +44,9 @@ object MemoryStream {
 
   def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+
+  def apply[A : Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, Some(numPartitions))
 }
 
 /**
@@ -136,9 +139,14 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
  * is intended for use in unit tests as it can only replay data when the object is still
  * available.
+ *
+ * If numPartitions is provided, the rows will be redistributed to the given number of partitions.
  */
-case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
+case class MemoryStream[A : Encoder](
+    id: Int,
+    sqlContext: SQLContext,
+    numPartitions: Option[Int] = None)
+  extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
 
   protected val output = logicalPlan.output
 
@@ -206,9 +214,23 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
-      newBlocks.map { block =>
-        new MemoryStreamInputPartition(block)
-      }.toArray
+      numPartitions match {
+        case Some(numParts) =>
+          // When the number of partition is provided, we redistribute the rows into
+          // the given number of partition, via round-robin manner.
+          val inputRows = newBlocks.flatten.toArray
+          (0 until numParts).map { newPartIdx =>
+            val records = inputRows.zipWithIndex.filter { case (_, idx) =>
+              idx % numParts == newPartIdx
+            }.map(_._1)
+            new MemoryStreamInputPartition(records)
+          }.toArray
+
+        case _ =>
+          newBlocks.map { block =>
+            new MemoryStreamInputPartition(block)
+          }.toArray
+      }
     }
   }
 

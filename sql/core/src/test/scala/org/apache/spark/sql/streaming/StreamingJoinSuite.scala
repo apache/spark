@@ -25,6 +25,7 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
@@ -376,7 +377,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       val rdd1 = spark.sparkContext.makeRDD(1 to 10, numPartitions)
       val rdd2 = spark.sparkContext.makeRDD((1 to 10).map(_.toString), numPartitions)
       val rdd = rdd1.stateStoreAwareZipPartitions(rdd2, stateInfo, storeNames, coordinatorRef) {
-        (left, right) => left.zip(right)
+        (_, left, right) => left.zip(right)
       }
       require(rdd.partitions.length === numPartitions)
       for (partIndex <- 0 until numPartitions) {
@@ -933,5 +934,61 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     assert(e.getMessage.toLowerCase(Locale.ROOT)
       .contains("the query is using stream-stream outer join with state format version 1"))
   }
-}
 
+  test("SPARK-29438: ensure UNION doesn't lead stream-stream join to use shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+        : (MemoryStream[Int], MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val df1 = input1.toDF
+        .select(
+          'value as "key",
+          'value as "leftValue",
+          'value as "rightValue")
+      val (input2, df2) = setupStream("left", 2)
+      val (input3, df3) = setupStream("right", 3)
+
+      val joined = df2
+        .join(df3,
+          df2("key") === df3("key") && df2("leftTime") === df3("rightTime"),
+          "inner")
+        .select(df2("key"), 'leftValue, 'rightValue)
+
+      (input1, input2, input3, df1.union(joined))
+    }
+
+    withTempDir { tempDir =>
+      val (input1, input2, input3, unionDf) = constructUnionDf(2)
+
+      testStream(unionDf)(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        MultiAddData(
+          (input1, Seq(11, 12, 13)),
+          (input2, Seq(11, 12, 13, 14, 15)),
+          (input3, Seq(13, 14, 15, 16, 17))),
+        CheckNewAnswer(Row(11, 11, 11), Row(12, 12, 12), Row(13, 13, 13), Row(13, 26, 39),
+          Row(14, 28, 42), Row(15, 30, 45)),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which leads right side of union to have mismatched partition IDs if it relies on
+      // TaskContext.partitionId(). SPARK-29438 fixes this issue to not rely on it.
+
+      val (newInput1, newInput2, newInput3, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData(11, 12, 13)
+      newInput2.addData(11, 12, 13, 14, 15)
+      newInput3.addData(13, 14, 15, 16, 17)
+
+      testStream(newUnionDf)(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        MultiAddData(
+          (newInput1, Seq(21, 22, 23)),
+          (newInput2, Seq(21, 22, 23, 24, 25)),
+          (newInput3, Seq(23, 24, 25, 26, 27))),
+        CheckNewAnswer(Row(21, 21, 21), Row(22, 22, 22), Row(23, 23, 23), Row(23, 46, 69),
+          Row(24, 48, 72), Row(25, 50, 75))
+      )
+    }
+  }
+}

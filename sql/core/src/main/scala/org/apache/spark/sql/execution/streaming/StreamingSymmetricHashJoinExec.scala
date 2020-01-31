@@ -215,6 +215,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   private def processPartitions(
+      partitionId: Int,
       leftInputIter: Iterator[InternalRow],
       rightInputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
     if (stateInfo.isEmpty) {
@@ -238,10 +239,10 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left)
+      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right)
+      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -406,6 +407,7 @@ case class StreamingSymmetricHashJoinExec(
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
+   * @param partitionId A partition ID of source RDD.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -414,7 +416,8 @@ case class StreamingSymmetricHashJoinExec(
       inputIter: Iterator[InternalRow],
       preJoinFilterExpr: Option[Expression],
       postJoinFilter: (InternalRow) => Boolean,
-      stateWatermarkPredicate: Option[JoinStateWatermarkPredicate]) {
+      stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
+      partitionId: Int) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
@@ -422,7 +425,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      stateFormatVersion)
+      partitionId, stateFormatVersion)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
