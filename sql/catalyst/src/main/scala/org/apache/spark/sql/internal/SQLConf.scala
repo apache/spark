@@ -2155,6 +2155,7 @@ object SQLConf {
         "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
         "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
       .intConf
+      .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
 
   /**

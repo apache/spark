@@ -142,7 +142,7 @@ object CommandUtils extends Logging {
       tid: TableIdentifier,
       paths: Seq[Option[URI]]): Long = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
-      calculateLocationsSizesParallel(sparkSession, paths.map(_.map(new Path(_))))
+      calculateLocationSizeParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
       paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p)).sum
     }
@@ -155,7 +155,7 @@ object CommandUtils extends Logging {
    * @param paths the Seq of [[Option[Path]]]s
    * @return total size of all partitions
    */
-  def calculateLocationsSizesParallel(
+  def calculateLocationSizeParallel(
       sparkSession: SparkSession,
       paths: Seq[Option[Path]]): Long = {
     val stagingDir = sparkSession.sessionState.conf
