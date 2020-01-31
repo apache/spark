@@ -415,6 +415,19 @@ class ArrowTests(ReusedSQLTestCase):
         for case in cases:
             run_test(*case)
 
+    def test_createDateFrame_with_category_type(self):
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        pdf["B"] = pdf["A"].astype('category')
+        self.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", True)
+        arrow_df = self.spark.createDataFrame(pdf)
+        result_arrow = arrow_df.collect()
+
+        self.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", False)
+        df = self.spark.createDataFrame(pdf)
+        result_spark = df.collect()
+
+        assert result_arrow == result_spark
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
