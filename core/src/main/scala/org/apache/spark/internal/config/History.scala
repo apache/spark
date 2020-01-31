@@ -96,6 +96,9 @@ private[spark] object History {
 
   private[spark] val EVENT_LOG_COMPACTION_SCORE_THRESHOLD =
     ConfigBuilder("spark.history.fs.eventLog.rolling.compaction.score.threshold")
+      .doc("The threshold score to determine whether it's good to do the compaction or not. " +
+        "The compaction score is calculated in analyzing, and being compared to this value. " +
+        "Compaction will proceed only when the score is higher than the threshold value.")
       .internal()
       .doubleConf
       .createWithDefault(0.7d)
