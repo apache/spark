@@ -117,7 +117,8 @@ class ExecutorSuite extends SparkFunSuite
 
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true,
+        resources = immutable.Map.empty[String, ResourceInformation])
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockExecutorBackend, taskDescription)
 
@@ -254,7 +255,8 @@ class ExecutorSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val executor =
-      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
+        resources = immutable.Map.empty[String, ResourceInformation])
     val executorClass = classOf[Executor]
 
     // Save all heartbeats sent into an ArrayBuffer for verification
@@ -353,7 +355,8 @@ class ExecutorSuite extends SparkFunSuite
     val mockBackend = mock[ExecutorBackend]
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
+        resources = immutable.Map.empty[String, ResourceInformation])
       executor.launchTask(mockBackend, taskDescription)
 
       // Ensure that the executor's metricsPoller is polled so that values are recorded for
@@ -466,7 +469,8 @@ class ExecutorSuite extends SparkFunSuite
     val timedOut = new AtomicBoolean(false)
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
-        uncaughtExceptionHandler = mockUncaughtExceptionHandler)
+        uncaughtExceptionHandler = mockUncaughtExceptionHandler,
+        resources = immutable.Map.empty[String, ResourceInformation])
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
       if (killTask) {
