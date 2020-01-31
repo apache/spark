@@ -26,7 +26,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch, creating
  * cores for Solr and so on.
  * <p>
- * This interface will be instantiated every time end-users call `SparkSession#executeCommand`.
+ * This interface will be instantiated when end users call `SparkSession#executeCommand`.
  */
 @Unstable
 public interface ExternalCommandRunner {
