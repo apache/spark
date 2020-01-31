@@ -128,7 +128,7 @@ private[kafka010] class KafkaSource(
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
-    throw new IllegalStateException(
+    throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
   }
 

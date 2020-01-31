@@ -32,11 +32,7 @@ import org.apache.spark.annotation.Evolving;
 public interface ReadLimit {
   static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
 
-  static ReadLimit maxFiles(int files) {
-    return new ReadMaxFiles(files);
-  }
+  static ReadLimit maxFiles(int files) { return new ReadMaxFiles(files); }
 
-  static ReadLimit allAvailable() {
-      return ReadAllAvailable.SINGLETON;
-  }
+  static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
 }

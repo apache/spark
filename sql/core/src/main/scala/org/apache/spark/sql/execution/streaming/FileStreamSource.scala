@@ -125,10 +125,8 @@ class FileStreamSource(
 
     // Obey user's setting to limit the number of files in this batch trigger.
     val batchFiles = limit match {
-      case files: ReadMaxFiles =>
-        newFiles.take(files.maxFiles())
-      case all: ReadAllAvailable =>
-        newFiles
+      case files: ReadMaxFiles => newFiles.take(files.maxFiles())
+      case _: ReadAllAvailable => newFiles
     }
 
     batchFiles.foreach { file =>
@@ -280,7 +278,7 @@ class FileStreamSource(
   }
 
   override def getOffset: Option[Offset] = {
-    throw new IllegalStateException(
+    throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
   }
 

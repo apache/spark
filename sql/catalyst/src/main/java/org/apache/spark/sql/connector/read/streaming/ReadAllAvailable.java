@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class ReadAllAvailable implements ReadLimit {
-  static final ReadAllAvailable SINGLETON = new ReadAllAvailable();
+  static final ReadAllAvailable INSTANCE = new ReadAllAvailable();
 
   private ReadAllAvailable() {}
 
