@@ -313,24 +313,24 @@ class KubernetesSuite extends SparkFunSuite
             case Action.MODIFIED =>
               execPods(name) = resource
             case Action.ADDED =>
-              println(s"Add event received for $name.")
+              logDebug(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
               // decommissioning.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
-                println("Waiting for first pod to become OK prior to deletion")
+                logDebug("Waiting for first pod to become OK prior to deletion")
                 Eventually.eventually(patienceTimeout, patienceInterval) {
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
                 // Sleep a small interval to allow execution of job
-                println("Sleeping before killing pod.")
-                Thread.sleep(5000)
+                logDebug("Sleeping before killing pod.")
+                Thread.sleep(2000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
-                println(s"Triggered pod decom/delete: $name deleted")
+                logDebug(s"Triggered pod decom/delete: $name deleted")
               }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
