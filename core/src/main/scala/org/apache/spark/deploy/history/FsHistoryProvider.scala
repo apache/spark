@@ -840,7 +840,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case None => // This is not applied to single event log file.
       }
     } catch {
-      case e: Exception => logError(s"Exception while compacting log for $rootPath", e)
+      case e: InterruptedException =>
+        throw e
+      case e: AccessControlException =>
+        logWarning(s"Insufficient permission while compacting log for $rootPath", e)
+      case e: Exception =>
+        logError(s"Exception while compacting log for $rootPath", e)
     } finally {
       endProcessing(rootPath)
     }
