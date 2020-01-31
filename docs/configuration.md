@@ -244,6 +244,15 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    A class name implementing org.apache.spark.api.resource.ResourceDiscoveryPlugin
+    to load into the application. This is for advanced user to replace the resource
+    discovery class with a custom implementation.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
