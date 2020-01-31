@@ -32,8 +32,13 @@
   stroke-width: 1px;
 }
 
+/* This declaration is needed to define the width of rectangles */
+#plan-viz-graph svg text :first-child {
+  font-weight: bold;
+}
+
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child, #plan-viz-graph svg text :nth-child(2) {
+#plan-viz-graph svg text .operator-name {
   font-weight: bold;
 }
 

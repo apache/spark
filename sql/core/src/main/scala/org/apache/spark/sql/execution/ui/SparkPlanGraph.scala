@@ -179,7 +179,7 @@ private[ui] class SparkPlanGraphNode(
     } else {
       // A certain level of height is needed for a rect as a node in a sub-graph
       // to avoid layout collapse for sub-graphs.
-      builder.insert(0, " \n")
+      builder ++= " "
     }
 
     s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
