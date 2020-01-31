@@ -42,8 +42,10 @@ class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging
       if (scriptFile.exists()) {
         val output = executeAndGetOutput(Seq(script.get), new File("."))
         ResourceInformation.parseJson(output)
-      } else throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
-        "doesn't exist!")
+      } else {
+        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
+          "doesn't exist!")
+      }
     } else {
       throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
         "didn't specify a discovery script!")
