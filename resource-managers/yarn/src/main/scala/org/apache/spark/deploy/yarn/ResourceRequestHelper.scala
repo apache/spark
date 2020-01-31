@@ -40,7 +40,7 @@ import org.apache.spark.util.{CausedBy, Utils}
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.exception.ResourceNotFoundException"
+  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
   @volatile private var numResourceErrors: Int = 0
@@ -190,8 +190,7 @@ private object ResourceRequestHelper extends Logging {
         case e: InvocationTargetException =>
           if (e.getCause != null) {
             if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
-              val resNotFoundClass = Utils.classForName(RESOURCE_NOT_FOUND)
-              if (e.getCause.getClass() == resNotFoundClass) {
+              if (e.getCause().getClass().getName().equals(RESOURCE_NOT_FOUND)) {
                 // warn a couple times and then stop so we don't spam the logs
                 if (numResourceErrors < 2) {
                   logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
