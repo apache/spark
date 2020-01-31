@@ -113,7 +113,7 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
         case Join(
             LogicalPlanWithDatasetId(_, leftId),
             LogicalPlanWithDatasetId(_, rightId),
-            _, condition, _) =>
+            _, condition) =>
           // If we are dealing with root join node, we need to take care of SPARK-6231:
           //  1. We can de-ambiguous `df("col") === df("col")` in the join condition.
           //  2. There is no ambiguity in direct self join like

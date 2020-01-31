@@ -308,7 +308,7 @@ case class AttributeReference(
     }
   }
 
-  override def withMetadata(newMetadata: Metadata): Attribute = {
+  override def withMetadata(newMetadata: Metadata): AttributeReference = {
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
