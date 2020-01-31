@@ -336,9 +336,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       val (input1, input2, unionDf) = constructUnionDf(2)
       testStream(unionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        MultiAddData(
-          (input1, Seq(11, 12)),
-          (input2, Seq(21, 22))),
+        MultiAddData(input1, 11, 12)(input2, 21, 22),
         CheckNewAnswer(Row(11, 12), Row(12, 13), Row(21, 1), Row(22, 1)),
         StopStream
       )
@@ -355,9 +353,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       testStream(newUnionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        MultiAddData(
-          (newInput1, Seq(13, 14)),
-          (newInput2, Seq(22, 23))),
+        MultiAddData(newInput1, 13, 14)(newInput2, 22, 23),
         CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1))
       )
     }
