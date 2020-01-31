@@ -374,7 +374,6 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
-
   private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
     def timestamps = {
       spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
