@@ -334,10 +334,10 @@ class JacksonParser(
    * Fields in the json that are not defined in the requested schema will be dropped.
    */
   private def convertObject(
-    parser: JsonParser,
-    schema: StructType,
-    fieldConverters: Array[ValueConverter],
-    structFilters: StructFilters = new NoopFilters()): Option[InternalRow] = {
+      parser: JsonParser,
+      schema: StructType,
+      fieldConverters: Array[ValueConverter],
+      structFilters: StructFilters = new NoopFilters()): Option[InternalRow] = {
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
