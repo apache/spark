@@ -265,22 +265,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
 
-  test("Constraints should be inferred from cast equality constraint(filter at lower data type)") {
-    val testRelation1 = LocalRelation('a.int)
-    val testRelation2 = LocalRelation('b.long)
-    val originalLeft = testRelation1.where('a === 1).subquery('left)
-    val originalRight = testRelation2.subquery('right)
-
-    val left = testRelation1.where(IsNotNull('a) && 'a === 1).subquery('left)
-    val right = testRelation2.where(IsNotNull('b) && 'b.cast(IntegerType) === 1).subquery('right)
-
-    Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
-      Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
-      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
-    }
-  }
-
-  test("Constraints should be inferred from cast equality constraint(filter at higher data type)") {
+  test("Constraints should be inferred from cast equality constraint(filter higher data type)") {
     val testRelation1 = LocalRelation('a.int)
     val testRelation2 = LocalRelation('b.long)
     val originalLeft = testRelation1.subquery('left)
@@ -288,6 +273,21 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     val left = testRelation1.where(IsNotNull('a) && 'a.cast(LongType) === 1L).subquery('left)
     val right = testRelation2.where(IsNotNull('b) && 'b === 1L).subquery('right)
+
+    Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
+      Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
+      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+    }
+  }
+
+  test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
+    val testRelation1 = LocalRelation('a.int)
+    val testRelation2 = LocalRelation('b.long)
+    val originalLeft = testRelation1.where('a === 1).subquery('left)
+    val originalRight = testRelation2.subquery('right)
+
+    val left = testRelation1.where(IsNotNull('a) && 'a === 1).subquery('left)
+    val right = testRelation2.where(IsNotNull('b)).subquery('right)
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>

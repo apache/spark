@@ -63,21 +63,15 @@ trait ConstraintHelper {
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
     val binaryComparisons = constraints.filter(_.isInstanceOf[BinaryComparison])
-    binaryComparisons.foreach {
+    constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         val candidateConstraints = binaryComparisons - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(lc: Attribute, _, tz), r: Attribute) =>
-        val candidateConstraints = binaryComparisons - eq
-        val bridge = Cast(r, lc.dataType, tz)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, lc, bridge)
-      case eq @ EqualTo(l: Attribute, r @ Cast(rc: Attribute, _, tz)) =>
-        val candidateConstraints = binaryComparisons - eq
-        val bridge = Cast(l, rc.dataType, tz)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, rc, bridge)
+      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, r, l)
+      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, l, r)
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -88,8 +82,6 @@ trait ConstraintHelper {
       source: Expression,
       destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
-  }).map(_ transform {
-    case Cast(e @ Cast(child, _, _), dt, _) if e == destination && dt == child.dataType => child
   })
 
   /**
