@@ -323,12 +323,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       val input1 = MemoryStream[Int](desiredPartitionsForInput1)
       val input2 = MemoryStream[Int]
       val df1 = input1.toDF()
-        .select($"value", $"value" + 1, $"value" + 2)
+        .select($"value", $"value" + 1)
       val df2 = input2.toDF()
-        .groupBy($"value", $"value" + 1)
+        .groupBy($"value")
         .agg(count("*"))
 
-      // Unioned DF would have columns as (Int, Int, Int)
+      // Unioned DF would have columns as (Int, Int)
       (input1, input2, df1.union(df2))
     }
 
@@ -338,9 +338,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         MultiAddData(
           (input1, Seq(11, 12)),
-          (input2, Seq(11, 12, 13))),
-        CheckNewAnswer(Row(11, 12, 13), Row(12, 13, 14), Row(11, 12, 1), Row(12, 13, 1),
-          Row(13, 14, 1)),
+          (input2, Seq(21, 22))),
+        CheckNewAnswer(Row(11, 12), Row(12, 13), Row(21, 1), Row(22, 1)),
         StopStream
       )
 
@@ -352,15 +351,14 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
 
       newInput1.addData(11, 12)
-      newInput2.addData(11, 12, 13)
+      newInput2.addData(21, 22)
 
       testStream(newUnionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         MultiAddData(
-          (newInput1, Seq(21, 22)),
-          (newInput2, Seq(21, 22, 23))),
-        CheckNewAnswer(Row(21, 22, 23), Row(22, 23, 24), Row(21, 22, 1), Row(22, 23, 1),
-          Row(23, 24, 1))
+          (newInput1, Seq(13, 14)),
+          (newInput2, Seq(22, 23))),
+        CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1))
       )
     }
   }

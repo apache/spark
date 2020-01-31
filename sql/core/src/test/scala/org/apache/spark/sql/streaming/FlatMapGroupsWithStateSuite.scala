@@ -1021,20 +1021,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead (flat)MapGroupsWithState" +
     " to use shifted partition IDs") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        (key, "-1")
-      } else {
-        state.update(RunningCount(count))
-        (key, count.toString)
-      }
+      state.update(RunningCount(count))
+      (key, count.toString)
     }
 
     def constructUnionDf(desiredPartitionsForInput1: Int)
@@ -1056,14 +1046,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       val (input1, input2, unionDf) = constructUnionDf(2)
       testStream(unionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        MultiAddData(
-          (input1, Seq("a")),
-          (input2, Seq("a"))),
-        CheckNewAnswer(("a", "a"), ("a", "1")),
-        assertNumStateRows(total = 1, updated = 1),
-        MultiAddData(input1, "b")(input2, "a", "b"),
-        CheckNewAnswer(("b", "b"), ("a", "2"), ("b", "1")),
-        assertNumStateRows(total = 2, updated = 2),
+        MultiAddData(input1, "input1-a")(input2, "input2-a"),
+        CheckNewAnswer(("input1-a", "input1-a"), ("input2-a", "1")),
         StopStream
       )
 
@@ -1074,17 +1058,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
       val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
 
-      newInput1.addData("a")
-      newInput1.addData("b")
-      newInput2.addData("a")
-      newInput2.addData("a", "b")
+      newInput1.addData("input1-a")
+      newInput2.addData("input2-a")
 
       testStream(newUnionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        // should remove state for "a" and return count as -1
-        MultiAddData(newInput1, "a")(newInput2, "a", "b"),
-        CheckNewAnswer(("a", "a"), ("a", "-1"), ("b", "2")),
-        assertNumStateRows(total = 1, updated = 2)
+        MultiAddData(newInput1, "input1-a")(newInput2, "input2-a", "input2-b"),
+        CheckNewAnswer(("input1-a", "input1-a"), ("input2-a", "2"), ("input2-b", "1"))
       )
     }
   }
