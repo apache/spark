@@ -41,7 +41,7 @@ class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
     allowArrayAsStructs: Boolean,
-    filters: Seq[Filter]) extends Logging {
+    filters: Seq[Filter] = Seq.empty) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
