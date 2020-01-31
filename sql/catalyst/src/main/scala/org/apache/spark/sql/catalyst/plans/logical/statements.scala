@@ -391,7 +391,7 @@ case class LoadDataStatement(
  */
 case class ShowCreateTableStatement(
     tableName: Seq[String],
-    asSpark: Boolean = false) extends ParsedStatement
+    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL

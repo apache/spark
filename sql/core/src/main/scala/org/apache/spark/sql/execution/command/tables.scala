@@ -1093,6 +1093,16 @@ trait ShowCreateTableCommandBase {
   }
 }
 
+/**
+ * A command that shows the Spark DDL syntax that can be used to create a given table.
+ * For Hive serde table, this command will generate Spark DDL that can be used to
+ * create corresponding Spark table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW CREATE TABLE [db_name.]table_name
+ * }}}
+ */
 case class ShowCreateTableCommand(table: TableIdentifier)
     extends RunnableCommand with ShowCreateTableCommandBase {
   override val output: Seq[Attribute] = Seq(
@@ -1109,14 +1119,100 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
-      val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-        showCreateDataSourceTable(tableMetadata)
+      val metadata = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+        tableMetadata
       } else {
-        showCreateHiveTable(tableMetadata)
+        // For a Hive serde table, we try to convert it to Spark DDL.
+        if (tableMetadata.unsupportedFeatures.nonEmpty) {
+          throw new AnalysisException(
+            "Failed to execute SHOW CREATE TABLE against table " +
+              s"${tableMetadata.identifier}, which is created by Hive and uses the " +
+              "following unsupported feature(s)\n" +
+              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n")
+          )
+        }
+
+        if (tableMetadata.tableType == VIEW) {
+          throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
+        }
+
+        // scalastyle:off caselocale
+        if (tableMetadata.properties.getOrElse("transactional", "false")
+            .toLowerCase.equals("true")) {
+          throw new AnalysisException(
+            "SHOW CREATE TABLE doesn't support transactional Hive table")
+        }
+        // scalastyle:on caselocale
+
+        convertTableMetadata(tableMetadata)
       }
+
+      val stmt = showCreateDataSourceTable(metadata)
 
       Seq(Row(stmt))
     }
+  }
+
+  private def convertTableMetadata(tableMetadata: CatalogTable): CatalogTable = {
+    val hiveSerde = HiveSerDe(
+      serde = tableMetadata.storage.serde,
+      inputFormat = tableMetadata.storage.inputFormat,
+      outputFormat = tableMetadata.storage.outputFormat)
+
+    // Looking for Spark data source that maps to to the Hive serde.
+    // TODO: some Hive fileformat + row serde might be mapped to Spark data source, e.g. CSV.
+    val source = HiveSerDe.serdeToSource(hiveSerde)
+    if (source.isEmpty) {
+      val builder = StringBuilder.newBuilder
+      hiveSerde.serde.foreach { serde =>
+        builder ++= s" SERDE: $serde"
+      }
+      hiveSerde.inputFormat.foreach { format =>
+        builder ++= s" INPUTFORMAT: $format"
+      }
+      hiveSerde.outputFormat.foreach { format =>
+        builder ++= s" OUTPUTFORMAT: $format"
+      }
+      throw new AnalysisException(
+        "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
+          s"${tableMetadata.identifier}, which is created by Hive and uses the " +
+          "following unsupported serde configuration\n" +
+          builder.toString()
+      )
+    } else {
+      // TODO: should we keep Hive serde properties?
+      val newStorage = tableMetadata.storage.copy(properties = Map.empty)
+      tableMetadata.copy(provider = source, storage = newStorage)
+    }
+  }
+}
+
+/**
+ * This commands generates the DDL for Hive serde table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW CREATE TABLE table_identifier AS SERDE;
+ * }}}
+ */
+case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
+    extends RunnableCommand with ShowCreateTableCommandBase {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("sparktab_stmt", StringType, nullable = false)()
+  )
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val tableMetadata = catalog.getTableMetadata(table)
+
+    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+      throw new AnalysisException(
+        s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
+    } else {
+      showCreateHiveTable(tableMetadata)
+    }
+
+    Seq(Row(stmt))
   }
 
   private def showCreateHiveTable(metadata: CatalogTable): String = {
@@ -1242,88 +1338,6 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       storage.outputFormat.foreach { format =>
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
-    }
-  }
-}
-
-/**
- * This commands generates Spark DDL for Hive table.
- *
- * The syntax of using this command in SQL is:
- * {{{
- *   SHOW CREATE TABLE table_identifier AS SPARK;
- * }}}
- */
-case class ShowCreateTableAsSparkCommand(table: TableIdentifier)
-    extends RunnableCommand with ShowCreateTableCommandBase {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("sparktab_stmt", StringType, nullable = false)()
-  )
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
-
-    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      throw new AnalysisException(
-        s"$table is already a Spark data source table. Use `SHOW CREATE TABLE` instead.")
-    } else {
-      if (tableMetadata.unsupportedFeatures.nonEmpty) {
-        throw new AnalysisException(
-          "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
-            s"${tableMetadata.identifier}, which is created by Hive and uses the " +
-            "following unsupported feature(s)\n" +
-            tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n")
-        )
-      }
-
-      if (tableMetadata.tableType == VIEW) {
-        throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE AS SPARK")
-      }
-
-      // scalastyle:off caselocale
-      if (tableMetadata.properties.getOrElse("transactional", "false").toLowerCase.equals("true")) {
-        throw new AnalysisException(
-          "SHOW CREATE TABLE AS SPARK doesn't support transactional Hive table")
-      }
-      // scalastyle:on caselocale
-
-      showCreateDataSourceTable(convertTableMetadata(tableMetadata))
-    }
-
-    Seq(Row(stmt))
-  }
-
-  private def convertTableMetadata(tableMetadata: CatalogTable): CatalogTable = {
-    val hiveSerde = HiveSerDe(
-      serde = tableMetadata.storage.serde,
-      inputFormat = tableMetadata.storage.inputFormat,
-      outputFormat = tableMetadata.storage.outputFormat)
-
-    // Looking for Spark data source that maps to to the Hive serde.
-    // TODO: some Hive fileformat + row serde might be mapped to Spark data source, e.g. CSV.
-    val source = HiveSerDe.serdeToSource(hiveSerde)
-    if (source.isEmpty) {
-      val builder = StringBuilder.newBuilder
-      hiveSerde.serde.foreach { serde =>
-        builder ++= s" SERDE: $serde"
-      }
-      hiveSerde.inputFormat.foreach { format =>
-        builder ++= s" INPUTFORMAT: $format"
-      }
-      hiveSerde.outputFormat.foreach { format =>
-        builder ++= s" OUTPUTFORMAT: $format"
-      }
-      throw new AnalysisException(
-        "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
-          s"${tableMetadata.identifier}, which is created by Hive and uses the " +
-          "following unsupported serde configuration\n" +
-          builder.toString()
-      )
-    } else {
-      // TODO: should we keep Hive serde properties?
-      val newStorage = tableMetadata.storage.copy(properties = Map.empty)
-      tableMetadata.copy(provider = source, storage = newStorage)
     }
   }
 }

@@ -3215,7 +3215,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Creates a [[ShowCreateTableStatement]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()), ctx.SPARK != null)
+    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()), ctx.SERDE != null)
   }
 
   /**

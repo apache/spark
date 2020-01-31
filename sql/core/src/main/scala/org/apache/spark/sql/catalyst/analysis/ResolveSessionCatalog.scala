@@ -378,13 +378,13 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tbl, asSpark) if !asSpark =>
+    case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
       ShowCreateTableCommand(v1TableName.asTableIdentifier)
 
-    case ShowCreateTableStatement(tbl, asSpark) if asSpark =>
-      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SPARK")
-      ShowCreateTableAsSparkCommand(v1TableName.asTableIdentifier)
+    case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
+      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
+      ShowCreateTableAsSerdeCommand(v1TableName.asTableIdentifier)
 
     case CacheTableStatement(tbl, plan, isLazy, options) =>
       val v1TableName = parseV1Table(tbl, "CACHE TABLE")

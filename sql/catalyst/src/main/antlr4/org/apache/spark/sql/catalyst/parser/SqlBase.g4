@@ -210,7 +210,7 @@ statement
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
-    | SHOW CREATE TABLE multipartIdentifier (AS SPARK)?                #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -1140,7 +1140,6 @@ ansiNonReserved
     | SKEWED
     | SORT
     | SORTED
-    | SPARK
     | START
     | STATISTICS
     | STORED
@@ -1399,7 +1398,6 @@ nonReserved
     | SOME
     | SORT
     | SORTED
-    | SPARK
     | START
     | STATISTICS
     | STORED
@@ -1661,7 +1659,6 @@ SKEWED: 'SKEWED';
 SOME: 'SOME';
 SORT: 'SORT';
 SORTED: 'SORTED';
-SPARK: 'SPARK';
 START: 'START';
 STATISTICS: 'STATISTICS';
 STORED: 'STORED';
