@@ -103,14 +103,22 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
-            // Unless this client is closed.
-            if (clientFactory != null) {
-              TransportClient client = clientFactory.createClient(host, port);
-              new OneForOneBlockFetcher(client, appId, execId,
-                blockIds1, listener1, conf, downloadFileManager).start();
-            } else {
-              logger.info("This clientFactory was closed. Skipping further block fetch retries.");
-            }
+           try{
+             // Unless this client is closed.
+             if (clientFactory != null) {
+               TransportClient client = clientFactory.createClient(host, port);
+               new OneForOneBlockFetcher(client, appId, execId,
+                   blockIds1, listener1, conf, downloadFileManager).start();
+             } else {
+               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
+             }
+           } catch (IOException e) {
+             logger.info("The relative remote external shuffle service (host: " + host + "," +
+                 "port: "+ port + "), which maintains the block data can't been connected.");
+             throw e;
+           } catch (Exception e) {
+             throw e;
+           }
           };
 
       int maxRetries = conf.maxIORetries();
