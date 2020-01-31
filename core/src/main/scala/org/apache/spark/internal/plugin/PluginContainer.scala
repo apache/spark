@@ -142,25 +142,26 @@ object PluginContainer {
 
   def apply(
       sc: SparkContext,
-      resources: java.util.Map[String, ResourceInformation]
-  ): Option[PluginContainer] = PluginContainer(Left(sc), resources)
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
+    PluginContainer(Left(sc), resources)
+  }
 
   def apply(
       env: SparkEnv,
-      resources: java.util.Map[String, ResourceInformation]
-  ): Option[PluginContainer] = PluginContainer(Right(env), resources)
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
+    PluginContainer(Right(env), resources)
+  }
+
 
   private def apply(
       ctx: Either[SparkContext, SparkEnv],
-      resources: java.util.Map[String, ResourceInformation]
-  ): Option[PluginContainer] = {
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
     val conf = ctx.fold(_.conf, _.conf)
     val plugins = Utils.loadExtensions(classOf[SparkPlugin], conf.get(PLUGINS).distinct, conf)
     if (plugins.nonEmpty) {
       ctx match {
         case Left(sc) => Some(new DriverPluginContainer(sc, resources, plugins))
-        case Right(env) =>
-          Some(new ExecutorPluginContainer(env, resources, plugins))
+        case Right(env) => Some(new ExecutorPluginContainer(env, resources, plugins))
       }
     } else {
       None

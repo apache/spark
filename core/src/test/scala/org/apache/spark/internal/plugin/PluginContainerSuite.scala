@@ -231,7 +231,7 @@ object NonLocalModeSparkPlugin {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
     val resourcesString = resources.filterKeys(_.equals(GPU)).map {
-      case (name, ri) =>
+      case (_, ri) =>
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")
     s"$id&$resourcesString"
