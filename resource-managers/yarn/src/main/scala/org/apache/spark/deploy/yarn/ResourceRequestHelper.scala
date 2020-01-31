@@ -24,7 +24,6 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.yarn.api.records.Resource
-import org.apache.hadoop.yarn.exceptions.ResourceNotFoundException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
@@ -41,6 +40,7 @@ import org.apache.spark.util.{CausedBy, Utils}
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
+  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.exception.ResourceNotFoundException"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
   @volatile private var numResourceErrors: Int = 0
@@ -189,13 +189,18 @@ private object ResourceRequestHelper extends Logging {
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
         case e: InvocationTargetException =>
           if (e.getCause != null) {
-            if (e.getCause.isInstanceOf[ResourceNotFoundException]) {
-              // warn a couple times and then stop so we don't spam the logs
-              if (numResourceErrors < 2) {
-                logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
-                  s"has to handle properly discovering and isolating the resource! Error: " +
-                  s"${e.getCause().getMessage}")
-                numResourceErrors += 1
+            if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
+              val resNotFoundClass = Utils.classForName(RESOURCE_NOT_FOUND)
+              if (e.getCause.getClass() == resNotFoundClass) {
+                // warn a couple times and then stop so we don't spam the logs
+                if (numResourceErrors < 2) {
+                  logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+                    s"has to handle properly discovering and isolating the resource! Error: " +
+                    s"${e.getCause().getMessage}")
+                  numResourceErrors += 1
+                }
+              } else {
+                throw e.getCause
               }
             } else {
               throw e.getCause
