@@ -1150,6 +1150,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_UI_ENABLED =
+    buildConf("spark.sql.streaming.ui.enabled")
+      .doc("Whether to run the structured streaming UI for the Spark application.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_INACTIVE_QUERY_RETENTION =
+    buildConf("spark.sql.streaming.ui.numInactiveQueries")
+      .doc("The number of inactive queries to retain for structured streaming ui.")
+      .intConf
+      .createWithDefault(100)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
@@ -2038,12 +2050,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val UTC_TIMESTAMP_FUNC_ENABLED = buildConf("spark.sql.legacy.utcTimestampFunc.enabled")
-    .doc("The configuration property enables the to_utc_timestamp() " +
-         "and from_utc_timestamp() functions.")
-    .booleanConf
-    .createWithDefault(false)
-
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
       "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
@@ -2122,11 +2128,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE = buildConf("spark.sql.legacy.addDirectory.recursive")
-    .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
-      "command of SQL. If false, then only a single file can be added.")
-    .booleanConf
-    .createWithDefault(true)
+  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE =
+    buildConf("spark.sql.legacy.addDirectory.recursive.enabled")
+      .internal()
+      .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
+        "command of SQL. If false, then only a single file can be added.")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
@@ -2144,6 +2152,16 @@ object SQLConf {
     .doc("When true, enable filter pushdown to JSON datasource.")
     .booleanConf
     .createWithDefault(true)
+
+  val ADD_PARTITION_BATCH_SIZE =
+    buildConf("spark.sql.addPartitionInBatch.size")
+      .internal()
+      .doc("The number of partitions to be handled in one turn when use " +
+        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
+        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
+      .createWithDefault(100)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2270,6 +2288,10 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def isStreamingUIEnabled: Boolean = getConf(STREAMING_UI_ENABLED)
+
+  def streamingUIInactiveQueryRetention: Int = getConf(STREAMING_UI_INACTIVE_QUERY_RETENTION)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
@@ -2427,8 +2449,6 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
-
-  def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
   def addDirectoryRecursiveEnabled: Boolean = getConf(LEGACY_ADD_DIRECTORY_USING_RECURSIVE)
 

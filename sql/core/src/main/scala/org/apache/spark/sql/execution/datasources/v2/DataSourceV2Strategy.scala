@@ -230,13 +230,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
-      DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
+      DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
+    case desc @ DescribeRelation(r: ResolvedTable, partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
       }
-      DescribeTableExec(desc.output, table, isExtended) :: Nil
+      DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
@@ -248,17 +248,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetPropertiesExec(catalog, ns, properties) :: Nil
+      AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
@@ -273,7 +273,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
     case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowNamespacesExec(r.output, catalog, ns, pattern) :: Nil
+      ShowNamespacesExec(r.output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
     case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
@@ -284,8 +284,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(ResolvedTable(_, _, table), propertyKey) =>
-      ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
+      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
     case _ => Nil
   }

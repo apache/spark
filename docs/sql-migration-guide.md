@@ -324,7 +324,7 @@ license: |
         </tr>
     </table>
 
-  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive` to false.
+  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive.enabled` to false.
 
   - Since Spark 3.0, `SHOW TBLPROPERTIES` will cause `AnalysisException` if the table does not exist. In Spark version 2.4 and earlier, this scenario caused `NoSuchTableException`. Also, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
 
@@ -919,6 +919,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `SELECT`
   * `GROUP BY`
   * `ORDER BY`
+  * `DISTRIBUTE BY`
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
@@ -936,10 +937,34 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `JOIN`
   * `{LEFT|RIGHT|FULL} OUTER JOIN`
   * `LEFT SEMI JOIN`
+  * `LEFT ANTI JOIN`
   * `CROSS JOIN`
 * Unions
 * Sub-queries
-  * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+  * Sub-queries in the FROM Clause
+  
+    ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
+  * Sub-queries in WHERE Clause
+    * Correlated or non-correlated IN and NOT IN statement in WHERE Clause
+    
+      ```
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2 WHERE t1.a = t2.a)
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)
+      ```
+    * Correlated or non-correlated EXISTS and NOT EXISTS statement in WHERE Clause
+    
+      ```
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t1.a = t2.a AND t2.a > 10)
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t2.a > 10)
+      ```
+    * Non-correlated IN and NOT IN statement in JOIN Condition
+    
+      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND t1.a IN (SELECT a FROM t3)```
+   
+    * Non-correlated EXISTS and NOT EXISTS statement in JOIN Condition
+       
+      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND EXISTS (SELECT * FROM t3 WHERE t3.a > 10)``` 
+       
 * Sampling
 * Explain
 * Partitioned tables including dynamic partition insertion

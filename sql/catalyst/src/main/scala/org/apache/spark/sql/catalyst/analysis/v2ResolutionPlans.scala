@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -53,7 +53,7 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
 /**
  * A plan containing resolved namespace.
  */
-case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])
+case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

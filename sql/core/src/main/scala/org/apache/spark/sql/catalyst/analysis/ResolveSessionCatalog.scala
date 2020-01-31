@@ -580,7 +580,7 @@ class ResolveSessionCatalog(
   }
 
   object SessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
+    def unapply(resolved: ResolvedNamespace): Option[(CatalogPlugin, Seq[String])] =
       if (isSessionCatalog(resolved.catalog)) {
         Some(resolved.catalog -> resolved.namespace)
       } else {

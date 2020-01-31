@@ -3053,7 +3053,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3065,7 +3064,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3084,7 +3082,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3096,7 +3093,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3412,7 +3408,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3423,7 +3419,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3461,7 +3457,7 @@ object functions {
    * }}}
    *
    * @param column: the input array column
-   * @param f: col => predicate, the boolean predicate to filter the input column
+   * @param f: col => predicate, the Boolean predicate to filter the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3478,7 +3474,7 @@ object functions {
    * }}}
    *
    * @param column: the input array column
-   * @param f: (col, index) => predicate, the boolean predicate to filter the input column
+   * @param f: (col, index) => predicate, the Boolean predicate to filter the input column
    *           given the index. Indices start at 0.
    *
    * @group collection_funcs
@@ -3520,7 +3516,7 @@ object functions {
     aggregate(expr, zero, merge, c => c)
 
   /**
-   * Merge two given arrays, element-wise, into a signle array using a function.
+   * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
    *

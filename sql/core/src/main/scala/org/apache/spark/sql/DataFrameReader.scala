@@ -195,6 +195,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
+      val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
       val pathsOption = if (paths.isEmpty) {
@@ -206,7 +207,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = provider match {
+      val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
           throw new IllegalArgumentException(
             s"$source does not support user specified schema. Please don't specify the schema.")
@@ -214,19 +215,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           val ident = hasCatalog.extractIdentifier(dsOptions)
           val catalog = CatalogV2Util.getTableProviderCatalog(
             hasCatalog,
-            sparkSession.sessionState.catalogManager,
+            catalogManager,
             dsOptions)
-          catalog.loadTable(ident)
+          (catalog.loadTable(ident), Some(catalog), Some(ident))
         case _ =>
-          userSpecifiedSchema match {
-            case Some(schema) => provider.getTable(dsOptions, schema)
-            case _ => provider.getTable(dsOptions)
-          }
+          // TODO: Non-catalog paths for DSV2 are currently not well defined.
+          val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+          (tbl, None, None)
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
         case _: SupportsRead if table.supports(BATCH_READ) =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
+          Dataset.ofRows(
+            sparkSession,
+            DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }
