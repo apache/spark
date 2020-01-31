@@ -957,9 +957,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed2 match {
         case UpdateTable(
-            SubqueryAlias(
-              AliasIdentifier("t", Seq()),
-              AsDataSourceV2Relation(_)),
+            SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             None) =>
@@ -971,9 +969,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed3 match {
         case UpdateTable(
-            SubqueryAlias(
-              AliasIdentifier("t", Seq()),
-              AsDataSourceV2Relation(_)),
+            SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1)))) =>
@@ -985,9 +981,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       parsed4 match {
-        case UpdateTable(
-            SubqueryAlias(AliasIdentifier("t", Seq()),
-            AsDataSourceV2Relation(_)),
+        case UpdateTable(SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
           Seq(Assignment(key: UnresolvedAttribute, IntegerLiteral(32))),
           Some(InSubquery(values, query))) =>
           assert(key.name == "t.age")
