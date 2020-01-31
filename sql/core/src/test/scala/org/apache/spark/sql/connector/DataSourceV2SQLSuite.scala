@@ -595,6 +595,36 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("CREATE/REPLACE TABLE: without USING clause") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val testCatalog = catalog("testcat").asTableCatalog
+
+    sql("CREATE TABLE testcat.t1 (id int)")
+    val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+    // Spark shouldn't set the default provider for catalog plugins.
+    assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+
+    sql("CREATE TABLE t2 (id int)")
+    val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+      .loadTable(Identifier.of(Array(), "t2")).asInstanceOf[V1Table]
+    // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+    assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+
+    sql(s"CREATE TABLE testcat.t3 USING foo AS SELECT id, data FROM source")
+    val t3 = testCatalog.loadTable(Identifier.of(Array(), "t3"))
+    assert(t3.properties.get(TableCatalog.PROP_PROVIDER) == "foo")
+    // REPLACE TABLE should retain the original table provider
+    sql("REPLACE TABLE testcat.t3 (id bigint)")
+    val t3Replaced = testCatalog.loadTable(Identifier.of(Array(), "t3"))
+    assert(t3Replaced.properties.get(TableCatalog.PROP_PROVIDER) == "foo")
+
+    sql("CREATE OR REPLACE TABLE testcat.t4 (id int)")
+    val t4 = testCatalog.loadTable(Identifier.of(Array(), "t4"))
+    // Spark shouldn't set the default provider for catalog plugins.
+    assert(!t4.properties.containsKey(TableCatalog.PROP_PROVIDER))
+  }
+
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")

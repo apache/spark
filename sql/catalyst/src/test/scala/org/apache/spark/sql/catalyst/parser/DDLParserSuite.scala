@@ -49,26 +49,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
-  test("SPARK-30098: create table without provider should " +
-    "use default data source under non-legacy mode") {
-    val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
-    val defaultProvider = conf.defaultDataSourceName
-    val expectedPlan = CreateTableStatement(
-      Seq("my_tab"),
-      new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType),
-      Seq.empty[Transform],
-      None,
-      Map.empty[String, String],
-      defaultProvider,
-      Map.empty[String, String],
-      None,
-      None,
-      false)
-    parseCompare(createSql, expectedPlan)
-  }
-
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
@@ -80,7 +60,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -103,7 +83,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         None,
         None),
@@ -123,7 +103,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("a"))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -177,7 +157,7 @@ class DDLParserSuite extends AnalysisTest {
           LiteralValue(34, IntegerType)))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -199,7 +179,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Some(BucketSpec(5, Seq("a"), Seq("b"))),
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -217,7 +197,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       Some("abc"))
@@ -237,7 +217,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map("test" -> "test"),
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -255,7 +235,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/tmp/file"),
         None)
@@ -273,7 +253,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -323,13 +303,13 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      conf.defaultDataSourceName,
+      None,
       Map.empty[String, String],
       None,
       None)
-    Seq(createSql, replaceSql).foreach { sql =>
-      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
-    }
+
+    testCreateOrReplaceDdl(createSql, expectedTableSpec, expectedIfNotExists = false)
+    testCreateOrReplaceDdl(replaceSql, expectedTableSpec, expectedIfNotExists = false)
   }
 
   test("support for other types in OPTIONS") {
@@ -352,7 +332,7 @@ class DDLParserSuite extends AnalysisTest {
           Seq.empty[Transform],
           Option.empty[BucketSpec],
           Map.empty[String, String],
-          "json",
+          Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
           None,
           None),
@@ -407,7 +387,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map("p1" -> "v1", "p2" -> "v2"),
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/user/external/page_view"),
         Some("This is the staging page view table"))
@@ -2026,7 +2006,7 @@ class DDLParserSuite extends AnalysisTest {
       partitioning: Seq[Transform],
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
-      provider: String,
+      provider: Option[String],
       options: Map[String, String],
       location: Option[String],
       comment: Option[String])

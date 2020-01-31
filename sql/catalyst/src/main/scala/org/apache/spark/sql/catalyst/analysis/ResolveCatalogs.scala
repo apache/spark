@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -147,24 +147,26 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+      val provider = c.provider.orElse(CatalogV2Util.getTableProvider(catalog, tbl.asIdentifier))
       ReplaceTable(
         catalog.asTableCatalog,
         tbl.asIdentifier,
         c.tableSchema,
         // convert the bucket spec and add it as a transform
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, provider),
         orCreate = c.orCreate)
 
     case c @ ReplaceTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+      val provider = c.provider.orElse(CatalogV2Util.getTableProvider(catalog, tbl.asIdentifier))
       ReplaceTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
         // convert the bucket spec and add it as a transform
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, provider),
         writeOptions = c.options,
         orCreate = c.orCreate)
 

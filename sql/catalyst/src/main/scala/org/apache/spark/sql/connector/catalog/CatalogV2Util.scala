@@ -289,6 +289,12 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
+  def getTableProvider(catalog: CatalogPlugin, ident: Identifier): Option[String] = {
+    loadTable(catalog, ident).flatMap { table =>
+      Option(table.properties.get(TableCatalog.PROP_PROVIDER))
+    }
+  }
+
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
@@ -298,10 +304,10 @@ private[sql] object CatalogV2Util {
       options: Map[String, String],
       location: Option[String],
       comment: Option[String],
-      provider: String): Map[String, String] = {
+      provider: Option[String]): Map[String, String] = {
     properties ++
       options ++
-      Map(TableCatalog.PROP_PROVIDER -> provider) ++
+      provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
   }
