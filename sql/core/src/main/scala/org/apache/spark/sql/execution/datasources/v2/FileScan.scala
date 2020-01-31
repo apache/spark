@@ -161,25 +161,10 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   private def getSizeInBytes(conf: SQLConf): Long = {
-    if (fileIndex.partitionSpec().partitionColumns.isEmpty) {
+    if (fileIndex.partitionSpec().partitionColumns.isEmpty || partitionFilters.isEmpty) {
       fileIndex.sizeInBytes
     } else {
-      val (partitionNum, partitionData) =
-        if (partitionFilters.isEmpty) {
-          (fileIndex.partitionSpec().partitions.size, None)
-        } else {
-          val partitions = fileIndex.listFiles(partitionFilters, dataFilters)
-          (partitions.size, Some(partitions))
-        }
-      if (partitionNum <= conf.maxPartNumForStatsCalculateViaFS) {
-        if (partitionData.isDefined) {
-          fileIndex.sizeInBytesOfPartitions(partitionData.get)
-        } else {
-          fileIndex.sizeInBytes
-        }
-      } else {
-        conf.defaultSizeInBytes
-      }
+      fileIndex.sizeInBytesOfPartitions(fileIndex.listFiles(partitionFilters, dataFilters))
     }
   }
 
@@ -189,7 +174,8 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
       override def sizeInBytes(): OptionalLong = {
         val compressionFactor = conf.fileCompressionFactor
         val sizeInBytes = getSizeInBytes(conf)
-        OptionalLong.of((compressionFactor*sizeInBytes).toLong)
+        val size = (compressionFactor * sizeInBytes).toLong
+        OptionalLong.of(size)
       }
 
       override def numRows(): OptionalLong = OptionalLong.empty()
