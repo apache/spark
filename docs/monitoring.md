@@ -640,7 +640,10 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information. Metrics `peakExecutorMetrics.*` are only enabled if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
+Executor metric values and their measured peak values per executor are exposed via the REST API at the end point `/applications/[app-id]/executors`.
+In addition, aggregated per-stage peak values of the executor metrics are written to the event log if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+Executor metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
 A list of the available metrics, with a short description:
 
 <table class="table">
