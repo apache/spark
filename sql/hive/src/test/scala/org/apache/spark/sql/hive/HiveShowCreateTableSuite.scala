@@ -389,6 +389,23 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     }
   }
 
+  test("hive table with nested fields with STORED AS clause in Spark DDL") {
+    withTable("t1") {
+      sql(
+        s"""
+           |CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING,
+           |  c3 STRUCT <s1: INT, s2: STRING>
+           |)
+           |STORED AS PARQUET
+         """.stripMargin
+      )
+
+      checkCreateSparkTableAsHive("t1")
+    }
+  }
+
   test("hive table with unsupported fileformat in Spark DDL") {
     withTable("t1") {
       sql(
