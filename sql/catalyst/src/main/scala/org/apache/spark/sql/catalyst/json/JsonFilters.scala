@@ -87,7 +87,7 @@ class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
           (refSet, pred)
         }
       }
-      // Build a mep where key is only one field and value is seq of predicates refer to the field
+      // Build a map where key is only one field and value is seq of predicates refer to the field
       // "i" -> Seq(AlwaysTrue, IsNotNull("i"), And(EqualTo("i", 0), StringStartsWith("s", "abc")))
       // "s" -> Seq(AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc")))
       val groupedByFields = withLiterals.toSeq
