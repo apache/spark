@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Besides the regular Data Definition Statements, Data Manipulation Statements and Data Retrieval Statements, Spark SQL supports the following Auxiliary Statements:
+Besides the major SQL statements such as Data Definition Statements, Data Manipulation Statements and Data Retrieval Statements, Spark SQL also supports the following Auxiliary Statements:
 
 - [ANALYZE](sql-ref-syntax-aux-analyze.html)
 - [CACHE](sql-ref-syntax-aux-cache.html)
