@@ -976,7 +976,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer(1 to 3: _*))
   }
 
-  test("streaming limit before agg in complete mode (SPARK-30658)") {
+  test("SPARK-30658: streaming limit before agg in complete mode") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(5).groupBy("value").count()
     testStream(limited, OutputMode.Complete())(
@@ -986,7 +986,8 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 1)))
   }
 
-  test("streaming limits before and after agg in complete mode (after limit < before limit)") {
+  test("SPARK-30658: streaming limits before and after agg in complete mode " +
+    "(after limit < before limit)") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
     testStream(limited, OutputMode.Complete())(
@@ -999,7 +1000,8 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)))
   }
 
-  test("streaming limits before and after agg in complete mode (before limit < after limit)") {
+  test("SPARK-30658: streaming limits before and after agg in complete mode " +
+    "(before limit < after limit)") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(2).groupBy("value").count().orderBy("value").limit(3)
     testStream(limited, OutputMode.Complete())(
@@ -1010,7 +1012,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1), Row(2, 1)))
   }
 
-  test("streaming limit after streaming dedup in append mode") {
+  test("SPARK-30657: streaming limit after streaming dedup in append mode") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().dropDuplicates().limit(1)
     testStream(limited)(
@@ -1069,7 +1071,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1), Row(1)))
   }
 
-  test("streaming limit optimization from StreamingLocalLimitExec to LocalLimitExec") {
+  test("SPARK-30657: streaming limit optimization from StreamingLocalLimitExec to LocalLimitExec") {
     val inputData = MemoryStream[Int]
     val inputDF = inputData.toDF()
 
