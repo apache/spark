@@ -255,7 +255,7 @@ different than a Pandas timestamp. It is recommended to use Pandas time series f
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
 
-### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
+### Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
 
 Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
 compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark

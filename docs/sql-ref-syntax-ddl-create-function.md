@@ -64,7 +64,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     optionally qualified with a database name. <br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]function_name
+        [ database_name. ] function_name
       </code>
   </dd>
   <dt><code><em>class_name</em></code></dt>
@@ -84,7 +84,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     along with its dependencies. <br><br>
     <b>Syntax:</b>
       <code>
-        USING { { (JAR | FILE ) resource_uri} , ...}
+        USING { { (JAR | FILE ) resource_uri } , ... }
       </code>
   </dd>
 </dl>

@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
@@ -153,8 +155,14 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
+
     val model = lr.fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    transformed
       .select("label", "probability", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.5)
@@ -504,9 +512,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blor = new LogisticRegression().setFamily("binomial")
     val blorModel = blor.fit(smallBinaryDataset)
     testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    testClassificationModelSingleRawPrediction(blorModel, smallBinaryDataset)
+    testProbClassificationModelSingleProbPrediction(blorModel, smallBinaryDataset)
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
     testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
+    testClassificationModelSingleRawPrediction(mlorModel, smallMultinomialDataset)
+    testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {
@@ -530,7 +542,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("sparse coefficients in LogisticAggregator") {
     val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
+    val binaryAgg = new LogisticAggregator(1, 2,
       fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
     val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
@@ -540,7 +552,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
+    val multinomialAgg = new LogisticAggregator(1, 3,
       fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
     val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {

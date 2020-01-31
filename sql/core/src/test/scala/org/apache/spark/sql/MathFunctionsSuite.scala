@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 private object MathFunctionsTestData {
@@ -218,19 +219,21 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
 
-    val pi = "3.1415"
-    checkAnswer(
-      sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
-        s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
-      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
-        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
-    )
-    checkAnswer(
-      sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
-        s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
-      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
-        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
-    )
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val pi = "3.1415"
+      checkAnswer(
+        sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+          s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+      )
+      checkAnswer(
+        sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
+          s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+      )
+    }
 
     val bdPi: BigDecimal = BigDecimal(31415925L, 7)
     checkAnswer(

@@ -282,10 +282,18 @@ class OneHotEncoderModel private[ml] (
       if (idx < size) {
         Vectors.sparse(size, Array(idx.toInt), Array(1.0))
       } else {
-        Vectors.sparse(size, Array.empty[Int], Array.empty[Double])
+        Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
       }
     }
   }
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
   @Since("3.0.0")

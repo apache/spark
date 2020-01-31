@@ -27,6 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -283,7 +284,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val gmtId = Option("GMT")
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
     checkEvaluation(cast("abdef", TimestampType, gmtId), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
@@ -323,7 +323,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("23", DecimalType.USER_DEFAULT), Decimal(23))
     checkEvaluation(cast("23", ByteType), 23.toByte)
     checkEvaluation(cast("23", ShortType), 23.toShort)
-    checkEvaluation(cast("2012-12-11", DoubleType), null)
     checkEvaluation(cast(123, IntegerType), 123)
 
     checkEvaluation(cast(Literal.create(null, IntegerType), ShortType), null)
@@ -410,15 +409,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
-      val ret = cast(array, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq(123, null, null, null))
-    }
-    {
-      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false, null))
@@ -428,15 +418,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved === false)
     }
 
-    {
-      val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq(123, null, null))
-    }
-    {
-      val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = false))
-      assert(ret.resolved === false)
-    }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved)
@@ -464,15 +445,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
 
     {
-      val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
-    }
-    {
-      val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
@@ -483,16 +455,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
-    }
-    {
-      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
@@ -547,23 +509,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(struct, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = true),
-        StructField("d", IntegerType, nullable = true))))
-      assert(ret.resolved)
-      checkEvaluation(ret, InternalRow(123, null, null, null))
-    }
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false),
-        StructField("d", IntegerType, nullable = true))))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(struct, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true),
@@ -580,21 +525,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved === false)
     }
 
-    {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = true))))
-      assert(ret.resolved)
-      checkEvaluation(ret, InternalRow(123, null, null))
-    }
-    {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false))))
-      assert(ret.resolved === false)
-    }
     {
       val ret = cast(struct_notNull, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
@@ -684,7 +614,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("y", true)
     checkCast("yes", true)
     checkCast("1", true)
-
     checkCast("f", false)
     checkCast("false", false)
     checkCast("FAlsE", false)
@@ -693,8 +622,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
 
     checkEvaluation(cast("abc", BooleanType), null)
-    checkEvaluation(cast("tru", BooleanType), null)
-    checkEvaluation(cast("fla", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
   }
 
@@ -891,8 +818,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(
-      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       checkExceptionInExpression[ArithmeticException](
         cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
@@ -924,11 +850,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq("nan", "nAn", " nan ").foreach { value =>
       checkEvaluation(cast(value, DoubleType), Double.NaN)
     }
-
-    // Invalid literals when casted to double and float results in null.
-    Seq(DoubleType, FloatType).foreach { dataType =>
-      checkEvaluation(cast("badvalue", dataType), null)
-    }
   }
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
@@ -958,8 +879,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(
-      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ByteType)
       Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
@@ -984,8 +904,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(
-      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ShortType)
       Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
@@ -1010,8 +929,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(
-      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key ->requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(IntegerType)
       testLongMaxAndMin(IntegerType)
 
@@ -1028,8 +946,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(
-      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testLongMaxAndMin(LongType)
 
       Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
@@ -1060,7 +977,6 @@ class CastSuite extends CastSuiteBase {
       case _ => Cast(Literal(v), targetType, timeZoneId)
     }
   }
-
 
   test("cast from int") {
     checkCast(0, false)
@@ -1132,14 +1048,8 @@ class CastSuite extends CastSuiteBase {
     assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
     assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
 
-    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
-    assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
-    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
-    assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
-
     assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
     assert(cast(true, DecimalType(1, 1)).nullable)
-
 
     checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
     checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
@@ -1179,17 +1089,9 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(Decimal("1003"), DecimalType.SYSTEM_DEFAULT), Decimal(1003))
     checkEvaluation(cast(Decimal("1003"), DecimalType(4, 0)), Decimal(1003))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
     checkEvaluation(cast(Decimal("1003"), DecimalType(3, 0)), null)
 
     checkEvaluation(cast(Decimal("995"), DecimalType(3, 0)), Decimal(995))
-    checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
-    checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
 
     checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
@@ -1203,15 +1105,158 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(true, DecimalType(2, 1)), Decimal(1))
     checkEvaluation(cast(true, DecimalType(1, 1)), null)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
+      assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
+      assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
+      assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
+
+      checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
+      checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
+      checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
+      checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
+
+      checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
+      checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
+      checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
+      checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
+    }
   }
 
   test("SPARK-28470: Cast should honor nullOnOverflow property") {
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
       checkEvaluation(
         Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
+    }
+  }
+
+  test("collect_list/collect_set can cast to ArrayType not containsNull") {
+    val list = CollectList(Literal(1))
+    assert(Cast.canCast(list.dataType, ArrayType(IntegerType, false)))
+    val set = CollectSet(Literal(1))
+    assert(Cast.canCast(set.dataType, ArrayType(StringType, false)))
+  }
+
+  test("Cast should output null for invalid strings when ANSI is not enabled.") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
+      checkEvaluation(cast("2012-12-11", DoubleType), null)
+
+      // cast to array
+      val array = Literal.create(Seq("123", "true", "f", null),
+        ArrayType(StringType, containsNull = true))
+      val array_notNull = Literal.create(Seq("123", "true", "f"),
+        ArrayType(StringType, containsNull = false))
+
+      {
+        val ret = cast(array, ArrayType(IntegerType, containsNull = true))
+        assert(ret.resolved)
+        checkEvaluation(ret, Seq(123, null, null, null))
+      }
+      {
+        val ret = cast(array, ArrayType(IntegerType, containsNull = false))
+        assert(ret.resolved === false)
+      }
+      {
+        val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = true))
+        assert(ret.resolved)
+        checkEvaluation(ret, Seq(123, null, null))
+      }
+      {
+        val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = false))
+        assert(ret.resolved === false)
+      }
+
+      // cast from map
+      val map = Literal.create(
+        Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
+        MapType(StringType, StringType, valueContainsNull = true))
+      val map_notNull = Literal.create(
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        MapType(StringType, StringType, valueContainsNull = false))
+
+      {
+        val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
+        assert(ret.resolved)
+        checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
+      }
+      {
+        val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = false))
+        assert(ret.resolved === false)
+      }
+      {
+        val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
+        assert(ret.resolved)
+        checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
+      }
+      {
+        val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
+        assert(ret.resolved === false)
+      }
+
+      // cast from struct
+      val struct = Literal.create(
+        InternalRow(
+          UTF8String.fromString("123"),
+          UTF8String.fromString("true"),
+          UTF8String.fromString("f"),
+          null),
+        StructType(Seq(
+          StructField("a", StringType, nullable = true),
+          StructField("b", StringType, nullable = true),
+          StructField("c", StringType, nullable = true),
+          StructField("d", StringType, nullable = true))))
+      val struct_notNull = Literal.create(
+        InternalRow(
+          UTF8String.fromString("123"),
+          UTF8String.fromString("true"),
+          UTF8String.fromString("f")),
+        StructType(Seq(
+          StructField("a", StringType, nullable = false),
+          StructField("b", StringType, nullable = false),
+          StructField("c", StringType, nullable = false))))
+
+      {
+        val ret = cast(struct, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = true),
+          StructField("d", IntegerType, nullable = true))))
+        assert(ret.resolved)
+        checkEvaluation(ret, InternalRow(123, null, null, null))
+      }
+      {
+        val ret = cast(struct, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = true))))
+        assert(ret.resolved === false)
+      }
+      {
+        val ret = cast(struct_notNull, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = true))))
+        assert(ret.resolved)
+        checkEvaluation(ret, InternalRow(123, null, null))
+      }
+      {
+        val ret = cast(struct_notNull, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false))))
+        assert(ret.resolved === false)
+      }
+
+      // Invalid literals when casted to double and float results in null.
+      Seq(DoubleType, FloatType).foreach { dataType =>
+        checkEvaluation(cast("badvalue", dataType), null)
+      }
     }
   }
 }
@@ -1227,6 +1272,31 @@ class AnsiCastSuite extends CastSuiteBase {
     v match {
       case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
+    }
+  }
+
+  test("cast from invalid string to numeric should throw NumberFormatException") {
+    // cast to IntegerType
+    Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
+      val array = Literal.create(Seq("123", "true", "f", null),
+        ArrayType(StringType, containsNull = true))
+      checkExceptionInExpression[NumberFormatException](
+        cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123-string", dataType), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("2020-07-19", dataType), "invalid input")
+    }
+
+    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123.000.00", dataType), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("abc.com", dataType), "invalid input")
     }
   }
 }

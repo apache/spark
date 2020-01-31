@@ -270,6 +270,55 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
+  test("SPARK-30112: it is allowed to write to a table while querying it for " +
+    "dynamic partition overwrite.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+        PartitionOverwriteMode.STATIC.toString).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part1 int, part2 int) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1))
+          sql("INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=2) SELECT 2")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 1, 2) :: Nil)
+
+          if (mode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1, 1) :: Row(3, 1, 2) :: Nil)
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 + 1 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"),
+              Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                  |SELECT i + 1, part2 FROM insertTable
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
+  }
+
   test("Caching")  {
     // write something to the jsonTable
     sql(
@@ -469,6 +518,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage
 
       assert(e.contains("Only Data Sources providing FileFormat are supported"))
+    }
+  }
+
+  test("new partitions should be added to catalog after writing to catalog table") {
+    val table = "partitioned_catalog_table"
+    val numParts = 210
+    withTable(table) {
+      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+      val tempTable = "partitioned_catalog_temp_table"
+      df.createOrReplaceTempView(tempTable)
+      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+      assert(partitions.size == numParts)
     }
   }
 

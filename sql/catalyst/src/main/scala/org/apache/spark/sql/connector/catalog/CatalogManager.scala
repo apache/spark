@@ -53,6 +53,15 @@ class CatalogManager(
     }
   }
 
+  def isCatalogRegistered(name: String): Boolean = {
+    try {
+      catalog(name)
+      true
+    } catch {
+      case _: CatalogNotFoundException => false
+    }
+  }
+
   private def loadV2SessionCatalog(): CatalogPlugin = {
     Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
@@ -71,7 +80,7 @@ class CatalogManager(
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  private def v2SessionCatalog: CatalogPlugin = {
+  private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
@@ -84,11 +93,6 @@ class CatalogManager(
     }.getOrElse(defaultSessionCatalog)
   }
 
-  private def getDefaultNamespace(c: CatalogPlugin) = c match {
-    case c: SupportsNamespaces => c.defaultNamespace()
-    case _ => Array.empty[String]
-  }
-
   private var _currentNamespace: Option[Array[String]] = None
 
   def currentNamespace: Array[String] = synchronized {
@@ -96,7 +100,7 @@ class CatalogManager(
       if (currentCatalog.name() == SESSION_CATALOG_NAME) {
         Array(v1SessionCatalog.getCurrentDatabase)
       } else {
-        getDefaultNamespace(currentCatalog)
+        currentCatalog.defaultNamespace()
       }
     }
   }

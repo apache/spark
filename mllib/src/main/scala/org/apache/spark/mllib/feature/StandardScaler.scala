@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.{StandardScalerModel => NewStandardScalerModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -55,12 +55,11 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
   @Since("1.1.0")
   def fit(data: RDD[Vector]): StandardScalerModel = {
     // TODO: skip computation if both withMean and withStd are false
-    val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
-      (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    val summary = Statistics.colStats(data.map((_, 1.0)), Seq("mean", "std"))
+
     new StandardScalerModel(
-      Vectors.dense(summary.variance.toArray.map(v => math.sqrt(v))),
-      summary.mean,
+      Vectors.fromML(summary.std),
+      Vectors.fromML(summary.mean),
       withStd,
       withMean)
   }

@@ -15,6 +15,8 @@
       url: sql-getting-started.html#creating-datasets
     - text: Interoperating with RDDs
       url: sql-getting-started.html#interoperating-with-rdds
+    - text: Scalar Functions
+      url: sql-getting-started.html#scalar-functions
     - text: Aggregations
       url: sql-getting-started.html#aggregations
 - text: Data Sources
@@ -34,6 +36,8 @@
       url: sql-data-sources-jdbc.html
     - text: Avro Files
       url: sql-data-sources-avro.html
+    - text: Whole Binary Files
+      url: sql-data-sources-binaryFile.html
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
 - text: Performance Tuning
@@ -43,8 +47,8 @@
       url: sql-performance-tuning.html#caching-data-in-memory
     - text: Other Configuration Options
       url: sql-performance-tuning.html#other-configuration-options
-    - text: Broadcast Hint for SQL Queries
-      url: sql-performance-tuning.html#broadcast-hint-for-sql-queries
+    - text: Join Strategy Hints for SQL Queries
+      url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
@@ -119,37 +123,27 @@
             - text: SELECT 
               url: sql-ref-syntax-qry-select.html 
               subitems:
-                - text: DISTINCT Clause
-                  url: sql-ref-syntax-qry-select-distinct.html
-                - text: Joins
-                  url: sql-ref-syntax-qry-select-join.html
-                - text: ORDER BY Clause 
-                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: WHERE Clause 
+                  url: sql-ref-syntax-qry-select-where.html
                 - text: GROUP BY Clause 
                   url: sql-ref-syntax-qry-select-groupby.html
                 - text: HAVING Clause 
                   url: sql-ref-syntax-qry-select-having.html
+                - text: ORDER BY Clause 
+                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: SORT BY Clause 
+                  url: sql-ref-syntax-qry-select-sortby.html
+                - text: CLUSTER BY Clause 
+                  url: sql-ref-syntax-qry-select-clusterby.html
+                - text: DISTRIBUTE BY Clause 
+                  url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
-                - text: Set operations
-                  url: sql-ref-syntax-qry-select-setops.html
                 - text: USE database
                   url: sql-ref-syntax-qry-select-usedb.html
-                - text: Common Table Expression(CTE)
-                  url: sql-ref-syntax-qry-select-cte.html
-                - text: Subqueries
-                  url: sql-ref-syntax-qry-select-subqueries.html
-                - text: Query hints
-                  url: sql-ref-syntax-qry-select-hints.html
-            - text: SAMPLING
-              url: sql-ref-syntax-qry-sampling.html
-            - text: WINDOWING ANALYTIC FUNCTIONS 
-              url: sql-ref-syntax-qry-window.html
-            - text: AGGREGATION (CUBE/ROLLUP/GROUPING)
-              url: sql-ref-syntax-qry-aggregation.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
-        - text: Auxilarry Statements
+        - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:
             - text: Analyze statement
@@ -168,6 +162,8 @@
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-refresh-table.html
+                - text: REFRESH
+                  url: sql-ref-syntax-aux-cache-refresh.md
             - text: Describe Commands
               url: sql-ref-syntax-aux-describe.html
               subitems:
@@ -233,5 +229,5 @@
               url: sql-ref-functions-udf-scalar.html
             - text: Aggregate functions
               url: sql-ref-functions-udf-aggregate.html
-    - text: Arthmetic operations
+    - text: Arithmetic operations
       url: sql-ref-arithmetic-ops.html

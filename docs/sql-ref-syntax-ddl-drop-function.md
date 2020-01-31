@@ -25,7 +25,7 @@ The `DROP FUNCTION` statement drops a temporary or user defined function (UDF). 
 
 ### Syntax
 {% highlight sql %}
-DROP [TEMPORARY] FUNCTION [IF EXISTS] [db_name.]function_name;
+DROP [ TEMPORARY ] FUNCTION [ IF EXISTS ] [ db_name. ] function_name
 {% endhighlight %}
 
 

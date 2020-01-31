@@ -271,11 +271,9 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         inputColumnIndex += 1
         featureIndex += 1
       case vec: Vector =>
-        vec.foreachActive { case (i, v) =>
-          if (v != 0.0) {
-            indices += featureIndex + i
-            values += v
-          }
+        vec.foreachNonZero { case (i, v) =>
+          indices += featureIndex + i
+          values += v
         }
         inputColumnIndex += 1
         featureIndex += vec.size

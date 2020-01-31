@@ -18,7 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.Locale
+import java.util.{Locale, TimeZone}
+
+import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
@@ -34,7 +36,6 @@ import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -184,7 +185,68 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
-  testWithAllStateVersions("state metrics") {
+  testWithAllStateVersions("state metrics - append mode") {
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    implicit class RichStreamExecution(query: StreamExecution) {
+      // this could be either empty row batch or actual batch
+      def stateNodes: Seq[SparkPlan] = {
+        query.lastExecution.executedPlan.collect {
+          case p if p.isInstanceOf[StateStoreSaveExec] => p
+        }
+      }
+
+      def stateOperatorProgresses: Seq[StateOperatorProgress] = {
+        val operatorProgress = mutable.ArrayBuffer[StateOperatorProgress]()
+        var progress = query.recentProgress.last
+
+        operatorProgress ++= progress.stateOperators.map { op => op.copy(op.numRowsUpdated) }
+        if (progress.numInputRows == 0) {
+          // empty batch, merge metrics from previous batch as well
+          progress = query.recentProgress.takeRight(2).head
+          operatorProgress.zipWithIndex.foreach { case (sop, index) =>
+            // "numRowsUpdated" should be merged, as it could be updated in both batches.
+            // (for now it is only updated from previous batch, but things can be changed.)
+            // other metrics represent current status of state so picking up the latest values.
+            val newOperatorProgress = sop.copy(
+              sop.numRowsUpdated + progress.stateOperators(index).numRowsUpdated)
+            operatorProgress(index) = newOperatorProgress
+          }
+        }
+
+        operatorProgress
+      }
+    }
+
+    testStream(aggWithWatermark)(
+      AddData(inputData, 15),
+      CheckAnswer(), // watermark = 5
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AddData(inputData, 10, 12, 14),
+      CheckAnswer(), // watermark = 5
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AddData(inputData, 25),
+      CheckAnswer((10, 3)), // watermark = 15
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 }
+    )
+  }
+
+  testWithAllStateVersions("state metrics - update/complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -280,16 +342,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
-  testWithAllStateVersions("typed aggregators") {
-    val inputData = MemoryStream[(String, Int)]
-    val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
-
-    testStream(aggregated, Update)(
-      AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
-      CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
-    )
-  }
-
   testWithAllStateVersions("prune results by current_time, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
@@ -345,15 +397,16 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
+    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(($"value" * SECONDS_PER_DAY).cast("timestamp").as("value"))
+        .select(to_utc_timestamp(from_unixtime('value * SECONDS_PER_DAY), tz))
+        .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
-        .where($"value".cast("date") >= date_sub(current_timestamp().cast("date"), 10))
-        .select(
-          ($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
+        .where($"value".cast("date") >= date_sub(current_date(), 10))
+        .select(($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
       StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys

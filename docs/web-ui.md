@@ -73,7 +73,8 @@ This page displays the details of a specific job identified by its job ID.
 </p>
 
 * DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
-
+* An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
+ 
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
@@ -124,6 +125,8 @@ The stage detail page begins with information like total time across all tasks, 
 </p>
 
 There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
+Nodes are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
+Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
@@ -336,7 +339,7 @@ scala> spark.sql("select name,sum(count) from global_temp.df group by name").sho
 </p>
 
 Now the above three dataframe/SQL operators are shown in the list. If we click the
-'show at \<console\>: 24' link of the last query, we will see the DAG of the job.
+'show at \<console\>: 24' link of the last query, we will see the DAG and details of the query execution.
 
 <p style="text-align: center;">
   <img src="img/webui-sql-dag.png"
@@ -346,10 +349,12 @@ Now the above three dataframe/SQL operators are shown in the list. If we click t
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-We can see that details information of each stage. The first block 'WholeStageCodegen'  
-compile multiple operator ('LocalTableScan' and 'HashAggregate') together into a single Java
-function to improve performance, and metrics like number of rows and spill size are listed in
-the block. The second block 'Exchange' shows the metrics on the shuffle exchange, including
+The query details page displays information about the query execution time, its duration,
+the list of associated jobs, and the query execution DAG.
+The first block 'WholeStageCodegen (1)' compiles multiple operators ('LocalTableScan' and 'HashAggregate') together into a single Java
+function to improve performance, and metrics like number of rows and spill size are listed in the block.
+The annotation '(1)' in the block name is the code generation id.
+The second block 'Exchange' shows the metrics on the shuffle exchange, including
 number of written shuffle records, total data size, etc.
 
 
@@ -362,6 +367,8 @@ number of written shuffle records, total data size, etc.
 </p>
 Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
 illustrate how Spark parses, analyzes, optimizes and performs the query.
+Steps in the physical plan subject to whole stage code generation optimization, are prefixed by a star followed by
+the code generation id, for example: '*(1) LocalTableScan'
 
 ### SQL metrics
 
@@ -440,7 +447,7 @@ The third section has the SQL statistics of the submitted operations.
 	* _Canceled_, final state when the execution is canceled.
 	* _Finished_ processing and waiting to fetch results.
 	* _Closed_, final state when client closed the statement.
-* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the the SQL statement.
+* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the SQL statement.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer3.png" title="JDBC/ODBC SQL Statistics" alt="JDBC/ODBC SQL Statistics">

@@ -74,7 +74,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "date",
     "datetime",
     "day",
-    "days",
     "dbproperties",
     "decimal",
     "deferred",
@@ -114,7 +113,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "grouping",
     "hold_ddltime",
     "hour",
-    "hours",
     "idxproperties",
     "ignore",
     "import",
@@ -150,15 +148,9 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "mapjoin",
     "materialized",
     "metadata",
-    "microsecond",
-    "microseconds",
-    "millisecond",
-    "milliseconds",
     "minus",
     "minute",
-    "minutes",
     "month",
-    "months",
     "msck",
     "no_drop",
     "none",
@@ -213,7 +205,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "rows",
     "schemas",
     "second",
-    "seconds",
     "serde",
     "serdeproperties",
     "server",
@@ -263,14 +254,11 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "utctimestamp",
     "values",
     "view",
-    "week",
-    "weeks",
     "while",
     "with",
     "work",
     "write",
-    "year",
-    "years")
+    "year")
 
   val hiveStrictNonReservedKeyword = Seq(
     "anti",
@@ -351,7 +339,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "database",
     "databases",
     "day",
-    "days",
     "dbproperties",
     "defined",
     "delete",
@@ -367,6 +354,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "drop",
     "else",
     "end",
+    "escape",
     "escaped",
     "except",
     "exchange",
@@ -397,7 +385,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "grouping",
     "having",
     "hour",
-    "hours",
     "if",
     "ignore",
     "import",
@@ -433,15 +420,9 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "logical",
     "macro",
     "map",
-    "microsecond",
-    "microseconds",
-    "millisecond",
-    "milliseconds",
     "minus",
     "minute",
-    "minutes",
     "month",
-    "months",
     "msck",
     "namespaces",
     "natural",
@@ -499,7 +480,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "rows",
     "schema",
     "second",
-    "seconds",
     "select",
     "semi",
     "separated",
@@ -548,14 +528,11 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "using",
     "values",
     "view",
-    "week",
-    "weeks",
     "when",
     "where",
     "window",
     "with",
-    "year",
-    "years")
+    "year")
 
   val reservedKeywordsInAnsiMode = Set(
     "all",
@@ -581,6 +558,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "distinct",
     "else",
     "end",
+    "escape",
     "except",
     "false",
     "fetch",
@@ -658,7 +636,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)

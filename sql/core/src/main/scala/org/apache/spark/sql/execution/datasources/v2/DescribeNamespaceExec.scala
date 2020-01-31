@@ -23,10 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.COMMENT_TABLE_PROP
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.LOCATION_TABLE_PROP
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.RESERVED_PROPERTIES
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -45,12 +42,15 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(COMMENT_TABLE_PROP))
-    rows += toCatalystRow("Location", metadata.get(LOCATION_TABLE_PROP))
+
+    CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
+      rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
+    }
+
     if (isExtended) {
-      val properties = metadata.asScala.toSeq.filter(p => !RESERVED_PROPERTIES.contains(p._1))
+      val properties = metadata.asScala -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       if (properties.nonEmpty) {
-        rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+        rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
     rows

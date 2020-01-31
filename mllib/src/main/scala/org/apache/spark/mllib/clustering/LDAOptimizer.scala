@@ -142,7 +142,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
       // Add edges for terms with non-zero counts.
-      termCounts.asBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+      termCounts.nonZeroIterator.map { case (term, cnt) =>
         Edge(docID, term2index(term), cnt)
       }
     }
@@ -211,11 +211,14 @@ final class EMLDAOptimizer extends LDAOptimizer {
     val docTopicDistributions: VertexRDD[TopicCounts] =
       graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
         .mapValues(_._2)
+    val prevGraph = graph
     // Update the vertex descriptors with the new counts.
     val newGraph = Graph(docTopicDistributions, graph.edges)
     graph = newGraph
     graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
+    prevGraph.unpersistVertices()
+    prevGraph.edges.unpersist()
     this
   }
 

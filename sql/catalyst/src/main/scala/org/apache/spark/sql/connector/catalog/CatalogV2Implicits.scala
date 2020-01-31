@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.types.StructType
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -29,9 +28,9 @@ import org.apache.spark.sql.types.StructType
 private[sql] object CatalogV2Implicits {
   import LogicalExpressions._
 
-  implicit class PartitionTypeHelper(partitionType: StructType) {
+  implicit class PartitionTypeHelper(colNames: Seq[String]) {
     def asTransforms: Array[Transform] = {
-      partitionType.names.map(col => identity(reference(Seq(col)))).toArray
+      colNames.map(col => identity(reference(Seq(col)))).toArray
     }
   }
 
@@ -96,6 +95,16 @@ private[sql] object CatalogV2Implicits {
         quote(ident.name)
       }
     }
+
+    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+
+    def asTableIdentifier: TableIdentifier = ident.namespace match {
+      case ns if ns.isEmpty => TableIdentifier(ident.name)
+      case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
+    }
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
@@ -116,7 +125,7 @@ private[sql] object CatalogV2Implicits {
     def quoted: String = parts.map(quote).mkString(".")
   }
 
-  private def quote(part: String): String = {
+  def quote(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {

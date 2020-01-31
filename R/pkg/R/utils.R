@@ -543,10 +543,14 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
-                ifelse(identical(func, obj), TRUE, FALSE)
+                ifelse(
+                  identical(func, obj) &&
+                    # Also check if the parent environment is identical to current parent
+                    identical(parent.env(environment(func)), func.env),
+                  TRUE, FALSE)
               })
               if (sum(found) > 0) {
-                # If function has been examined, ignore.
+                # If function has been examined ignore
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.

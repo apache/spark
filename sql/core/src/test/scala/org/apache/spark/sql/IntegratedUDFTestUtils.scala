@@ -22,6 +22,8 @@ import java.nio.file.{Files, Paths}
 import scala.collection.JavaConverters._
 import scala.util.Try
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
 import org.apache.spark.broadcast.Broadcast
@@ -103,7 +105,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pandas_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pandas_version;" +
           "require_minimum_pandas_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
@@ -115,7 +117,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pyarrow_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version;" +
           "require_minimum_pyarrow_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!

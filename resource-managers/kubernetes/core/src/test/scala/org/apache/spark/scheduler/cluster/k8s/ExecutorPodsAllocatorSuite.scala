@@ -189,6 +189,17 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations, times(4)).create(any())
     verify(podOperations).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "3", "4")
     verify(podOperations).delete()
+    assert(podsAllocatorUnderTest.isDeleted("3"))
+    assert(podsAllocatorUnderTest.isDeleted("4"))
+
+    // Update the snapshot to not contain the deleted executors, make sure the
+    // allocator cleans up internal state.
+    snapshotsStore.updatePod(deletedExecutor(3))
+    snapshotsStore.updatePod(deletedExecutor(4))
+    snapshotsStore.removeDeletedExecutors()
+    snapshotsStore.notifySubscribers()
+    assert(!podsAllocatorUnderTest.isDeleted("3"))
+    assert(!podsAllocatorUnderTest.isDeleted("4"))
   }
 
   private def executorPodAnswer(): Answer[SparkPod] =
