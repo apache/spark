@@ -3022,18 +3022,23 @@ def aggregate(col, zero, merge, finish=None):
     +----+
     |42.0|
     +----+
+
+    >>> def merge(acc, x):
+    ...     count = acc.count + 1
+    ...     sum = acc.sum + x
+    ...     return struct(count.alias("count"), sum.alias("sum"))
     >>> df.select(
     ...     aggregate(
     ...         "values",
-    ...         struct(lit(1), lit(0.0)),
-    ...         lambda acc, x: struct(acc.col1 + 1, acc.col2 + x),
-    ...         lambda acc: acc.col2 / acc.col1,
+    ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
+    ...         merge,
+    ...         lambda acc: acc.sum / acc.count,
     ...     ).alias("mean")
     ... ).show()
     +----+
     |mean|
     +----+
-    | 7.0|
+    | 8.4|
     +----+
     """
     if finish is not None:
