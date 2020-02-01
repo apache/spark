@@ -2158,6 +2158,12 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
 
+  val FORCE_USING_OFFSET_WITHOUT_LIMIT = buildConf("spark.sql.forceUsingOffsetWithoutLimit")
+    .doc("When this option is set to true, although OFFSET may have large overhead, " +
+      "still use it. Otherwise, an analysis exception is thrown.")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2729,6 +2735,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def forceUsingOffsetWithoutLimit: Boolean = getConf(SQLConf.FORCE_USING_OFFSET_WITHOUT_LIMIT)
 
   /** ********************** SQLConf functionality methods ************ */
 

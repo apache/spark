@@ -324,7 +324,9 @@ package object dsl {
 
       def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
 
-      def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
+      def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, child = logicalPlan)
+
+      def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
 
       def join(
         otherPlan: LogicalPlan,

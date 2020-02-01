@@ -441,6 +441,7 @@ queryOrganization
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
       windowClause?
       (LIMIT (ALL | limit=expression))?
+      (OFFSET offset=expression)?
     ;
 
 multiInsertQueryBody
@@ -1338,6 +1339,7 @@ nonReserved
     | NULL
     | NULLS
     | OF
+    | OFFSET
     | ONLY
     | OPTION
     | OPTIONS
@@ -1595,6 +1597,7 @@ NOT: 'NOT' | '!';
 NULL: 'NULL';
 NULLS: 'NULLS';
 OF: 'OF';
+OFFSET: 'OFFSET';
 ON: 'ON';
 ONLY: 'ONLY';
 OPTION: 'OPTION';

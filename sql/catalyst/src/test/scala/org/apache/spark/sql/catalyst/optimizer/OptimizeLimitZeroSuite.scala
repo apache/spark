@@ -49,7 +49,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
   }
 
   test("Limit 0: individual LocalLimit 0 node") {
-    val query = LocalLimit(0, testRelation1)
+    val query = LocalLimit(0, 0, testRelation1)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation('a.int)
@@ -58,7 +58,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
   }
 
   test("Limit 0: individual GlobalLimit 0 node") {
-    val query = GlobalLimit(0, testRelation1)
+    val query = GlobalLimit(0, 0, testRelation1)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation('a.int)

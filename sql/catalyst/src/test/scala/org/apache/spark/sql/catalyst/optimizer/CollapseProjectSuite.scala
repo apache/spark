@@ -149,9 +149,9 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse redundant alias through local limit") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = LocalLimit(1, relation.select('a as 'b)).select('b as 'c).analyze
+    val query = LocalLimit(1, 0, relation.select('a as 'b)).select('b as 'c).analyze
     val optimized = Optimize.execute(query)
-    val expected = LocalLimit(1, relation.select('a as 'c)).analyze
+    val expected = LocalLimit(1, 0, relation.select('a as 'c)).analyze
     comparePlans(optimized, expected)
   }
 

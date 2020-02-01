@@ -184,6 +184,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>NULL</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>NULLS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>OF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>OFFSET</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ON</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>ONLY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>OPTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
