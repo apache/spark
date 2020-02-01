@@ -35,7 +35,7 @@ dir1/
  └── file3.json (schema: <file, string>, content: "{'file':'corrupt.json'}")
 
 partitioned_users.orc/
- ├── favorite_color=__HIVE_DEFAULT_PARTITION__/
+ ├── favorite_color=\_\_HIVE_DEFAULT_PARTITION\_\_/
  │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
  ├── favorite_color=red/
  │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
