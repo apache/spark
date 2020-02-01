@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import scala.util.Try
 
+import org.apache.spark.sql.catalyst.StructFilters._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, StructType}
@@ -33,7 +34,7 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  */
 abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
 
-  assert(filters.forall(StructFilters.checkFilterRefs(_, schema)),
+  assert(filters.forall(checkFilterRefs(_, schema.fieldNames.toSet)),
     "A pushed down filter refers to a non-existing schema field.")
 
   /**
@@ -58,7 +59,7 @@ abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
   def toPredicate(filters: Seq[sources.Filter]): BasePredicate = {
     val reducedExpr = filters
       .sortBy(_.references.length)
-      .flatMap(StructFilters.filterToExpression(_, toRef))
+      .flatMap(filterToExpression(_, toRef))
       .reduce(And)
     Predicate.create(reducedExpr)
   }
@@ -73,9 +74,8 @@ abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
 }
 
 object StructFilters {
-  private def checkFilterRefs(filter: sources.Filter, schema: StructType): Boolean = {
-    val fieldNames = schema.fields.map(_.name).toSet
-    filter.references.forall(fieldNames.contains(_))
+  private def checkFilterRefs(filter: sources.Filter, fieldNames: Set[String]): Boolean = {
+    filter.references.forall(fieldNames.contains)
   }
 
   /**
@@ -85,7 +85,8 @@ object StructFilters {
    * @return a sub-set of `filters` that can be handled by the datasource.
    */
   def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
-    filters.filter(checkFilterRefs(_, schema))
+    val fieldNames = schema.fieldNames.toSet
+    filters.filter(checkFilterRefs(_, fieldNames))
   }
 
   private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
