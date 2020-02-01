@@ -57,7 +57,7 @@ abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
    */
   def toPredicate(filters: Seq[sources.Filter]): BasePredicate = {
     val reducedExpr = filters
-      .sortBy(_.references.size)
+      .sortBy(_.references.length)
       .flatMap(StructFilters.filterToExpression(_, toRef))
       .reduce(And)
     Predicate.create(reducedExpr)
