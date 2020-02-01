@@ -101,6 +101,13 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     new InMemoryTable(name, schema, partitions, properties)
   }
 
+  override def loadTable(ident: Identifier): Table = {
+    val identToUse = Option(InMemoryTableSessionCatalog.customIdentifierResolution)
+      .map(_(ident))
+      .getOrElse(ident)
+    super.loadTable(identToUse)
+  }
+
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val fullIdent = fullIdentifier(ident)
     Option(tables.get(fullIdent)) match {
@@ -121,6 +128,21 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         newTable
       case _ =>
         throw new NoSuchTableException(ident)
+    }
+  }
+}
+
+object InMemoryTableSessionCatalog {
+  private var customIdentifierResolution: Identifier => Identifier = _
+
+  def withCustomIdentifierResolver(
+      resolver: Identifier => Identifier)(
+      f: => Unit): Unit = {
+    try {
+      customIdentifierResolution = resolver
+      f
+    } finally {
+      customIdentifierResolution = null
     }
   }
 }
