@@ -28,7 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
@@ -55,7 +55,7 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth with HasLoss {
+    with HasAggregationDepth with HasLoss with HasBlockSize {
 
   import LinearRegression._
 
@@ -316,6 +316,15 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setEpsilon(value: Double): this.type = set(epsilon, value)
   setDefault(epsilon -> 1.35)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 1024.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
@@ -354,9 +363,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       return lrModel.setSummary(Some(trainingSummary))
     }
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
     val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
       (Summarizer.createSummarizerBuffer("mean", "std"),
         Summarizer.createSummarizerBuffer("mean", "std", "count")))(
@@ -392,7 +398,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"will be zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
-        if (handlePersistence) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
@@ -421,8 +426,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // if y is constant (rawYStd is zero), then y cannot be scaled. In this case
     // setting yStd=abs(yMean) ensures that y is not scaled anymore in l-bfgs algorithm.
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
-    val featuresMean = featuresSummarizer.mean.toArray
-    val featuresStd = featuresSummarizer.std.toArray
+    val featuresMean = featuresSummarizer.mean.compressed
+    val featuresStd = featuresSummarizer.std.compressed
     val bcFeaturesMean = instances.context.broadcast(featuresMean)
     val bcFeaturesStd = instances.context.broadcast(featuresStd)
 
@@ -442,23 +447,36 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
-    val getFeaturesStd = (j: Int) => if (j >= 0 && j < numFeatures) featuresStd(j) else 0.0
     val regularization = if (effectiveL2RegParam != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
       Some(new L2Regularization(effectiveL2RegParam, shouldApply,
-        if ($(standardization)) None else Some(getFeaturesStd)))
+        if ($(standardization)) None else Some(featuresStd.apply)))
     } else {
       None
     }
+
+    val standardized = instances.map {
+      case Instance(label, weight, features) =>
+        val featuresStd = bcFeaturesStd.value
+        val array = Array.ofDim[Double](numFeatures)
+        features.foreachNonZero { (i, v) =>
+          val std = featuresStd(i)
+          if (std != 0) array(i) = v / std
+        }
+        Instance(label, weight, Vectors.dense(array))
+    }
+    val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"training dataset (blockSize=${$(blockSize)})")
 
     val costFun = $(loss) match {
       case SquaredError =>
         val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
           bcFeaturesStd, bcFeaturesMean)(_)
-        new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
+        new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
       case Huber =>
-        val getAggregatorFunc = new HuberAggregator($(fitIntercept), $(epsilon), bcFeaturesStd)(_)
-        new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
+        val getAggregatorFunc = new HuberAggregator(numFeatures, $(fitIntercept), $(epsilon))(_)
+        new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
     }
 
     val optimizer = $(loss) match {
@@ -524,6 +542,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         throw new SparkException(msg)
       }
 
+      blocks.unpersist()
       bcFeaturesMean.destroy()
       bcFeaturesStd.destroy()
 
@@ -557,7 +576,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             after the coefficients are converged. See the following discussion for detail.
             http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
             */
-            yMean - dot(Vectors.dense(rawCoefficients), Vectors.dense(featuresMean))
+            yMean - dot(Vectors.dense(rawCoefficients), featuresMean)
           case Huber => parameters(numFeatures)
         }
       } else {
@@ -571,8 +590,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
       (Vectors.dense(rawCoefficients).compressed, interceptValue, scaleValue, arrayBuilder.result())
     }
-
-    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept, scale))
     // Handle possible missing or invalid prediction columns
