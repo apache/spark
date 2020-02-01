@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress}
 
 /**
@@ -45,8 +45,10 @@ private[sql] class StreamingQueryStatusListener(sqlConf: SQLConf) extends Stream
   private[ui] val activeQueryStatus = new ConcurrentHashMap[UUID, StreamingQueryUIData]()
   private[ui] val inactiveQueryStatus = new mutable.Queue[StreamingQueryUIData]()
 
-  private val streamingProgressRetention = sqlConf.streamingProgressRetention
-  private val inactiveQueryStatusRetention = sqlConf.streamingUIInactiveQueryRetention
+  private val streamingProgressRetention =
+    sqlConf.getConf(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES)
+  private val inactiveQueryStatusRetention =
+    sqlConf.getConf(StaticSQLConf.STREAMING_UI_RETAINED_QUERIES)
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     activeQueryStatus.putIfAbsent(event.runId,

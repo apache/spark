@@ -1150,18 +1150,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STREAMING_UI_ENABLED =
-    buildConf("spark.sql.streaming.ui.enabled")
-      .doc("Whether to run the structured streaming UI for the Spark application.")
-      .booleanConf
-      .createWithDefault(true)
-
-  val STREAMING_UI_INACTIVE_QUERY_RETENTION =
-    buildConf("spark.sql.streaming.ui.numInactiveQueries")
-      .doc("The number of inactive queries to retain for structured streaming ui.")
-      .intConf
-      .createWithDefault(100)
-
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
@@ -2283,10 +2271,6 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
-
-  def isStreamingUIEnabled: Boolean = getConf(STREAMING_UI_ENABLED)
-
-  def streamingUIInactiveQueryRetention: Int = getConf(STREAMING_UI_INACTIVE_QUERY_RETENTION)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
