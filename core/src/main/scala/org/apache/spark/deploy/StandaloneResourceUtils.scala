@@ -208,7 +208,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
       }
       val newAllocation = {
         val allocations = newAssignments.map { case (rName, addresses) =>
-          ResourceAllocation(ResourceID(componentName, rName), addresses)
+          ResourceAllocation(new ResourceID(componentName, rName), addresses)
         }.toSeq
         StandaloneResourceAllocation(pid, allocations)
       }
@@ -348,7 +348,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
     val compShortName = componentName.substring(componentName.lastIndexOf(".") + 1)
     val tmpFile = Utils.tempFileWith(dir)
     val allocations = resources.map { case (rName, rInfo) =>
-      ResourceAllocation(ResourceID(componentName, rName), rInfo.addresses)
+      ResourceAllocation(new ResourceID(componentName, rName), rInfo.addresses)
     }.toSeq
     try {
       writeResourceAllocationJson(componentName, allocations, tmpFile)
