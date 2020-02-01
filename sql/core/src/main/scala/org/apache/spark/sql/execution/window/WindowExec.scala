@@ -115,7 +115,7 @@ case class WindowExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Unwrap the window expressions and frame factories from the map.
+    // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
