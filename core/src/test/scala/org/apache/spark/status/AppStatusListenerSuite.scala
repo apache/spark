@@ -1659,8 +1659,18 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("clean up used memory when BlockManager added") {
     val listener = new AppStatusListener(store, conf, true)
-
+    // Add block manager at the first time
     val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(
+      time, driver, 42L, Some(43L), Some(44L)))
+    // Update the memory metrics
+    listener.updateExecutorMemoryDiskInfo(
+      listener.liveExecutors(SparkContext.DRIVER_IDENTIFIER),
+      StorageLevel.MEMORY_AND_DISK,
+      10L,
+      10L
+    )
+    // Re-add the same block manager again
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(
       time, driver, 42L, Some(43L), Some(44L)))
 
