@@ -18,6 +18,7 @@
 """
 RDD-based machine learning APIs for Python (in maintenance mode).
 
+
 The `pyspark.mllib` package is in maintenance mode as of the Spark 2.0.0 release to encourage
 migration to the DataFrame-based APIs under the `pyspark.ml` package.
 """
