@@ -93,12 +93,12 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
     }
   }
 
-  private def checkNumScannedPartitions(stmt: String, expected: Boolean): Unit = {
+  private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
     val plan = sql(stmt).queryExecution.sparkPlan
-    val pushedDown = plan.collectFirst {
-      case p: HiveTableScanExec => p.prunedPartitionsViaHiveMetaStore().isDefined
-    }.getOrElse(false)
-    assert(pushedDown == expected)
+    val numPartitions = plan.collectFirst {
+      case p: HiveTableScanExec => p.rawPartitions.length
+    }.getOrElse(0)
+    assert(numPartitions == expectedNumParts)
   }
 
   test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
@@ -125,15 +125,20 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate is used, getHiveQlPartitions should only return the
+            // qualified partition; Otherwise, it return all the partitions.
+            val expectedNumPartitions = if (hivePruning == "true") 1 else 2
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expected = hivePruning.toBoolean)
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
           }
         }
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate does not exist, getHiveQlPartitions should always
+            // return all the partitions.
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expected = hivePruning.toBoolean)
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
           }
         }
       }
@@ -163,7 +168,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
            """.stripMargin)
         val scan = getHiveTableScanExec(s"SELECT * FROM $table")
         val numDataCols = scan.relation.dataCols.length
-        scan.prunedPartitions.foreach(p => assert(p.getCols.size == numDataCols))
+        scan.rawPartitions.foreach(p => assert(p.getCols.size == numDataCols))
       }
     }
   }

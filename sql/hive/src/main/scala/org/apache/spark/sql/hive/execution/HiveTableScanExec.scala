@@ -172,28 +172,30 @@ case class HiveTableScanExec(
         prunePartitions(hivePartitions)
       }
     } else {
-      val prunedPartitions = prunedPartitionsViaHiveMetaStore()
-      if (prunedPartitions.isDefined) {
-        prunedPartitions.get
+      if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+        rawPartitions
       } else {
-        prunePartitions(
-          sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
-            .map(HiveClientImpl.toHivePartition(_, hiveQlTable)))
+        prunePartitions(rawPartitions)
       }
     }
   }
 
-  def prunedPartitionsViaHiveMetaStore(): Option[Seq[HivePartition]] = {
-    if (sparkSession.sessionState.conf.metastorePartitionPruning) {
-      val normalizedFilters = partitionPruningPred.map(_.transform {
-        case a: AttributeReference => originalAttributes(a)
-      })
-      Some(sparkSession.sessionState.catalog
-        .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
-        .map(HiveClientImpl.toHivePartition(_, hiveQlTable)))
-    } else {
-      None
-    }
+  // exposed for tests
+  @transient lazy val rawPartitions: Seq[HivePartition] = {
+    val prunedPartitions =
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+        partitionPruningPred.nonEmpty) {
+        // Retrieve the original attributes based on expression ID so that capitalization matches.
+        val normalizedFilters = partitionPruningPred.map(_.transform {
+          case a: AttributeReference => originalAttributes(a)
+        })
+        relation.prunedPartitions.getOrElse(
+          sparkSession.sessionState.catalog
+            .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters))
+      } else {
+        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+      }
+    prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
