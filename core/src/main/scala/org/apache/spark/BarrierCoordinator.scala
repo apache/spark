@@ -101,10 +101,13 @@ private[spark] class BarrierCoordinator(
     // reset when a barrier() call fails due to timeout.
     private var barrierEpoch: Int = 0
 
-    // Arrays of RPCCallContexts and RequestToSyncs for barrier tasks that have made a blocking
-    // runBarrier() call
+    // An array of RPCCallContexts for barrier tasks that are waiting for reply of a blocking
+    // call.
     private val requesters: ArrayBuffer[RpcCallContext] = new ArrayBuffer[RpcCallContext](numTasks)
-    private val requests: ArrayBuffer[RequestToSync] = new ArrayBuffer[RequestToSync](numTasks)
+
+    // An array of allGather messages for barrier tasks that are waiting for reply of a blocking
+    // call.
+    private val allGatherMessages: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]](numTasks)
 
     // The blocking requestMethod called by tasks to sync up for this stage attempt
     private var requestMethodToSync: Int = 0
@@ -174,7 +177,7 @@ private[spark] class BarrierCoordinator(
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
-        requests += request
+        allGatherMessages += request.allGatherMessage
         logInfo(s"Barrier sync epoch $barrierEpoch from $barrierId received update from Task " +
           s"$taskId, current progress: ${requesters.size}/$numTasks.")
         if (maybeFinishAllRequesters(requesters, numTasks, requestMethod)) {
@@ -184,7 +187,7 @@ private[spark] class BarrierCoordinator(
             s"tasks, finished successfully.")
           barrierEpoch += 1
           requesters.clear()
-          requests.clear()
+          allGatherMessages.clear()
           cancelTimerTask()
         }
       }
@@ -201,10 +204,7 @@ private[spark] class BarrierCoordinator(
           requesters.foreach(_.reply(Array[Byte]()))
         }
         else if (requestMethod == RequestMethod.ALL_GATHER) {
-          val msgs = requests.map(
-            (request) => request.allGatherMessage
-          )
-          val msgsArray = Array[Array[Byte]](msgs: _*)
+          val msgsArray: Array[Array[Byte]] = allGatherMessages.toArray
           val b = new ByteArrayOutputStream();
           val o = new ObjectOutputStream(b);
           o.writeObject(msgsArray);
