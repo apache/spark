@@ -105,8 +105,8 @@ object StructFilters {
    *         of the given filter to an expression is impossible.
    */
   def filterToExpression(
-    filter: sources.Filter,
-    toRef: String => Option[BoundReference]): Option[Expression] = {
+      filter: sources.Filter,
+      toRef: String => Option[BoundReference]): Option[Expression] = {
     def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
       zip(toRef(name), toLiteral(value))
     }
