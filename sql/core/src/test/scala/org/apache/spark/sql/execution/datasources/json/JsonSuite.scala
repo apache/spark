@@ -2605,6 +2605,45 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       }
     }
   }
+
+  test("case sensitivity of filters references") {
+    Seq(true, false).foreach { filterPushdown =>
+      withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+        withTempPath { path =>
+          Seq(
+            """{"aaa": 0, "BBB": 1}""",
+            """{"AAA": 2, "bbb": 3}""").toDF().write.text(path.getCanonicalPath)
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .json(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
+            checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
+            checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
+            // Schema inferring
+            val errorMsg = intercept[AnalysisException] {
+              spark.read.json(path.getCanonicalPath).collect()
+            }.getMessage
+            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+          }
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .json(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
+            val errorMsg = intercept[AnalysisException] {
+              readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
+            }.getMessage
+            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            // Schema inferring
+            val readback2 = spark.read.json(path.getCanonicalPath)
+            checkAnswer(
+              readback2.filter($"AAA" === 2).select($"AAA", $"bbb"),
+              Seq(Row(2, 3)))
+            checkAnswer(readback2.filter($"aaa" === 2).select($"AAA", $"bbb"), Seq())
+          }
+        }
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
