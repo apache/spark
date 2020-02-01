@@ -2294,6 +2294,36 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       }
     }
   }
+
+  test("case sensitivity of filters references") {
+    Seq(true, false).foreach { filterPushdown =>
+      withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+        withTempPath { path =>
+          Seq(
+            """aaa,BBB""",
+            """0,1""",
+            """2,3""").toDF().repartition(1).write.text(path.getCanonicalPath)
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .option("header", true)
+              .csv(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
+            checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq(Row(2, 3)))
+          }
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .option("header", true)
+              .csv(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
+            val errorMsg = intercept[AnalysisException] {
+              readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
+            }.getMessage
+            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+          }
+        }
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
