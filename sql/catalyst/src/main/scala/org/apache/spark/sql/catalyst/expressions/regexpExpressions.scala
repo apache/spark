@@ -68,7 +68,7 @@ trait StringRegexExpression extends Expression
 }
 
 abstract class EscapeRegexExpression(str: Expression, pattern: Expression, escape: Expression)
-  extends TernaryExpression with StringRegexExpression {
+  extends TernaryExpression with StringRegexExpression with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def children: Seq[Expression] = Seq(str, pattern, escape)
@@ -356,6 +356,8 @@ case class RLike(left: Expression, right: Expression)
 // scalastyle:on line.contains.tab
 case class SimilarTo(str: Expression, pattern: Expression, escape: Expression)
   extends EscapeRegexExpression(str, pattern, escape) {
+
+  def this(str: Expression, pattern: Expression) = this(str, pattern, Literal("\\"))
 
   override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
 
