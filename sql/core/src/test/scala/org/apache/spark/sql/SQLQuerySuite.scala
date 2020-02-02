@@ -2056,6 +2056,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       verifyCallCount(
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
+      verifyCallCount(df.selectExpr(
+        """
+          CASE WHEN testUdf(a) > 3 THEN 4
+          WHEN testUdf(a) = 3 THEN 3
+          WHEN testUdf(a) = 2 THEN 2
+          WHEN testUdf(a) = 1 THEN 1
+          ELSE 0 END"""), Row(1), 1)
+
+      verifyCallCount(df.selectExpr(
+        """
+          CASE WHEN testUdf(a + 1) > 3 THEN 4
+          WHEN testUdf(a + 1) = 3 THEN 3
+          WHEN testUdf(a) = 2 THEN 2
+          WHEN testUdf(a) = 1 THEN 1
+          ELSE 0 END"""), Row(1), 3)
+
       // Try disabling it via configuration.
       spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "false")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)

@@ -91,7 +91,18 @@ class EquivalentExpressions {
     def childrenToRecurse: Seq[Expression] = expr match {
       case _: CodegenFallback => Nil
       case i: If => i.predicate :: Nil
-      case c: CaseWhen => c.children.head :: Nil
+      case c: CaseWhen =>
+        val firstExpression = c.children.head
+        val firstUdes = firstExpression.collect { case u: UserDefinedExpression => u }
+        val accessedExpressions = c.children.filter { e =>
+          val udes = e.collect { case u: UserDefinedExpression => u }
+          udes.nonEmpty && firstUdes.containsSlice(udes)
+        }
+        if (accessedExpressions.nonEmpty) {
+          accessedExpressions
+        } else {
+          firstExpression :: Nil
+        }
       case c: Coalesce => c.children.head :: Nil
       case other => other.children
     }
