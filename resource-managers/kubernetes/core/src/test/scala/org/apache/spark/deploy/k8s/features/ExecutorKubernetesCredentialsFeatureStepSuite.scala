@@ -22,7 +22,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 
-class ExecutorKubernetesCredentialsFeatureStepTest extends SparkFunSuite with BeforeAndAfter {
+class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var baseConf: SparkConf = _
 
@@ -30,8 +30,8 @@ class ExecutorKubernetesCredentialsFeatureStepTest extends SparkFunSuite with Be
     baseConf = new SparkConf(false)
   }
 
-  private def newExecutorConf(
-          environment: Map[String, String] = Map.empty): KubernetesExecutorConf = {
+  private def newExecutorConf(environment: Map[String, String] = Map.empty):
+  KubernetesExecutorConf = {
     KubernetesTestConf.createExecutorConf(
       sparkConf = baseConf,
       environment = environment)
@@ -47,8 +47,7 @@ class ExecutorKubernetesCredentialsFeatureStepTest extends SparkFunSuite with Be
 
     val serviceAccountName = spec.getServiceAccountName
     val accountName = spec.getServiceAccount
-    assert(serviceAccountName.equals("executor-name"))
-    assert(accountName.equals("executor-name"))
+    assertSAName(serviceAccountName, accountName)
   }
 
   test("configure spark pod with with driver service account " +
@@ -62,8 +61,7 @@ class ExecutorKubernetesCredentialsFeatureStepTest extends SparkFunSuite with Be
 
     val serviceAccountName = spec.getServiceAccountName
     val accountName = spec.getServiceAccount
-    assert(serviceAccountName.equals("driver-name"))
-    assert(accountName.equals("driver-name"))
+    assertSAName(serviceAccountName, accountName)
   }
 
   test("configure spark pod with with driver service account " +
@@ -79,7 +77,11 @@ class ExecutorKubernetesCredentialsFeatureStepTest extends SparkFunSuite with Be
 
     val serviceAccountName = spec.getServiceAccountName
     val accountName = spec.getServiceAccount
-    assert(serviceAccountName.equals("executor-name"))
-    assert(accountName.equals("executor-name"))
+    assertSAName(serviceAccountName, accountName)
+  }
+
+  def assertSAName(serviceAccountName: String, accountName: String): Unit = {
+    assert(serviceAccountName.equals(serviceAccountName))
+    assert(accountName.equals(accountName))
   }
 }
