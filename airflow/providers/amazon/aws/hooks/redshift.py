@@ -46,7 +46,7 @@ class RedshiftHook(AwsHook):
         except conn.exceptions.ClusterNotFoundFault:
             return 'cluster_not_found'
 
-    def delete_cluster(
+    def delete_cluster(  # pylint: disable=invalid-name
             self,
             cluster_identifier,
             skip_final_cluster_snapshot=True,
@@ -81,7 +81,7 @@ class RedshiftHook(AwsHook):
         if 'Snapshots' not in response:
             return None
         snapshots = response['Snapshots']
-        snapshots = filter(lambda x: x['Status'], snapshots)
+        snapshots = [snapshot for snapshot in snapshots if snapshot["Status"]]
         snapshots.sort(key=lambda x: x['SnapshotCreateTime'], reverse=True)
         return snapshots
 
