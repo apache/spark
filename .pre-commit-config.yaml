@@ -224,12 +224,6 @@ repos:
           ^airflow/sensors/.*$|
           ^airflow/providers/.*$|
           ^airflow/contrib/.*$
-      - id: provide-create-sessions
-        language: pygrep
-        name: Make sure provide_session and create_session are imported from airflow.utils.session
-        entry: "from airflow\\.utils\\.db import.* (provide_session|create_session)"
-        files: \.py$
-        pass_filenames: true
       - id: base-operator
         language: pygrep
         name: Make sure BaseOperator[Link] is imported from airflow.models outside of core
@@ -243,6 +237,12 @@ repos:
           ^airflow/sensors/.*$|
           ^airflow/providers/.*\.py$|
           ^airflow/contrib/.*\.py$
+      - id: provide-create-sessions
+        language: pygrep
+        name: Make sure provide_session and create_session are imported from airflow.utils.session
+        entry: "from airflow\\.utils\\.db import.* (provide_session|create_session)"
+        files: \.py$
+        pass_filenames: true
       - id: build
         name: Check if image build is needed
         entry: ./scripts/ci/pre_commit_ci_build.sh
