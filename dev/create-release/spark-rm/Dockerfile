@@ -77,7 +77,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates apt-tr
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
   gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
-  gem install jekyll-redirect-from && \
+  gem install jekyll-redirect-from -v 0.15.0 && \
   gem install pygments.rb
 
 WORKDIR /opt/spark-rm/output
