@@ -20,7 +20,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -42,12 +42,29 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
+  private def checkGenerate(generate: LogicalPlan): Unit = generate match {
+    case Aggregate(_, _, _: Expand) =>
+    case _ => fail(s"Plan is not generated:\n$generate")
+  }
+
+  private def checkGenerateAndRewrite(rewrite: LogicalPlan): Unit = rewrite match {
+    case Aggregate(_, _, Aggregate(_, _, Expand(_, _, _: Expand))) =>
+    case _ => fail(s"Plan is not rewritten:\n$rewrite")
+  }
+
   test("single distinct group") {
     val input = testRelation
       .groupBy('a)(countDistinct('e))
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)
+  }
+
+  test("single distinct group with filter") {
+    val input = testRelation
+      .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'e))
+      .analyze
+    checkGenerate(RewriteDistinctAggregates(input))
   }
 
   test("single distinct group with partial aggregates") {
@@ -65,6 +82,13 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
+  }
+
+  test("multiple distinct groups with filter") {
+    val input = testRelation
+      .groupBy('a)(countDistinct(Some(EqualTo('d, Literal(""))), 'b, 'c), countDistinct('d))
+      .analyze
+    checkGenerateAndRewrite(RewriteDistinctAggregates(input))
   }
 
   test("multiple distinct groups with partial aggregates") {
