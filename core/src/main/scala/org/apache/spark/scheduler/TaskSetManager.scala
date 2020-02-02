@@ -225,7 +225,7 @@ private[spark] class TaskSetManager(
   // We then move down if we manage to launch a "more local" task when resetting the timer
   private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
-  private var lastLaunchTime = clock.getTimeMillis()  // Time we last reset locality wait
+  private var lastLocalityWaitResetTime = clock.getTimeMillis()  // Time we last reset locality wait
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -398,7 +398,7 @@ private[spark] class TaskSetManager(
 
   private[scheduler] def resetDelayScheduleTimer(
       minLocality: Option[TaskLocality.TaskLocality]): Unit = {
-    lastLaunchTime = clock.getTimeMillis()
+    lastLocalityWaitResetTime = clock.getTimeMillis()
     for (locality <- minLocality) {
       currentLocalityIndex = getLocalityIndex(locality)
     }
@@ -566,14 +566,14 @@ private[spark] class TaskSetManager(
         // This is a performance optimization: if there are no more tasks that can
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
-        lastLaunchTime = curTime
+        lastLocalityWaitResetTime = curTime
         logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-      } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
-        // Jump to the next locality level, and reset lastLaunchTime so that the next locality
-        // wait timer doesn't immediately expire
-        lastLaunchTime += localityWaits(currentLocalityIndex)
+      } else if (curTime - lastLocalityWaitResetTime >= localityWaits(currentLocalityIndex)) {
+        // Jump to the next locality level, and reset lastLocalityWaitResetTime so that the next
+        // locality wait timer doesn't immediately expire
+        lastLocalityWaitResetTime += localityWaits(currentLocalityIndex)
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
