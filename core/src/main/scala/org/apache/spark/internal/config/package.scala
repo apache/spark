@@ -54,6 +54,18 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val RESOURCES_DISCOVERY_PLUGIN =
+    ConfigBuilder("spark.resources.discovery.plugin")
+      .doc("Comma-separated list of class names implementing" +
+        "org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application." +
+        "This is for advanced users to replace the resource discovery class with a " +
+        "custom implementation. Spark will try each class specified until one of them " +
+        "returns the resource information for that resource. It tries the discovery " +
+        "script last if none of the plugins return information for that resource.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
       .internal()
@@ -148,11 +160,8 @@ package object config {
 
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
     ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
+      .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
+        "to the event log.")
       .booleanConf
       .createWithDefault(false)
 
@@ -215,8 +224,18 @@ package object config {
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
 
+  private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
+    ConfigBuilder("spark.executor.processTreeMetrics.enabled")
+      .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
+        "executor metrics.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")
+      .doc("How often to collect executor metrics (in milliseconds). " +
+        "If 0, the polling is done on executor heartbeats. " +
+        "If positive, the polling is done at this interval.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 

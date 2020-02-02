@@ -30,6 +30,7 @@ import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EXECUTOR_ID
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
 import org.apache.spark.util.Utils
@@ -82,7 +83,8 @@ private[spark] class MesosExecutorBackend
     executor = new Executor(
       executorId,
       slaveInfo.getHostname,
-      env)
+      env,
+      resources = Map.empty[String, ResourceInformation])
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo): Unit = {

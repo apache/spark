@@ -148,20 +148,6 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("view") {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
-  test("view with output columns") {
-    withView("v1") {
-      sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
   test("temp view") {
     val viewName = "spark_28383"
     withTempView(viewName) {
@@ -225,7 +211,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+  protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     def normalize(table: CatalogTable): CatalogTable = {
       val nondeterministicProps = Set(
         "CreateTime",

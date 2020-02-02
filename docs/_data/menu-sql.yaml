@@ -212,22 +212,5 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
-    - text: Functions
-      url: sql-ref-functions.html
-      subitems:
-        - text: Builtin Functions
-          url: sql-ref-functions-builtin.html
-          subitems:
-            - text: Scalar functions
-              url: sql-ref-functions-builtin-scalar.html
-            - text: Aggregate functions
-              url: sql-ref-functions-builtin-aggregate.html
-        - text: User defined Functions
-          url: sql-ref-functions-udf.html
-          subitems:
-            - text: Scalar functions
-              url: sql-ref-functions-udf-scalar.html
-            - text: Aggregate functions
-              url: sql-ref-functions-udf-aggregate.html
     - text: Arithmetic operations
       url: sql-ref-arithmetic-ops.html
