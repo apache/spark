@@ -749,6 +749,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
     | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=SIMILAR TO pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
@@ -1394,6 +1395,7 @@ nonReserved
     | SET
     | SETS
     | SHOW
+    | SIMILAR
     | SKEWED
     | SOME
     | SORT
@@ -1655,6 +1657,7 @@ SET: 'SET';
 SETMINUS: 'MINUS';
 SETS: 'SETS';
 SHOW: 'SHOW';
+SIMILAR: 'SIMILAR';
 SKEWED: 'SKEWED';
 SOME: 'SOME';
 SORT: 'SORT';

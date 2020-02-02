@@ -38,15 +38,12 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
-   * @param escapeChar the escape string contains one character.
+   * @param escapeChar the escape character.
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
     val in = pattern.toIterator
     val out = new StringBuilder()
-
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
       in.next match {
@@ -55,9 +52,10 @@ object StringUtils extends Logging {
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
-            case _ => fail(s"the escape character is not allowed to precede '$c'")
+            case _ => fail(pattern, s"the escape character is not allowed to precede '$c'")
           }
-        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          fail(pattern, "it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -65,6 +63,61 @@ object StringUtils extends Logging {
     }
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
+
+  /**
+   * Validate and convert SQL 'similar to' pattern to a Java regular expression.
+   *
+   * This function is similar to escapeLikeRegex, but there are some differences as follows:
+   * 1. If the escape character precedes the meta character for SIMILAR TO, the meta character
+   *    should convert to quote literal.
+   * 2. If '\' is not escape character, need convert to quote literal.
+   * 3. '.', '^' and '$' is not a meta character for SIMILAR TO,
+   *    so we need convert it to quote literal.
+   * 4. Avoid convert the characters of Java regular expression to quote literal.
+   * @param pattern the SQL pattern to convert
+   * @param escapeChar the escape character.
+   * @return the equivalent Java regular expression of the pattern for SIMILAR TO
+   */
+  def escapeSimilarRegex(pattern: String, escapeChar: Char): String = {
+    val in = pattern.toIterator
+    val out = new StringBuilder()
+
+    def isJavaRegularCharacter(c: Char) =
+      Set('w', 'W', 's', 'S', 'd', 'D', 'b', 'B', 'n', 'r', 't', 'f', 'v').contains(c)
+
+    while (in.hasNext) {
+      in.next match {
+        case c1 if c1 == escapeChar && in.hasNext =>
+          val c = in.next
+          c match {
+            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
+            // The meta character for SIMILAR TO.
+            case '|' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' =>
+              out ++= Pattern.quote(Character.toString(c))
+            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
+            // Avoid convert the characters of Java regular expression to quote literal.
+            case 'w' | 'W' | 's' | 'S' | 'd' | 'D' | 'b' | 'B' | 'n' | 'r' | 't' | 'f' | 'v' =>
+              out ++= s"\\$c"
+            case _ => fail(pattern, s"the escape character is not allowed to precede '$c'")
+          }
+        case c if c == escapeChar =>
+          fail(pattern, "it is not allowed to end with the escape character")
+        case '_' => out ++= "."
+        case '%' => out ++= ".*"
+        // If '\' is not the escape character, need convert to literal.
+        case '\\' => out ++= Pattern.quote(Character.toString('\\'))
+        // '.', '^' and '$' is not a meta character for SIMILAR TO.
+        case '.' => out ++= Pattern.quote(Character.toString('.'))
+        case '^' => out ++= Pattern.quote(Character.toString('^'))
+        case '$' => out ++= Pattern.quote(Character.toString('$'))
+        case c => out ++= Character.toString(c)
+      }
+    }
+    "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+  }
+
+  private def fail(pattern: String, message: String): Unit = throw new AnalysisException(
+      s"the pattern '$pattern' is invalid, $message")
 
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
