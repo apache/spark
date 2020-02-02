@@ -27,7 +27,7 @@ import org.apache.spark.sql.streaming
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
   test("onQueryStarted, onQueryProgress, onQueryTerminated") {
-    val listener = new StreamingQueryStatusListener(spark.sqlContext.conf)
+    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf)
 
     // hanlde query started event
     val id = UUID.randomUUID()
@@ -73,7 +73,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("same query start multiple times") {
-    val listener = new StreamingQueryStatusListener(spark.sqlContext.conf)
+    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf)
 
     // handle first time start
     val id = UUID.randomUUID()
