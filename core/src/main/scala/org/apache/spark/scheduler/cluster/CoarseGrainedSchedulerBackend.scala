@@ -331,7 +331,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
               }, executorData.resourceProfileId))
-          scheduler.resourceOffers(workOffers)
+          scheduler.resourceOffers(workOffers, false)
         } else {
           Seq.empty
         }

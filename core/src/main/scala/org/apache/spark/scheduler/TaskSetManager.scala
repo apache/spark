@@ -221,10 +221,11 @@ private[spark] class TaskSetManager(
   private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
-  // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
-  // We then move down if we manage to launch a "more local" task.
+  // last reset the locality wait timer, and move up a level when localityWaits[curLevel] expires.
+  // We then move down if we manage to launch a "more local" task when resetting the timer
+  private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
-  private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  private var lastLaunchTime = clock.getTimeMillis()  // Time we last reset locality wait
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -452,6 +453,9 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
+        if (legacyLocalityWaitReset && maxLocality != TaskLocality.NO_PREF) {
+          resetDelayScheduleTimer(Some(taskLocality))
+        }
         // Serialize and return the task
         val serializedTask: ByteBuffer = try {
           ser.serialize(task)
