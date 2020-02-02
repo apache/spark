@@ -16,14 +16,20 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""This module is deprecated. Please use `airflow.providers.mysql.operators.presto_to_mysql`."""
 
-import warnings
+import unittest
+from unittest.mock import patch
 
-# pylint: disable=unused-import
-from airflow.providers.mysql.operators.presto_to_mysql import PrestoToMySqlTransfer  # noqa
+from airflow.providers.apache.cassandra.sensors.table import CassandraTableSensor
 
-warnings.warn(
-    "This module is deprecated. Please use `airflow.providers.mysql.operators.presto_to_mysql`.",
-    DeprecationWarning, stacklevel=2
-)
+
+class TestCassandraTableSensor(unittest.TestCase):
+    @patch("airflow.providers.apache.cassandra.sensors.table.CassandraHook")
+    def test_poke(self, mock_hook):
+        sensor = CassandraTableSensor(
+            task_id='test_task',
+            cassandra_conn_id='cassandra_default',
+            table='t',
+        )
+        sensor.poke(None)
+        mock_hook.return_value.table_exists.assert_called_once_with('t')
