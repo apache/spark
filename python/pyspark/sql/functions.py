@@ -2973,7 +2973,7 @@ def _invoke_higher_order_function(name, cols, fun_specs):
     return Column(sc._jvm.Column(expr(*jcols + jfuns)))
 
 
-@since(3.0)
+@since(3.1)
 def transform(col, f):
     """
     Returns an array of elements after applying a transformation to each element in the input array.
@@ -3015,7 +3015,7 @@ def transform(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def exists(col, f):
     """
     Returns whether a predicate holds for one or more elements in the array.
@@ -3042,7 +3042,7 @@ def exists(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def forall(col, f):
     """
     Returns whether a predicate holds for every element in the array.
@@ -3073,7 +3073,7 @@ def forall(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def filter(col, f):
     """
     Returns an array of elements for which a predicate holds in a given array.
@@ -3113,7 +3113,7 @@ def filter(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def aggregate(col, zero, merge, finish=None):
     """
     Applies a binary operator to an initial state and all elements in the array,
@@ -3175,7 +3175,7 @@ def aggregate(col, zero, merge, finish=None):
         )
 
 
-@since(3.0)
+@since(3.1)
 def zip_with(col1, col2, f):
     """
     Merge two given arrays, element-wise, into a single array using a function.
@@ -3212,7 +3212,7 @@ def zip_with(col1, col2, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def transform_keys(col, f):
     """
     Applies a function to every key-value pair in a map and returns
@@ -3241,7 +3241,7 @@ def transform_keys(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def transform_values(col, f):
     """
     Applies a function to every key-value pair in a map and returns
@@ -3270,7 +3270,7 @@ def transform_values(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def map_filter(col, f):
     """
     Returns a map whose key-value pairs satisfy a predicate.
@@ -3298,7 +3298,7 @@ def map_filter(col, f):
     )
 
 
-@since(3.0)
+@since(3.1)
 def map_zip_with(col1, col2, f):
     """
     Merge two given maps, key-wise into a single map using a function.
