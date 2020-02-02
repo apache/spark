@@ -30,8 +30,10 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -42,7 +44,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class DataSourceV2Suite extends QueryTest with SharedSparkSession {
+class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
@@ -164,25 +166,25 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
 
         val groupByColA = df.groupBy('i).agg(sum('j))
         checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-        assert(groupByColA.queryExecution.executedPlan.collectFirst {
+        assert(collectFirst(groupByColA.queryExecution.executedPlan) {
           case e: ShuffleExchangeExec => e
         }.isEmpty)
 
         val groupByColAB = df.groupBy('i, 'j).agg(count("*"))
         checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-        assert(groupByColAB.queryExecution.executedPlan.collectFirst {
+        assert(collectFirst(groupByColAB.queryExecution.executedPlan) {
           case e: ShuffleExchangeExec => e
         }.isEmpty)
 
         val groupByColB = df.groupBy('j).agg(sum('i))
         checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-        assert(groupByColB.queryExecution.executedPlan.collectFirst {
+        assert(collectFirst(groupByColB.queryExecution.executedPlan) {
           case e: ShuffleExchangeExec => e
         }.isDefined)
 
         val groupByAPlusB = df.groupBy('i + 'j).agg(count("*"))
         checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-        assert(groupByAPlusB.queryExecution.executedPlan.collectFirst {
+        assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
           case e: ShuffleExchangeExec => e
         }.isDefined)
       }
@@ -385,7 +387,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
       val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
       Seq(2, 3).toDF("a").createTempView("t1")
       val df = t2.where("i < (select max(a) from t1)").select('i)
-      val subqueries = df.queryExecution.executedPlan.collect {
+      val subqueries = stripAQEPlan(df.queryExecution.executedPlan).collect {
         case p => p.subqueries
       }.flatten
       assert(subqueries.length == 1)
@@ -417,7 +419,7 @@ object SimpleReaderFactory extends PartitionReaderFactory {
 
 abstract class SimpleBatchTable extends Table with SupportsRead  {
 
-  override def schema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def schema(): StructType = TestingV2Source.schema
 
   override def name(): String = this.getClass.toString
 
@@ -431,12 +433,31 @@ abstract class SimpleScanBuilder extends ScanBuilder
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
 }
 
-class SimpleSinglePartitionSource extends TableProvider {
+trait TestingV2Source extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    TestingV2Source.schema
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+
+  def getTable(options: CaseInsensitiveStringMap): Table
+}
+
+object TestingV2Source {
+  val schema = new StructType().add("i", "int").add("j", "int")
+}
+
+class SimpleSinglePartitionSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -451,9 +472,10 @@ class SimpleSinglePartitionSource extends TableProvider {
   }
 }
 
+
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
-class SimpleDataSourceV2 extends TableProvider {
+class SimpleDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -468,7 +490,7 @@ class SimpleDataSourceV2 extends TableProvider {
   }
 }
 
-class AdvancedDataSourceV2 extends TableProvider {
+class AdvancedDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -480,7 +502,7 @@ class AdvancedDataSourceV2 extends TableProvider {
 class AdvancedScanBuilder extends ScanBuilder
   with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
 
-  var requiredSchema = new StructType().add("i", "int").add("j", "int")
+  var requiredSchema = TestingV2Source.schema
   var filters = Array.empty[Filter]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -566,11 +588,16 @@ class SchemaRequiredDataSource extends TableProvider {
     override def readSchema(): StructType = schema
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def supportsExternalMetadata(): Boolean = true
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     throw new IllegalArgumentException("requires a user-supplied schema")
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
@@ -582,7 +609,7 @@ class SchemaRequiredDataSource extends TableProvider {
   }
 }
 
-class ColumnarDataSourceV2 extends TableProvider {
+class ColumnarDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
 
@@ -647,7 +674,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TableProvider {
+class PartitionAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning{
@@ -715,7 +742,7 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   }
 }
 
-class ReportStatisticsDataSource extends TableProvider {
+class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {

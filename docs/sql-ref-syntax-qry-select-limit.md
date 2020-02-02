@@ -1,7 +1,7 @@
 ---
 layout: global
-title: LIMIT operator
-displayTitle: LIMIT operator
+title: LIMIT Clause
+displayTitle: LIMIT Clause
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -18,5 +18,84 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+The <code>LIMIT</code> clause is used to constrain the number of rows returned by
+the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
+is used in conjuction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
+ensure that the results are deterministic.
 
-**This page is under construction**
+### Syntax
+{% highlight sql %}
+LIMIT { ALL | integer_expression }
+{% endhighlight %}
+
+### Parameters
+<dl>
+  <dt><code><em>ALL</em></code></dt>
+  <dd>
+    If specified, the query returns all the rows. In other words, no limit is applied if this
+    option is specified.
+  </dd>
+  <dt><code><em>integer_expression</em></code></dt>
+  <dd>
+    Specifies an expression that returns an integer. 
+  </dd>
+</dl>
+
+### Examples
+{% highlight sql %}
+CREATE TABLE person (name STRING, age INT);
+INSERT INTO person VALUES
+    ('Zen Hui', 25), 
+    ('Anil B', 18), 
+    ('Shone S', 16), 
+    ('Mike A', 25),
+    ('John A', 18), 
+    ('Jack N', 16);
+                        
+-- Select the first two rows.
+SELECT name, age FROM person ORDER BY name LIMIT 2;
+
+  +------+---+
+  |name  |age|
+  +------+---+
+  |Anil B|18 |
+  |Jack N|16 |
+  +------+---+
+
+-- Specifying ALL option on LIMIT returns all the rows.
+SELECT name, age FROM person ORDER BY name LIMIT ALL;
+
+  +-------+---+
+  |name   |age|
+  +-------+---+
+  |Anil B |18 |
+  |Jack N |16 |
+  |John A |18 |
+  |Mike A |25 |
+  |Shone S|16 |
+  |Zen Hui|25 |
+  +-------+---+
+
+-- A function expression as an input to limit.
+SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
+
+  +-------+---+
+  |   name|age|
+  +-------+---+
+  | Anil B| 18|
+  | Jack N| 16|
+  | John A| 18|
+  | Mike A| 25|
+  |Shone S| 16|
+  +-------+---+
+{% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.{ConcurrentModificationException, UUID}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{TimeoutException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -67,6 +68,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         addListener(listener)
         logInfo(s"Registered listener ${listener.getClass.getName}")
       })
+    }
+    sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
+      addListener(listener)
     }
   } catch {
     case e: Exception =>
@@ -321,6 +325,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @param trigger [[Trigger]] for the query.
    * @param triggerClock [[Clock]] to use for the triggering.
    */
+  @throws[TimeoutException]
   private[sql] def startQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],

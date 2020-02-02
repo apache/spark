@@ -19,11 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
-
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
   override def zero: (Long, Long) = (0, 0)
@@ -226,25 +224,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
 
   private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
 
-  test("typed aggregation: TypedAggregator") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkDataset(
-      ds.groupByKey(_._1).agg(typed.sum(_._2)),
-      ("a", 30.0), ("b", 3.0), ("c", 1.0))
-  }
-
-  test("typed aggregation: TypedAggregator, expr, expr") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkDataset(
-      ds.groupByKey(_._1).agg(
-        typed.sum(_._2),
-        expr("sum(_2)").as[Long],
-        count("*")),
-      ("a", 30.0, 30L, 2L), ("b", 3.0, 3L, 2L), ("c", 1.0, 1L, 1L))
-  }
-
   test("typed aggregation: complex result type") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
@@ -253,17 +232,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
-  }
-
-  test("typed aggregation: in project list") {
-    val ds = Seq(1, 3, 2, 5).toDS()
-
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i)),
-      11.0)
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i), typed.sum((i: Int) => i * 2)),
-      11.0 -> 22.0)
   }
 
   test("typed aggregation: class input") {
@@ -315,14 +283,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
       ("one", 1), ("two", 1))
   }
 
-  test("typed aggregate: avg, count, sum") {
-    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-    checkDataset(
-      ds.groupByKey(_._1).agg(
-        typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
-      ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))
-  }
-
   test("generic typed sum") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
     checkDataset(
@@ -366,18 +326,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
   }
 
-  test("spark-15114 shorter system generated alias names") {
-    val ds = Seq(1, 3, 2, 5).toDS()
-    assert(ds.select(typed.sum((i: Int) => i)).columns.head === "TypedSumDouble(int)")
-    val ds2 = ds.select(typed.sum((i: Int) => i), typed.avg((i: Int) => i))
-    assert(ds2.columns.head === "TypedSumDouble(int)")
-    assert(ds2.columns.last === "TypedAverage(int)")
-    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
-      "RowAgg(org.apache.spark.sql.Row)")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
-  }
-
   test("SPARK-15814 Aggregator can return null result") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
     checkDatasetUnorderly(
@@ -388,15 +336,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   test("SPARK-16100: use Map as the buffer type of Aggregator") {
     val ds = Seq(1, 2, 3).toDS()
     checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
-  }
-
-  test("SPARK-15204 improve nullability inference for Aggregator") {
-    val ds1 = Seq(1, 3, 2, 5).toDS()
-    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
-    val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable)
-    val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.select(NameAgg.toColumn).schema.head.nullable)
   }
 
   test("SPARK-18147: very complex aggregator result type") {

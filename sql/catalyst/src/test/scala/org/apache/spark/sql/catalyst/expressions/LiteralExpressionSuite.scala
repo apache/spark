@@ -302,7 +302,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
         .atZone(ZoneOffset.UTC)
         .toInstant
-      val expected = "TIMESTAMP('2019-03-21 01:02:03.456')"
+      val expected = "TIMESTAMP '2019-03-21 01:02:03.456'"
       val literalStr = Literal.create(timestamp).sql
       assert(literalStr === expected)
     }

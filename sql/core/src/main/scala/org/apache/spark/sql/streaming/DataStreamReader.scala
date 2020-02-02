@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
@@ -83,9 +83,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -123,9 +120,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -142,9 +136,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -182,15 +173,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case _ => None
     }
     ds match {
-      case provider: TableProvider =>
+      // file source v2 does not support streaming yet.
+      case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-        val table = userSpecifiedSchema match {
-          case Some(schema) => provider.getTable(dsOptions, schema)
-          case _ => provider.getTable(dsOptions)
-        }
+        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
@@ -277,6 +266,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * empty array/struct during schema inference.</li>
    * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
    * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -357,6 +351,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * For instance, this is used while parsing dates and timestamps.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing. Maximum length is 1 character.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -370,6 +369,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
+   * we should merge schemas collected from all ORC part-files. This will override
+   * `spark.sql.orc.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.3.0
@@ -389,6 +396,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * whether we should merge schemas collected from all
    * Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -419,6 +431,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * </li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -442,15 +459,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *   spark.readStream().textFile("/path/to/spark/README.md")
    * }}}
    *
-   * You can set the following text-specific options to deal with text files:
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * </ul>
+   * You can set the text-specific options as specified in `DataStreamReader.text`.
    *
    * @param path input path
    * @since 2.1.0

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -403,7 +403,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
@@ -426,7 +426,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(ResourceID(SPARK_EXECUTOR_PREFIX, rName).amountConf, "3")
+      conf.set(new ResourceID(SPARK_EXECUTOR_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
@@ -450,7 +450,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.values.foreach { rName =>
-      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
     // also just set yarn one that we don't convert
     conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}", "5")
@@ -471,6 +471,18 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("test yarn jars path not exists") {
+    withTempDir { dir =>
+      val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))
+      val client = new Client(new ClientArguments(Array()), conf, null)
+      withTempDir { distDir =>
+        intercept[FileNotFoundException] {
+          client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
+        }
+      }
+    }
   }
 
   private val matching = Seq(

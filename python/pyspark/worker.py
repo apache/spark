@@ -39,8 +39,10 @@ from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
-from pyspark.sql.types import to_arrow_type, StructType
+    BatchedSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 

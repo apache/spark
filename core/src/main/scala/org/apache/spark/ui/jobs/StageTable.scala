@@ -183,7 +183,9 @@ private[ui] class StagePagedTable(
       Seq(("Stage Id", null, true)) ++
       {if (isFairScheduler) {Seq(("Pool Name", null, true))} else Seq.empty} ++
       Seq(
-        ("Description", null, true), ("Submitted", null, true), ("Duration", null, true),
+        ("Description", null, true),
+        ("Submitted", null, true),
+        ("Duration", ToolTips.DURATION, true),
         ("Tasks: Succeeded/Total", null, false),
         ("Input", ToolTips.INPUT, true),
         ("Output", ToolTips.OUTPUT, true),
@@ -307,19 +309,7 @@ private[ui] class StagePagedTable(
       } else {
         failureReason
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, failureReason)
     <td valign="middle">{failureReasonSummary}{details}</td>
   }
 

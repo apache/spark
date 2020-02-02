@@ -19,23 +19,27 @@ package org.apache.spark.network.util;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ReadableByteChannel;
 
 import io.netty.buffer.ByteBuf;
 
 public class ByteArrayReadableChannel implements ReadableByteChannel {
   private ByteBuf data;
+  private boolean closed;
 
-  public int readableBytes() {
-    return data.readableBytes();
-  }
-
-  public void feedData(ByteBuf buf) {
+  public void feedData(ByteBuf buf) throws ClosedChannelException {
+    if (closed) {
+      throw new ClosedChannelException();
+    }
     data = buf;
   }
 
   @Override
   public int read(ByteBuffer dst) throws IOException {
+    if (closed) {
+      throw new ClosedChannelException();
+    }
     int totalRead = 0;
     while (data.readableBytes() > 0 && dst.remaining() > 0) {
       int bytesToRead = Math.min(data.readableBytes(), dst.remaining());
@@ -43,20 +47,16 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
       totalRead += bytesToRead;
     }
 
-    if (data.readableBytes() == 0) {
-      data.release();
-    }
-
     return totalRead;
   }
 
   @Override
-  public void close() throws IOException {
+  public void close() {
+    closed = true;
   }
 
   @Override
   public boolean isOpen() {
-    return true;
+    return !closed;
   }
-
 }

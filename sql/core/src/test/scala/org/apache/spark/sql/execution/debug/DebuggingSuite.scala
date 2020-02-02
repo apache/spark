@@ -25,11 +25,26 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
 class DebuggingSuite extends SharedSparkSession {
+
+
+  var originalValue: String = _
+  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -71,7 +86,7 @@ class DebuggingSuite extends SharedSparkSession {
       """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
-        |== WholeStageCodegen ==
+        |== WholeStageCodegen (1) ==
         |Tuples output: 10
         | id LongType: {java.lang.Long}
         |== Range (0, 10, step=1, splits=2) ==

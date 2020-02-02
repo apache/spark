@@ -403,10 +403,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
        {"a":"1","b":"2","c":"3"}
       > SELECT _FUNC_('a');
        {"a":null}
-  """)
+  """,
+  since = "2.0.1")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
+  extends TernaryExpression with ExpectsInputTypes {
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
@@ -449,6 +450,22 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       i += 1
     }
     mapBuilder.build()
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+    val keyValues = ctx.freshName("kvs")
+
+    nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
+      s"""
+         |UTF8String[] $keyValues = $text.split($pd, -1);
+         |for(UTF8String kvEntry: $keyValues) {
+         |  UTF8String[] kv = kvEntry.split($kvd, 2);
+         |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
+         |}
+         |${ev.value} = $builderTerm.build();
+         |""".stripMargin
+    )
   }
 
   override def prettyName: String = "str_to_map"
