@@ -584,7 +584,7 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(3.0)
+@since(3.1)
 def percentile_approx(col, percentage, accuracy=10000):
     """Returns the approximate percentile value of numeric column col at the given percentage.
     The value of percentage must be between 0.0 and 1.0.

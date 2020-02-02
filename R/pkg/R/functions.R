@@ -1424,7 +1424,7 @@ setMethod("quarter",
 #'
 #' @rdname column_aggregate_functions
 #' @aliases percentile_approx percentile_approx,Column-method
-#' @note percentile_approx since 3.0.0
+#' @note percentile_approx since 3.1.0
 setMethod("percentile_approx",
           signature(x = "characterOrColumn", percentage = "numeric"),
           function(x, percentage, accuracy = 10000) {

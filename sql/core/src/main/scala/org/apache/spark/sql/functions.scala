@@ -665,7 +665,7 @@ object functions {
    * is the relative error of the approximation.
    *
    * @group agg_funcs
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def percentile_approx(e: Column, percentage: Array[Double], accuracy: Long): Column = {
     withAggregateFunction {
@@ -679,7 +679,7 @@ object functions {
    * Aggregate function: Returns the approximate percentile value of numeric
    * column col at the given percentage.
    *
-   * The value of percentage must be between 0.0 and 1.0.\
+   * The value of percentage must be between 0.0 and 1.0.
    *
    * The accuracy parameter is a positive numeric literal
    * which controls approximation accuracy at the cost of memory.
@@ -687,7 +687,7 @@ object functions {
    * is the relative error of the approximation.
    *
    * @group agg_funcs
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def percentile_approx(e: Column, percentage: Double, accuracy: Long): Column = {
     withAggregateFunction {
