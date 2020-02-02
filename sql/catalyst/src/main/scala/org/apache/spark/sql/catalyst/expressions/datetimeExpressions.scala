@@ -1370,7 +1370,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 }
 
 /**
- * Parses a column to a timestamp based on the supplied format.
+ * Parses a column to a timestamp in the seconds precision based on the supplied format.
  */
 @ExpressionDescription(
   usage = """
