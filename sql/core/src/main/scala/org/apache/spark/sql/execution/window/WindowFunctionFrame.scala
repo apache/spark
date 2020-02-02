@@ -47,14 +47,14 @@ abstract class WindowFunctionFrame {
   /**
    * The current lower window bound in the row array (inclusive).
    *
-   * This should be called after the current row is updated via [[write]]
+   * This should be called after the current row is updated via `write`.
    */
   def currentLowerBound(): Int
 
   /**
    * The current row index of the upper window bound in the row array (exclusive)
    *
-   * This should be called after the current row is updated via [[write]]
+   * This should be called after the current row is updated via `write`.
    */
   def currentUpperBound(): Int
 }
