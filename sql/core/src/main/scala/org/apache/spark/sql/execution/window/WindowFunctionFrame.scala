@@ -77,7 +77,7 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-final class OffsetWindowFunctionFrame(
+class OffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -87,21 +87,21 @@ final class OffsetWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+  protected var input: ExternalAppendOnlyUnsafeRowArray = null
 
   /**
    * An iterator over the [[input]]
    */
-  private[this] var inputIterator: Iterator[UnsafeRow] = _
+  protected var inputIterator: Iterator[UnsafeRow] = _
 
   /** Index of the input row currently used for output. */
-  private[this] var inputIndex = 0
+  protected var inputIndex = 0
 
   /**
    * Create the projection used when the offset row exists.
    * Please note that this project always respect null input values (like PostgreSQL).
    */
-  private[this] val projection = {
+  protected val projection = {
     // Collect the expressions and bind them.
     val inputAttrs = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
@@ -112,7 +112,7 @@ final class OffsetWindowFunctionFrame(
   }
 
   /** Create the projection used when the offset row DOES NOT exists. */
-  private[this] val fillDefaultValue = {
+  protected val fillDefaultValue = {
     // Collect the expressions and bind them.
     val inputAttrs: AttributeSeq = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
@@ -155,6 +155,38 @@ final class OffsetWindowFunctionFrame(
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
   override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+}
+
+class FixedOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrame(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    input = rows
+    inputIndex = 0
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    inputIterator = input.generateIterator()
+    var newInputIndex = inputIndex
+    while (newInputIndex < offset) {
+      if (inputIterator.hasNext) inputIterator.next()
+      newInputIndex += 1
+    }
+    if (newInputIndex >= 0 && newInputIndex < input.length) {
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      projection(r)
+    } else {
+      // Use default values since the offset row does not exist.
+      fillDefaultValue(current)
+    }
+  }
 }
 
 /**

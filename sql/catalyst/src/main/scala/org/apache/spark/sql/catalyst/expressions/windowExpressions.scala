@@ -363,6 +363,11 @@ abstract class OffsetWindowFunction
    */
   val direction: SortDirection
 
+  /**
+   * Whether the offset is based on the entire frame.
+   */
+  val isWholeBased: Boolean = false
+
   override def children: Seq[Expression] = Seq(input, offset, default)
 
   /*
@@ -463,6 +468,39 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
   def this() = this(Literal(null))
 
   override val direction = Descending
+}
+
+/**
+ * The NthValue function returns the value of `input` at the row that is the `offset`th row of
+ * the window frame (counting from 1). Offsets start at 0, which is the current row. When the
+ * value of `input` is null at the `offset`th row, null is returned.
+ *
+ * @param input expression to evaluate `offset`th row of the window frame.
+ * @param offset rows to jump ahead in the partition.
+ */
+case class NthValue(input: Expression, offset: Expression)
+    extends OffsetWindowFunction {
+
+  override val default = Literal(null)
+
+  override val isWholeBased = true
+
+  override val direction = Ascending
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else {
+      offset.eval() match {
+        case i: Int if i <= 0 => TypeCheckFailure(
+          s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
+        case i: Int => TypeCheckSuccess
+        case other => TypeCheckFailure(
+          s"The 'offset' parameter must be a int literal but it is $other.")
+      }
+    }
+  }
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {

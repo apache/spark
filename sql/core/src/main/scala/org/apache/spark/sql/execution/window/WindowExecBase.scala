@@ -138,7 +138,11 @@ abstract class WindowExecBase(
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
+            case f: OffsetWindowFunction => if (f.isWholeBased) {
+              collect("WHOLE_OFFSET", frame, e, f)
+            } else {
+              collect("OFFSET", frame, e, f)
+            }
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")
           }
@@ -176,6 +180,18 @@ abstract class WindowExecBase(
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
               new OffsetWindowFunctionFrame(
+                target,
+                ordinal,
+                // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
+                child.output,
+                (expressions, schema) =>
+                  MutableProjection.create(expressions, schema),
+                offset)
+
+          case ("WHOLE_OFFSET", _, IntegerLiteral(offset), _) =>
+            target: InternalRow =>
+              new FixedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.

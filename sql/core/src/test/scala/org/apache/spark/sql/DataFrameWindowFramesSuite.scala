@@ -29,18 +29,19 @@ import org.apache.spark.sql.test.SharedSparkSession
 class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  test("lead/lag with empty data frame") {
+  test("lead/lag/nth_value with empty data frame") {
     val df = Seq.empty[(Int, String)].toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
 
     checkAnswer(
       df.select(
         lead("value", 1).over(window),
-        lag("value", 1).over(window)),
+        lag("value", 1).over(window),
+        nth_value("value", 1).over(window)),
       Nil)
   }
 
-  test("lead/lag with positive offset") {
+  test("lead/lag/nth_value with positive offset") {
     val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
 
@@ -48,11 +49,13 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       df.select(
         $"key",
         lead("value", 1).over(window),
-        lag("value", 1).over(window)),
-      Row(1, "3", null) :: Row(1, null, "1") :: Row(2, "4", null) :: Row(2, null, "2") :: Nil)
+        lag("value", 1).over(window),
+        nth_value("value", 1).over(window)),
+      Row(1, "3", null, "3") :: Row(1, null, "1", "3") ::
+        Row(2, "4", null, "4") :: Row(2, null, "2", "4") :: Nil)
   }
 
-  test("reverse lead/lag with positive offset") {
+  test("reverse lead/lag/nth_value with positive offset") {
     val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value".desc)
 
@@ -60,8 +63,10 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       df.select(
         $"key",
         lead("value", 1).over(window),
-        lag("value", 1).over(window)),
-      Row(1, "1", null) :: Row(1, null, "3") :: Row(2, "2", null) :: Row(2, null, "4") :: Nil)
+        lag("value", 1).over(window),
+        nth_value("value", 1).over(window)),
+      Row(1, "1", null, "1") :: Row(1, null, "3", "1") ::
+        Row(2, "2", null, "2") :: Row(2, null, "4", "2") :: Nil)
   }
 
   test("lead/lag with negative offset") {
