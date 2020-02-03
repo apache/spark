@@ -2148,7 +2148,7 @@ object SQLConf {
 
   val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
     .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
-      " dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
