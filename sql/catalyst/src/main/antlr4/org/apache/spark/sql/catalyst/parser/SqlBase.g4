@@ -160,7 +160,13 @@ statement
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
+        TYPE dataType                                                  #alterTableColumnType
+    | ALTER TABLE table=multipartIdentifier
+        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
+        commentSpec?                                                   #alterTableColumnComment
+    | ALTER TABLE table=multipartIdentifier
+        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
+        colPosition                                                    #alterTableColumnPosition
     | ALTER TABLE table=multipartIdentifier
         ALTER COLUMN? column=multipartIdentifier
         setOrDrop=(SET | DROP) NOT NULL                                #alterColumnNullability

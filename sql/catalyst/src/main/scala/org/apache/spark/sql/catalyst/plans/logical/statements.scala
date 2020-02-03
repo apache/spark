@@ -165,7 +165,11 @@ case class AlterTableAlterColumnStatement(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[ColumnPosition]) extends ParsedStatement
+    position: Option[ColumnPosition]) extends ParsedStatement {
+  require(
+    Seq(dataType, nullable, comment, position).filter(_.nonEmpty).length == 1,
+    "Only one property can be changed at a time.")
+}
 
 /**
  * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.

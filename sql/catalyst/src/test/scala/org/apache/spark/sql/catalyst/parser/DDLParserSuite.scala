@@ -646,19 +646,6 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: update column type, comment and position") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c " +
-        "TYPE bigint COMMENT 'new comment' AFTER d"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(LongType),
-        None,
-        Some("new comment"),
-        Some(after("d"))))
-  }
-
   test("alter table: SET/DROP NOT NULL") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),

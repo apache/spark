@@ -2949,21 +2949,37 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
    * }}}
    */
-  override def visitAlterTableColumn(
-      ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
-    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
-    if (ctx.dataType == null && ctx.commentSpec() == null && ctx.colPosition == null) {
-      operationNotAllowed(
-        s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT or a FIRST/AFTER", ctx)
-    }
-
+  override def visitAlterTableColumnType(
+      ctx: AlterTableColumnTypeContext): LogicalPlan = withOrigin(ctx) {
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
-      dataType = Option(ctx.dataType).map(typedVisit[DataType]),
+      dataType = Some(typedVisit[DataType](ctx.dataType)),
       nullable = None,
-      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      comment = None,
+      position = None)
+  }
+
+  override def visitAlterTableColumnComment(
+      ctx: AlterTableColumnCommentContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAlterColumnStatement(
+      visitMultipartIdentifier(ctx.table),
+      typedVisit[Seq[String]](ctx.column),
+      dataType = None,
+      nullable = None,
+      comment = Some(visitCommentSpec(ctx.commentSpec())),
+      position = None)
+  }
+
+  override def visitAlterTableColumnPosition(
+      ctx: AlterTableColumnPositionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAlterColumnStatement(
+      visitMultipartIdentifier(ctx.table),
+      typedVisit[Seq[String]](ctx.column),
+      dataType = None,
+      nullable = None,
+      comment = None,
+      position = Some(typedVisit[ColumnPosition](ctx.colPosition)))
   }
 
   /**
