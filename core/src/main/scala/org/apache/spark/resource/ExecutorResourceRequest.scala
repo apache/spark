@@ -17,6 +17,8 @@
 
 package org.apache.spark.resource
 
+import java.util.Optional
+
 /**
  * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -53,8 +55,8 @@ package org.apache.spark.resource
 private[spark] class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Long,
-    val discoveryScript: String = "",
-    val vendor: String = "") extends Serializable {
+    val discoveryScript: Optional[String] = Optional.empty(),
+    val vendor: Optional[String] = Optional.empty()) extends Serializable {
 
   override def equals(obj: Any): Boolean = {
     obj match {

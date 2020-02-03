@@ -165,7 +165,7 @@ class ResourceUtilsSuite extends SparkFunSuite
         dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")
       val rpBuilder = new ResourceProfileBuilder()
-      val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
+      val ereqs = new ExecutorResourceRequests().resource(GPU, 2, Optional.of(gpuDiscovery))
       val treqs = new TaskResourceRequests().resource(GPU, 1)
 
       val rp = rpBuilder.require(ereqs).require(treqs).build

@@ -20,6 +20,7 @@ package org.apache.spark.executor
 import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Optional
 import java.util.Properties
 
 import scala.collection.mutable
@@ -239,7 +240,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
         """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
       val rpBuilder = new ResourceProfileBuilder
-      val ereqs = new ExecutorResourceRequests().resource(FPGA, 3, scriptPath)
+      val ereqs = new ExecutorResourceRequests().resource(FPGA, 3, Optional.of(scriptPath))
       ereqs.resource(GPU, 2)
       val rp = rpBuilder.require(ereqs).build
       allocatedFileAndConfigsResourceDiscoveryTestFpga(dir, new SparkConf, rp)

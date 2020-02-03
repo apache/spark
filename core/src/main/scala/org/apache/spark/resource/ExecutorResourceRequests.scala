@@ -17,6 +17,7 @@
 
 package org.apache.spark.resource
 
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -94,6 +95,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    *  like GPUs are gpu (spark configs spark.executor.resource.gpu.*). If you pass in a resource
    *  that the cluster manager doesn't support the result is undefined, it may error or may just
    *  be ignored.
+   * (Java friendly) using Optional instead of scala Option
    *
    * @param resourceName Name of the resource.
    * @param amount amount of that resource per executor to use.
@@ -106,10 +108,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   def resource(
       resourceName: String,
       amount: Long,
-      discoveryScript: String = "",
-      vendor: String = ""): this.type = {
-    // a bit weird but for Java api use empty string as meaning None because empty
-    // string is otherwise invalid for those parameters anyway
+      discoveryScript: Optional[String] = Optional.empty(),
+      vendor: Optional[String] = Optional.empty()): this.type = {
     val req = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
     _executorResources.put(resourceName, req)
     this
