@@ -1050,6 +1050,7 @@ ansiNonReserved
     | FIELDS
     | FILEFORMAT
     | FIRST
+    | FIRST_VALUE
     | FOLLOWING
     | FORMAT
     | FORMATTED
@@ -1069,6 +1070,7 @@ ansiNonReserved
     | ITEMS
     | KEYS
     | LAST
+    | LAST_VALUE
     | LATERAL
     | LAZY
     | LIKE
