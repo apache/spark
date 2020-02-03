@@ -58,7 +58,7 @@ public class RetryingBlockFetcher {
      * issues.
      */
     void createAndStart(String[] blockIds, BlockFetchingListener listener)
-         throws IOException, InterruptedException;
+        throws IOException, InterruptedException, ExternalShuffleServiceLostException;
   }
 
   /** Shared executor service used for waiting and retrying. */
