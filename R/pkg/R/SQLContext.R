@@ -556,7 +556,6 @@ tableToDF <- function(tableName) {
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
-#' @name read.df
 #' @note read.df since 1.4.0
 read.df <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
@@ -687,7 +686,6 @@ read.jdbc <- function(url, tableName,
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
-#' @name read.stream
 #' @note read.stream since 2.2.0
 #' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {
