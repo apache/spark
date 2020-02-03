@@ -291,7 +291,11 @@ public class RetryingBlockFetcherSuite {
     }
 
     assertNotNull(stub);
-    stub.when(fetchStarter).createAndStart(any(), any());
+    try {
+      stub.when(fetchStarter).createAndStart(any(), any());
+    } catch (ExternalShuffleServiceLostException e) {
+      throw new IOException(e);
+    }
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
     new RetryingBlockFetcher(conf, fetchStarter, blockIdArray, listener).start();
   }
