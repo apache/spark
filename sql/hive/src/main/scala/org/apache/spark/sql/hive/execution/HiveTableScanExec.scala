@@ -172,7 +172,8 @@ case class HiveTableScanExec(
         prunePartitions(hivePartitions)
       }
     } else {
-      if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+        partitionPruningPred.nonEmpty) {
         rawPartitions
       } else {
         prunePartitions(rawPartitions)
@@ -189,9 +190,8 @@ case class HiveTableScanExec(
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        relation.prunedPartitions.getOrElse(
-          sparkSession.sessionState.catalog
-            .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters))
+        sparkSession.sessionState.catalog
+          .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
