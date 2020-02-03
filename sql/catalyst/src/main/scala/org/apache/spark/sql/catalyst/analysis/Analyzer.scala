@@ -823,9 +823,7 @@ class Analyzer(
           .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(SubqueryAlias(u.originalNameParts, _))
-          .getOrElse(u)
+        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -889,13 +887,7 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier)
-          .map {
-            case r: DataSourceV2Relation => SubqueryAlias(u.multipartIdentifier, r)
-            case other => other
-          }
-          .map(resolveViews)
-          .getOrElse(u)
+        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
@@ -932,7 +924,9 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+              SubqueryAlias(
+                identifier,
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
