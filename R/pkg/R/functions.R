@@ -3377,10 +3377,10 @@ create_lambda <- function(fun, expected_nargs) {
   # Convert both Columns to Scala expressions
   jexpr <- as_jexpr(result)
 
-  jargs <- callJStatic(
+  jargs <- handledCallJStatic(
     "org.apache.spark.api.python.PythonUtils",
     "toSeq",
-    callJStatic(
+    handledCallJStatic(
       "java.util.Arrays", "asList", lapply(args, as_jexpr)
     )
   )
