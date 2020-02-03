@@ -21,7 +21,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -113,6 +112,10 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group setParam */
+  @Since("3.0.0")
+  def setBootstrap(value: Boolean): this.type = set(bootstrap, value)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
@@ -135,13 +138,14 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val instances = extractInstances(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
+    strategy.bootstrap = $(bootstrap)
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, leafCol, impurity,
       numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, subsamplingRate, cacheNodeIds,
-      checkpointInterval)
+      checkpointInterval, bootstrap)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))

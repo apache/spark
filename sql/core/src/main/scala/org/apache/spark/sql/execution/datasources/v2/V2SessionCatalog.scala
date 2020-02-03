@@ -125,10 +125,12 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
     val comment = properties.get(TableCatalog.PROP_COMMENT)
+    val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
 
     try {
       catalog.alterTable(
-        catalogTable.copy(properties = properties, schema = schema, comment = comment))
+        catalogTable
+          .copy(properties = properties, schema = schema, owner = owner, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
@@ -230,7 +232,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
           case remove: RemoveProperty
-            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
+            if CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>

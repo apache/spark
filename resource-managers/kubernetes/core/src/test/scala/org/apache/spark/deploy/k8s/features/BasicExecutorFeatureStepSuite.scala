@@ -115,8 +115,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod with resources") {
-    val fpgaResourceID = ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
-    val gpuExecutorResourceID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
+    val fpgaResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
+    val gpuExecutorResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
     val gpuResources =
       Map(("nvidia.com/gpu" -> TestResourceInformation(gpuExecutorResourceID, "2", "nvidia.com")),
       ("foo.com/fpga" -> TestResourceInformation(fpgaResourceID, "1", "foo.com")))

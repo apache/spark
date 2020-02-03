@@ -46,7 +46,7 @@ _check_column_type = sys.version >= '3'
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message)
-class GroupedMapPandasUDFTests(ReusedSQLTestCase):
+class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
     def data(self):
@@ -250,7 +250,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
+                    'Invalid return type.*grouped map Pandas UDF.*MapType'):
                 pandas_udf(
                     lambda pdf: pdf,
                     'id long, v map<int, int>',
@@ -278,7 +278,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
-        common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
+        common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
             StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
@@ -533,13 +533,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, ['id', 'group', 'ts', 'result'])
         df = df.select(col('id'), col('group'), col('ts').cast('timestamp'), col('result'))
 
-        @pandas_udf(df.schema, PandasUDFType.GROUPED_MAP)
         def f(pdf):
             # Assign each result element the ids of the windowed group
             pdf['result'] = [pdf['id']] * len(pdf)
             return pdf
 
-        result = df.groupby('group', window('ts', '5 days')).apply(f)\
+        result = df.groupby('group', window('ts', '5 days')).applyInPandas(f, df.schema)\
             .select('id', 'result').collect()
         for r in result:
             self.assertListEqual(expected[r[0]], r[1])
@@ -590,7 +589,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_grouped_map import *
+    from pyspark.sql.tests.test_pandas_grouped_map import *
 
     try:
         import xmlrunner

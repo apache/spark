@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
@@ -85,6 +86,8 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
 
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
+
+  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("Fall back to v1 when writing to file with read only FileDataSourceV2") {
     val df = spark.range(10).toDF()

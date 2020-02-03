@@ -86,7 +86,7 @@ class DebuggingSuite extends SharedSparkSession {
       """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
-        |== WholeStageCodegen ==
+        |== WholeStageCodegen (1) ==
         |Tuples output: 10
         | id LongType: {java.lang.Long}
         |== Range (0, 10, step=1, splits=2) ==

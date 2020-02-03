@@ -220,10 +220,13 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.14",
+    unidocGenjavadocVersion := "0.15",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
+      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/repos/central/data/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
@@ -822,7 +825,9 @@ object Unidoc {
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/unsafe")))
+      .map(_.filterNot(f =>
+        f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
+        !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))

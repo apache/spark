@@ -103,8 +103,6 @@ statement
         SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
     | ALTER namespace multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
-    | ALTER namespace multipartIdentifier
-        SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
@@ -212,7 +210,7 @@ statement
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
-    | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -1100,7 +1098,6 @@ ansiNonReserved
     | OVER
     | OVERLAY
     | OVERWRITE
-    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1353,7 +1350,6 @@ nonReserved
     | OVERLAPS
     | OVERLAY
     | OVERWRITE
-    | OWNER
     | PARTITION
     | PARTITIONED
     | PARTITIONS
@@ -1612,7 +1608,6 @@ OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
 OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
-OWNER: 'OWNER';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';

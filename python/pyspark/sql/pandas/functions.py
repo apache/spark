@@ -17,11 +17,15 @@
 
 import functools
 import sys
+import warnings
 
 from pyspark import since
 from pyspark.rdd import PythonEvalType
+from pyspark.sql.pandas.typehints import infer_eval_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
+from pyspark.util import _get_argspec
 
 
 class PandasUDFType(object):
@@ -33,11 +37,7 @@ class PandasUDFType(object):
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
-    COGROUPED_MAP = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
-
-    MAP_ITER = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
 
 @since(2.3)
@@ -50,6 +50,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
+
+    .. seealso:: :meth:`pyspark.sql.DataFrame.mapInPandas`
+    .. seealso:: :meth:`pyspark.sql.GroupedData.applyInPandas`
+    .. seealso:: :meth:`pyspark.sql.PandasCogroupedOps.applyInPandas`
 
     The function type of the UDF can be one of the following:
 
@@ -337,97 +341,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
-    5. MAP_ITER
-
-       A map iterator Pandas UDFs are used to transform data with an iterator of batches.
-       It can be used with :meth:`pyspark.sql.DataFrame.mapInPandas`.
-
-       It can return the output of arbitrary length in contrast to the scalar Pandas UDF.
-       It maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
-       function and returns the result as a :class:`DataFrame`.
-
-       The user-defined function should take an iterator of `pandas.DataFrame`\\s and return another
-       iterator of `pandas.DataFrame`\\s. All columns are passed together as an
-       iterator of `pandas.DataFrame`\\s to the user-defined function and the returned iterator of
-       `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
-
-       >>> df = spark.createDataFrame([(1, 21), (2, 30)],
-       ...                            ("id", "age"))  # doctest: +SKIP
-       >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
-       ... def filter_func(batch_iter):
-       ...     for pdf in batch_iter:
-       ...         yield pdf[pdf.id == 1]
-       >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
-       +---+---+
-       | id|age|
-       +---+---+
-       |  1| 21|
-       +---+---+
-
-    6. COGROUPED_MAP
-
-       A cogrouped map UDF defines transformation: (`pandas.DataFrame`, `pandas.DataFrame`) ->
-       `pandas.DataFrame`. The `returnType` should be a :class:`StructType` describing the schema
-       of the returned `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame`
-       must either match the field names in the defined `returnType` schema if specified as strings,
-       or match the field data types by position if not strings, e.g. integer indices. The length
-       of the returned `pandas.DataFrame` can be arbitrary.
-
-       CoGrouped map UDFs are used with :meth:`pyspark.sql.CoGroupedData.apply`.
-
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> df1 = spark.createDataFrame(
-       ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
-       ...     ("time", "id", "v1"))
-       >>> df2 = spark.createDataFrame(
-       ...     [(20000101, 1, "x"), (20000101, 2, "y")],
-       ...     ("time", "id", "v2"))
-       >>> @pandas_udf("time int, id int, v1 double, v2 string",
-       ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
-       ... def asof_join(l, r):
-       ...     return pd.merge_asof(l, r, on="time", by="id")
-       >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
-       +---------+---+---+---+
-       |     time| id| v1| v2|
-       +---------+---+---+---+
-       | 20000101|  1|1.0|  x|
-       | 20000102|  1|3.0|  x|
-       | 20000101|  2|2.0|  y|
-       | 20000102|  2|4.0|  y|
-       +---------+---+---+---+
-
-       Alternatively, the user can define a function that takes three arguments.  In this case,
-       the grouping key(s) will be passed as the first argument and the data will be passed as the
-       second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
-       types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
-       `pandas.DataFrame` containing all columns from the original Spark DataFrames.
-       >>> @pandas_udf("time int, id int, v1 double, v2 string",
-       ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
-       ... def asof_join(k, l, r):
-       ...     if k == (1,):
-       ...         return pd.merge_asof(l, r, on="time", by="id")
-       ...     else:
-       ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
-       >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
-       +---------+---+---+---+
-       |     time| id| v1| v2|
-       +---------+---+---+---+
-       | 20000101|  1|1.0|  x|
-       | 20000102|  1|3.0|  x|
-       +---------+---+---+---+
-
-    .. note:: The user-defined functions are considered deterministic by default. Due to
-        optimization, duplicate invocations may be eliminated or the function may even be invoked
-        more times than it is present in the query. If your function is not deterministic, call
-        `asNondeterministic` on the user defined function. E.g.:
-
-    >>> @pandas_udf('double', PandasUDFType.SCALAR)  # doctest: +SKIP
-    ... def random(v):
-    ...     import numpy as np
-    ...     import pandas as pd
-    ...     return pd.Series(np.random.randn(len(v))
-    >>> random = random.asNondeterministic()  # doctest: +SKIP
-
     .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
@@ -472,6 +385,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     # Note: Python 3.7.3, Pandas 0.24.2 and PyArrow 0.13.0 are used.
     # Note: Timezone is KST.
     # Note: 'X' means it throws an exception during the conversion.
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
 
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
@@ -490,31 +405,81 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             eval_type = returnType
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
-            eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            eval_type = None
     else:
         return_type = returnType
 
         if functionType is not None:
             eval_type = functionType
         else:
-            eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            eval_type = None
 
     if return_type is None:
-        raise ValueError("Invalid returnType: returnType can not be None")
+        raise ValueError("Invalid return type: returnType can not be None")
 
     if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                          PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
-        raise ValueError("Invalid functionType: "
+                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+                         None]:  # None means it should infer the type from type hints.
+
+        raise ValueError("Invalid function type: "
                          "functionType must be one the values from PandasUDFType")
 
     if is_decorator:
-        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(_create_pandas_udf, returnType=return_type, evalType=eval_type)
     else:
-        return _create_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_pandas_udf(f=f, returnType=return_type, evalType=eval_type)
+
+
+def _create_pandas_udf(f, returnType, evalType):
+    argspec = _get_argspec(f)
+
+    # pandas UDF by type hints.
+    if sys.version_info >= (3, 6):
+        from inspect import signature
+
+        if evalType in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+            warnings.warn(
+                "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
+                "pandas UDF instead of specifying pandas UDF type which will be deprecated "
+                "in the future releases. See SPARK-28264 for more details.", UserWarning)
+        elif len(argspec.annotations) > 0:
+            evalType = infer_eval_type(signature(f))
+            assert evalType is not None
+
+    if evalType is None:
+        # Set default is scalar UDF.
+        evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+
+    if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
+            evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
+            len(argspec.args) == 0 and \
+            argspec.varargs is None:
+        raise ValueError(
+            "Invalid function: 0-arg pandas_udfs are not supported. "
+            "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+        )
+
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
+            and len(argspec.args) not in (1, 2):
+        raise ValueError(
+            "Invalid function: pandas_udf with function type GROUPED_MAP or "
+            "the function in groupby.applyInPandas "
+            "must take either one argument (data) or two arguments (key, data).")
+
+    if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
+            and len(argspec.args) not in (2, 3):
+        raise ValueError(
+            "Invalid function: the function in cogroup.applyInPandas "
+            "must take either two arguments (left, right) "
+            "or three arguments (key, left, right).")
+
+    return _create_udf(f, returnType, evalType)
 
 
 def _test():

@@ -67,22 +67,21 @@ class UnivocityParser(
   // their positions in the data schema.
   private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
 
-  val tokenizer = {
+  val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
     // parser select a sequence of fields for reading by their positions.
-    // if (options.columnPruning && requiredSchema.length < dataSchema.length) {
     if (parsedSchema.length < dataSchema.length) {
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
   }
 
-  // Pre-allocated Seq to avoid the overhead of the seq builder.
-  private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
+  // Pre-allocated Some to avoid the overhead of building Some per each-row.
+  private val requiredRow = Some(new GenericInternalRow(requiredSchema.length))
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
-  // We preallocate it avoid unnecessary invokes of the seq builder.
-  private val noRows = Seq.empty[InternalRow]
+  // We preallocate it avoid unnecessary allocations.
+  private val noRows = None
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
@@ -181,6 +180,11 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
+    case CalendarIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
+      }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
@@ -203,20 +207,21 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
-    // If `columnPruning` enabled and partition attributes scanned only,
-    // `schema` gets empty.
-    (_: String) => Seq(InternalRow.empty)
-  } else {
-    // parse if the columnPruning is disabled or requiredSchema is nonEmpty
-    (input: String) => convert(tokenizer.parseLine(input))
-  }
-
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): Seq[InternalRow] = doParse(input)
+  val parse: String => Option[InternalRow] = {
+    // This is intentionally a val to create a function once and reuse.
+    if (options.columnPruning && requiredSchema.isEmpty) {
+      // If `columnPruning` enabled and partition attributes scanned only,
+      // `schema` gets empty.
+      (_: String) => Some(InternalRow.empty)
+    } else {
+      // parse if the columnPruning is disabled or requiredSchema is nonEmpty
+      (input: String) => convert(tokenizer.parseLine(input))
+    }
+  }
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
@@ -224,70 +229,53 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  private def convert(tokens: Array[String]): Seq[InternalRow] = {
+  private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
         new RuntimeException("Malformed CSV record"))
-    } else if (tokens.length != parsedSchema.length) {
+    }
+
+    var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
-      // However, we still have chance to parse some of the tokens, by adding extra null tokens in
-      // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
-      val checkedTokens = if (parsedSchema.length > tokens.length) {
-        tokens ++ new Array[String](parsedSchema.length - tokens.length)
-      } else {
-        tokens.take(parsedSchema.length)
-      }
-      def getPartialResult(): Option[InternalRow] = {
-        try {
-          convert(checkedTokens).headOption
-        } catch {
-          case _: BadRecordException => None
-        }
-      }
-      // For records with less or more tokens than the schema, tries to return partial results
-      // if possible.
-      throw BadRecordException(
-        () => getCurrentInput,
-        () => getPartialResult(),
-        new RuntimeException("Malformed CSV record"))
-    } else {
-      // When the length of the returned tokens is identical to the length of the parsed schema,
-      // we just need to:
-      //  1. Convert the tokens that correspond to the required schema.
-      //  2. Apply the pushdown filters to `requiredRow`.
-      var i = 0
-      val row = requiredRow.head
-      var skipRow = false
-      var badRecordException: Option[Throwable] = None
-      while (i < requiredSchema.length) {
-        try {
-          if (!skipRow) {
-            row(i) = valueConverters(i).apply(getToken(tokens, i))
-            if (csvFilters.skipRow(row, i)) {
-              skipRow = true
-            }
-          }
-          if (skipRow) {
-            row.setNullAt(i)
-          }
-        } catch {
-          case NonFatal(e) =>
-            badRecordException = badRecordException.orElse(Some(e))
-            row.setNullAt(i)
-        }
-        i += 1
-      }
-      if (skipRow) {
-        noRows
-      } else {
-        if (badRecordException.isDefined) {
-          throw BadRecordException(
-            () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
+      // However, we still have chance to parse some of the tokens. It continues to parses the
+      // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
+      // tokens.
+      Some(new RuntimeException("Malformed CSV record"))
+    } else None
+    // When the length of the returned tokens is identical to the length of the parsed schema,
+    // we just need to:
+    //  1. Convert the tokens that correspond to the required schema.
+    //  2. Apply the pushdown filters to `requiredRow`.
+    var i = 0
+    val row = requiredRow.get
+    var skipRow = false
+    while (i < requiredSchema.length) {
+      try {
+        if (skipRow) {
+          row.setNullAt(i)
         } else {
-          requiredRow
+          row(i) = valueConverters(i).apply(getToken(tokens, i))
+          if (csvFilters.skipRow(row, i)) {
+            skipRow = true
+          }
         }
+      } catch {
+        case NonFatal(e) =>
+          badRecordException = badRecordException.orElse(Some(e))
+          row.setNullAt(i)
+      }
+      i += 1
+    }
+    if (skipRow) {
+      noRows
+    } else {
+      if (badRecordException.isDefined) {
+        throw BadRecordException(
+          () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
+      } else {
+        requiredRow
       }
     }
   }

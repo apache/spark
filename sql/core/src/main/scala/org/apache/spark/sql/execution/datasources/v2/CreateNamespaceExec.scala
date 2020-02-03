@@ -42,7 +42,7 @@ case class CreateNamespaceExec(
     if (!catalog.namespaceExists(ns)) {
       try {
         val ownership =
-          Map(PROP_OWNER_NAME -> Utils.getCurrentUserName(), PROP_OWNER_TYPE -> "USER")
+          Map(PROP_OWNER -> Utils.getCurrentUserName())
         catalog.createNamespace(ns, (properties ++ ownership).asJava)
       } catch {
         case _: NamespaceAlreadyExistsException if ifNotExists =>

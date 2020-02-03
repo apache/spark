@@ -54,6 +54,7 @@ trait CodegenSupport extends SparkPlan {
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
     case _: InMemoryTableScanExec => "memoryScan"
+    case _: WholeStageCodegenExec => "wholestagecodegen"
     case _ => nodeName.toLowerCase(Locale.ROOT)
   }
 
@@ -612,6 +613,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+
+  override def nodeName: String = s"WholeStageCodegen (${codegenStageId})"
 
   def generatedClassName(): String = if (conf.wholeStageUseIdInClassName) {
     s"GeneratedIteratorForCodegenStage$codegenStageId"

@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -116,6 +117,19 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column with interval type") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e1 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
+      assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
+      val e2 =
+        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
+      assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
+    }
+  }
+
   test("AlterTable: add column with position") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -132,9 +146,9 @@ trait AlterTableTests extends SharedSparkSession {
         .add("point", new StructType().add("x", IntegerType))
         .add("b", StringType))
 
-      val e1 = intercept[SparkException](
+      val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
-      assert(e1.getMessage().contains("AFTER column not found"))
+      assert(e1.getMessage().contains("Couldn't find the reference column"))
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -153,9 +167,9 @@ trait AlterTableTests extends SharedSparkSession {
           .add("z", IntegerType))
         .add("b", StringType))
 
-      val e2 = intercept[SparkException](
+      val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
-      assert(e2.getMessage().contains("AFTER column not found"))
+      assert(e2.getMessage().contains("Couldn't find the reference column"))
     }
   }
 
@@ -298,6 +312,30 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column - new column should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq("id", "point.x", "arr.element.x", "mk.key.x", "mv.value.x").foreach { field =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS $field double")
+        }
+        assert(e.getMessage.contains("add"))
+        assert(e.getMessage.contains(s"$field already exists"))
+      }
+    }
+  }
+
   test("AlterTable: update column type int -> long") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -307,6 +345,15 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
       assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", LongType))
+    }
+  }
+
+  test("AlterTable: update column type to interval") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE interval"))
+      assert(e.getMessage.contains("id to interval type"))
     }
   }
 
@@ -358,7 +405,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+      assert(exc.getMessage.contains("update a struct by updating its fields"))
 
       val table = getTableMetadata(t)
 
@@ -572,9 +619,9 @@ trait AlterTableTests extends SharedSparkSession {
           .add("z", IntegerType))
         .add("b", IntegerType))
 
-      val e1 = intercept[SparkException](
+      val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("AFTER column not found"))
+      assert(e1.getMessage.contains("Couldn't resolve positional argument"))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -594,9 +641,9 @@ trait AlterTableTests extends SharedSparkSession {
           .add("y", IntegerType))
         .add("b", IntegerType))
 
-      val e2 = intercept[SparkException](
+      val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("AFTER column not found"))
+      assert(e2.getMessage.contains("Couldn't resolve positional argument"))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
@@ -826,6 +873,37 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: rename column - new name should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |user_id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq(
+        "id" -> "user_id",
+        "point.x" -> "y",
+        "arr.element.x" -> "y",
+        "mk.key.x" -> "y",
+        "mv.value.x" -> "y").foreach { case (field, newName) =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+        }
+        assert(e.getMessage.contains("rename"))
+        assert(e.getMessage.contains((field.split("\\.").init :+ newName).mkString(".")))
+        assert(e.getMessage.contains("already exists"))
+      }
+    }
+  }
+
   test("AlterTable: drop column") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -945,7 +1023,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(table.name === fullTableName(t))
       assert(table.properties ===
-        Map("provider" -> v2Format, "location" -> "s3://bucket/path").asJava)
+        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
     }
   }
 
@@ -971,7 +1049,8 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
     }
   }
 
@@ -983,15 +1062,15 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(t)
 
       assert(table.name === fullTableName(t))
-      assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
+      assert(table.properties ===
+        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
 
       val updated = getTableMetadata(t)
 
       assert(updated.name === fullTableName(t))
-      assert(updated.properties === Map("provider" -> v2Format).asJava)
+      assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
-
 }

@@ -107,7 +107,7 @@ case class AnalyzePartitionCommand(
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
     val newPartitions = partitions.flatMap { p =>
-      val newTotalSize = CommandUtils.calculateLocationSize(
+      val newTotalSize = CommandUtils.calculateSingleLocationSize(
         sessionState, tableMeta.identifier, p.storage.locationUri)
       val newRowCount = rowCounts.get(p.spec)
       val newStats = CommandUtils.compareAndGetNewStats(p.stats, newTotalSize, newRowCount)

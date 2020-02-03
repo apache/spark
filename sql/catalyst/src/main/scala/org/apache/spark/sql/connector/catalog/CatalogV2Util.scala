@@ -28,9 +28,39 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  /**
+   * The list of reserved table properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER TABLE ... SET TBLPROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val TABLE_RESERVED_PROPERTIES =
+    Seq(TableCatalog.PROP_COMMENT,
+      TableCatalog.PROP_LOCATION,
+      TableCatalog.PROP_PROVIDER,
+      TableCatalog.PROP_OWNER)
+
+  /**
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val NAMESPACE_RESERVED_PROPERTIES =
+    Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_LOCATION,
+      SupportsNamespaces.PROP_OWNER)
 
   /**
    * Apply properties changes to a map and return the result.
@@ -256,7 +286,7 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
@@ -274,6 +304,10 @@ private[sql] object CatalogV2Util {
       Map(TableCatalog.PROP_PROVIDER -> provider) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
+  }
+
+  def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
+    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def createAlterTable(

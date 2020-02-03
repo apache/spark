@@ -223,7 +223,7 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("log warnings for invalid hints") {
-    val logAppender = new LogAppender
+    val logAppender = new LogAppender("invalid hints")
     withLogAppender(logAppender) {
       checkAnalysis(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),

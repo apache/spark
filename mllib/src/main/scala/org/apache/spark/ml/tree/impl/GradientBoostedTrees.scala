@@ -311,6 +311,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     val validationTol = boostingStrategy.validationTol
     treeStrategy.algo = OldAlgo.Regression
     treeStrategy.impurity = OldVariance
+    require(!treeStrategy.bootstrap, "GradientBoostedTrees does not need bootstrap sampling")
     treeStrategy.assertValid()
 
     // Prepare periodic checkpointers
@@ -346,7 +347,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     val firstCounts = BaggedPoint
       .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
-        withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed)
+        treeStrategy.bootstrap, (tp: TreePoint) => tp.weight, seed = seed)
       .map { bagged =>
         require(bagged.subsampleCounts.length == 1)
         require(bagged.sampleWeight == bagged.datum.weight)
@@ -411,7 +412,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       // (label: Double, count: Int)
       val labelWithCounts = BaggedPoint
         .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
-          withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed + m)
+          treeStrategy.bootstrap, (tp: TreePoint) => tp.weight, seed = seed + m)
         .zip(predError)
         .map { case (bagged, (pred, _)) =>
           require(bagged.subsampleCounts.length == 1)

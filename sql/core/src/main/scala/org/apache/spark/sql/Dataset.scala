@@ -268,9 +268,9 @@ class Dataset[T] private[sql](
       }
   }
 
-  private[sql] def numericCalculationSupportedColumns: Seq[Expression] = {
-    queryExecution.analyzed.output.filter { attr =>
-      TypeCollection.NumericAndInterval.acceptsType(attr.dataType)
+  private[sql] def numericColumns: Seq[Expression] = {
+    schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
+      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
     }
   }
 
@@ -3327,6 +3327,16 @@ class Dataset[T] private[sql](
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
       val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
         plan.executeCollect().iterator.map(toJava))
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
+    }
+  }
+
+  private[sql] def tailToPython(n: Int): Array[Any] = {
+    EvaluatePython.registerPicklers()
+    withAction("tailToPython", queryExecution) { plan =>
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
+        plan.executeTail(n).iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }

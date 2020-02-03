@@ -125,6 +125,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
     validateNumClasses(numClasses)
     val instances = extractInstances(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    require(!strategy.bootstrap, "DecisionTreeClassifier does not need bootstrap sampling")
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,

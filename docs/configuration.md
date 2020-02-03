@@ -244,6 +244,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    Comma-separated list of class names implementing
+    org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.
+    This is for advanced users to replace the resource discovery class with a
+    custom implementation. Spark will try each class specified until one of them
+    returns the resource information for that resource. It tries the discovery
+    script last if none of the plugins return information for that resource.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
@@ -844,13 +856,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>
@@ -1619,6 +1632,43 @@ Apart from these, the following properties are also available, and may be useful
     The file output committer algorithm version, valid algorithm version number: 1 or 2.
     Version 2 may have better performance, but version 1 may handle failures better in certain situations,
     as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+  </td>
+</tr>
+</table>
+
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics (in milliseconds).
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
+    If positive, the polling is done at this interval.
   </td>
 </tr>
 </table>

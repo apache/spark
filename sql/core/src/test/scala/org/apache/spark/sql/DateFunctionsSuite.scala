@@ -293,10 +293,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val i = new CalendarInterval(2, 2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d + INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),
+      df.selectExpr(s"d + INTERVAL'${i.toString}'"),
       Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
     checkAnswer(
-      df.selectExpr(s"t + INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),
+      df.selectExpr(s"t + INTERVAL'${i.toString}'"),
       Seq(Row(Timestamp.valueOf("2015-10-03 00:00:01")),
         Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
   }
@@ -309,10 +309,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val i = new CalendarInterval(2, 2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d - INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),
+      df.selectExpr(s"d - INTERVAL'${i.toString}'"),
       Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
     checkAnswer(
-      df.selectExpr(s"t - INTERVAL'${IntervalUtils.toMultiUnitsString(i)}'"),
+      df.selectExpr(s"t - INTERVAL'${i.toString}'"),
       Seq(Row(Timestamp.valueOf("2015-07-29 23:59:59")),
         Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
@@ -713,6 +713,40 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("from_utc_timestamp with literal zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
+  test("from_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
   test("handling null field by date_part") {
     val input = Seq(Date.valueOf("2019-09-20")).toDF("d")
     Seq("date_part(null, d)", "date_part(null, date'2019-09-20')").foreach { expr =>
@@ -720,5 +754,39 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(df.schema.headOption.get.dataType == DoubleType)
       checkAnswer(df, Row(null))
     }
+  }
+
+  test("to_utc_timestamp with literal zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+  }
+
+  test("to_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
   }
 }

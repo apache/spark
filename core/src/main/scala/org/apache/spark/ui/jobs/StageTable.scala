@@ -309,19 +309,7 @@ private[ui] class StagePagedTable(
       } else {
         failureReason
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, failureReason)
     <td valign="middle">{failureReasonSummary}{details}</td>
   }
 

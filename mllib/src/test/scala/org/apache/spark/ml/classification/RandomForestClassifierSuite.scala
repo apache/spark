@@ -82,12 +82,14 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Binary classification with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
+      .setBootstrap(false)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
 
   test("Binary classification with continuous features and node Id cache:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
+      .setBootstrap(false)
       .setCacheNodeIds(true)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
@@ -333,6 +335,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
+    oldStrategy.bootstrap = rf.getBootstrap
     val oldModel = OldRandomForest.trainClassifier(
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
@@ -344,7 +347,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
       numClasses)
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.hasParent)
-    assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
+    assert(!newModel.trees.head.hasParent)
     assert(newModel.numClasses === numClasses)
     assert(newModel.numFeatures === numFeatures)
   }

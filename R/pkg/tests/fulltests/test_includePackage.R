@@ -39,6 +39,7 @@ test_that("include inside function", {
     data <- lapplyPartition(rdd, generateData)
     actual <- collectRDD(data)
   }
+  expect_true(TRUE)
 })
 
 test_that("use include package", {
@@ -55,6 +56,7 @@ test_that("use include package", {
     data <- lapplyPartition(rdd, generateData)
     actual <- collectRDD(data)
   }
+  expect_true(TRUE)
 })
 
 sparkR.session.stop()

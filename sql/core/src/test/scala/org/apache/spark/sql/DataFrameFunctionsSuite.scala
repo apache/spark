@@ -3562,6 +3562,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
       Seq(Row(1)))
   }
+
+  test("the like function with the escape parameter") {
+    val df = Seq(("abc", "a_c", "!")).toDF("str", "pattern", "escape")
+    checkAnswer(df.selectExpr("like(str, pattern, '@')"), Row(true))
+
+    val longEscapeError = intercept[AnalysisException] {
+      df.selectExpr("like(str, pattern, '@%')").collect()
+    }.getMessage
+    assert(longEscapeError.contains("The 'escape' parameter must be a string literal of one char"))
+
+    val nonFoldableError = intercept[AnalysisException] {
+      df.selectExpr("like(str, pattern, escape)").collect()
+    }.getMessage
+    assert(nonFoldableError.contains("The 'escape' parameter must be a string literal"))
+  }
 }
 
 object DataFrameFunctionsSuite {

@@ -293,16 +293,6 @@ case class AlterNamespaceSetLocation(
 }
 
 /**
- * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
- */
-case class AlterNamespaceSetOwner(
-    child: LogicalPlan,
-    ownerName: String,
-    ownerType: String) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
-}
-
-/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(

@@ -176,27 +176,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-      parFuncs.foreach { funcId =>
-        // Examples can change settings. We clone the session to prevent tests clashing.
-        val clonedSpark = spark.cloneSession()
-        val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-        val className = info.getClassName
-        if (!ignoreSet.contains(className)) {
-          withClue(s"Function '${info.getName}', Expression class '$className'") {
-            val example = info.getExamples
-            checkExampleSyntax(example)
-            example.split("  > ").toList.foreach(_ match {
-              case exampleRe(sql, output) =>
-                val df = clonedSpark.sql(sql)
-                val actual = unindentAndTrim(
-                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-                val expected = unindentAndTrim(output)
-                assert(actual.sorted === expected.sorted)
-              case _ =>
-            })
-          }
+    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+    parFuncs.foreach { funcId =>
+      // Examples can change settings. We clone the session to prevent tests clashing.
+      val clonedSpark = spark.cloneSession()
+      val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
+      val className = info.getClassName
+      if (!ignoreSet.contains(className)) {
+        withClue(s"Function '${info.getName}', Expression class '$className'") {
+          val example = info.getExamples
+          checkExampleSyntax(example)
+          example.split("  > ").toList.foreach(_ match {
+            case exampleRe(sql, output) =>
+              val df = clonedSpark.sql(sql)
+              val actual = unindentAndTrim(
+                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val expected = unindentAndTrim(output)
+              assert(actual === expected)
+            case _ =>
+          })
         }
       }
     }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -114,31 +114,37 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
-      CreateTableExec(catalog, ident, schema, parts, props, ifNotExists) :: Nil
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      CreateTableExec(catalog, ident, schema, parts, propsWithOwner, ifNotExists) :: Nil
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(
-            staging, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(
-            catalog, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(catalog, ident) =>
       RefreshTableExec(catalog, ident) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate = orCreate) :: Nil
+          AtomicReplaceTableExec(
+            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
         case _ =>
-          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate = orCreate) :: Nil
+          ReplaceTableExec(
+            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
       }
 
     case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
@@ -148,7 +154,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            props,
+            propsWithOwner,
             writeOptions,
             orCreate = orCreate) :: Nil
         case _ =>
@@ -158,7 +164,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            props,
+            propsWithOwner,
             writeOptions,
             orCreate = orCreate) :: Nil
       }
@@ -224,13 +230,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
-      DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
+      DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
+    case desc @ DescribeRelation(r: ResolvedTable, partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
       }
-      DescribeTableExec(desc.output, table, isExtended) :: Nil
+      DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
@@ -242,17 +248,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetPropertiesExec(catalog, ns, properties) :: Nil
+      AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
@@ -267,7 +273,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
     case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowNamespacesExec(r.output, catalog, ns, pattern) :: Nil
+      ShowNamespacesExec(r.output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
     case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
@@ -278,13 +284,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(ResolvedTable(_, _, table), propertyKey) =>
-      ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
-
-    case AlterNamespaceSetOwner(ResolvedNamespace(catalog, namespace), name, typ) =>
-      val properties =
-        Map(SupportsNamespaces.PROP_OWNER_NAME -> name, SupportsNamespaces.PROP_OWNER_TYPE -> typ)
-      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
+      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
     case _ => Nil
   }

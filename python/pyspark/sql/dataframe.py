@@ -605,6 +605,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.limit(num).collect()
 
+    @ignore_unicode_prefix
+    @since(3.0)
+    def tail(self, num):
+        """
+        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
+
+        Running tail requires moving data into the application's driver process, and doing so with
+        a very large ``num`` can crash the driver process with OutOfMemoryError.
+
+        >>> df.tail(1)
+        [Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc):
+            sock_info = self._jdf.tailToPython(num)
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+
     @since(1.3)
     def foreach(self, f):
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.

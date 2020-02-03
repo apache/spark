@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -326,7 +324,7 @@ class ResolveSessionCatalog(
 
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
+      val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
@@ -380,9 +378,13 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tbl) =>
+    case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
       ShowCreateTableCommand(v1TableName.asTableIdentifier)
+
+    case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
+      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
+      ShowCreateTableAsSerdeCommand(v1TableName.asTableIdentifier)
 
     case CacheTableStatement(tbl, plan, isLazy, options) =>
       val v1TableName = parseV1Table(tbl, "CACHE TABLE")
@@ -582,7 +584,7 @@ class ResolveSessionCatalog(
   }
 
   object SessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
+    def unapply(resolved: ResolvedNamespace): Option[(CatalogPlugin, Seq[String])] =
       if (isSessionCatalog(resolved.catalog)) {
         Some(resolved.catalog -> resolved.namespace)
       } else {

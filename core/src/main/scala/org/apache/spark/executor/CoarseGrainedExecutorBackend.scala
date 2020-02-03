@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -42,7 +43,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -69,6 +70,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
+  private var _resources = Map.empty[String, ResourceInformation]
+
   /**
    * Map each taskId to the information about the resource allocated to it, Please refer to
    * [[ResourceInformation]] for specifics.
@@ -78,12 +81,17 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
-    val resources = parseOrFindResources(resourcesFileOpt)
+    try {
+      _resources = parseOrFindResources(resourcesFileOpt)
+    } catch {
+      case NonFatal(e) =>
+        exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
+    }
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, resources, resourceProfile.id))
+        extractAttributes, _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
       case Success(_) =>
         self.send(RegisteredExecutor)
@@ -92,15 +100,36 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
+  /**
+   * Create a classLoader for use for resource discovery. The user could provide a class
+   * as a substitute for the default one so we have to be able to load it from a user specified
+   * jar.
+   */
+  private def createClassLoader(): MutableURLClassLoader = {
+    val currentLoader = Utils.getContextOrSparkClassLoader
+    val urls = userClassPath.toArray
+    if (env.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)) {
+      new ChildFirstURLClassLoader(urls, currentLoader)
+    } else {
+      new MutableURLClassLoader(urls, currentLoader)
+    }
+  }
+
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
+    // use a classloader that includes the user classpath in case they specified a class for
+    // resource discovery
+    val urlClassLoader = createClassLoader()
     logDebug(s"Resource profile id is: ${resourceProfile.id}")
-    val resources = getOrDiscoverAllResourcesForResourceProfile(
-      resourcesFileOpt,
-      SPARK_EXECUTOR_PREFIX,
-      resourceProfile)
-    logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
-    resources
+    Utils.withContextClassLoader(urlClassLoader) {
+      val resources = getOrDiscoverAllResourcesForResourceProfile(
+        resourcesFileOpt,
+        SPARK_EXECUTOR_PREFIX,
+        resourceProfile,
+        env.conf)
+      logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+      resources
+    }
   }
 
   def extractLogUrls: Map[String, String] = {
@@ -119,7 +148,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       try {
-        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false,
+          resources = _resources)
         driver.get.send(LaunchedExecutor(executorId))
       } catch {
         case NonFatal(e) =>

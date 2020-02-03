@@ -116,7 +116,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         {metadata}
       </div>
       {planVisualizationResources(request)}
-      <script>$(function() {{ renderPlanViz(); }})</script>
+      <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>
     </div>
   }
 

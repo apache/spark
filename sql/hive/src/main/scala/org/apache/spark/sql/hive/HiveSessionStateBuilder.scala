@@ -21,13 +21,15 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
@@ -91,6 +93,20 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreReadCheck +:
         TableCapabilityCheck +:
         customCheckRules
+  }
+
+  /**
+   * Logical query plan optimizer that takes into account Hive.
+   */
+  override protected def optimizer: Optimizer = {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+      override def postHocOptimizationBatches: Seq[Batch] = Seq(
+        Batch("Prune Hive Table Partitions", Once, new PruneHiveTablePartitions(session))
+      )
+
+      override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+        super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+    }
   }
 
   /**

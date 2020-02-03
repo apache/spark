@@ -257,6 +257,8 @@ license: |
   - Since Spark 3.0, the unary arithmetic operator plus(`+`) only accepts string, numeric and interval type values as inputs. Besides, `+` with a integral string representation will be coerced to double value, e.g. `+'1'` results `1.0`. In Spark version 2.4 and earlier, this operator is ignored. There is no type checking for it, thus, all type values with a `+` prefix are valid, e.g. `+ array(1, 2)` is valid and results `[1, 2]`. Besides, there is no type coercion for it at all, e.g. in Spark 2.4, the result of `+'1'` is string `1`.
 
   - Since Spark 3.0, day-time interval strings are converted to intervals with respect to the `from` and `to` bounds. If an input string does not match to the pattern defined by specified bounds, the `ParseException` exception is thrown. For example, `interval '2 10:20' hour to minute` raises the exception because the expected format is `[+|-]h[h]:[m]m`. In Spark version 2.4, the `from` bound was not taken into account, and the `to` bound was used to truncate the resulted interval. For instance, the day-time interval string from the showed example is converted to `interval 10 hours 20 minutes`. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.fromDayTimeString.enabled` to `true`.
+  
+  - Since Spark 3.0, negative scale of decimal is not allowed by default, e.g. data type of literal like `1E10BD` is `DecimalType(11, 0)`. In Spark version 2.4 and earlier, it was `DecimalType(2, -9)`. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.allowNegativeScaleOfDecimal.enabled` to `true`.
 
   - Since Spark 3.0, the `date_add` and `date_sub` functions only accepts int, smallint, tinyint as the 2nd argument, fractional and string types are not valid anymore, e.g. `date_add(cast('1964-05-23' as date), '12.34')` will cause `AnalysisException`. In Spark version 2.4 and earlier, if the 2nd argument is fractional or string value, it will be coerced to int value, and the result will be a date value of `1964-06-04`.
 
@@ -308,37 +310,38 @@ license: |
         </tr>
         <tr>
           <td>
-            ownerName
+            owner
           </td>
           <td>
             yes
           </td>
           <td>
-            no
-          </td>
-          <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
-          </td>
-        </tr>
-        <tr>
-          <td>
-            ownerType
-          </td>
-          <td>
             yes
           </td>
           <td>
-            no
-          </td>
-          <td>
-            For databases, please use the ALTER DATABASE ... SET OWNER syntax to modify it.
+            For databases and tables, it is determined by the user who runs spark and create the table.
           </td>
         </tr>
     </table>
 
-  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive` to false.
+  - Since Spark 3.0, `ADD FILE` can be used to add file directories as well. Earlier only single files can be added using this command. To restore the behaviour of earlier versions, set `spark.sql.legacy.addDirectory.recursive.enabled` to false.
 
-  - Since Spark 3.0, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
+  - Since Spark 3.0, `SHOW TBLPROPERTIES` will cause `AnalysisException` if the table does not exist. In Spark version 2.4 and earlier, this scenario caused `NoSuchTableException`. Also, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
+
+  - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
+
+  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. This may need to set `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars` according to the version of the Hive metastore.
+  For example: set `spark.sql.hive.metastore.version` to `1.2.1` and `spark.sql.hive.metastore.jars` to `maven` if your Hive metastore version is 1.2.1.
+
+## Upgrading from Spark SQL 2.4.4 to 2.4.5
+
+  - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.
+
+  - Since Spark 2.4.5, `spark.sql.legacy.mssqlserver.numericMapping.enabled` configuration is added in order to support the legacy MsSQLServer dialect mapping behavior using IntegerType and DoubleType for SMALLINT and REAL JDBC types, respectively. To restore the behaviour of 2.4.3 and earlier versions, set `spark.sql.legacy.mssqlserver.numericMapping.enabled` to `true`.
+
+## Upgrading from Spark SQL 2.4.3 to 2.4.4
+
+  - Since Spark 2.4.4, according to [MsSqlServer Guide](https://docs.microsoft.com/en-us/sql/connect/jdbc/using-basic-data-types?view=sql-server-2017), MsSQLServer JDBC Dialect uses ShortType and FloatType for SMALLINT and REAL, respectively. Previously, IntegerType and DoubleType is used.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
@@ -921,6 +924,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `SELECT`
   * `GROUP BY`
   * `ORDER BY`
+  * `DISTRIBUTE BY`
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
@@ -938,10 +942,34 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `JOIN`
   * `{LEFT|RIGHT|FULL} OUTER JOIN`
   * `LEFT SEMI JOIN`
+  * `LEFT ANTI JOIN`
   * `CROSS JOIN`
 * Unions
 * Sub-queries
-  * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+  * Sub-queries in the FROM Clause
+  
+    ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
+  * Sub-queries in WHERE Clause
+    * Correlated or non-correlated IN and NOT IN statement in WHERE Clause
+    
+      ```
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2 WHERE t1.a = t2.a)
+      SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)
+      ```
+    * Correlated or non-correlated EXISTS and NOT EXISTS statement in WHERE Clause
+    
+      ```
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t1.a = t2.a AND t2.a > 10)
+      SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t2.a > 10)
+      ```
+    * Non-correlated IN and NOT IN statement in JOIN Condition
+    
+      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND t1.a IN (SELECT a FROM t3)```
+   
+    * Non-correlated EXISTS and NOT EXISTS statement in JOIN Condition
+       
+      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND EXISTS (SELECT * FROM t3 WHERE t3.a > 10)``` 
+       
 * Sampling
 * Explain
 * Partitioned tables including dynamic partition insertion
