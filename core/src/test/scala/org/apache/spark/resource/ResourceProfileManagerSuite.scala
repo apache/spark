@@ -17,8 +17,6 @@
 
 package org.apache.spark.resource
 
-import java.util.Optional
-
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
@@ -60,7 +58,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
-      new ExecutorResourceRequests().resource("gpu", 2, Optional.of("someScript"))
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
     val immrprof = rprof.require(gpuExecReq).build
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
@@ -78,7 +76,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
-      new ExecutorResourceRequests().resource("gpu", 2, Optional.of("someScript"))
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
     val immrprof = rprof.require(gpuExecReq).build
     assert(rpmanager.isSupported(immrprof) == true)
   }
@@ -91,7 +89,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
-      new ExecutorResourceRequests().resource("gpu", 2, Optional.of("someScript"))
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
     val immrprof = rprof.require(gpuExecReq).build
     var error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)

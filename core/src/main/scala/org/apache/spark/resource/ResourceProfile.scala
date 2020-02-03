@@ -290,8 +290,8 @@ object ResourceProfile extends Logging {
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
       val name = req.id.resourceName
-      ereqs.resource(name, req.amount, req.discoveryScript,
-        req.vendor)
+      ereqs.resource(name, req.amount, req.discoveryScript.orElse(""),
+        req.vendor.orElse(""))
     }
     ereqs.requests
   }

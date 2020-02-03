@@ -349,11 +349,9 @@ private[spark] object ResourceUtils extends Logging {
     val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
     val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
       val resourceId = new ResourceID(componentName, rName)
-      val resourceReq = new ResourceRequest(
-        resourceId,
-        execRequest.amount,
-        execRequest.discoveryScript,
-        execRequest.vendor)
+      val scriptOpt = emptyStringToOptional(execRequest.discoveryScript)
+      val vendorOpt = emptyStringToOptional(execRequest.vendor)
+      val resourceReq = new ResourceRequest(resourceId, execRequest.amount, scriptOpt, vendorOpt)
       val addrs = discoverResource(sparkConf, resourceReq).addresses
       (rName, new ResourceInformation(rName, addrs))
     }

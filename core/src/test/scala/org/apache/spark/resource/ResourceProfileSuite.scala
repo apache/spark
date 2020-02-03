@@ -17,8 +17,6 @@
 
 package org.apache.spark.resource
 
-import java.util.Optional
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.{EXECUTOR_CORES, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
@@ -109,8 +107,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
-      new ExecutorResourceRequests().resource("gpu", 2,
-        Optional.of("myscript"), Optional.of("nvidia"))
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
     assert(immrprof.limitingResource(sparkConf) == "cpus")
@@ -122,8 +119,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
-      new ExecutorResourceRequests().resource("gpu", 2,
-        Optional.of("myscript"), Optional.of("nvidia"))
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
     assert(immrprof.limitingResource(sparkConf) == "gpu")
@@ -144,8 +140,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
-      new ExecutorResourceRequests().resource("gpu", 2,
-        Optional.of("myscript"), Optional.of("nvidia"))
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
     assert(immrprof.limitingResource(sparkConf) == ResourceProfile.CPUS)
@@ -157,16 +152,15 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("Create ResourceProfile") {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val eReq = new ExecutorResourceRequests().resource("gpu", 2,
-      Optional.of("myscript"), Optional.of("nvidia"))
+    val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(eReq)
 
     assert(rprof.executorResources.size === 1)
     assert(rprof.executorResources.contains("gpu"),
       "Executor resources should have gpu")
-    assert(rprof.executorResources.get("gpu").get.vendor.get() === "nvidia",
+    assert(rprof.executorResources.get("gpu").get.vendor === "nvidia",
       "gpu vendor should be nvidia")
-    assert(rprof.executorResources.get("gpu").get.discoveryScript.get() === "myscript",
+    assert(rprof.executorResources.get("gpu").get.discoveryScript === "myscript",
       "discoveryScript should be myscript")
     assert(rprof.executorResources.get("gpu").get.amount === 2,
     "gpu amount should be 2")
