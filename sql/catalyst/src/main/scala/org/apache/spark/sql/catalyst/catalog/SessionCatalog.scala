@@ -826,6 +826,8 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
+        case _: NoSuchDatabaseException => false
+        case _: NoSuchNamespaceException => false
       }
     }
   }
