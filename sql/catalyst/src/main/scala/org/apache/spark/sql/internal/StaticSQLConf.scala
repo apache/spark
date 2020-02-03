@@ -176,4 +176,24 @@ object StaticSQLConf {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val STREAMING_UI_ENABLED =
+    buildStaticConf("spark.sql.streaming.ui.enabled")
+      .doc("Whether to run the Structured Streaming Web UI for the Spark application when the " +
+        "Spark Web UI is enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_RETAINED_PROGRESS_UPDATES =
+    buildStaticConf("spark.sql.streaming.ui.retainedProgressUpdates")
+      .doc("The number of progress updates to retain for a streaming query for Structured " +
+        "Streaming UI.")
+      .intConf
+      .createWithDefault(100)
+
+  val STREAMING_UI_RETAINED_QUERIES =
+    buildStaticConf("spark.sql.streaming.ui.retainedQueries")
+      .doc("The number of inactive queries to retain for Structured Streaming UI.")
+      .intConf
+      .createWithDefault(100)
 }
