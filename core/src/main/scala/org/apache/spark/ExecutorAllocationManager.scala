@@ -861,7 +861,7 @@ private[spark] class ExecutorAllocationManager(
      * granularity within stages.
      */
     def updateExecutorPlacementHints(): Unit = {
-      var localityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
+      val localityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
 
       // ResourceProfile id => map[host, count]
       val rplocalityToCount = new mutable.HashMap[Int, mutable.HashMap[String, Int]]()
