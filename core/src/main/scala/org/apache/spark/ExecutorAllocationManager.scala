@@ -503,12 +503,7 @@ private[spark] class ExecutorAllocationManager(
     // If our target has not changed, do not send a message
     // to the cluster manager and reset our exponential growth
     if (delta == 0) {
-<<<<<<< HEAD
       numExecutorsToAddPerResourceProfileId(rpId) = 1
-=======
-      numExecutorsToAdd = 1
-      return 0
->>>>>>> a4912cee615314e9578e6ab4eae25f147feacbd5
     }
     delta
   }
@@ -750,21 +745,6 @@ private[spark] class ExecutorAllocationManager(
 
           }
         }
-<<<<<<< HEAD
-        // If the task failed, we expect it to be resubmitted later. To ensure we have
-        // enough resources to run the resubmitted task, we need to mark the scheduler
-        // as backlogged again if it's not already marked as such (SPARK-8366)
-        if (taskEnd.reason != Success) {
-          if (!hasPendingTasks) {
-            allocationManager.onSchedulerBacklogged()
-          }
-          if (taskEnd.taskInfo.speculative) {
-            stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
-          } else {
-            stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
-          }
-=======
-
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
           stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
@@ -788,7 +768,6 @@ private[spark] class ExecutorAllocationManager(
               // for the task index (SPARK-30511)
               stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
             }
->>>>>>> a4912cee615314e9578e6ab4eae25f147feacbd5
         }
       }
     }
