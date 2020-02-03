@@ -646,6 +646,20 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
+  test("alter table: mutiple property changes are not allowed") {
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment'")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT AFTER d")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment' AFTER d")}
+  }
+
   test("alter table: SET/DROP NOT NULL") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),
