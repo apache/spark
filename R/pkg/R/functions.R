@@ -3332,9 +3332,9 @@ setMethod("row_number",
 #'        yields unresolved \code{a.b.c}
 #' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
 unresolved_named_lambda_var <- function(...) {
-  jc <- sparkR.newJObject(
+  jc <- newJObject(
     "org.apache.spark.sql.Column",
-    sparkR.newJObject(
+    newJObject(
       "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
       list(...)
     )
