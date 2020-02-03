@@ -98,11 +98,11 @@ class BlockManagerMasterEndpoint(
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      val result = updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
-      context.reply(result)
+      val isSuccess = updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      context.reply(isSuccess)
       // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
       // returns false since the block info would be updated again later.
-      if (result) {
+      if (isSuccess) {
         listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
       }
 
