@@ -275,7 +275,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
     val pending = listener.totalPendingTasksPerResourceProfile(rpId)
-    val pendingSpeculative = pendingSpeculativeTasksPerResourceProfile(rpId)
+    val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val running = listener.totalRunningTasksPerResourceProfile(rpId)
     val numRunningOrPendingTasks = pending + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
@@ -753,7 +753,7 @@ private[spark] class ExecutorAllocationManager(
         taskEnd.reason match {
           case Success | _: TaskKilled =>
           case _ =>
-            if (totalPendingTasks() == 0) {
+            if (!hasPendingTasks) {
               // If the task failed (not intentionally killed), we expect it to be resubmitted
               // later. To ensure we have enough resources to run the resubmitted task, we need to
               // mark the scheduler as backlogged again if it's not already marked as such
