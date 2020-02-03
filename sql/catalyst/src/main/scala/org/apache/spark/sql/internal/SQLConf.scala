@@ -997,19 +997,20 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val UI_EXTENDED_INFO = buildConf("spark.sql.ui.extendedInfo")
-    .doc("Enables extended information in the SQL UI, for example displaying additional" +
-      " information about the child operators of InMemoryTableScan. Note that this" +
-      " setting depends on extended SQL event information " + EXTENDED_EVENT_INFO.key +
-      " being enabled during the duration of a query.")
-    .booleanConf
-    .createWithDefault(true)
-
   val PRUNE_CACHED_IN_MEMORY_RELATION = buildConf("spark.sql.ui.pruneCachedInMemoryRelation")
     .doc("Enables pruning of the children of InMemoryRelation operators that do 100% cached reads" +
       " in the Spark SQL UI, eliminating redundant information about uncomputed operators.")
     .booleanConf
     .createWithDefault(true)
+
+  val UI_EXTENDED_INFO = buildConf("spark.sql.ui.extendedInfo")
+    .doc("Enables extended information in the SQL UI, for example displaying additional" +
+      " information about the child operators of InMemoryTableScan. Note that this" +
+      s" setting depends on extended SQL event information ${EXTENDED_EVENT_INFO.key}" +
+      " being enabled during the duration of a query.")
+    .booleanConf
+    .createWithDefault(true)
+
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
@@ -2311,12 +2312,11 @@ class SQLConf extends Serializable with Logging {
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
 
-  def extendedEventInfo: Boolean =
-    getConf(EXTENDED_EVENT_INFO)
-
-  def uiExtendedInfo: Boolean = getConf(UI_EXTENDED_INFO)
+  def extendedEventInfo: Boolean = getConf(EXTENDED_EVENT_INFO)
 
   def pruneCachedInMemoryRelation: Boolean = getConf(PRUNE_CACHED_IN_MEMORY_RELATION)
+
+  def uiExtendedInfo: Boolean = getConf(UI_EXTENDED_INFO)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
