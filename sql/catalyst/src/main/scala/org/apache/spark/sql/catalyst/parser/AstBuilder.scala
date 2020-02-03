@@ -2940,13 +2940,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command.
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column type
    *
    * For example:
    * {{{
    *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint COMMENT 'new comment'
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
    * }}}
    */
   override def visitAlterTableColumnType(
@@ -2960,6 +2958,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       position = None)
   }
 
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column comment
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
+   * }}}
+   */
   override def visitAlterTableColumnComment(
       ctx: AlterTableColumnCommentContext): LogicalPlan = withOrigin(ctx) {
     AlterTableAlterColumnStatement(
@@ -2971,6 +2977,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       position = None)
   }
 
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command to change column position
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c FIRST
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c AFTER x
+   * }}}
+   */
   override def visitAlterTableColumnPosition(
       ctx: AlterTableColumnPositionContext): LogicalPlan = withOrigin(ctx) {
     AlterTableAlterColumnStatement(

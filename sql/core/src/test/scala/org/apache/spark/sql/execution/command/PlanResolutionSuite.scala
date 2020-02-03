@@ -1012,27 +1012,28 @@ class PlanResolutionSuite extends AnalysisTest {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
-        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint COMMENT 'new comment'"
-        val sql3 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
 
         val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
+          val oldColumn = StructField("i", IntegerType)
           val newColumn = StructField("i", LongType)
           val expected1 = AlterTableChangeColumnCommand(
             tableIdent, "i", newColumn)
           val expected2 = AlterTableChangeColumnCommand(
-            tableIdent, "i", newColumn.withComment("new comment"))
+            tableIdent, "i", oldColumn.withComment("new comment"))
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
 
-          val e1 = intercept[AnalysisException] {
+          val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
+          val e1 = intercept[IllegalArgumentException] {
             parseAndResolve(sql3)
           }
-          assert(e1.getMessage.contains("ALTER COLUMN with v1 tables must specify new data type"))
+          assert(e1.getMessage.contains("j does not exist. Available: i, s"))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1050,8 +1051,6 @@ class PlanResolutionSuite extends AnalysisTest {
           val parsed5 = parseAndResolve(sql5)
           comparePlans(parsed5, expected5)
         } else {
-          val parsed3 = parseAndResolve(sql3)
-
           parsed1 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
@@ -1060,14 +1059,6 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.updateColumnType(Array("i"), LongType),
-                TableChange.updateColumnComment(Array("i"), "new comment")))
-            case _ => fail("expect AlterTable")
-          }
-
-          parsed3 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
                 TableChange.updateColumnComment(Array("i"), "new comment")))
