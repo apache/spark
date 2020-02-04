@@ -69,7 +69,7 @@ private[spark] object Constants {
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
   // The default logging conf mount is chosen to be at root, because in kubernetes,
   // "subpath volume mount" has limitation that configmap updates are not applied.
-  val LOGGING_MOUNT_DIR = "/conf-logging"
+  val LOGGING_MOUNT_DIR = "/opt/spark/log"
   // BINDINGS
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
 

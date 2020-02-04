@@ -22,7 +22,7 @@ import org.apache.spark.deploy.k8s.{Config, KubernetesTestConf, SparkPod}
 import org.apache.spark.launcher.SparkLauncher
 
 class MountLogConfFeatureStepSuite extends SparkFunSuite {
-  // TODO add more tests.
+
   test("Do not enable mount logger config feature," +
     " if neither of logging configuration file or user defined config map is configured.") {
     val sparkConf = new SparkConf(false)
