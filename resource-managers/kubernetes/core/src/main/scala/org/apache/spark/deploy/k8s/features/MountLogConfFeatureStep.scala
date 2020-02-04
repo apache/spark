@@ -47,7 +47,8 @@ class MountLogConfFeatureStep(conf: KubernetesConf)
 
   private val featureEnabled: Boolean = {
     (loggingConfURL != null &&
-      conf.get(SparkLauncher.DEPLOY_MODE).equalsIgnoreCase("cluster")) ||
+      conf.getOption(SparkLauncher.DEPLOY_MODE).getOrElse("client")
+        .equalsIgnoreCase("cluster")) ||
       useExistingConfigMap
   }
 
