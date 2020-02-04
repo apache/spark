@@ -163,7 +163,7 @@ statement
         TYPE dataType                                                  #alterTableColumnType
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        commentSpec?                                                   #alterTableColumnComment
+        commentSpec                                                    #alterTableColumnComment
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         colPosition                                                    #alterTableColumnPosition
