@@ -2054,7 +2054,6 @@ test_that("higher order functions", {
 
   expect_true(all(unlist(result)))
 
-  expect_error(array_filter("xs", function(x, y, z) TRUE))
   expect_error(array_transform("xs", function(...) 42))
 })
 

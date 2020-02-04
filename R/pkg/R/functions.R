@@ -3348,17 +3348,13 @@ unresolved_named_lambda_var <- function(...) {
 #'
 #' @param fun R \code{function} (unary, binary or ternary)
 #'        that transforms \code{Columns} into a \code{Column}
-#' @param expected_nargs numeric a vector of the expected
-#'        number of arguments. Used for validation
 #' @return JVM \code{LambdaFunction} object
-create_lambda <- function(fun, expected_nargs) {
+create_lambda <- function(fun) {
   as_jexpr <- function(x) callJMethod(x@jc, "expr")
 
   # Process function arguments
   parameters <- formals(fun)
   nparameters <- length(parameters)
-
-  stopifnot(nparameters %in% expected_nargs)
 
   stopifnot(
     nparameters >= 1 &
@@ -3412,7 +3408,7 @@ invoke_higher_order_function <- function(name, cols, funs) {
   jexpr <- do.call(sparkR.newJObject, c(
     paste("org.apache.spark.sql.catalyst.expressions", name, sep = "."),
     lapply(cols, as_jexpr),
-    lapply(funs, function(args) do.call(create_lambda, args))
+    lapply(funs, create_lambda)
   ))
 
   column(sparkR.newJObject("org.apache.spark.sql.Column", jexpr))
@@ -3430,16 +3426,15 @@ invoke_higher_order_function <- function(name, cols, funs) {
 setMethod("array_aggregate",
           signature(x = "characterOrColumn", zero = "Column", merge = "function"),
           function(x, zero, merge, finish = NULL) {
-            if (is.null(finish)) {
-              invoke_higher_order_function("ArrayAggregate", list(x, zero), list(list(merge, 2)))
-            } else {
-              invoke_higher_order_function(
-                "ArrayAggregate",
-                cols = list(x, zero),
-                funs = list(
-                  list(fun = merge, expected_nargs = 2),
-                  list(fun = finish, expected_nargs = 1)))
-            }
+            invoke_higher_order_function(
+              "ArrayAggregate",
+              cols = list(x, zero),
+              funs = if (is.null(finish)) {
+                list(merge)
+              } else {
+                list(merge, finish)
+              }
+            )
           })
 
 #' @details
@@ -3495,7 +3490,8 @@ setMethod("array_exists",
             invoke_higher_order_function(
               "ArrayExists",
               cols = list(x),
-              list(list(fun = f, expected_nargs = 1)))
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3510,7 +3506,8 @@ setMethod("array_filter",
             invoke_higher_order_function(
               "ArrayFilter",
               cols = list(x),
-              funs = list(list(fun = f, expected_nargs = c(1, 2))))
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3525,7 +3522,8 @@ setMethod("array_forall",
             invoke_higher_order_function(
               "ArrayForAll",
               cols = list(x),
-              funs = list(list(fun = f, expected_nargs = 1)))
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3659,9 +3657,15 @@ setMethod("array_sort",
 #' @rdname column_collection_functions
 #' @aliases array_transform array_transform,characterOrColumn,characterOrColumn,function-method
 #' @note array_transform since 3.1.0
-setMethod("array_transform", signature(x = "characterOrColumn", f = "function"), function(x, f) {
-  invoke_higher_order_function("ArrayTransform", list(x), list(list(f, c(1, 2))))
-})
+setMethod("array_transform",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "ArrayTransform",
+              cols = list(x),
+              funs = list(f)
+            )
+          })
 
 #' @details
 #' \code{arrays_overlap}: Returns true if the input arrays have at least one non-null element in
@@ -3724,7 +3728,8 @@ setMethod("arrays_zip_with",
             invoke_higher_order_function(
               "ZipWith",
               cols = list(x, y),
-              funs = list(list(fun = f, expected_nargs = 2)))
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3796,7 +3801,7 @@ setMethod("map_filter",
             invoke_higher_order_function(
               "MapFilter",
               cols = list(x),
-              funs = list(list(fun = f, expected_nargs = 2)))
+              funs = list(f))
           })
 
 #' @details
@@ -3853,7 +3858,8 @@ setMethod("transform_keys",
             invoke_higher_order_function(
               "TransformKeys",
               cols = list(x),
-              funs = list(list(fun = f, expected_nargs = 2)))
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3869,7 +3875,8 @@ setMethod("transform_values",
             invoke_higher_order_function(
               "TransformValues",
               cols = list(x),
-              funs = list(list(fun = f, expected_nargs = 2)))
+              funs = list(f)
+           )
           })
 
 
@@ -3900,7 +3907,8 @@ setMethod("map_zip_with",
             invoke_higher_order_function(
               "MapZipWith",
               cols = list(x, y),
-              funs = list(list(fun = f, expected_nargs = 3)))
+              funs = list(f)
+           )
           })
 
 #' @details
