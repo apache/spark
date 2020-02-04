@@ -360,10 +360,6 @@ class FunctionsTests(ReusedSQLTestCase):
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
 
-        # Should fail if arity doesn't match expectations
-        with self.assertRaises(ValueError):
-            exists('numbers', lambda x, y, z: x < 0)
-
 
 if __name__ == "__main__":
     import unittest
