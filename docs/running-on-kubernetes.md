@@ -352,7 +352,10 @@ Spark uses `log4j.properties` under the conf dir as the standard way of setting 
  to provide custom logging configuration using a config map. For example, config map can be updated irrespective
  of point of submission of spark job.
  Once the user defined config map is created inside the kubernetes cluster, we can mount it and configure
- for spark to use it be setting the property: `spark.kubernetes.loggingConf.configMapName`.
+ for spark to use it, by setting the property: `spark.kubernetes.loggingConf.configMapName` and 
+ `spark.kubernetes.loggingConf.fileName`. `spark.kubernetes.loggingConf.configMapName` is the name of config map
+  in kubernetes and `spark.kubernetes.loggingConf.fileName` is the name of the file used to create the
+  config map.
  
 2) For spark cluster mode of deployment, the configuration file present inside the `conf/` dir is
  by default auto configured as a kubernetes config map and setup for all executors and driver as logging
