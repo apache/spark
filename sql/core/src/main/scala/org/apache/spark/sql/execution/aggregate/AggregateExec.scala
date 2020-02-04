@@ -30,18 +30,16 @@ abstract class AggregateExec(
   extends UnaryExecNode {
 
   override def verboseStringWithOperatorId(): String = {
-    val allAggregateExpressions = aggregateExpressions
-
-    val keyString = groupingExpressions.mkString("[", ", ", "]")
-    val functionString = allAggregateExpressions.mkString("[", ", ", "]")
     val inputString = child.output.mkString("[", ", ", "]")
+    val keyString = groupingExpressions.mkString("[", ", ", "]")
+    val functionString = aggregateExpressions.mkString("[", ", ", "]")
     val outputString = output.mkString("[", ", ", "]")
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input: $inputString
-       |Output: $outputString
        |Keys: $keyString
        |Functions: $functionString
+       |Output: $outputString
      """.stripMargin
   }
 }

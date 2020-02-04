@@ -84,18 +84,18 @@ Input     : [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
-Output: [key#x, max#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
      
 (7) HashAggregate [codegen id : 2]
 Input: [key#x, max#x]
-Output: [key#x, max(val)#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+Output: [key#x, max(val)#x]
      
 (8) Exchange 
 Input: [key#x, max(val)#x]
@@ -146,18 +146,18 @@ Input     : [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
-Output: [key#x, max#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
      
 (7) HashAggregate [codegen id : 2]
 Input: [key#x, max#x]
-Output: [key#x, max(val)#x, max(val#x)#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+Output: [key#x, max(val)#x, max(val#x)#x]
      
 (8) Filter [codegen id : 2]
 Input     : [key#x, max(val)#x, max(val#x)#x]
@@ -231,18 +231,18 @@ Input     : [key#x, val#x]
      
 (10) HashAggregate [codegen id : 3]
 Input: [key#x, val#x]
-Output: [key#x, val#x]
 Keys: [key#x, val#x]
 Functions: []
+Output: [key#x, val#x]
      
 (11) Exchange 
 Input: [key#x, val#x]
      
 (12) HashAggregate [codegen id : 4]
 Input: [key#x, val#x]
-Output: [key#x, val#x]
 Keys: [key#x, val#x]
 Functions: []
+Output: [key#x, val#x]
 
 
 -- !query
@@ -439,18 +439,18 @@ Input     : [key#x, val#x]
      
 (9) HashAggregate [codegen id : 1]
 Input: [key#x]
-Output: [max#x]
 Keys: []
 Functions: [partial_max(key#x)]
+Output: [max#x]
      
 (10) Exchange 
 Input: [max#x]
      
 (11) HashAggregate [codegen id : 2]
 Input: [max#x]
-Output: [max(key)#x]
 Keys: []
 Functions: [max(key#x)]
+Output: [max(key)#x]
      
 Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (18)
@@ -482,18 +482,18 @@ Input     : [key#x, val#x]
      
 (16) HashAggregate [codegen id : 1]
 Input: [key#x]
-Output: [max#x]
 Keys: []
 Functions: [partial_max(key#x)]
+Output: [max#x]
      
 (17) Exchange 
 Input: [max#x]
      
 (18) HashAggregate [codegen id : 2]
 Input: [max#x]
-Output: [max(key)#x]
 Keys: []
 Functions: [max(key#x)]
+Output: [max(key)#x]
 
 
 -- !query
@@ -561,18 +561,18 @@ Input     : [key#x, val#x]
      
 (8) HashAggregate [codegen id : 1]
 Input: [key#x]
-Output: [max#x]
 Keys: []
 Functions: [partial_max(key#x)]
+Output: [max#x]
      
 (9) Exchange 
 Input: [max#x]
      
 (10) HashAggregate [codegen id : 2]
 Input: [max#x]
-Output: [max(key)#x]
 Keys: []
 Functions: [max(key#x)]
+Output: [max(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (17)
@@ -604,18 +604,18 @@ Input     : [key#x, val#x]
      
 (15) HashAggregate [codegen id : 1]
 Input: [key#x]
-Output: [max#x]
 Keys: []
 Functions: [partial_max(key#x)]
+Output: [max#x]
      
 (16) Exchange 
 Input: [max#x]
      
 (17) HashAggregate [codegen id : 2]
 Input: [max#x]
-Output: [max(key)#x]
 Keys: []
 Functions: [max(key#x)]
+Output: [max(key)#x]
 
 
 -- !query
@@ -665,18 +665,18 @@ Input: [key#x]
      
 (6) HashAggregate [codegen id : 1]
 Input: [key#x]
-Output: [sum#x, count#xL]
 Keys: []
 Functions: [partial_avg(cast(key#x as bigint))]
+Output: [sum#x, count#xL]
      
 (7) Exchange 
 Input: [sum#x, count#xL]
      
 (8) HashAggregate [codegen id : 2]
 Input: [sum#x, count#xL]
-Output: [avg(key)#x]
 Keys: []
 Functions: [avg(cast(key#x as bigint))]
+Output: [avg(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
@@ -796,27 +796,27 @@ Input     : [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
-Output: [key#x, max#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
      
 (7) HashAggregate [codegen id : 4]
 Input: [key#x, max#x]
-Output: [key#x, max(val)#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+Output: [key#x, max(val)#x]
      
 (8) ReusedExchange  [Reuses operator id: 6]
 Output : ArrayBuffer(key#x, max#x)
      
 (9) HashAggregate [codegen id : 3]
 Input: [key#x, max#x]
-Output: [key#x, max(val)#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+Output: [key#x, max(val)#x]
      
 (10) BroadcastExchange 
 Input: [key#x, max(val)#x]
@@ -854,7 +854,7 @@ Output: []
 -- !query
 EXPLAIN FORMATTED
   SELECT
-    COUNT(val) FILTER (WHERE val = 1),
+    COUNT(val) + SUM(key),
     COUNT(key) FILTER (WHERE val > 1)
   FROM explain_temp1
 -- !query schema
@@ -879,18 +879,18 @@ Input: [key#x, val#x]
      
 (3) HashAggregate 
 Input: [key#x, val#x]
-Output: [count#xL, count#xL]
 Keys: []
-Functions: [partial_count(val#x) FILTER (WHERE (val#x = 1)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Functions: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Output: [count#xL, sum#xL, count#xL]
      
 (4) Exchange 
-Input: [count#xL, count#xL]
+Input: [count#xL, sum#xL, count#xL]
      
 (5) HashAggregate [codegen id : 2]
-Input: [count#xL, count#xL]
-Output: [count(val) FILTER (WHERE (val = 1))#xL, count(key) FILTER (WHERE (val > 1))#xL]
+Input: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions: [count(val#x), count(key#x)]
+Functions: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
+Output: [(count(val) + sum(key))#xL, count(key) FILTER (WHERE (val > 1))#xL]
 
 
 -- !query
@@ -920,18 +920,18 @@ Input: [key#x, val#x]
      
 (3) ObjectHashAggregate 
 Input: [key#x, val#x]
-Output: [key#x, buf#x]
 Keys: [key#x]
 Functions: [partial_collect_set(val#x, 0, 0)]
+Output: [key#x, buf#x]
      
 (4) Exchange 
 Input: [key#x, buf#x]
      
 (5) ObjectHashAggregate 
 Input: [key#x, buf#x]
-Output: [key#x, sort_array(collect_set(val), true)[0]#x]
 Keys: [key#x]
 Functions: [collect_set(val#x, 0, 0)]
+Output: [key#x, sort_array(collect_set(val), true)[0]#x]
 
 
 -- !query
@@ -966,9 +966,9 @@ Input: [key#x, val#x]
      
 (4) SortAggregate 
 Input: [key#x, val#x]
-Output: [key#x, min#x]
 Keys: [key#x]
 Functions: [partial_min(val#x)]
+Output: [key#x, min#x]
      
 (5) Exchange 
 Input: [key#x, min#x]
@@ -978,9 +978,9 @@ Input: [key#x, min#x]
      
 (7) SortAggregate 
 Input: [key#x, min#x]
-Output: [key#x, min(val)#x]
 Keys: [key#x]
 Functions: [min(val#x)]
+Output: [key#x, min(val)#x]
 
 
 -- !query
