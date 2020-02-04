@@ -308,7 +308,7 @@ class JacksonParser(
     }
   }
 
-  private lazy val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
+  private val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
 
   /**
    * This function throws an exception for failed conversion. For empty string on data types
