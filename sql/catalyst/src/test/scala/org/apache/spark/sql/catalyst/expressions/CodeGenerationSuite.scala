@@ -190,7 +190,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expressions = Seq.fill(length) {
       ToUTCTimestamp(
         Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
+        Literal.create("PST", StringType),
+        Some(DateTimeUtils.localTimeZone.getID))
     }
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
@@ -207,7 +208,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expressions = Seq.fill(length) {
       ToUTCTimestamp(
         Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
+        Literal.create("PST", StringType),
+        Some(DateTimeUtils.localTimeZone.getID))
     }
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
