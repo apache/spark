@@ -1152,7 +1152,7 @@ object SQLConf {
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
-      .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
+      .doc("This enables substitution using syntax like `${var}`, `${system:var}`, and `${env:var}`.")
       .booleanConf
       .createWithDefault(true)
 
