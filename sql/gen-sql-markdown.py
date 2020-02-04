@@ -15,12 +15,18 @@
 # limitations under the License.
 #
 
-import sys
 import os
+import re
+import sys
 from collections import namedtuple
+from textwrap import dedent
+
+from markdown import markdown
 
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
+SQLConfEntry = namedtuple(
+    "SQLConfEntry", ["name", "default", "docstring"])
 
 
 def _list_function_infos(jvm):
@@ -45,6 +51,18 @@ def _list_function_infos(jvm):
             since=jinfo.getSince(),
             deprecated=jinfo.getDeprecated()))
     return sorted(infos, key=lambda i: i.name)
+
+
+def _list_sql_configs(jvm):
+    sql_configs = {
+        _sql_config._1(): SQLConfEntry(
+            name=_sql_config._1(),
+            default=_sql_config._2(),
+            docstring=_sql_config._3(),
+        )
+        for _sql_config in jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
+    }
+    return sql_configs
 
 
 def _make_pretty_usage(usage):
@@ -218,9 +236,69 @@ def generate_sql_markdown(jvm, path):
             mdfile.write("<br/>\n\n")
 
 
+def generate_sql_configs_table(jvm, path):
+    """
+    Generates an HTML table at `path` that lists all public SQL
+    configuration options.
+    """
+    sql_configs = _list_sql_configs(jvm)
+    value_reference_pattern = re.compile(r"^<value of (\S*)>$")
+    # ConfigEntry(key=spark.buffer.size, defaultValue=65536, doc=, public=true)
+    config_entry_pattern = re.compile(r"ConfigEntry\(key=(\S*), defaultValue=\S*, doc=\S*, public=\S*\)")
+
+    with open(path, 'w') as f:
+        f.write(dedent(
+            """
+            <table class="table">
+            <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+            """
+        ))
+        for name, config in sorted(sql_configs.items()):
+            if config.default == "<undefined>":
+                default = "none"
+            elif config.default.startswith("<value of "):
+                referenced_config_name = value_reference_pattern.match(config.default).group(1)
+                # difficultes in looking this up: a) potential recursion, b) references to non-SQL configs
+                default = "value of <code>{}</code>".format(referenced_config_name)
+            elif config.default.startswith("<"):
+                raise Exception(
+                    "Unhandled reference in SQL config docs. Config {name} "
+                    "has default '{default}' that looks like an HTML tag."
+                    .format(
+                        name=name,
+                        default=config.default,
+                    )
+                )
+            else:
+                default = config.default
+
+            docstring = config_entry_pattern.sub(r"\g<1>", config.docstring)
+
+            f.write(dedent(
+                """
+                <tr>
+                    <td><code>{name}</code></td>
+                    <td>{default}</td>
+                    <td>{docstring}</td>
+                </tr>
+                """
+                .format(
+                    name=name,
+                    default=default,
+                    docstring=markdown(docstring),
+                )
+            ))
+        f.write("</table>\n")
+
+
 if __name__ == "__main__":
     from pyspark.java_gateway import launch_gateway
 
     jvm = launch_gateway().jvm
-    markdown_file_path = "%s/docs/index.md" % os.path.dirname(sys.argv[0])
+    spark_home = os.path.dirname(os.path.dirname(__file__))
+
+    markdown_file_path = os.path.join(spark_home, "sql/docs/index.md")
+    sql_configs_table_path = os.path.join(spark_home, "docs/_includes/sql-configs.html")
+
     generate_sql_markdown(jvm, markdown_file_path)
+    generate_sql_configs_table(jvm, sql_configs_table_path)

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils {
@@ -37,6 +38,11 @@ private[sql] object PythonSQLUtils {
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+  }
+
+  def listSQLConfigs(): Array[(String, String, String)] = {
+    val conf = new SQLConf()
+    conf.getAllDefinedConfs.toArray
   }
 
   /**
