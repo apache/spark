@@ -44,8 +44,6 @@ def generic_file_source_options_example(spark):
     # +-------------+
     # $example off:ignore_corrupt_files$
 
-    spark.sql("set spark.sql.files.ignoreMissingFiles=false")
-
     # $example on:load_with_path_glob_filter$
     df = spark.read.load("examples/src/main/resources/dir1",
                          format="parquet", pathGlobFilter="*.parquet")

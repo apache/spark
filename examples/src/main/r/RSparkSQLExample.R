@@ -110,7 +110,6 @@ head(testCorruptDF)
 # 1 file1.parquet
 # 2 file2.parquet
 # $example off:ignore_corrupt_files$
-sql("set spark.sql.files.ignoreMissingFiles=false")
 
 # $example on:recursive_file_lookup$
 recursiveLoadedDF <- read.df("examples/src/main/resources/dir1", "parquet", recursiveFileLookup = "true")
