@@ -53,7 +53,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends AggregateExec(groupingExpressions, aggregateExpressions)
+  extends AggregateExec(groupingExpressions, aggregateExpressions, resultExpressions)
     with BlockingOperatorWithCodegen with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {

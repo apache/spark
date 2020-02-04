@@ -97,7 +97,7 @@ EXPLAIN FORMATTED
 -- HashAggregate
 EXPLAIN FORMATTED
   SELECT
-    COUNT(val) + SUM(key),
+    COUNT(val) + SUM(key) as TOTAL,
     COUNT(key) FILTER (WHERE val > 1)
   FROM explain_temp1;
 

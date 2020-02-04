@@ -26,19 +26,22 @@ import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
  */
 abstract class AggregateExec(
     groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression])
+    aggregateExpressions: Seq[AggregateExpression],
+    resultExpressions: Seq[NamedExpression])
   extends UnaryExecNode {
 
   override def verboseStringWithOperatorId(): String = {
     val inputString = child.output.mkString("[", ", ", "]")
     val keyString = groupingExpressions.mkString("[", ", ", "]")
     val functionString = aggregateExpressions.mkString("[", ", ", "]")
+    val resultString = resultExpressions.mkString("[", ", ", "]")
     val outputString = output.mkString("[", ", ", "]")
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input: $inputString
        |Keys: $keyString
        |Functions: $functionString
+       |Results: $resultString
        |Output: $outputString
      """.stripMargin
   }
