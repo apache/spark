@@ -19,11 +19,13 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.util.Locale
+import java.time.{Instant, LocalDateTime, ZoneOffset}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -788,5 +790,67 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+  }
+
+  test("to_utc_timestamp in various system and session time zones") {
+    val localTs = "2020-02-04T22:42:10"
+    val defaultTz = TimeZone.getDefault
+    try {
+      DateTimeTestUtils.outstandingTimezonesIds.foreach { systemTz =>
+        TimeZone.setDefault(DateTimeUtils.getTimeZone(systemTz))
+        DateTimeTestUtils.outstandingTimezonesIds.foreach { sessionTz =>
+          withSQLConf(
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz) {
+
+            DateTimeTestUtils.outstandingTimezonesIds.foreach { toTz =>
+              withClue(s"system = $systemTz session = $sessionTz to = $toTz") {
+                val instant = LocalDateTime
+                  .parse(localTs)
+                  .atZone(DateTimeUtils.getZoneId(toTz))
+                  .toInstant
+                val df = Seq(localTs).toDF("localTs")
+                checkAnswer(
+                  df.select(to_utc_timestamp(col("localTs"), toTz)),
+                  Row(instant))
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      case NonFatal(_) => TimeZone.setDefault(defaultTz)
+    }
+  }
+
+  test("from_utc_timestamp in various system and session time zones") {
+    val localTs = "2020-02-04T22:42:10"
+    val instant = LocalDateTime
+      .parse(localTs)
+      .atZone(ZoneOffset.UTC)
+      .toInstant
+    val defaultTz = TimeZone.getDefault
+    try {
+      DateTimeTestUtils.outstandingTimezonesIds.foreach { systemTz =>
+        TimeZone.setDefault(DateTimeUtils.getTimeZone(systemTz))
+        DateTimeTestUtils.outstandingTimezonesIds.foreach { sessionTz =>
+          withSQLConf(
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz) {
+
+            DateTimeTestUtils.outstandingTimezonesIds.foreach { toTz =>
+              withClue(s"system = $systemTz session = $sessionTz to = $toTz") {
+                val df = Seq(localTs).toDF("localTs")
+                checkAnswer(
+                  df.select(from_utc_timestamp(col("localTs"), toTz)),
+                  Row(instant))
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      case NonFatal(_) => TimeZone.setDefault(defaultTz)
+    }
   }
 }
