@@ -3410,6 +3410,13 @@ object functions {
   /**
    * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), x => x + 1))
+   *   df.selectExpr("transform(i, x -> x + 1")
+   * }}}
+   *
+   * @param column the input array column
+   * @param f: col => transformed_col the lambda function to transform the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3421,6 +3428,14 @@ object functions {
   /**
    * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), (x, i) => x + i))
+   *   df.selectExpr("transform(i, (x, i) -> x + i))")
+   * }}}
+   *
+   * @param column the input array column
+   * @param f: (col, index) => transformed_col the lambda function to filter the input column
+   *           given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3431,6 +3446,13 @@ object functions {
 
   /**
    * Returns whether a predicate holds for one or more elements in the array.
+   * {{{
+   *   df.select(exists(col("i"), _ % 2 === 0))
+   *   df.selectExpr("exists(i, x -> x % 2 == 0)")
+   * }}}
+   *
+   * @param column the input array column
+   * @param f: col => predicate the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3441,6 +3463,13 @@ object functions {
 
   /**
    * Returns whether a predicate holds for every element in the array.
+   * {{{
+   *   df.select(forall(col("i"), x => x % 2 === 0))
+   *   df.selectExpr("forall(i, x -> x % 2 == 0)")
+   * }}}
+   *
+   * @param column the input array column
+   * @param f: col => predicate the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3456,8 +3485,8 @@ object functions {
    *   df.selectExpr("filter(col, x -> x % 2 == 0)")
    * }}}
    *
-   * @param column: the input array column
-   * @param f: col => predicate, the Boolean predicate to filter the input column
+   * @param column the input array column
+   * @param f: col => predicate the Boolean predicate to filter the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3473,8 +3502,8 @@ object functions {
    *   df.selectExpr("filter(col, (x, i) -> i % 2 == 0)")
    * }}}
    *
-   * @param column: the input array column
-   * @param f: (col, index) => predicate, the Boolean predicate to filter the input column
+   * @param column the input array column
+   * @param f: (col, index) => predicate the Boolean predicate to filter the input column
    *           given the index. Indices start at 0.
    *
    * @group collection_funcs
@@ -3488,6 +3517,16 @@ object functions {
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   *   df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)")
+   * }}}
+   *
+   * @param expr the input array column
+   * @param zero the initial value
+   * @param merge: (c, v) => c the merge function to reduce all elements into a single state
+   * @param finish: col => final_col the lambda function to convert the single state into
+   *              final result
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3508,6 +3547,14 @@ object functions {
   /**
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   *   df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)")
+   * }}}
+   *
+   * @param expr the input array column
+   * @param zero the initial value
+   * @param merge: (c, v) => c the merge function to reduce all elements into a single state
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3519,6 +3566,14 @@ object functions {
    * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
+   * {{{
+   *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
+   *   df.selectExpr("zip_with(val1, val2, (x, y) -> x + y)")
+   * }}}
+   *
+   * @param left the left input array column
+   * @param right the right input array column
+   * @param f: (lCol, rCol) => col the lambda function to merge two input columns into one column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3530,6 +3585,13 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new keys for the pairs.
+   * {{{
+   *   df.select(transform_keys(col("i"), (k, v) => k + v))
+   *   df.selectExpr("transform_keys(i, (k, v) -> k + v)")
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f: col => k_transformed_col the lambda function to transform the key of input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3541,6 +3603,13 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new values for the pairs.
+   * {{{
+   *   df.select(transform_values(col("i"), (k, v) => k + v))
+   *   df.selectExpr("transform_values(i, (k, v) -> k + v)")
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f: col => v_transformed_col the lambda function to transform the value of input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3551,6 +3620,13 @@ object functions {
 
   /**
    * Returns a map whose key-value pairs satisfy a predicate.
+   * {{{
+   *   df.select(map_filter(col("m"), (k, v) => k * 10 === v))
+   *   df.selectExpr("map_filter(m, (k, v) -> k * 10 = v)")
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f: (k, v) => predicate the Boolean predicate to filter the input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3561,6 +3637,15 @@ object functions {
 
   /**
    * Merge two given maps, key-wise into a single map using a function.
+   * {{{
+   *   df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2))
+   *   df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)")
+   * }}}
+   *
+   * @param left the left input map column
+   * @param right the right input map column
+   * @param f: (k, v1, v2) => v the lambda function to merge two values of input map columns into
+   *         one value
    *
    * @group collection_funcs
    * @since 3.0.0
