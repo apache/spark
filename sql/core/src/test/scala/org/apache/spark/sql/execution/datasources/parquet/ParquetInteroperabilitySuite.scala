@@ -146,7 +146,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 DateTimeUtils.toJavaTimestamp(DateTimeUtils.convertTz(
                   DateTimeUtils.fromJavaTimestamp(ts),
                   DateTimeUtils.TimeZoneUTC,
-                  DateTimeUtils.getTimeZone(conf.sessionLocalTimeZone)))
+                  DateTimeUtils.getTimeZone(conf.sessionLocalTimeZone),
+                  DateTimeUtils.localTimeZone()))
               }
             }
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray

@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -64,6 +65,8 @@ object DateTimeUtils {
   def getTimeZone(timeZoneId: String): TimeZone = {
     TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
+
+  def localTimeZone(): TimeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
@@ -801,9 +804,11 @@ object DateTimeUtils {
    * mapping, the conversion here may return wrong result, we should make the timestamp
    * timezone-aware.
    */
-  def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
-    // We always use local timezone to parse or format a timestamp
-    val localZone = defaultTimeZone()
+  def convertTz(
+      ts: SQLTimestamp,
+      fromZone: TimeZone,
+      toZone: TimeZone,
+      localZone: TimeZone): SQLTimestamp = {
     val utcTs = if (fromZone.getID == localZone.getID) {
       ts
     } else {
@@ -828,16 +833,16 @@ object DateTimeUtils {
    * Returns a timestamp of given timezone from utc timestamp, with the same string
    * representation in their timezone.
    */
-  def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, TimeZoneGMT, getTimeZone(timeZone))
+  def fromUTCTime(time: SQLTimestamp, timeZone: String, localZone: TimeZone): SQLTimestamp = {
+    convertTz(time, TimeZoneGMT, getTimeZone(timeZone), localZone)
   }
 
   /**
    * Returns a utc timestamp from a given timestamp from a given timezone, with the same
    * string representation in their timezone.
    */
-  def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
+  def toUTCTime(time: SQLTimestamp, timeZone: String, localZone: TimeZone): SQLTimestamp = {
+    convertTz(time, getTimeZone(timeZone), TimeZoneGMT, localZone)
   }
 
   /**

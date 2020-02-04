@@ -1154,20 +1154,25 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class FromUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class FromUTCTimestamp(left: Expression, right: Expression, timeZoneId: Option[String] = None)
+  extends BinaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
   override def prettyName: String = "from_utc_timestamp"
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override def nullSafeEval(time: Any, timezone: Any): Any = {
     DateTimeUtils.fromUTCTime(time.asInstanceOf[Long],
-      timezone.asInstanceOf[UTF8String].toString)
+      timezone.asInstanceOf[UTF8String].toString,
+      timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val localTz = ctx.addReferenceObj("timeZone", timeZone)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
@@ -1190,13 +1195,13 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm, $localTz);
            |}
          """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
+        s"""$dtu.fromUTCTime($timestamp, $format.toString(), $localTz)"""
       })
     }
   }
@@ -1360,20 +1365,25 @@ case class MonthsBetween(
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class ToUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class ToUTCTimestamp(left: Expression, right: Expression, timeZoneId: Option[String] = None)
+  extends BinaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
   override def prettyName: String = "to_utc_timestamp"
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override def nullSafeEval(time: Any, timezone: Any): Any = {
     DateTimeUtils.toUTCTime(time.asInstanceOf[Long],
-      timezone.asInstanceOf[UTF8String].toString)
+      timezone.asInstanceOf[UTF8String].toString,
+      timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val localTz = ctx.addReferenceObj("timeZone", timeZone)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
@@ -1396,13 +1406,13 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm, $localTz);
            |}
          """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""$dtu.toUTCTime($timestamp, $format.toString())"""
+        s"""$dtu.toUTCTime($timestamp, $format.toString(), $localTz)"""
       })
     }
   }

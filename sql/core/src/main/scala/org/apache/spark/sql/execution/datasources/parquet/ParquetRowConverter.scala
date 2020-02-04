@@ -155,6 +155,7 @@ private[parquet] class ParquetRowConverter(
      """.stripMargin)
 
   private[this] val UTC = DateTimeUtils.TimeZoneUTC
+  private[this] val localTz = DateTimeUtils.localTimeZone
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -292,7 +293,8 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC, localTz))
+              .getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }

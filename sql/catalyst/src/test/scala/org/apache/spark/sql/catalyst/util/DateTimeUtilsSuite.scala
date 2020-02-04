@@ -433,7 +433,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("from UTC timestamp") {
     def test(utc: String, tz: String, expected: String): Unit = {
-      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+      assert(toJavaTimestamp(fromUTCTime(
+        fromJavaTimestamp(Timestamp.valueOf(utc)), tz, DateTimeUtils.localTimeZone)).toString
         === expected)
     }
     for (tz <- ALL_TIMEZONES) {
@@ -457,7 +458,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("to UTC timestamp") {
     def test(utc: String, tz: String, expected: String): Unit = {
-      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+      assert(toJavaTimestamp(toUTCTime(
+        fromJavaTimestamp(Timestamp.valueOf(utc)), tz, DateTimeUtils.localTimeZone)).toString
         === expected)
     }
 

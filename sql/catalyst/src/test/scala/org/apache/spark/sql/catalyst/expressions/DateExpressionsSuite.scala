@@ -904,7 +904,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val msg = intercept[java.time.DateTimeException] {
         GenerateUnsafeProjection.generate(
           ToUTCTimestamp(
-            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+            Literal(Timestamp.valueOf("2015-07-24 00:00:00")),
+            Literal(invalidTz),
+            Some(DateTimeUtils.localTimeZone.getID)) :: Nil)
       }.getMessage
       assert(msg.contains(invalidTz))
     }
@@ -915,12 +917,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         FromUTCTimestamp(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
-          Literal.create(tz, StringType)),
+          Literal.create(tz, StringType),
+          Some(DateTimeUtils.localTimeZone.getID)),
         if (expected != null) Timestamp.valueOf(expected) else null)
       checkEvaluation(
         FromUTCTimestamp(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
-          NonFoldableLiteral.create(tz, StringType)),
+          NonFoldableLiteral.create(tz, StringType),
+          Some(DateTimeUtils.localTimeZone.getID)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
     test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
@@ -933,7 +937,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("from_utc_timestamp - invalid time zone id") {
     Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
       val msg = intercept[java.time.DateTimeException] {
-        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+        GenerateUnsafeProjection.generate(
+          FromUTCTimestamp(
+            Literal(0),
+            Literal(invalidTz),
+            Some(DateTimeUtils.localTimeZone.getID)) :: Nil)
       }.getMessage
       assert(msg.contains(invalidTz))
     }

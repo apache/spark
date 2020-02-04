@@ -36,6 +36,7 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -100,6 +101,7 @@ public class VectorizedColumnReader {
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final TimeZone convertTz;
   private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
+  private static final TimeZone localTz = DateTimeUtils.localTimeZone();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -334,7 +336,7 @@ public class VectorizedColumnReader {
               if (!column.isNullAt(i)) {
                 Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
                 long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
-                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC, localTz);
                 column.putLong(i, adjTime);
               }
             }
@@ -486,7 +488,7 @@ public class VectorizedColumnReader {
           if (defColumn.readInteger() == maxDefLevel) {
             // Read 12 bytes for INT96
             long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
-            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC, localTz);
             column.putLong(rowId + i, adjTime);
           } else {
             column.putNull(rowId + i);
