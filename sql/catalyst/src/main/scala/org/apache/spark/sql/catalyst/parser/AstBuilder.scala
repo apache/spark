@@ -2940,86 +2940,54 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to change column type
+   * Parse a [[AlterTableAlterColumnStatement]] command to alter a column's property.
    *
    * For example:
    * {{{
    *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint
-   * }}}
-   */
-  override def visitAlterTableColumnType(
-      ctx: AlterTableColumnTypeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      typedVisit[Seq[String]](ctx.column),
-      dataType = Some(typedVisit[DataType](ctx.dataType)),
-      nullable = None,
-      comment = None,
-      position = None)
-  }
-
-  /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to change column comment
-   *
-   * For example:
-   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
    *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
-   * }}}
-   */
-  override def visitAlterTableColumnComment(
-      ctx: AlterTableColumnCommentContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      typedVisit[Seq[String]](ctx.column),
-      dataType = None,
-      nullable = None,
-      comment = Some(visitCommentSpec(ctx.commentSpec())),
-      position = None)
-  }
-
-  /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to change column position
-   *
-   * For example:
-   * {{{
    *   ALTER TABLE table1 ALTER COLUMN a.b.c FIRST
    *   ALTER TABLE table1 ALTER COLUMN a.b.c AFTER x
    * }}}
    */
-  override def visitAlterTableColumnPosition(
-      ctx: AlterTableColumnPositionContext): LogicalPlan = withOrigin(ctx) {
+  override def visitAlterTableAlterColumn(
+      ctx: AlterTableAlterColumnContext): LogicalPlan = withOrigin(ctx) {
+    val action = ctx.alterColumnAction
+    val dataType = if (action.dataType != null) {
+      Some(typedVisit[DataType](action.dataType))
+    } else {
+      None
+    }
+    val nullable = if (action.setOrDrop != null) {
+      action.setOrDrop.getType match {
+        case SqlBaseParser.SET => Some(false)
+        case SqlBaseParser.DROP => Some(true)
+      }
+    } else {
+      None
+    }
+    val comment = if (action.commentSpec != null) {
+      Some(visitCommentSpec(action.commentSpec()))
+    } else {
+      None
+    }
+    val position = if (action.colPosition != null) {
+      Some(typedVisit[ColumnPosition](action.colPosition))
+    } else {
+      None
+    }
+
+    assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
+
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
-      dataType = None,
-      nullable = None,
-      comment = None,
-      position = Some(typedVisit[ColumnPosition](ctx.colPosition)))
-  }
-
-  /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to change column nullability.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
-   * }}}
-   */
-  override def visitAlterColumnNullability(ctx: AlterColumnNullabilityContext): LogicalPlan = {
-    withOrigin(ctx) {
-      val nullable = ctx.setOrDrop.getType match {
-        case SqlBaseParser.SET => false
-        case SqlBaseParser.DROP => true
-      }
-      AlterTableAlterColumnStatement(
-        visitMultipartIdentifier(ctx.table),
-        typedVisit[Seq[String]](ctx.column),
-        dataType = None,
-        nullable = Some(nullable),
-        comment = None,
-        position = None)
-    }
+      dataType = dataType,
+      nullable = nullable,
+      comment = comment,
+      position = position)
   }
 
   /**
