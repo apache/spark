@@ -17,22 +17,55 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)) {
+    if (SQLConf.get.legacyCTEPrecedenceEnabled.isEmpty) {
+      if (hasNestedCTE(plan, inTraverse = false)) {
+        throw new AnalysisException("The ambiguous nested CTE was founded in current plan, " +
+          "please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, " +
+          "see more detail in SPARK-28228.")
+      } else {
+        traverseAndSubstituteCTE(plan, inTraverse = false)
+      }
+    } else if (SQLConf.get.legacyCTEPrecedenceEnabled.get) {
       legacyTraverseAndSubstituteCTE(plan)
     } else {
-      traverseAndSubstituteCTE(plan, false)
+      traverseAndSubstituteCTE(plan, inTraverse = false)
     }
+  }
+
+  /**
+   * Check the plan to be traversed has nested CTE or not, find the nested WITH clause in
+   * child, innerChildren and subquery for the current plan.
+   */
+  private def hasNestedCTE(plan: LogicalPlan, inTraverse: Boolean): Boolean = {
+    plan.foreach {
+      case _: With if inTraverse =>
+        return true
+
+      case w @ With(child: LogicalPlan, _) =>
+        (w.innerChildren :+ child).foreach { p =>
+          if (hasNestedCTE(p, inTraverse = true)) return true
+        }
+
+      case other if inTraverse =>
+        other.transformExpressions {
+          case e: SubqueryExpression if hasNestedCTE(e.plan, inTraverse = true) =>
+            return true
+        }
+
+      case _ =>
+    }
+    false
   }
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {

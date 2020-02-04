@@ -168,9 +168,10 @@ WITH t as (
 )
 SELECT * FROM t
 -- !query schema
-struct<1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -204,9 +205,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<2:int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -222,9 +224,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -240,9 +243,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<3:int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -252,9 +256,10 @@ SELECT max(c) FROM (
   SELECT * FROM t
 )
 -- !query schema
-struct<max(c):int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -266,9 +271,10 @@ SELECT sum(c) FROM (
   )
 )
 -- !query schema
-struct<sum(c):bigint>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -281,9 +287,10 @@ SELECT sum(c) FROM (
   )
 )
 -- !query schema
-struct<sum(c):bigint>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -293,9 +300,10 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -307,9 +315,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -322,9 +331,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query

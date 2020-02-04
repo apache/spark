@@ -2079,7 +2079,7 @@ object SQLConf {
     .internal()
     .doc("When true, outer CTE definitions takes precedence over inner definitions.")
     .booleanConf
-    .createWithDefault(false)
+    .createOptional
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
@@ -2713,6 +2713,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def legacyCTEPrecedenceEnabled: Option[Boolean] = getConf(LEGACY_CTE_PRECEDENCE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
