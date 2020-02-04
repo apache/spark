@@ -44,7 +44,7 @@ private[spark] trait MountLoggerConfigMapSuite { k8sSuite: KubernetesSuite =>
     val loggingConfigFileName = "log-config-test-log4j.properties"
     val configMapName = "test-logging-config-map"
     val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
-    assert(loggingConfURL != null, "Test not properly setup, logging configuration file not available.")
+    assert(loggingConfURL != null, "Logging configuration file not available.")
     try {
       configMap = buildConfigMap(loggingConfURL, loggingConfigFileName, configMapName)
 
@@ -71,7 +71,7 @@ private[spark] trait MountLoggerConfigMapSuite { k8sSuite: KubernetesSuite =>
   test("Run with logging configuration provided from log4j properties file", k8sTestTag) {
     val loggingConfigFileName = "log-config-test-log4j.properties"
     val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
-    assert(loggingConfURL != null, "Test not properly setup, logging configuration file not available.")
+    assert(loggingConfURL != null, "Logging configuration file not available.")
 
     val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/$loggingConfigFileName"
