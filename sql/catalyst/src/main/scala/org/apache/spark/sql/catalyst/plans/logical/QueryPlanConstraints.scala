@@ -62,16 +62,17 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
-    val binaryComparisons = constraints.filter(_.isInstanceOf[BinaryComparison])
+    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
+    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = binaryComparisons - eq
+        val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, r, l)
+        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceConstraints(binaryComparisons - eq, l, r)
+        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
     inferredConstraints -- constraints
