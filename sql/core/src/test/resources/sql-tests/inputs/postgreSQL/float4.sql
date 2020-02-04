@@ -106,7 +106,6 @@ SELECT smallint(float('32767.6'));
 SELECT smallint(float('-32768.4'));
 SELECT smallint(float('-32768.6'));
 SELECT int(float('2147483520'));
-SELECT int(float('2147483547'));
 SELECT int(float('-2147483648.5'));
 SELECT int(float('-2147483900'));
 SELECT bigint(float('9223369837831520256'));
