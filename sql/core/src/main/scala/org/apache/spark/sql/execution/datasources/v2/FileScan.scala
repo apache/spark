@@ -160,7 +160,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
     partitions.toArray
   }
 
-  private def getSizeInBytes(conf: SQLConf): Long = {
+  private def getSizeInBytes(): Long = {
     if (fileIndex.partitionSpec().partitionColumns.isEmpty || partitionFilters.isEmpty) {
       fileIndex.sizeInBytes
     } else {
@@ -169,11 +169,10 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   override def estimateStatistics(): Statistics = {
-    val conf = sparkSession.sessionState.conf
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
-        val compressionFactor = conf.fileCompressionFactor
-        val sizeInBytes = getSizeInBytes(conf)
+        val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
+        val sizeInBytes = getSizeInBytes()
         val size = (compressionFactor * sizeInBytes).toLong
         OptionalLong.of(size)
       }
