@@ -81,25 +81,45 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
+        case Limit(IntegerLiteral(limit), Sort(order, true, child))
+            if limit < conf.topKSortFallbackThreshold =>
+          TakeOrderedAndProjectExec(limit, 0, order, child.output, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+            if limit < conf.topKSortFallbackThreshold =>
+          TakeOrderedAndProjectExec(limit, 0, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), child) =>
+          CollectLimitExec(limit, 0, planLater(child)) :: Nil
+        case GlobalLimitAndOffset(
+            IntegerLiteral(limit),
+            IntegerLiteral(offset),
+            Sort(order, true, child))
             if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
-        case Limit(
+        case GlobalLimitAndOffset(
             IntegerLiteral(limit),
             IntegerLiteral(offset),
             Project(projectList, Sort(order, true, child)))
             if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+        case GlobalLimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
           CollectLimitExec(limit, offset, planLater(child)) :: Nil
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
-      case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
+      case Limit(IntegerLiteral(limit), Sort(order, true, child))
+          if limit < conf.topKSortFallbackThreshold =>
+        TakeOrderedAndProjectExec(limit, 0, order, child.output, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+          if limit < conf.topKSortFallbackThreshold =>
+        TakeOrderedAndProjectExec(limit, 0, order, projectList, planLater(child)) :: Nil
+      case GlobalLimitAndOffset(
+          IntegerLiteral(limit),
+          IntegerLiteral(offset),
+          Sort(order, true, child))
           if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
-      case Limit(
+      case GlobalLimitAndOffset(
           IntegerLiteral(limit),
           IntegerLiteral(offset),
           Project(projectList, Sort(order, true, child)))
@@ -480,15 +500,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(Limit(IntegerLiteral(limit), IntegerLiteral(offset), child))
-        if generatesStreamingAppends(child) =>
-        StreamingGlobalLimitExec(
-          limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+      case ReturnAnswer(Limit(IntegerLiteral(limit), child)) if generatesStreamingAppends(child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
 
-      case Limit(IntegerLiteral(limit), IntegerLiteral(offset), child)
-        if generatesStreamingAppends(child) =>
-        StreamingGlobalLimitExec(
-          limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+      case Limit(IntegerLiteral(limit), child) if generatesStreamingAppends(child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
 
       case _ => Nil
     }
@@ -752,10 +768,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
-      case logical.LocalLimit(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-        execution.LocalLimitExec(limit, planLater(child), offset) :: Nil
-      case logical.GlobalLimit(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-        execution.GlobalLimitExec(limit, planLater(child), offset) :: Nil
+      case logical.LocalLimit(IntegerLiteral(limit), child) =>
+        execution.LocalLimitExec(limit, planLater(child)) :: Nil
+      case logical.GlobalLimit(IntegerLiteral(limit), child) =>
+        execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.GlobalLimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+        execution.GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
       case logical.Union(unionChildren) =>
         execution.UnionExec(unionChildren.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>

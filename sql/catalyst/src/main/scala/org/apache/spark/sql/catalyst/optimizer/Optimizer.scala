@@ -452,24 +452,21 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
   private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case GlobalLimit(_, _, child) => child
+      case GlobalLimit(_, child) => child
       case _ => plan
     }
   }
 
-  private def maybePushLocalLimit(
-      limitExp: Expression,
-      offsetExp: Expression,
-      plan: LogicalPlan): LogicalPlan = {
+  private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
     (limitExp, plan.maxRowsPerPartition) match {
       case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
         // If the child has a cap on max rows per partition and the cap is larger than
         // the new limit, put a new LocalLimit there.
-        LocalLimit(limitExp, offsetExp, stripGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
       case (_, None) =>
         // If the child has no cap, put the new LocalLimit.
-        LocalLimit(limitExp, offsetExp, stripGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
       case _ =>
         // Otherwise, don't put a new LocalLimit.
@@ -484,8 +481,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(le, oe, Union(children)) =>
-      LocalLimit(le, oe, Union(children.map(maybePushLocalLimit(le, oe, _))))
+    case LocalLimit(exp, Union(children)) =>
+      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
     // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
     // JOIN in the general case without a more invasive rewrite.
@@ -493,13 +490,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    case LocalLimit(le, oe, join @ Join(left, right, joinType, _, _)) =>
+    case LocalLimit(exp, join @ Join(left, right, joinType, _, _)) =>
       val newJoin = joinType match {
-        case RightOuter => join.copy(right = maybePushLocalLimit(le, oe, right))
-        case LeftOuter => join.copy(left = maybePushLocalLimit(le, oe, left))
+        case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
         case _ => join
       }
-      LocalLimit(le, oe, newJoin)
+      LocalLimit(exp, newJoin)
   }
 }
 
@@ -714,11 +711,11 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
-    case Project(l1, g @ GlobalLimit(_, _, limit @ LocalLimit(_, _, p2 @ Project(l2, _))))
+    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
         if isRenaming(l1, l2) =>
       val newProjectList = buildCleanedProjectList(l1, l2)
       g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
-    case Project(l1, limit @ LocalLimit(_, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
       val newProjectList = buildCleanedProjectList(l1, l2)
       limit.copy(child = p2.copy(projectList = newProjectList))
     case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
@@ -1386,12 +1383,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case GlobalLimit(le, oe, GlobalLimit(nle, noe, grandChild)) =>
-      GlobalLimit(Least(Seq(nle, le)), Greatest(Seq(noe, oe)), grandChild)
-    case LocalLimit(le, oe, LocalLimit(nle, noe, grandChild)) =>
-      LocalLimit(Least(Seq(nle, le)), Greatest(Seq(noe, oe)), grandChild)
-    case Limit(le, oe, Limit(nle, noe, grandChild)) =>
-      Limit(Least(Seq(nle, le)), Greatest(Seq(noe, oe)), grandChild)
+    case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
+      GlobalLimit(Least(Seq(ne, le)), grandChild)
+    case LocalLimit(le, LocalLimit(ne, grandChild)) =>
+      LocalLimit(Least(Seq(ne, le)), grandChild)
+    case Limit(le, Limit(ne, grandChild)) =>
+      Limit(Least(Seq(ne, le)), grandChild)
   }
 }
 
@@ -1401,10 +1398,10 @@ object CombineLimits extends Rule[LogicalPlan] {
  */
 object RewriteOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case GlobalLimit(le, oe, Offset(noe, grandChild)) =>
-      GlobalLimit(le, Greatest(Seq(noe, oe)), grandChild)
-    case LocalLimit(le, oe, Offset(noe, grandChild)) =>
-      Offset(noe, LocalLimit(le, Greatest(Seq(noe, oe)), grandChild))
+    case GlobalLimit(le, Offset(oe, grandChild)) =>
+      GlobalLimitAndOffset(le, oe, grandChild)
+    case LocalLimit(le, Offset(oe, grandChild)) =>
+      Offset(oe, LocalLimit(Add(le, oe), grandChild))
   }
 }
 
@@ -1512,11 +1509,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       projection.initialize(0)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()), isStreaming)
 
-    case Limit(
-        IntegerLiteral(limit),
-        IntegerLiteral(offset),
-        LocalRelation(output, data, isStreaming)) =>
-      LocalRelation(output, data.drop(offset).take(limit), isStreaming)
+    case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
+       LocalRelation(output, data.take(limit), isStreaming)
 
     case Filter(condition, LocalRelation(output, data, isStreaming))
         if !hasUnevaluableExpr(condition) =>
@@ -1799,7 +1793,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // changes up the Logical Plan.
     //
     // Replace Global Limit 0 nodes with empty Local Relation
-    case gl @ GlobalLimit(IntegerLiteral(0), _, _) =>
+    case gl @ GlobalLimit(IntegerLiteral(0), _) =>
       empty(gl)
 
     // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
@@ -1808,7 +1802,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // then the following rule will handle that case as well.
     //
     // Replace Local Limit 0 nodes with empty Local Relation
-    case ll @ LocalLimit(IntegerLiteral(0), _, _) =>
+    case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
   }
 }

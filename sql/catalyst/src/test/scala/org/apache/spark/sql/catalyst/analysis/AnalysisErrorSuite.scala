@@ -646,7 +646,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan4 = Filter(
       Exists(
         Limit(1,
-          child = Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
       ),
       LocalRelation(a))
     assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)

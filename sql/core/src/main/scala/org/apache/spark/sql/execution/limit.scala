@@ -106,6 +106,10 @@ object BaseLimitExec {
 trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.take(limit)
+  }
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -116,8 +120,6 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
 
   protected lazy val countTerm = BaseLimitExec.newLimitCountTerm()
 
-  protected lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
-
   override lazy val limitNotReachedChecks: Seq[String] = {
     s"$countTerm < $limit" +: super.limitNotReachedChecks
   }
@@ -125,30 +127,14 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
-}
-
-/**
- * Skip the first `offset` elements then take the first `limit` of the following elements in
- *  each child partition, but do not collect or shuffle them.
- */
-case class LocalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extends BaseLimitExec {
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter => iter.take(limit + offset)}
-  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
     // Here we have to inline it to not change its name. This is fine as we won't have many limit
     // operators in one query.
     ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
-    ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
     s"""
-       | if ($countTerm < ${limit + offset}) {
+       | if ($countTerm < $limit) {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
        | }
@@ -157,10 +143,35 @@ case class LocalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extends
 }
 
 /**
+ * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
+ */
+case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+/**
+ * Take the first `limit` elements of the child's single output partition.
+ */
+case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+/**
  * Skip the first `offset` elements then take the first `limit` of the following elements in
  *  the child's single output partition.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extends BaseLimitExec {
+case class GlobalLimitAndOffsetExec(
+    limit: Int,
+    offset: Int,
+    child: SparkPlan) extends BaseLimitExec {
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
@@ -173,6 +184,8 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extend
     val skips = rdd.take(offset)
     rdd.filter(!skips.contains(_))
   }
+
+  private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.

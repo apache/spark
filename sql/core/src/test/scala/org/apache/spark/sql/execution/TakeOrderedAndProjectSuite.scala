@@ -63,7 +63,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
         input =>
           GlobalLimitExec(limit,
             LocalLimitExec(limit,
-              SortExec(sortOrder, true, input), 0), 0),
+              SortExec(sortOrder, true, input))),
         sortAnswers = false)
     }
   }
@@ -79,7 +79,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
           GlobalLimitExec(limit,
             LocalLimitExec(limit,
               ProjectExec(Seq(input.output.last),
-                SortExec(sortOrder, true, input)), 0), 0),
+                SortExec(sortOrder, true, input)))),
         sortAnswers = false)
     }
   }
