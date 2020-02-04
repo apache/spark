@@ -54,14 +54,14 @@ def _list_function_infos(jvm):
 
 
 def _list_sql_configs(jvm):
-    sql_configs = {
-        _sql_config._1(): SQLConfEntry(
+    sql_configs = [
+        SQLConfEntry(
             name=_sql_config._1(),
             default=_sql_config._2(),
             docstring=_sql_config._3(),
         )
         for _sql_config in jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
-    }
+    ]
     return sql_configs
 
 
@@ -253,7 +253,7 @@ def generate_sql_configs_table(jvm, path):
             <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
             """
         ))
-        for name, config in sorted(sql_configs.items()):
+        for config in sorted(sql_configs, key=lambda x: x.name):
             if config.default == "<undefined>":
                 default = "none"
             elif config.default.startswith("<value of "):
@@ -283,7 +283,7 @@ def generate_sql_configs_table(jvm, path):
                 </tr>
                 """
                 .format(
-                    name=name,
+                    name=config.name,
                     default=default,
                     docstring=markdown(docstring),
                 )
