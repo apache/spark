@@ -884,12 +884,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         ToUTCTimestamp(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
-          Literal.create(tz, StringType)),
+          Literal.create(tz, StringType),
+          Some(DateTimeUtils.localTimeZone.getID)),
         if (expected != null) Timestamp.valueOf(expected) else null)
       checkEvaluation(
         ToUTCTimestamp(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
-          NonFoldableLiteral.create(tz, StringType)),
+          NonFoldableLiteral.create(tz, StringType),
+          Some(DateTimeUtils.localTimeZone.getID)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
     test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
