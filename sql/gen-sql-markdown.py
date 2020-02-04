@@ -244,7 +244,8 @@ def generate_sql_configs_table(jvm, path):
     sql_configs = _list_sql_configs(jvm)
     value_reference_pattern = re.compile(r"^<value of (\S*)>$")
     # ConfigEntry(key=spark.buffer.size, defaultValue=65536, doc=, public=true)
-    config_entry_pattern = re.compile(r"ConfigEntry\(key=(\S*), defaultValue=\S*, doc=\S*, public=\S*\)")
+    config_entry_pattern = re.compile(
+        r"ConfigEntry\(key=(\S*), defaultValue=\S*, doc=\S*, public=\S*\)")
 
     with open(path, 'w') as f:
         f.write(dedent(
@@ -258,7 +259,9 @@ def generate_sql_configs_table(jvm, path):
                 default = "none"
             elif config.default.startswith("<value of "):
                 referenced_config_name = value_reference_pattern.match(config.default).group(1)
-                # difficultes in looking this up: a) potential recursion, b) references to non-SQL configs
+                # difficultes in looking this up:
+                #   a) potential recursion
+                #   b) references to non-SQL configs
                 default = "value of <code>{}</code>".format(referenced_config_name)
             elif config.default.startswith("<"):
                 raise Exception(
