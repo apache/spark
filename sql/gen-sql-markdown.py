@@ -271,7 +271,7 @@ def generate_sql_configs_table(jvm, path):
                     "Unhandled reference in SQL config docs. Config '{name}' "
                     "has default '{default}' that looks like an HTML tag."
                     .format(
-                        name=name,
+                        name=config.name,
                         default=config.default,
                     )
                 )
