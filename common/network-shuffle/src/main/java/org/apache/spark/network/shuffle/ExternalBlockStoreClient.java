@@ -103,7 +103,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
-
             // Unless this client is closed.
             if (clientFactory != null) {
               TransportClient client = null;
@@ -113,16 +112,15 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
                 // throw ExternalShuffleServiceLostException exception then we won't retry to connect
                 // un-connected External Shuffle Service.
                 String msg = "The relative remote external shuffle service (host: " + host + "," +
-                    "port: " + port + "), which maintains the block data can't been connected.";
+                  "port: " + port + "), which maintains the block data can't been connected.";
                 logger.info(msg);
                 throw new ExternalShuffleServiceLostException(msg);
               }
               new OneForOneBlockFetcher(client, appId, execId,
-                  blockIds1, listener1, conf, downloadFileManager).start();
+                blockIds1, listener1, conf, downloadFileManager).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
             }
-
           };
 
       int maxRetries = conf.maxIORetries();
