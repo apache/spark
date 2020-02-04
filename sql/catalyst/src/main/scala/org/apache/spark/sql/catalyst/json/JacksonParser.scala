@@ -318,20 +318,19 @@ class JacksonParser(
       parser: JsonParser,
       dataType: DataType): PartialFunction[JsonToken, R] = {
 
-    // SPARK-25040: Disallow empty strings for data types except for string and binary types.
-    case VALUE_STRING if parser.getTextLength < 1 =>
-        // Legacy mode for prior to Spark 3.0.0.
-      if (allowEmptyString) {
-        dataType match {
-          case FloatType | DoubleType | TimestampType | DateType =>
-            throw new RuntimeException(
-              s"Failed to parse an empty string for data type ${dataType.catalogString}")
-          case _ => null
-        }
-      } else {
-        throw new RuntimeException(
-          s"Failed to parse an empty string for data type ${dataType.catalogString}")
+    // SPARK-25040: Disallows empty strings for data types except for string and binary types.
+    // But treats empty strings as null for certain types if the legacy config is enabled.
+    case VALUE_STRING if parser.getTextLength < 1 && allowEmptyString =>
+      dataType match {
+        case FloatType | DoubleType | TimestampType | DateType =>
+          throw new RuntimeException(
+            s"Failed to parse an empty string for data type ${dataType.catalogString}")
+        case _ => null
       }
+
+    case VALUE_STRING if parser.getTextLength < 1 =>
+      throw new RuntimeException(
+        s"Failed to parse an empty string for data type ${dataType.catalogString}")
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a

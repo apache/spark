@@ -1991,11 +1991,11 @@ object SQLConf {
 
   val LEGACY_ALLOW_EMPTY_STRING_IN_JSON =
     buildConf("spark.sql.legacy.json.allowEmptyString.enabled")
-    .internal()
-    .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
+      .internal()
+      .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
       "some data types such as `IntegerType`.")
-    .booleanConf
-    .createWithDefault(false)
+      .booleanConf
+      .createWithDefault(false)
 
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")

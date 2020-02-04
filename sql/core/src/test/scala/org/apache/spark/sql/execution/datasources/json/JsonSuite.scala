@@ -2436,29 +2436,24 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     }
   }
 
+
+  private def failedOnEmptyString(dataType: DataType): Unit = {
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+    val errMessage = intercept[SparkException] {
+      df.collect()
+    }.getMessage
+    assert(errMessage.contains(
+      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+  }
+
+  private def emptyString(dataType: DataType, expected: Any): Unit = {
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+    checkAnswer(df, Row(expected) :: Nil)
+  }
+
   test("SPARK-25040: empty strings should be disallowed") {
-    def failedOnEmptyString(dataType: DataType): Unit = {
-       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      val errMessage = intercept[SparkException] {
-        df.collect()
-      }.getMessage
-      assert(errMessage.contains(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
-    }
-
-    def emptyString(dataType: DataType, expected: Any): Unit = {
-      val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      checkAnswer(df, Row(expected) :: Nil)
-    }
-
-    def emptyStringAsNull(dataType: DataType): Unit = {
-      val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      checkAnswer(df, Row(null) :: Nil)
-    }
-
     failedOnEmptyString(BooleanType)
     failedOnEmptyString(ByteType)
     failedOnEmptyString(ShortType)
@@ -2475,6 +2470,14 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
     emptyString(StringType, "")
     emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
+  }
+
+  test("SPARK-25040: allowing empty strings when legacy config is enabled") {
+    def emptyStringAsNull(dataType: DataType): Unit = {
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      checkAnswer(df, Row(null) :: Nil)
+    }
 
     // Legacy mode prior to Spark 3.0.0
     withSQLConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON.key -> "true") {
