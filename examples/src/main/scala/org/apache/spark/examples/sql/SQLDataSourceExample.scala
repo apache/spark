@@ -59,16 +59,15 @@ object SQLDataSourceExample {
     // $example off:ignore_corrupt_files$
     spark.sql("set spark.sql.files.ignoreMissingFiles=false")
     // $example on:load_with_path_glob_filter$
-    val partitionedUsersDF = spark.read.format("orc")
-      .option("pathGlobFilter", "*.orc")
-      .load("examples/src/main/resources/partitioned_users.orc")
+    val partitionedUsersDF = spark.read.format("parquet")
+      .option("pathGlobFilter", "*.parquet") // json file should be filtered out
+      .load("examples/src/main/resources/dir1")
     partitionedUsersDF.show()
-    // +------+----------------+--------------+
-    // |  name|favorite_numbers|favorite_color|
-    // +------+----------------+--------------+
-    // |Alyssa|  [3, 9, 15, 20]|          null|
-    // |   Ben|              []|           red|
-    // +------+----------------+--------------+
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
     // $example off:load_with_path_glob_filter$
     // $example on:recursive_file_lookup$
     val recursiveLoadedDF = spark.read.format("parquet")

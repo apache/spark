@@ -47,15 +47,14 @@ def generic_file_source_options_example(spark):
     spark.sql("set spark.sql.files.ignoreMissingFiles=false")
 
     # $example on:load_with_path_glob_filter$
-    df = spark.read.load("examples/src/main/resources/partitioned_users.orc",
-                         format="orc", pathGlobFilter="*.orc")
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", pathGlobFilter="*.parquet")
     df.show()
-    # +------+----------------+--------------+
-    # |  name|favorite_numbers|favorite_color|
-    # +------+----------------+--------------+
-    # |Alyssa|  [3, 9, 15, 20]|          null|
-    # |   Ben|              []|           red|
-    # +------+----------------+--------------+
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
     # $example off:load_with_path_glob_filter$
 
     # $example on:recursive_file_lookup$

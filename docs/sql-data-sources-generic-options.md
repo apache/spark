@@ -34,13 +34,6 @@ dir1/
  └── file1.parquet (schema: <file, string>, content: "file1.parquet")
  └── file3.json (schema: <file, string>, content: "{'file':'corrupt.json'}")
 
-partitioned_users.orc/
- ├── favorite_color=\_\_HIVE_DEFAULT_PARTITION\_\_/
- │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
- ├── favorite_color=red/
- │    └── users.orc (schema: <name: string, favorite_number: array<int>>)
- └── do_not_read_this.txt
-
 {% endhighlight %}
 
 ### Ignore Corrupt Files

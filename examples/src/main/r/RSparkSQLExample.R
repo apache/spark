@@ -140,7 +140,9 @@ namesAndAges <- select(df, "name", "age")
 # $example off:manual_load_options_csv$
 
 # $example on:load_with_path_glob_filter$
-df <- read.df("examples/src/main/resources/partitioned_users.orc", "orc", pathGlobFilter = "*.orc")
+df <- read.df("examples/src/main/resources/dir1", "parquet", pathGlobFilter = "*.parquet")
+#            file
+# 1 file1.parquet
 # $example off:load_with_path_glob_filter$
 
 # $example on:manual_save_options_orc$
