@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
@@ -307,6 +308,8 @@ class JacksonParser(
     }
   }
 
+  private lazy val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
+
   /**
    * This function throws an exception for failed conversion. For empty string on data types
    * except for string and binary types, this also throws an exception.
@@ -317,8 +320,18 @@ class JacksonParser(
 
     // SPARK-25040: Disallow empty strings for data types except for string and binary types.
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw new RuntimeException(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}")
+        // Legacy mode for prior to Spark 3.0.0.
+      if (allowEmptyString) {
+        dataType match {
+          case FloatType | DoubleType | TimestampType | DateType =>
+            throw new RuntimeException(
+              s"Failed to parse an empty string for data type ${dataType.catalogString}")
+          case _ => null
+        }
+      } else {
+        throw new RuntimeException(
+          s"Failed to parse an empty string for data type ${dataType.catalogString}")
+      }
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
