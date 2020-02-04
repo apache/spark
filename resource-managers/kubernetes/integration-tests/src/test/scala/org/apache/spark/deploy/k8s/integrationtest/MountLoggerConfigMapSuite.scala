@@ -100,6 +100,4 @@ private[spark] trait MountLoggerConfigMapSuite { k8sSuite: KubernetesSuite =>
       new File(logConfFilePath).delete()
     }
   }
-
-
 }
