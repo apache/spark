@@ -162,9 +162,9 @@ package object expressions  {
         resolver: Resolver): (Seq[Attribute], Seq[String]) = {
       // Collect matching attributes given a name and a lookup.
       def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
-        candidates.toSeq.flatMap(_.collect {
+        candidates.getOrElse(Nil).collect {
           case a if resolver(a.name, name) => a.withName(name)
-        })
+        }
       }
 
       // Find matches for the given name assuming that the 1st two parts are qualifier
@@ -242,10 +242,10 @@ package object expressions  {
           name: String,
           qualifier: Seq[String],
           candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
-        candidates.toSeq.flatMap(_.collect {
+        candidates.getOrElse(Nil).collect {
           case a if resolver(name, a.name) && matchQualifier(qualifier, a.qualifier) =>
             a.withName(name)
-        })
+        }
       }
 
       // Iterate each string in `nameParts` in a reverse order and try to match the attributes
@@ -257,28 +257,22 @@ package object expressions  {
       // Note that the match is performed in the reverse order in order to match the longest
       // qualifier as possible. If a match is found, the remaining portion of `nameParts`
       // is also returned as nested fields.
-      val matches = nameParts.zipWithIndex.reverseIterator.flatMap { case (name, index) =>
-        val matched = collectMatches(
+      var candidates: Seq[Attribute] = Nil
+      var nestedFields: Seq[String] = Nil
+      var i = nameParts.length - 1
+      while (i >= 0 && candidates.isEmpty) {
+        val name = nameParts(i)
+        candidates = collectMatches(
           name,
-          nameParts.take(index),
+          nameParts.take(i),
           direct.get(name.toLowerCase(Locale.ROOT)))
-        if (matched.nonEmpty) {
-          (matched, nameParts.takeRight(nameParts.length - index - 1)) :: Nil
-        } else {
-          Nil
+        if (candidates.nonEmpty) {
+          nestedFields = nameParts.takeRight(nameParts.length - i - 1)
         }
+        i -= 1
       }
 
-      if (!matches.hasNext) {
-        return (Nil, Nil)
-      }
-
-      // Note that `matches` is an iterator, and only the first match will be used.
-      if (matches.hasNext) {
-        matches.next
-      } else {
-        (Nil, Nil)
-      }
+      (candidates, nestedFields)
     }
 
     /** Perform attribute resolution given a name and a resolver. */

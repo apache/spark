@@ -49,7 +49,7 @@ sealed trait IdentifierWithDatabase {
 
 /**
  * Encapsulates an identifier that is either a alias name or an identifier that has table
- * name and a namespace.
+ * name and a qualifier.
  * The SubqueryAlias node keeps track of the qualifier using the information in this structure
  * @param name - Is an alias name or a table name
  * @param qualifier - Is a qualifier
