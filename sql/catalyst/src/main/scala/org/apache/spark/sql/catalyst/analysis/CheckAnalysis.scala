@@ -349,13 +349,9 @@ trait CheckAnalysis extends PredicateHelper {
 
           case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
             && o.children.exists(_.isInstanceOf[Offset]) =>
-            if (!SQLConf.get.forceUsingOffsetWithoutLimit) {
-              failAnalysis(
-                s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
-                  | clause found in: ${o.nodeName}. If you know exactly that OFFSET clause
-                  | does not cause excessive overhead and still want to use it, set
-                  | ${SQLConf.FORCE_USING_OFFSET_WITHOUT_LIMIT.key} to true.""".stripMargin)
-            }
+            failAnalysis(
+              s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+                | clause found in: ${o.nodeName}.""".stripMargin)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
@@ -787,13 +783,9 @@ trait CheckAnalysis extends PredicateHelper {
     plan match {
       case Offset(offsetExpr, _) =>
         checkLimitLikeClause("offset", offsetExpr)
-        if (!SQLConf.get.forceUsingOffsetWithoutLimit) {
-          failAnalysis(
-            s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
-              | clause is found to be the outermost node. If you know exactly that OFFSET
-              | clause does not cause excessive overhead and still want to use it, set
-              | ${SQLConf.FORCE_USING_OFFSET_WITHOUT_LIMIT.key} to true.""".stripMargin)
-        }
+        failAnalysis(
+          s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+            | clause is found to be the outermost node.""".stripMargin)
       case _ =>
     }
   }

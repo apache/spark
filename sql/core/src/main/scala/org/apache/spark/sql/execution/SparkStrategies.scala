@@ -82,13 +82,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
         case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
-            if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
+            if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
         case Limit(
             IntegerLiteral(limit),
             IntegerLiteral(offset),
             Project(projectList, Sort(order, true, child)))
-            if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
+            if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
           CollectLimitExec(limit, offset, planLater(child)) :: Nil
@@ -97,13 +97,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case other => planLater(other) :: Nil
       }
       case Limit(IntegerLiteral(limit), IntegerLiteral(offset), Sort(order, true, child))
-          if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
+          if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
       case Limit(
           IntegerLiteral(limit),
           IntegerLiteral(offset),
           Project(projectList, Sort(order, true, child)))
-          if limit != Limit.INVALID_LIMIT.value && limit < conf.topKSortFallbackThreshold =>
+          if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }

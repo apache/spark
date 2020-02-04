@@ -797,7 +797,6 @@ case class Pivot(
  * So we introduced LocalLimit and GlobalLimit in the logical plan node for limit pushdown.
  */
 object Limit {
-  val INVALID_LIMIT = Literal(-1)
   def apply(
       limitExpr: Expression,
       offsetExpr: Expression = Literal(0),

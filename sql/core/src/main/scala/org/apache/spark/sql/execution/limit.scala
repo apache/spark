@@ -46,11 +46,7 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
-    if (limit == Limit.INVALID_LIMIT.value) {
-      child.executeCollect().drop(offset)
-    } else {
-      child.executeTake(limit + offset).drop(offset)
-    }
+    child.executeTake(limit + offset).drop(offset)
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
@@ -59,11 +55,7 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
-    val locallyLimited = if (limit == Limit.INVALID_LIMIT.value) {
-      child.execute()
-    } else {
-      child.execute().mapPartitionsInternal(_.take(limit + offset))
-    }
+    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit + offset))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
         locallyLimited,
@@ -72,11 +64,7 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
         serializer,
         writeMetrics),
       readMetrics)
-    if (limit == Limit.INVALID_LIMIT.value) {
-      shuffled.mapPartitionsInternal(_.drop(offset))
-    } else {
-      shuffled.mapPartitionsInternal(_.drop(offset).take(limit))
-    }
+    shuffled.mapPartitionsInternal(_.drop(offset).take(limit))
   }
 }
 
@@ -150,11 +138,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extends
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def doExecute(): RDD[InternalRow] = {
-    if (limit == Limit.INVALID_LIMIT.value) {
-      child.execute()
-    } else {
-      child.execute().mapPartitions { iter => iter.take(limit + offset)}
-    }
+    child.execute().mapPartitions { iter => iter.take(limit + offset)}
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
@@ -163,16 +147,12 @@ case class LocalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extends
     // operators in one query.
     ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
-    if (limit == Limit.INVALID_LIMIT.value) {
-      s"${consume(ctx, input)}"
-    } else {
-      s"""
-         | if ($countTerm < ${limit + offset}) {
-         |   $countTerm += 1;
-         |   ${consume(ctx, input)}
-         | }
-       """.stripMargin
-    }
+    s"""
+       | if ($countTerm < ${limit + offset}) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, input)}
+       | }
+     """.stripMargin
   }
 }
 
@@ -189,11 +169,7 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extend
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def doExecute(): RDD[InternalRow] = {
-    val rdd = if (limit == Limit.INVALID_LIMIT.value) {
-      child.execute()
-    } else {
-      child.execute().mapPartitions { iter => iter.take(limit + offset)}
-    }
+    val rdd = child.execute().mapPartitions { iter => iter.take(limit + offset)}
     val skips = rdd.take(offset)
     rdd.filter(!skips.contains(_))
   }
@@ -204,24 +180,14 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan, offset: Int = 0) extend
     // operators in one query.
     ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
-    if (limit == Limit.INVALID_LIMIT.value) {
-      s"""
-         | if ($skipTerm < $offset) {
-         |   $skipTerm += 1;
-         | } else {
-         |   ${consume(ctx, input)}
-         | }
-       """.stripMargin
-    } else {
-      s"""
-         | if ($skipTerm < $offset) {
-         |   $skipTerm += 1;
-         | } else if ($countTerm < $limit) {
-         |   $countTerm += 1;
-         |   ${consume(ctx, input)}
-         | }
-       """.stripMargin
-    }
+    s"""
+       | if ($skipTerm < $offset) {
+       |   $skipTerm += 1;
+       | } else if ($countTerm < $limit) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, input)}
+       | }
+     """.stripMargin
   }
 }
 
