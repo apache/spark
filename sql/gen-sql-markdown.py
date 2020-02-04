@@ -263,17 +263,18 @@ def generate_sql_configs_table(jvm, path):
                 #   a) potential recursion
                 #   b) references to non-SQL configs
                 default = "value of <code>{}</code>".format(referenced_config_name)
-            elif config.default.startswith("<"):
+            else:
+                default = config.default
+
+            if default.startswith("<"):
                 raise Exception(
-                    "Unhandled reference in SQL config docs. Config {name} "
+                    "Unhandled reference in SQL config docs. Config '{name}' "
                     "has default '{default}' that looks like an HTML tag."
                     .format(
                         name=name,
                         default=config.default,
                     )
                 )
-            else:
-                default = config.default
 
             docstring = config_entry_pattern.sub(r"\g<1>", config.docstring)
 
