@@ -272,7 +272,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val conf = createConf(3, 15)
       .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
-    ResourceProfile.reInitDefaultProfile(conf)
     val manager = createManager(conf)
     post(SparkListenerStageSubmitted(createStageInfo(0, 20)))
     for (i <- 0 to 5) {
@@ -401,15 +400,20 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   test("SPARK-30511 remove executors when speculative tasks end") {
     val clock = new ManualClock()
     val stage = createStageInfo(0, 40)
-    val manager = createManager(createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4), clock = clock)
+    val conf = createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4)
+    val manager = createManager(conf, clock = clock)
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     post(SparkListenerStageSubmitted(stage))
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 3)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
 
     (0 to 9).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
     (0 to 39).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
@@ -431,7 +435,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
     (30 to 39).foreach { _ => post(SparkListenerSpeculativeTaskSubmitted(0))}
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(numExecutorsTarget(manager, defaultProfile.id) == 5)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
     (10 to 12).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
@@ -1323,13 +1329,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)
-    ResourceProfile.reInitDefaultProfile(sparkConf)
     sparkConf
   }
 
   private def createManager(
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
+    ResourceProfile.reInitDefaultProfile(conf)
     rpManager = new ResourceProfileManager(conf)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
       resourceProfileManager = rpManager)

@@ -333,7 +333,6 @@ private[spark] class ExecutorAllocationManager(
    * @return the delta in the target number of executors.
    */
   private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
-
     if (initializing) {
       // Do not change our target while we are still initializing,
       // Otherwise the first job may have to ramp up unnecessarily
@@ -365,16 +364,14 @@ private[spark] class ExecutorAllocationManager(
   private def addExecutorsToTarget(
       maxNeeded: Int,
       rpId: Int,
-      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
-  ): Int = {
+      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]): Int = {
     updateTargetExecs(addExecutors, maxNeeded, rpId, updatesNeeded)
   }
 
   private def decrementExecutorsFromTarget(
       maxNeeded: Int,
       rpId: Int,
-      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
-  ): Int = {
+      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]): Int = {
     updateTargetExecs(decrementExecutors, maxNeeded, rpId, updatesNeeded)
   }
 
@@ -382,8 +379,7 @@ private[spark] class ExecutorAllocationManager(
       updateTargetFn: (Int, Int) => Int,
       maxNeeded: Int,
       rpId: Int,
-      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
-  ): Int = {
+      updatesNeeded: mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]): Int = {
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
     // update the target number (add or remove)
     val delta = updateTargetFn(maxNeeded, rpId)
@@ -487,16 +483,12 @@ private[spark] class ExecutorAllocationManager(
     // make sure our target is at least as much as our current allocation:
     var numExecutorsTarget = math.max(numExecutorsTargetPerResourceProfileId(rpId),
         executorMonitor.executorCountWithResourceProfile(rpId))
-
     // Boost our target with the number to add for this round:
     numExecutorsTarget += numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rpId, 1)
-
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
-
     // Ensure that our target fits within configured bounds:
     numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
-
     val delta = numExecutorsTarget - oldNumExecutorsTarget
     numExecutorsTargetPerResourceProfileId(rpId) = numExecutorsTarget
 
