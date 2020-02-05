@@ -771,15 +771,6 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
-  test("Support respect nulls keywords for first_value and last_value") {
-    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
-  }
-
   test("timestamp literals") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
