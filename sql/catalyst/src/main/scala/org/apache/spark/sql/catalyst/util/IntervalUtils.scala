@@ -176,7 +176,7 @@ object IntervalUtils {
   private val dayTimePatternLegacy =
     "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
 
-  private val fallbackNotice = ", set spark.sql.legacy.fromDayTimeString.enabled to true " +
+  private val fallbackNotice = s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
     "to restore the behavior before Spark 3.0."
 
   /**
@@ -198,8 +198,8 @@ object IntervalUtils {
     require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
     val m = dayTimePatternLegacy.pattern.matcher(input)
-    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input" +
-      fallbackNotice)
+    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input, " +
+      s"$fallbackNotice")
 
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
@@ -300,8 +300,8 @@ object IntervalUtils {
     require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
     val pattern = regexp.get.pattern
     val m = pattern.matcher(input)
-    require(m.matches, s"Interval string must match day-time format of '$pattern': $input" +
-      fallbackNotice)
+    require(m.matches, s"Interval string must match day-time format of '$pattern': $input, " +
+      s"$fallbackNotice")
     var micros: Long = 0L
     var days: Int = 0
     unitsRange(to, from).foreach {
