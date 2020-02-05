@@ -20,7 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{LocalDate, ZoneId}
 import java.util.Locale
 
-import DateTimeUtils.{convertSpecialDate, localDateToDays}
+import org.apache.commons.lang3.time.FastDateFormat
+
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, localDateToDays}
+import org.apache.spark.sql.internal.SQLConf
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
@@ -48,17 +51,41 @@ class Iso8601DateFormatter(
   }
 }
 
+class LegacyDateFormatter(pattern: String, locale: Locale) extends DateFormatter {
+  @transient
+  private lazy val format = FastDateFormat.getInstance(pattern, locale)
+
+  override def parse(s: String): Int = {
+    val milliseconds = format.parse(s).getTime
+    DateTimeUtils.millisToDays(milliseconds)
+  }
+
+  override def format(days: Int): String = {
+    val date = DateTimeUtils.toJavaDate(days)
+    format.format(date)
+  }
+}
+
 object DateFormatter {
-  val defaultPattern: String = "uuuu-MM-dd"
   val defaultLocale: Locale = Locale.US
 
   def apply(format: String, zoneId: ZoneId, locale: Locale): DateFormatter = {
-    new Iso8601DateFormatter(format, zoneId, locale)
+    if (SQLConf.get.legacyTimeParserEnabled) {
+      new LegacyDateFormatter(format, locale)
+    } else {
+      new Iso8601DateFormatter(format, zoneId, locale)
+    }
   }
 
   def apply(format: String, zoneId: ZoneId): DateFormatter = {
     apply(format, zoneId, defaultLocale)
   }
 
-  def apply(zoneId: ZoneId): DateFormatter = apply(defaultPattern, zoneId)
+  def apply(zoneId: ZoneId): DateFormatter = {
+    if (SQLConf.get.legacyTimeParserEnabled) {
+      new LegacyDateFormatter("yyyy-MM-dd", defaultLocale)
+    } else {
+      new Iso8601DateFormatter("uuuu-MM-dd", zoneId, defaultLocale)
+    }
+  }
 }
