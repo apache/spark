@@ -1030,10 +1030,11 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
 
           val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
-          val e1 = intercept[IllegalArgumentException] {
+          val e1 = intercept[AnalysisException] {
             parseAndResolve(sql3)
           }
-          assert(e1.getMessage.contains("j does not exist. Available: i, s"))
+          assert(e1.getMessage.contains(
+            "ALTER COLUMN cannot find column j in v1 table. Available: i, s"))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1065,6 +1066,29 @@ class PlanResolutionSuite extends AnalysisTest {
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  test("alter table: alter column case sensitivity for v1 table") {
+    val tblName = "v1Table"
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val sql = s"ALTER TABLE $tblName ALTER COLUMN I COMMENT 'new comment'"
+        if (caseSensitive) {
+          val e = intercept[AnalysisException] {
+            parseAndResolve(sql)
+          }
+          assert(e.getMessage.contains(
+            "ALTER COLUMN cannot find column I in v1 table. Available: i, s"))
+        } else {
+          val actual = parseAndResolve(sql)
+          val expected = AlterTableChangeColumnCommand(
+            TableIdentifier(tblName, None),
+            "I",
+            StructField("I", IntegerType).withComment("new comment"))
+          comparePlans(actual, expected)
+        }
+      }
     }
   }
 

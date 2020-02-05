@@ -15,8 +15,8 @@ ALTER TABLE test_change CHANGE a TYPE STRING;
 DESC test_change;
 
 -- Change column position (not supported yet)
-ALTER TABLE test_change CHANGE INT AFTER b;
-ALTER TABLE test_change CHANGE STRING FIRST;
+ALTER TABLE test_change CHANGE a AFTER b;
+ALTER TABLE test_change CHANGE b FIRST;
 DESC test_change;
 
 -- Change column comment
@@ -32,6 +32,10 @@ DESC test_change;
 
 -- Change a invalid column
 ALTER TABLE test_change CHANGE invalid_col TYPE INT;
+DESC test_change;
+
+-- Check case insensitivity.
+ALTER TABLE test_change CHANGE A COMMENT 'case insensitivity';
 DESC test_change;
 
 -- Change column can't apply to a temporary/global_temporary view

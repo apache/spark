@@ -85,12 +85,19 @@ class ResolveSessionCatalog(
             throw new AnalysisException("" +
               "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
           }
-
-          val colName = a.column(0)
-          val dataType = a.dataType.getOrElse(v1Table.schema(colName).dataType)
           val builder = new MetadataBuilder
           // Add comment to metadata
           a.comment.map(c => builder.putString("comment", c))
+          val colName = a.column(0)
+          val dataType = a.dataType.getOrElse {
+            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+              .map(_._2.dataType)
+              .getOrElse {
+                throw new AnalysisException(
+                  s"ALTER COLUMN cannot find column ${quote(colName)} in v1 table. " +
+                    s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
+              }
+          }
           // Add Hive type string to metadata.
           val cleanedDataType = HiveStringType.replaceCharType(dataType)
           if (dataType != cleanedDataType) {
