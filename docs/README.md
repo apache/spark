@@ -31,15 +31,41 @@ whichever version of Spark you currently have checked out of revision control.
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
 Python, R and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
-installed. Also install the following libraries:
+You need to have Ruby 2 and Python 3 installed. A handy way to install and manage various versions of Ruby and Python is with [`rbenv`] and [`pyenv`].
+
+[`rbenv`]: https://github.com/rbenv/rbenv
+[`pyenv`]: https://github.com/pyenv/pyenv
+
+On macOS you can install them with Homebrew:
 
 ```sh
-$ sudo gem install jekyll jekyll-redirect-from rouge
+brew install rbenv pyenv
 ```
 
-Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
+To activate them, you'll need to run these commands or add them to the end of your `.bash_profile`:
+
+```sh
+eval "$(rbenv init -)"
+eval "$(pyenv init -)"
+```
+
+You can now use them to install specific versions of Ruby and Python and associate them with 
+the Spark home directory. Whenever you navigate to this directory or any of its subdirectories, these versions of Ruby and Python will be automatically activated.
+
+```sh
+rbenv install 2.7.0
+pyenv install 3.7.6
+
+cd /path/to/spark/home
+rbenv local 2.7.0
+pyenv local 3.7.6
+```
+
+Now you can install the following libraries:
+
+```sh
+gem install jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0
+```
 
 ### R Documentation
 
@@ -58,7 +84,7 @@ Note: Other versions of roxygen2 might work in SparkR documentation generation b
 To generate API docs for any language, you'll need to install these libraries:
 
 ```sh
-$ sudo pip install sphinx mkdocs numpy
+pip install sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1
 ```
 
 ## Generating the Documentation HTML
@@ -124,8 +150,7 @@ To work around this limitation for Python, install [`entr`](http://eradman.com/e
 
 ```sh
 cd "$SPARK_HOME/python/docs"
-find .. -type f -name '*.py' \
-| entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
+find .. -type f -name '*.py' | entr -s 'make html'
 ```
 
 Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.
