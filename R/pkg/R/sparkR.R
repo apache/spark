@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+#
+# REMOVEME
+#
+
 .sparkREnv <- new.env()
 
 # Utility function that returns TRUE if we have an active connection to the
