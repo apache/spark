@@ -233,6 +233,42 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-30126: addFile when file path contains spaces with recursive works") {
+    withTempDir { dir =>
+      try {
+        val sep = File.separator
+        val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpConfFile1 = File.createTempFile("test file", ".conf", tmpDir)
+
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addFile(tmpConfFile1.getAbsolutePath, true)
+
+        assert(sc.listFiles().size == 1)
+        assert(sc.listFiles().head.contains(new Path(tmpConfFile1.getName).toUri.toString))
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-30126: addFile when file path contains spaces without recursive works") {
+    withTempDir { dir =>
+      try {
+          val sep = File.separator
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+          val tmpConfFile2 = File.createTempFile("test file", ".conf", tmpDir)
+
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc.addFile(tmpConfFile2.getAbsolutePath)
+
+          assert(sc.listFiles().size == 1)
+          assert(sc.listFiles().head.contains(new Path(tmpConfFile2.getName).toUri.toString))
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
   test("addFile recursive can't add directories by default") {
     withTempDir { dir =>
       try {
@@ -291,6 +327,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           sc.addFile(jarPath)
           sc.addFile(jarPath)
       }
+    }
+  }
+
+  test("SPARK-30126: add jar when path contains spaces") {
+    withTempDir { dir =>
+       try {
+          val sep = File.separator
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+          val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc.addJar(tmpJar.getAbsolutePath)
+
+          assert(sc.listJars().size == 1)
+          assert(sc.listJars().head.contains(tmpJar.getName))
+       } finally {
+         sc.stop()
+       }
     }
   }
 
@@ -842,9 +896,26 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The configuration of resource: gpu (exec = 4, task = 2) will result " +
-      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
-      "executor to: 1. Please adjust your configuration."))
+    assert(error.contains(
+      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
+        "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
+        "executor to: 1. Please adjust your configuration."))
+  }
+
+  test("Parse resources executor config cpus not limiting resource") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 8, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
+
+    var error = intercept[IllegalArgumentException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The number of slots on an executor has to be " +
+      "limited by the number of cores, otherwise you waste resources and " +
+      "dynamic allocation doesn't work properly"))
   }
 
   test("test resource scheduling under local-cluster mode") {
@@ -856,7 +927,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 3, 1024]")
+        .setMaster("local-cluster[3, 1, 1024]")
         .setAppName("test-cluster")
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)

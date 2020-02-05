@@ -52,7 +52,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .endMetadata()
       // TODO(SPARK-29076): Validate with docker 4 desktop
       .withNewSpec()
-        .withCapacity(Map("storage" -> new QuantityBuilder().withAmount("1Gi").build()).asJava)
+        .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
         .withAccessModes("ReadWriteOnce")
         .withPersistentVolumeReclaimPolicy("Retain")
         .withStorageClassName(STORAGE_NAME)
@@ -69,8 +69,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         .withAccessModes("ReadWriteOnce")
         .withStorageClassName(STORAGE_NAME)
         .withResources(new ResourceRequirementsBuilder()
-        .withRequests(Map("storage" -> new QuantityBuilder()
-          .withAmount("1Gi").build()).asJava).build())
+          .withRequests(Map("storage" -> new Quantity("1Gi")).asJava).build())
       .endSpec()
 
     kubernetesTestComponents

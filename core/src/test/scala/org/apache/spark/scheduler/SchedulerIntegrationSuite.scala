@@ -26,6 +26,7 @@ import scala.concurrent.duration.{Duration, SECONDS}
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
+import org.scalatest.Assertions
 import org.scalatest.Assertions.AssertionsHelper
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -463,7 +464,7 @@ class MockRDD(
   override def toString: String = "MockRDD " + id
 }
 
-object MockRDD extends AssertionsHelper with TripleEquals {
+object MockRDD extends AssertionsHelper with TripleEquals with Assertions {
   /**
    * make sure all the shuffle dependencies have a consistent number of output partitions
    * (mostly to make sure the test setup makes sense, not that Spark itself would get this wrong)

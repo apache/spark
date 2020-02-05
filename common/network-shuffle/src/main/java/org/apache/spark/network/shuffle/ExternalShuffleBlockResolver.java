@@ -25,12 +25,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -369,6 +372,19 @@ public class ExternalShuffleBlockResolver {
     return numRemovedBlocks;
   }
 
+  public Map<String, String[]> getLocalDirs(String appId, String[] execIds) {
+    return Arrays.stream(execIds)
+      .map(exec -> {
+        ExecutorShuffleInfo info = executors.get(new AppExecId(appId, exec));
+        if (info == null) {
+          throw new RuntimeException(
+            String.format("Executor is not registered (appId=%s, execId=%s)", appId, exec));
+        }
+        return Pair.of(exec, info.localDirs);
+      })
+      .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+  }
+
   /** Simply encodes an executor's full ID, which is appId + execId. */
   public static class AppExecId {
     public final String appId;
@@ -386,19 +402,19 @@ public class ExternalShuffleBlockResolver {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppExecId appExecId = (AppExecId) o;
-      return Objects.equal(appId, appExecId.appId) && Objects.equal(execId, appExecId.execId);
+      return Objects.equals(appId, appExecId.appId) && Objects.equals(execId, appExecId.execId);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(appId, execId);
+      return Objects.hash(appId, execId);
     }
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("execId", execId)
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+        .append("appId", appId)
+        .append("execId", execId)
         .toString();
     }
   }

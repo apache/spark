@@ -50,14 +50,19 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
+    case o: SQLMetric =>
+      if (_value < 0) _value = 0
+      if (o.value > 0) _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def isZero(): Boolean = _value == _zeroValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = {
+    if (_value < 0) _value = 0
+    _value += v
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
@@ -65,7 +70,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def set(v: Long): Unit = _value = v
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
   override def value: Long = _value
 
@@ -111,7 +116,8 @@ object SQLMetrics {
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
   }
 
@@ -120,14 +126,16 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
     val acc = new SQLMetric(NS_TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
   }
 
@@ -142,31 +150,46 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name (min, med, max (stageId (attemptId): taskId))"),
+      countFailedValues = false)
     acc
+  }
+
+  private def toNumberFormat(value: Long): String = {
+    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
+    numberFormat.format(value.toDouble / baseForAvgMetric)
+  }
+
+  def metricNeedsMax(metricsType: String): Boolean = {
+    metricsType != SUM_METRIC
   }
 
   /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
-   */
-  def stringValue(metricsType: String, values: Array[Long]): String = {
+    */
+  def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
+    // stringMetric = "(driver)" OR (stage $stageId (attempt $attemptId): task $taskId))
+    val stringMetric = if (maxMetrics.isEmpty) {
+      "(driver)"
+    } else {
+      s"(stage ${maxMetrics(1)} (attempt ${maxMetrics(2)}): task ${maxMetrics(3)})"
+    }
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else if (metricsType == AVERAGE_METRIC) {
-      val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-
       val validValues = values.filter(_ > 0)
       val Seq(min, med, max) = {
         val metric = if (validValues.isEmpty) {
-          Seq.fill(3)(0L)
+          val zeros = Seq.fill(3)(0L)
+          zeros.map(v => toNumberFormat(v))
         } else {
           Arrays.sort(validValues)
-          Seq(validValues(0), validValues(validValues.length / 2),
-            validValues(validValues.length - 1))
+          Seq(toNumberFormat(validValues(0)), toNumberFormat(validValues(validValues.length / 2)),
+            s"${toNumberFormat(validValues(validValues.length - 1))} $stringMetric")
         }
-        metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
+        metric
       }
       s"\n($min, $med, $max)"
     } else {
@@ -183,13 +206,15 @@ object SQLMetrics {
       val validValues = values.filter(_ >= 0)
       val Seq(sum, min, med, max) = {
         val metric = if (validValues.isEmpty) {
-          Seq.fill(4)(0L)
+          val zeros = Seq.fill(4)(0L)
+          zeros.map(v => strFormat(v))
         } else {
           Arrays.sort(validValues)
-          Seq(validValues.sum, validValues(0), validValues(validValues.length / 2),
-            validValues(validValues.length - 1))
+          Seq(strFormat(validValues.sum), strFormat(validValues(0)),
+            strFormat(validValues(validValues.length / 2)),
+            s"${strFormat(validValues(validValues.length - 1))} $stringMetric")
         }
-        metric.map(strFormat)
+        metric
       }
       s"\n$sum ($min, $med, $max)"
     }

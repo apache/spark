@@ -21,7 +21,8 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
-import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
@@ -30,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for parsing JSON data into Spark SQL rows.
  *
- * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
+ * Most of these map directly to Jackson's internal options, specified in [[JsonReadFeature]].
  */
 private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -129,16 +130,19 @@ private[sql] class JSONOptions(
    */
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
 
-  /** Sets config options on a Jackson [[JsonFactory]]. */
-  def setJacksonOptions(factory: JsonFactory): Unit = {
-    factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)
-    factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, allowUnquotedFieldNames)
-    factory.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
-    factory.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, allowNumericLeadingZeros)
-    factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
-    factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
-      allowBackslashEscapingAnyCharacter)
-    factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
+  /** Build a Jackson [[JsonFactory]] using JSON options. */
+  def buildJsonFactory(): JsonFactory = {
+    new JsonFactoryBuilder()
+      .configure(JsonReadFeature.ALLOW_JAVA_COMMENTS, allowComments)
+      .configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES, allowUnquotedFieldNames)
+      .configure(JsonReadFeature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
+      .configure(JsonReadFeature.ALLOW_LEADING_ZEROS_FOR_NUMBERS, allowNumericLeadingZeros)
+      .configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
+      .configure(
+        JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+        allowBackslashEscapingAnyCharacter)
+      .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, allowUnquotedControlChars)
+      .build()
   }
 }
 

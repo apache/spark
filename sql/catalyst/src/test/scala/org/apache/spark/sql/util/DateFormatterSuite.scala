@@ -103,18 +103,15 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("special date values") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val zoneId = getZoneId(timeZone)
-        val formatter = DateFormatter(zoneId)
+    testSpecialDatetimeValues { zoneId =>
+      val formatter = DateFormatter(zoneId)
 
-        assert(formatter.parse("EPOCH") === 0)
-        val today = localDateToDays(LocalDate.now(zoneId))
-        assert(formatter.parse("Yesterday") === today - 1)
-        assert(formatter.parse("now") === today)
-        assert(formatter.parse("today ") === today)
-        assert(formatter.parse("tomorrow UTC") === today + 1)
-      }
+      assert(formatter.parse("EPOCH") === 0)
+      val today = localDateToDays(LocalDate.now(zoneId))
+      assert(formatter.parse("Yesterday") === today - 1)
+      assert(formatter.parse("now") === today)
+      assert(formatter.parse("today ") === today)
+      assert(formatter.parse("tomorrow UTC") === today + 1)
     }
   }
 }

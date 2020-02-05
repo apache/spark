@@ -116,11 +116,11 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf('blah')
                 def foo(x):
                     return x
-            with self.assertRaisesRegexp(ValueError, 'Invalid returnType.*None'):
+            with self.assertRaisesRegexp(ValueError, 'Invalid return type.*None'):
                 @pandas_udf(functionType=PandasUDFType.SCALAR)
                 def foo(x):
                     return x
-            with self.assertRaisesRegexp(ValueError, 'Invalid functionType'):
+            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
                 @pandas_udf('double', 100)
                 def foo(x):
                     return x
@@ -132,11 +132,11 @@ class PandasUDFTests(ReusedSQLTestCase):
                 def zero_with_type():
                     return 1
 
-            with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
+            with self.assertRaisesRegexp(TypeError, 'Invalid return type'):
                 @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
-            with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
+            with self.assertRaisesRegexp(TypeError, 'Invalid return type'):
                 @pandas_udf(returnType='double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df

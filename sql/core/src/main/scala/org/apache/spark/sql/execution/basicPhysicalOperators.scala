@@ -29,16 +29,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport with AliasAwareOutputPartitioning {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -81,7 +81,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
 
   override def verboseStringWithOperatorId(): String = {
     s"""
@@ -91,7 +91,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
      """.stripMargin
   }
 }
-
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
@@ -227,7 +226,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val predicate = newPredicate(condition, child.output)
+      val predicate = Predicate.create(condition, child.output)
       predicate.initialize(0)
       iter.filter { row =>
         val r = predicate.eval(row)
@@ -299,7 +298,9 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def needCopyResult: Boolean = withReplacement
+  override def needCopyResult: Boolean = {
+    child.asInstanceOf[CodegenSupport].needCopyResult || withReplacement
+  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -748,7 +749,9 @@ case class SubqueryExec(name: String, child: SparkPlan)
   private lazy val relationFuture: Future[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    Future {
+    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
+      sqlContext.sparkSession,
+      SubqueryExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
@@ -763,7 +766,7 @@ case class SubqueryExec(name: String, child: SparkPlan)
         SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
-    }(SubqueryExec.executionContext)
+    }
   }
 
   protected override def doCanonicalize(): SparkPlan = {
@@ -787,7 +790,8 @@ case class SubqueryExec(name: String, child: SparkPlan)
 
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+    ThreadUtils.newDaemonCachedThreadPool("subquery",
+      SQLConf.get.getConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD)))
 }
 
 /**

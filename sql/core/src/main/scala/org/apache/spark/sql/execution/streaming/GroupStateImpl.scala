@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, Processing
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -160,7 +160,7 @@ private[sql] class GroupStateImpl[S] private(
   def getTimeoutTimestamp: Long = timeoutTimestamp
 
   private def parseDuration(duration: String): Long = {
-    val cal = IntervalUtils.fromString(duration)
+    val cal = IntervalUtils.stringToInterval(UTF8String.fromString(duration))
     if (IntervalUtils.isNegative(cal)) {
       throw new IllegalArgumentException(s"Provided duration ($duration) is negative")
     }

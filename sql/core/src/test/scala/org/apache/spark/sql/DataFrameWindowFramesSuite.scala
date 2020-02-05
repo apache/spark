@@ -111,7 +111,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         first("value").over(
           window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         first("value").over(
@@ -226,7 +226,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         sum("value").over(window.
           rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         sum("value").over(window.

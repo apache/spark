@@ -682,7 +682,6 @@ private[spark] object BLAS extends Serializable {
 
           val xTemp = xValues(k) * alpha
           while (i < indEnd) {
-            val rowIndex = Arows(i)
             yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }

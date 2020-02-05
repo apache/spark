@@ -136,9 +136,6 @@ if [ -n "$JAVA" ]; then
   JAVA_VOL="--volume $JAVA:/opt/spark-java"
 fi
 
-# SPARK-24530: Sphinx must work with python 3 to generate doc correctly.
-echo "SPHINXPYTHON=/opt/p35/bin/python" >> $ENVFILE
-
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
 docker run -ti \
   --env-file "$ENVFILE" \

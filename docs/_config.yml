@@ -1,4 +1,4 @@
-highlighter: pygments
+highlighter: rouge
 markdown: kramdown
 gems:
   - jekyll-redirect-from

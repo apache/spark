@@ -234,10 +234,10 @@ abstract class RDD[T: ClassTag](
    * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
    * chance of deadlock.
    *
-   * The use of Integer is simply so this is serializable -- executors may reference the shared
-   * fields (though they should never mutate them, that only happens on the driver).
+   * Executors may reference the shared fields (though they should never mutate them,
+   * that only happens on the driver).
    */
-  private val stateLock = new Integer(0)
+  private val stateLock = new Serializable {}
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed

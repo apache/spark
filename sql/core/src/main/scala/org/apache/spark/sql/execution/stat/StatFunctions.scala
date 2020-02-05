@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -248,7 +248,9 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
+            new ApproximatePercentile(child,
+              Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
+              .toAggregateExpression(),
             Literal(index))
       } else {
         stats.toLowerCase(Locale.ROOT) match {

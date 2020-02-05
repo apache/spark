@@ -36,6 +36,7 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -699,5 +700,41 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       classOf[LongWritable], classOf[Text]).collect().isEmpty)
 
     assert(collectRDDAndDeleteFileBeforeCompute(true).isEmpty)
+  }
+
+  test("SPARK-25100: Support commit tasks when Kyro registration is required") {
+    // Prepare the input file
+    val inputFilePath = new File(tempDir, "/input").getAbsolutePath
+    Utils.tryWithResource(new PrintWriter(new File(inputFilePath))) { writer =>
+      for (i <- 1 to 3) {
+        writer.print(i)
+        writer.write('\n')
+      }
+    }
+
+    // Start a new SparkContext
+    val conf = new SparkConf(false)
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.kryo.registrationRequired", "true")
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+    sc = new SparkContext(conf)
+
+    // Prepare the input RDD
+    val pairRDD = sc.textFile(inputFilePath).map(x => (x, x))
+
+    // Test saveAsTextFile()
+    val outputFilePath1 = new File(tempDir, "/out1").getAbsolutePath
+    pairRDD.saveAsTextFile(outputFilePath1)
+    assert(sc.textFile(outputFilePath1).collect() === Array("(1,1)", "(2,2)", "(3,3)"))
+
+    // Test saveAsNewAPIHadoopDataset()
+    val outputFilePath2 = new File(tempDir, "/out2").getAbsolutePath
+    val jobConf = new JobConf()
+    jobConf.setOutputKeyClass(classOf[IntWritable])
+    jobConf.setOutputValueClass(classOf[IntWritable])
+    jobConf.set("mapred.output.dir", outputFilePath2)
+    pairRDD.saveAsNewAPIHadoopDataset(jobConf)
+    assert(sc.textFile(outputFilePath2).collect() === Array("1\t1", "2\t2", "3\t3"))
   }
 }

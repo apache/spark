@@ -21,8 +21,9 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -30,11 +31,18 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
-    create(BindReferences.bindReference(expression, inputSchema))
+/**
+ * A base class for generated/interpreted predicate
+ */
+abstract class BasePredicate {
+  def eval(r: InternalRow): Boolean
 
-  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
+  /**
+   * Initializes internal states given the current partition index.
+   * This is used by nondeterministic expressions to set initial states.
+   * The default implementation does nothing.
+   */
+  def initialize(partitionIndex: Int): Unit = {}
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
@@ -56,6 +64,35 @@ trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
 }
 
+/**
+ * The factory object for `BasePredicate`.
+ */
+object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
+
+  override protected def createCodeGeneratedObject(in: Expression): BasePredicate = {
+    GeneratePredicate.generate(in)
+  }
+
+  override protected def createInterpretedObject(in: Expression): BasePredicate = {
+    InterpretedPredicate(in)
+  }
+
+  def createInterpreted(e: Expression): InterpretedPredicate = InterpretedPredicate(e)
+
+  /**
+   * Returns a BasePredicate for an Expression, which will be bound to `inputSchema`.
+   */
+  def create(e: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
+    createObject(bindReference(e, inputSchema))
+  }
+
+  /**
+   * Returns a BasePredicate for a given bound Expression.
+   */
+  def create(e: Expression): BasePredicate = {
+    createObject(e)
+  }
+}
 
 trait PredicateHelper {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {

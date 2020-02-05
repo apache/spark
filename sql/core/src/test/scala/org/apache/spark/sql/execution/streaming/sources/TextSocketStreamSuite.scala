@@ -194,13 +194,12 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   }
 
   test("user-specified schema given") {
-    val provider = new TextSocketSourceProvider
     val userSpecifiedSchema = StructType(
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[UnsupportedOperationException] {
-      provider.getTable(new CaseInsensitiveStringMap(params.asJava), userSpecifiedSchema)
+      spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
     }
     assert(exception.getMessage.contains(
       "TextSocketSourceProvider source does not support user-specified schema"))
@@ -318,7 +317,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
           for (i <- 0 until numRecords / 2) {
             r.next()
             offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
-            data.append(r.get().get(0, DataTypes.StringType).asInstanceOf[String].toInt)
+            data.append(r.get().getString(0).toInt)
             // commit the offsets in the middle and validate if processing continues
             if (i == 2) {
               commitOffset(t.partitionId, i + 1)
@@ -381,7 +380,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
         val r = readerFactory.createReader(t).asInstanceOf[TextSocketContinuousPartitionReader]
         for (_ <- 0 until numRecords / 2) {
           r.next()
-          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP).isInstanceOf[(_, _)])
+          assert(r.get().numFields === 2)
+          // just try to read columns one by one - it would throw error if the row is corrupted
+          r.get().getString(0)
+          r.get().getLong(1)
         }
       case _ => throw new IllegalStateException("Unexpected task type")
     }

@@ -328,10 +328,10 @@ private[hive] class TestHiveSparkSession(
     @transient
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
-        "CREATE TABLE src (key INT, value STRING)".cmd,
+        "CREATE TABLE src (key INT, value STRING) STORED AS TEXTFILE".cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
-        "CREATE TABLE src1 (key INT, value STRING)".cmd,
+        "CREATE TABLE src1 (key INT, value STRING) STORED AS TEXTFILE".cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"

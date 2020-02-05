@@ -25,13 +25,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -332,6 +331,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("date_add") {
     checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toByte)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toShort)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
@@ -346,10 +351,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
+    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ByteType)
+    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ShortType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
   }
 
   test("date_sub") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toByte)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toShort)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
@@ -365,6 +378,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateSub(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
+    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ByteType)
+    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ShortType)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
   }
 
@@ -877,29 +892,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-      test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
-      test(null, "UTC", null)
-      test("2015-07-24 00:00:00", null, null)
-      test(null, null, null)
-    }
-    val msg = intercept[AnalysisException] {
-      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
+    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
   }
 
   test("to_utc_timestamp - invalid time zone id") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-        val msg = intercept[java.time.DateTimeException] {
-          GenerateUnsafeProjection.generate(
-            ToUTCTimestamp(
-              Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
-        }.getMessage
-        assert(msg.contains(invalidTz))
-      }
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(
+          ToUTCTimestamp(
+            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
     }
   }
 
@@ -916,28 +923,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-      test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
-      test(null, "UTC", null)
-      test("2015-07-24 00:00:00", null, null)
-      test(null, null, null)
-    }
-    val msg = intercept[AnalysisException] {
-      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
+    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
   }
 
   test("from_utc_timestamp - invalid time zone id") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-        val msg = intercept[java.time.DateTimeException] {
-          GenerateUnsafeProjection.generate(
-            FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
-        }.getMessage
-        assert(msg.contains(invalidTz))
-      }
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
     }
   }
 
@@ -1053,11 +1051,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nanos = 123456000
     val timestamp = Epoch(MakeTimestamp(
       Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
-      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Literal(Decimal(nanos / NANOS_PER_SECOND.toDouble, 8, 6)),
       Some(Literal(zoneId.getId))))
     val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
       .atZone(zoneId).toInstant
-    val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
+    val expected = Decimal(BigDecimal(nanos) / NANOS_PER_SECOND +
       instant.getEpochSecond +
       zoneId.getRules.getOffset(instant).getTotalSeconds)
     checkEvaluation(timestamp, expected)
@@ -1089,17 +1087,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
-      IntervalUtils.fromString("interval " +
-        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
     checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
-      IntervalUtils.fromString("interval " +
-        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
     checkEvaluation(
       SubtractTimestamps(
         Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
         Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      IntervalUtils.fromString("interval " +
-        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
   }
 
   test("subtract dates") {
@@ -1107,18 +1105,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractDates(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      IntervalUtils.fromString("interval 1 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
     checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      IntervalUtils.fromString("interval -1 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
     checkEvaluation(SubtractDates(Literal(end), epochDate),
-      IntervalUtils.fromString("interval 49 years 9 months 4 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
     checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.fromString("interval -49 years -9 months -4 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
     checkEvaluation(
       SubtractDates(
         Literal(LocalDate.of(10000, 1, 1)),
         Literal(LocalDate.of(1, 1, 1))),
-      IntervalUtils.fromString("interval 9999 years"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
   }
 }

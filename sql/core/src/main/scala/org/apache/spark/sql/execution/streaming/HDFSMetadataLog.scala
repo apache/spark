@@ -90,13 +90,21 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
+  /**
+   * Serialize the metadata and write to the output stream. If this method is overridden in a
+   * subclass, the overriding method should not close the given output stream, as it will be closed
+   * in the caller.
+   */
   protected def serialize(metadata: T, out: OutputStream): Unit = {
-    // called inside a try-finally where the underlying stream is closed in the caller
     Serialization.write(metadata, out)
   }
 
+  /**
+   * Read and deserialize the metadata from input stream. If this method is overridden in a
+   * subclass, the overriding method should not close the given input stream, as it will be closed
+   * in the caller.
+   */
   protected def deserialize(in: InputStream): T = {
-    // called inside a try-finally where the underlying stream is closed in the caller
     val reader = new InputStreamReader(in, StandardCharsets.UTF_8)
     Serialization.read[T](reader)
   }

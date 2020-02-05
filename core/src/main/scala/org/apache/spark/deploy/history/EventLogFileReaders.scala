@@ -173,7 +173,8 @@ class SingleFileEventLogFileReader(
 
   override def fileSizeForLastIndex: Long = status.getLen
 
-  override def completed: Boolean = !rootPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS)
+  override def completed: Boolean = !rootPath.getName.stripSuffix(EventLogFileWriter.COMPACTED)
+    .endsWith(EventLogFileWriter.IN_PROGRESS)
 
   override def fileSizeForLastIndexForDFS: Option[Long] = {
     if (completed) {
@@ -218,15 +219,23 @@ class RollingEventLogFilesFileReader(
 
   private lazy val eventLogFiles: Seq[FileStatus] = {
     val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
-      getIndex(status.getPath.getName)
+      val filePath = status.getPath
+      var idx = getEventLogFileIndex(filePath.getName).toDouble
+      // trick to place compacted file later than normal file if index is same.
+      if (EventLogFileWriter.isCompacted(filePath)) {
+        idx += 0.1
+      }
+      idx
     }
-    val indices = eventLogFiles.map { file => getIndex(file.getPath.getName) }.sorted
+    val filesToRead = dropBeforeLastCompactFile(eventLogFiles)
+    val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
     require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
-      s" indices: ${(indices.head to indices.last)}, actual: ${indices}")
-    eventLogFiles
+      s" indices: ${indices.head to indices.last}, actual: ${indices}")
+    filesToRead
   }
 
-  override def lastIndex: Option[Long] = Some(getIndex(lastEventLogFile.getPath.getName))
+  override def lastIndex: Option[Long] = Some(
+    getEventLogFileIndex(lastEventLogFile.getPath.getName))
 
   override def fileSizeForLastIndex: Long = lastEventLogFile.getLen
 
@@ -261,4 +270,11 @@ class RollingEventLogFilesFileReader(
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
 
   private def lastEventLogFile: FileStatus = eventLogFiles.last
+
+  private def dropBeforeLastCompactFile(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
+    val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
+      EventLogFileWriter.isCompacted(fs.getPath)
+    }
+    eventLogFiles.drop(lastCompactedFileIdx)
+  }
 }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -134,13 +135,16 @@ public abstract class UnsafeWriter {
     // grow the global buffer before writing data.
     grow(16);
 
-    // Write the months, days and microseconds fields of Interval to the variable length portion.
-    Platform.putInt(getBuffer(), cursor(), input.months);
-    Platform.putInt(getBuffer(), cursor() + 4, input.days);
-    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
-
+    if (input == null) {
+      BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+    } else {
+      // Write the months, days and microseconds fields of interval to the variable length portion.
+      Platform.putInt(getBuffer(), cursor(), input.months);
+      Platform.putInt(getBuffer(), cursor() + 4, input.days);
+      Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
+    }
+    // we need to reserve the space so that we can update it later.
     setOffsetAndSize(ordinal, 16);
-
     // move the cursor forward.
     increaseCursor(16);
   }

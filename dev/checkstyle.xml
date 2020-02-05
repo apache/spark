@@ -24,7 +24,7 @@
     Checkstyle configuration based on the Google coding conventions from:
 
     -  Google Java Style
-       https://google-styleguide.googlecode.com/svn-history/r130/trunk/javaguide.html
+       https://google.github.io/styleguide/javaguide.html
 
     with Spark-specific changes from:
 

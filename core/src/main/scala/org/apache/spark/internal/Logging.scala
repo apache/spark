@@ -116,6 +116,11 @@ trait Logging {
     false
   }
 
+  // For testing
+  def initializeForcefully(isInterpreter: Boolean, silent: Boolean): Unit = {
+    initializeLogging(isInterpreter, silent)
+  }
+
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     // Don't use a logger in here, as this is itself occurring during initialization of a logger
     // If Log4j 1.2 is being used, but is not initialized, load a default properties file
@@ -230,19 +235,18 @@ private class SparkShellLoggingFilter extends Filter {
    */
   def decide(loggingEvent: LoggingEvent): Int = {
     if (Logging.sparkShellThresholdLevel == null) {
-      return Filter.NEUTRAL
-    }
-    val rootLevel = LogManager.getRootLogger().getLevel()
-    if (!loggingEvent.getLevel().eq(rootLevel)) {
-      return Filter.NEUTRAL
-    }
-    var logger = loggingEvent.getLogger()
-    while (logger.getParent() != null) {
-      if (logger.getLevel() != null) {
-        return Filter.NEUTRAL
+      Filter.NEUTRAL
+    } else if (loggingEvent.getLevel.isGreaterOrEqual(Logging.sparkShellThresholdLevel)) {
+      Filter.NEUTRAL
+    } else {
+      var logger = loggingEvent.getLogger()
+      while (logger.getParent() != null) {
+        if (logger.getLevel != null || logger.getAllAppenders.hasMoreElements) {
+          return Filter.NEUTRAL
+        }
+        logger = logger.getParent()
       }
-      logger = logger.getParent()
+      Filter.DENY
     }
-    return Filter.DENY
   }
 }

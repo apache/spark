@@ -29,11 +29,11 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -47,7 +47,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select('a).union(b.select(UnresolvedStar(None)))
+        a.select(UnresolvedStar(None)).select($"a").union(b.select(UnresolvedStar(None)))
       }
 
     assertAnalysisSuccess(plan)
@@ -99,9 +99,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case 1: one missing attribute is in the leaf node and another is in the unary node
     val plan1 = testRelation2
-      .where('a > "str").select('a, 'b)
-      .where('b > "str").select('a)
-      .sortBy('b.asc, 'c.desc)
+      .where($"a" > "str").select($"a", $"b")
+      .where($"b" > "str").select($"a")
+      .sortBy($"b".asc, $"c".desc)
     val expected1 = testRelation2
       .where(a > "str").select(a, b, c)
       .where(b > "str").select(a, b, c)
@@ -111,9 +111,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case 2: all the missing attributes are in the leaf node
     val plan2 = testRelation2
-      .where('a > "str").select('a)
-      .where('a > "str").select('a)
-      .sortBy('b.asc, 'c.desc)
+      .where($"a" > "str").select($"a")
+      .where($"a" > "str").select($"a")
+      .sortBy($"b".asc, $"c".desc)
     val expected2 = testRelation2
       .where(a > "str").select(a, b, c)
       .where(a > "str").select(a, b, c)
@@ -130,8 +130,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case: join itself can resolve all the missing attributes
     val plan = testRelation2.join(testRelation3)
-      .where('a > "str").select('a, 'b)
-      .sortBy('c.desc, 'h.asc)
+      .where($"a" > "str").select($"a", $"b")
+      .sortBy($"c".desc, $"h".asc)
     val expected = testRelation2.join(testRelation3)
       .where(a > "str").select(a, b, c, h)
       .sortBy(c.desc, h.asc)
@@ -149,9 +149,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Case 1: when the child of Sort is not Aggregate,
     //   the sort reference is handled by the rule ResolveSortReferences
     val plan1 = testRelation2
-      .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
-      .select('a, 'c, 'a3)
-      .orderBy('b.asc)
+      .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
+      .select($"a", $"c", $"a3")
+      .orderBy($"b".asc)
 
     val expected1 = testRelation2
       .groupBy(a, c, b)(a, c, alias_a3, b)
@@ -164,8 +164,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Case 2: when the child of Sort is Aggregate,
     //   the sort reference is handled by the rule ResolveAggregateFunctions
     val plan2 = testRelation2
-      .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
-      .orderBy('b.asc)
+      .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
+      .orderBy($"b".asc)
 
     val expected2 = testRelation2
       .groupBy(a, c, b)(a, c, alias_a3, alias_b)
@@ -187,11 +187,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("divide should be casted into fractional types") {
     val plan = caseInsensitiveAnalyzer.execute(
       testRelation2.select(
-        'a / Literal(2) as 'div1,
-        'a / 'b as 'div2,
-        'a / 'c as 'div3,
-        'a / 'd as 'div4,
-        'e / 'e as 'div5))
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5"))
     val pl = plan.asInstanceOf[Project].projectList
 
     assert(pl(0).dataType == DoubleType)
@@ -259,7 +259,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
           Literal("a_plus_1"), (att1 + 1))),
-          'col.struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+          Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -270,7 +270,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val a = testRelation2.output(0)
     val c = testRelation2.output(2)
 
-    val plan = testRelation2.select('c).orderBy(Floor('a).asc)
+    val plan = testRelation2.select($"c").orderBy(Floor($"a").asc)
     val expected = testRelation2.select(c, a)
       .orderBy(Floor(Cast(a, DoubleType, Option(TimeZone.getDefault().getID))).asc).select(c)
 
@@ -374,8 +374,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val alias3 = count(a).as("a3")
 
     val plan = testRelation2
-      .groupBy('a, 'c)('a.as("a1"), 'c.as("a2"), count('a).as("a3"))
-      .orderBy('a1.asc, 'c.asc)
+      .groupBy($"a", $"c")($"a".as("a1"), $"c".as("a2"), count($"a").as("a3"))
+      .orderBy($"a1".asc, $"c".asc)
 
     val expected = testRelation2
       .groupBy(a, c)(alias1, alias2, alias3)
@@ -391,13 +391,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
-    val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
-    val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
+    val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
+      Symbol("b").struct(Symbol("x").int.withNullability(false)))
+    val plan = relation.select(
+      CaseWhen(Seq((Literal(true), Symbol("a").attr)), Symbol("b")).as("val"))
     assertAnalysisSuccess(plan)
   }
 
   test("Keep attribute qualifiers after dedup") {
-    val input = LocalRelation('key.int, 'value.string)
+    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
 
     val query =
       Project(Seq($"x.key", $"y.key"),
@@ -524,8 +526,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
     def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      val src1 = LocalRelation('id.int, 'v1.string).as("s1")
-      val src2 = LocalRelation('id.int, 'v2.string).as("s2")
+      val src1 = LocalRelation(Symbol("id").int, Symbol("v1").string).as("s1")
+      val src2 = LocalRelation(Symbol("id").int, Symbol("v2").string).as("s2")
       UnresolvedSubqueryColumnAliases(
         outputNames,
         SubqueryAlias(
@@ -553,12 +555,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
-    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = 'a.attr, 'b.attr)
+    checkPartitioning[HashPartitioning](numPartitions = 10,
+      exprs = Symbol("a").attr, Symbol("b").attr)
 
     checkPartitioning[RangePartitioning](numPartitions = 10,
       exprs = SortOrder(Literal(10), Ascending))
     checkPartitioning[RangePartitioning](numPartitions = 10,
-      exprs = SortOrder('a.attr, Ascending), SortOrder('b.attr, Descending))
+      exprs = SortOrder(Symbol("a").attr, Ascending), SortOrder(Symbol("b").attr, Descending))
 
     checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
 
@@ -569,7 +572,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkPartitioning(numPartitions = -1, exprs = Literal(20))
     }
     intercept[IllegalArgumentException] {
-      checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
+      checkPartitioning(numPartitions = 10, exprs =
+        SortOrder(Symbol("a").attr, Ascending), Symbol("b").attr)
     }
   }
 
@@ -592,10 +596,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
-      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+      listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
     assertAnalysisSuccess(
       listRelation.select(MultiAlias(MultiAlias(
-        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+        PosExplode($"list"), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
   }
 
   test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
@@ -618,18 +622,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
       val batches = Batch("View", Once, EliminateView) :: Nil
     }
-    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val relation = LocalRelation(Symbol("a").int.notNull, Symbol("b").string)
     val view = View(CatalogTable(
         identifier = TableIdentifier("v1"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-      output = Seq('a.int, 'b.string),
+      output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)
     val expected = Project(Seq(
-        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
-        Alias(Cast('b.string, StringType, tz), "b")()),
+        Alias(Cast(Symbol("a").int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast(Symbol("b").string, StringType, tz), "b")()),
       relation)
     val res = ViewAnalyzer.execute(view)
     comparePlans(res, expected)
@@ -649,5 +653,88 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
     assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
       Seq("Table not found: test"))
+  }
+
+  test("check CollectMetrics resolved") {
+    val a = testRelation.output.head
+    val sum = Sum(a).toAggregateExpression().as("sum")
+    val random_sum = Sum(Rand(1L)).toAggregateExpression().as("rand_sum")
+    val literal = Literal(1).as("lit")
+
+    // Ok
+    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation).resolved)
+
+    // Bad name
+    assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
+    assertAnalysisError(CollectMetrics("", sum :: Nil, testRelation),
+      "observed metrics should be named" :: Nil)
+
+    // No columns
+    assert(!CollectMetrics("evt", Nil, testRelation).resolved)
+
+    def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
+      assertAnalysisError(CollectMetrics("event", exprs, testRelation), errors)
+    }
+
+    // Unwrapped attribute
+    checkAnalysisError(
+      a :: Nil,
+      "Attribute", "can only be used as an argument to an aggregate function")
+
+    // Unwrapped non-deterministic expression
+    checkAnalysisError(
+      Rand(10).as("rnd") :: Nil,
+      "non-deterministic expression", "can only be used as an argument to an aggregate function")
+
+    // Distinct aggregate
+    checkAnalysisError(
+      Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
+    "distinct aggregates are not allowed in observed metrics, but found")
+
+    // Nested aggregate
+    checkAnalysisError(
+      Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
+      "nested aggregates are not allowed in observed metrics, but found")
+
+    // Windowed aggregate
+    val windowExpr = WindowExpression(
+      RowNumber(),
+      WindowSpecDefinition(Nil, a.asc :: Nil,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    checkAnalysisError(
+      windowExpr.as("rn") :: Nil,
+      "window expressions are not allowed in observed metrics, but found")
+  }
+
+  test("check CollectMetrics duplicates") {
+    val a = testRelation.output.head
+    val sum = Sum(a).toAggregateExpression().as("sum")
+    val count = Count(Literal(1)).toAggregateExpression().as("cnt")
+
+    // Same result - duplicate names are allowed
+    assertAnalysisSuccess(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+
+    // Same children, structurally different metrics - fail
+    assertAnalysisError(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+
+    // Different children, same metrics - fail
+    val b = Symbol("b").string
+    val tblB = LocalRelation(b)
+    assertAnalysisError(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+
+    // Subquery different tree - fail
+    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
+    val query = Project(
+      b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
+      CollectMetrics("evt1", count :: Nil, tblB))
+    assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
   }
 }

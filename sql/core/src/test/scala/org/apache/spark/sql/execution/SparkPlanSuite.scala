@@ -34,6 +34,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     intercept[IllegalStateException] { plan.executeToIterator() }
     intercept[IllegalStateException] { plan.executeBroadcast() }
     intercept[IllegalStateException] { plan.executeTake(1) }
+    intercept[IllegalStateException] { plan.executeTail(1) }
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {

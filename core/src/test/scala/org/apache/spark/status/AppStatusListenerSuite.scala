@@ -32,12 +32,12 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
+import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
-
   private val conf = new SparkConf()
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     .set(ASYNC_TRACKING_ENABLED, false)
@@ -1657,6 +1657,30 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("clean up used memory when BlockManager added") {
+    val listener = new AppStatusListener(store, conf, true)
+    // Add block manager at the first time
+    val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(
+      time, driver, 42L, Some(43L), Some(44L)))
+    // Update the memory metrics
+    listener.updateExecutorMemoryDiskInfo(
+      listener.liveExecutors(SparkContext.DRIVER_IDENTIFIER),
+      StorageLevel.MEMORY_AND_DISK,
+      10L,
+      10L
+    )
+    // Re-add the same block manager again
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(
+      time, driver, 42L, Some(43L), Some(44L)))
+
+    check[ExecutorSummaryWrapper](SparkContext.DRIVER_IDENTIFIER) { d =>
+      val memoryMetrics = d.info.memoryMetrics.get
+      assert(memoryMetrics.usedOffHeapStorageMemory == 0)
+      assert(memoryMetrics.usedOnHeapStorageMemory == 0)
+    }
+  }
+
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
@@ -1693,41 +1717,5 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     def blockId: BlockId = RDDBlockId(rddId, partId)
 
-  }
-
-  /** Create a stage submitted event for the specified stage Id. */
-  private def createStageSubmittedEvent(stageId: Int) = {
-    SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
-  }
-
-  /** Create a stage completed event for the specified stage Id. */
-  private def createStageCompletedEvent(stageId: Int) = {
-    SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
-  }
-
-  /** Create an executor added event for the specified executor Id. */
-  private def createExecutorAddedEvent(executorId: Int) = {
-    SparkListenerExecutorAdded(0L, executorId.toString,
-      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
-  }
-
-  /** Create an executor added event for the specified executor Id. */
-  private def createExecutorRemovedEvent(executorId: Int) = {
-    SparkListenerExecutorRemoved(10L, executorId.toString, "test")
-  }
-
-  /** Create an executor metrics update event, with the specified executor metrics values. */
-  private def createExecutorMetricsUpdateEvent(
-      stageId: Int,
-      executorId: Int,
-      executorMetrics: Array[Long]): SparkListenerExecutorMetricsUpdate = {
-    val taskMetrics = TaskMetrics.empty
-    taskMetrics.incDiskBytesSpilled(111)
-    taskMetrics.incMemoryBytesSpilled(222)
-    val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
   }
 }

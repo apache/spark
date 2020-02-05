@@ -89,14 +89,14 @@ object MutableProjection
   }
 
   /**
-   * Returns an MutableProjection for given sequence of bound Expressions.
+   * Returns a MutableProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): MutableProjection = {
     createObject(exprs)
   }
 
   /**
-   * Returns an MutableProjection for given sequence of Expressions, which will be bound to
+   * Returns a MutableProjection for given sequence of Expressions, which will be bound to
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): MutableProjection = {

@@ -24,13 +24,19 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-SHOW CREATE TABLE name
+SHOW CREATE TABLE table_identifier
 {% endhighlight %}
 
 ### Parameters
 <dl>
- <dt><code><em>name</em></code></dt>
- <dd>The name of the table or view to be used for SHOW CREATE TABLE.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table or view name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 ### Examples

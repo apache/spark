@@ -26,23 +26,22 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold {
+  with HasAggregationDepth with HasThreshold with HasBlockSize {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -156,36 +155,40 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 1024.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-
-    val instances = extractInstances(dataset)
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
-      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
+    val sc = dataset.sparkSession.sparkContext
+    val instances = extractInstances(dataset)
 
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val (summarizer, labelSummarizer) = instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
+      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
+                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = $(aggregationDepth)
+    )
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -212,20 +215,33 @@ class LinearSVC @Since("2.2.0") (
         throw new SparkException(msg)
       }
 
-      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
-      val getFeaturesStd = (j: Int) => featuresStd(j)
+      val featuresStd = summarizer.std.compressed
+      val bcFeaturesStd = sc.broadcast(featuresStd)
       val regParamL2 = $(regParam)
-      val bcFeaturesStd = instances.context.broadcast(featuresStd)
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
         Some(new L2Regularization(regParamL2, shouldApply,
-          if ($(standardization)) None else Some(getFeaturesStd)))
+          if ($(standardization)) None else Some(featuresStd.apply)))
       } else {
         None
       }
 
-      val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
-      val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+      val standardized = instances.map {
+        case Instance(label, weight, features) =>
+          val featuresStd = bcFeaturesStd.value
+          val array = Array.ofDim[Double](numFeatures)
+          features.foreachNonZero { (i, v) =>
+            val std = featuresStd(i)
+            if (std != 0) array(i) = v / std
+          }
+          Instance(label, weight, Vectors.dense(array))
+      }
+      val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+        .persist(StorageLevel.MEMORY_AND_DISK)
+        .setName(s"training dataset (blockSize=${$(blockSize)})")
+
+      val getAggregatorFunc = new HingeAggregator(numFeatures, $(fitIntercept))(_)
+      val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,
         $(aggregationDepth))
 
       def regParamL1Fun = (index: Int) => 0D
@@ -242,6 +258,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
+      blocks.unpersist()
       bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
@@ -271,8 +288,6 @@ class LinearSVC @Since("2.2.0") (
       }
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
-
-    if (handlePersistence) instances.unpersist()
 
     copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
@@ -314,7 +329,8 @@ class LinearSVCModel private[classification] (
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
   }
@@ -331,6 +347,10 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LinearSVCModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
+  }
 }
 
 

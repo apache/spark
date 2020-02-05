@@ -32,11 +32,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here provides
@@ -273,7 +272,7 @@ object functions {
    * Aggregate function: returns a list of objects with duplicates.
    *
    * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
+   * on the order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -284,7 +283,7 @@ object functions {
    * Aggregate function: returns a list of objects with duplicates.
    *
    * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
+   * on the order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -295,7 +294,7 @@ object functions {
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
    * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
+   * on the order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -306,7 +305,7 @@ object functions {
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
    * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
+   * on the order of the rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -424,8 +423,8 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -440,8 +439,8 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -456,8 +455,8 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -470,8 +469,8 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -549,8 +548,8 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -565,8 +564,8 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -581,8 +580,8 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -595,8 +594,8 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -3054,7 +3053,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3066,7 +3064,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3085,7 +3082,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3097,7 +3093,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3267,6 +3262,11 @@ object functions {
   /**
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
+   *
+   * @param x the array column to be sliced
+   * @param start the starting index
+   * @param length the length of the slice
+   *
    * @group collection_funcs
    * @since 2.4.0
    */
@@ -3335,7 +3335,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+  def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
 
   /**
    * Remove all elements that equal to element from the given array.
@@ -3408,7 +3408,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3419,7 +3419,7 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3451,6 +3451,13 @@ object functions {
 
   /**
    * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), x => x % 2 === 0))
+   *   df.selectExpr("filter(col, x -> x % 2 == 0)")
+   * }}}
+   *
+   * @param column: the input array column
+   * @param f: col => predicate, the Boolean predicate to filter the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3461,6 +3468,14 @@ object functions {
 
   /**
    * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), (x, i) => i % 2 === 0))
+   *   df.selectExpr("filter(col, (x, i) -> i % 2 == 0)")
+   * }}}
+   *
+   * @param column: the input array column
+   * @param f: (col, index) => predicate, the Boolean predicate to filter the input column
+   *           given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3501,7 +3516,7 @@ object functions {
     aggregate(expr, zero, merge, c => c)
 
   /**
-   * Merge two given arrays, element-wise, into a signle array using a function.
+   * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
    *
@@ -4225,6 +4240,67 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression.
+   *
+   * @note The input encoder is inferred from the input type IN.
+   */
+  def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
+    udaf(agg, ExpressionEncoder[IN]())
+  }
+
+  /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   Aggregator<IN, BUF, OUT> agg = // custom Aggregator
+   *   Encoder<IN> enc = // input encoder
+   *
+   *   // declare a UDF based on agg
+   *   UserDefinedFunction aggUDF = udaf(agg, enc)
+   *   DataFrame aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg, enc))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   * @param inputEncoder a specific input encoder to use
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression
+   *
+   * @note This overloading takes an explicit input encoder, to support UDAF
+   * declarations in Java.
+   */
+  def udaf[IN, BUF, OUT](
+      agg: Aggregator[IN, BUF, OUT],
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    UserDefinedAggregator(agg, inputEncoder)
+  }
 
   /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF).

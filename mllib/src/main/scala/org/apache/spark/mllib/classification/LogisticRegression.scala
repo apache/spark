@@ -141,8 +141,8 @@ class LogisticRegressionModel @Since("1.3.0") (
       val withBias = dataMatrix.size + 1 == dataWithBiasSize
       (0 until numClasses - 1).foreach { i =>
         var margin = 0.0
-        dataMatrix.foreachActive { (index, value) =>
-          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        dataMatrix.foreachNonZero { (index, value) =>
+          margin += value * weightsArray((i * dataWithBiasSize) + index)
         }
         // Intercept is required to be added into margin.
         if (withBias) {
@@ -339,10 +339,8 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val spark = SparkSession.builder().sparkContext(input.context).getOrCreate()
         val df = spark.createDataFrame(input.map(_.asML))
-        // Determine if we should cache the DF
-        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model
-        val mlLogisticRegressionModel = lr.train(df, handlePersistence)
+        val mlLogisticRegressionModel = lr.train(df)
         // convert the model
         val weights = Vectors.dense(mlLogisticRegressionModel.coefficients.toArray)
         createModel(weights, mlLogisticRegressionModel.intercept)

@@ -130,6 +130,12 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"BinaryClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"numBins=${$(numBins)}"
+  }
 }
 
 @Since("1.6.0")

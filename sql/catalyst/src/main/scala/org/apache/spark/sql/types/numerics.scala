@@ -22,7 +22,6 @@ import scala.math.Ordering
 
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
-
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
@@ -118,14 +117,14 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     }
 }
 
-object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
+object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toFloat
-  private val intLowerBound = Int.MinValue.toFloat
-  private val longUpperBound = Long.MaxValue.toFloat
-  private val longLowerBound = Long.MinValue.toFloat
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Float): Int = {
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
@@ -148,16 +147,18 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
       overflowException(x, "int")
     }
   }
+
+  override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
 }
 
-object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
+object DoubleExactNumeric extends DoubleIsFractional {
   private def overflowException(x: Double, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toDouble
-  private val intLowerBound = Int.MinValue.toDouble
-  private val longUpperBound = Long.MaxValue.toDouble
-  private val longLowerBound = Long.MinValue.toDouble
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Double): Int = {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
@@ -174,6 +175,8 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
       overflowException(x, "long")
     }
   }
+
+  override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {

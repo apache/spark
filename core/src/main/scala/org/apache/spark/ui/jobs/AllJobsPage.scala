@@ -71,7 +71,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+      val jobDescription = UIUtils.makeDescription(
+        job.description.getOrElse(lastStageDescription),
+        "",
+        plainText = true).text
 
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
@@ -123,7 +126,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -139,7 +142,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -183,7 +186,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -449,7 +452,11 @@ private[ui] class JobDataSource(
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
-    val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
+    val jobDescription =
+      UIUtils.makeDescription(
+        jobData.description.getOrElse(lastStageDescription),
+        basePath,
+        plainText = false)
 
     val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
@@ -541,12 +548,15 @@ private[ui] class JobPagedTable(
 
   override def headers: Seq[Node] = {
     // Information for each header: title, cssClass, and sortable
-    val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+    val jobHeadersAndCssClasses: Seq[(String, String, Boolean, Option[String])] =
       Seq(
-        (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
-        ("Tasks (for all stages): Succeeded/Total", "", false)
+        (jobIdTitle, "", true, None),
+        ("Description", "", true, None),
+        ("Submitted", "", true, None),
+        ("Duration", "", true, Some("Elapsed time since the job was submitted " +
+          "until execution completion of all its stages.")),
+        ("Stages: Succeeded/Total", "", false, None),
+        ("Tasks (for all stages): Succeeded/Total", "", false, None)
       )
 
     if (!jobHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -554,7 +564,7 @@ private[ui] class JobPagedTable(
     }
 
     val headerRow: Seq[Node] = {
-      jobHeadersAndCssClasses.map { case (header, cssClass, sortable) =>
+      jobHeadersAndCssClasses.map { case (header, cssClass, sortable, tooltip) =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -566,9 +576,17 @@ private[ui] class JobPagedTable(
 
           <th class={cssClass}>
             <a href={headerLink}>
-              {header}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                } else {
+                  <span>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                }
+              }
             </a>
           </th>
         } else {
@@ -581,12 +599,32 @@ private[ui] class JobPagedTable(
 
             <th class={cssClass}>
               <a href={headerLink}>
-                {header}
-              </a>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}
+                    </span>
+                  } else {
+                    <span>
+                      {header}
+                    </span>
+                  }
+                }
+               </a>
             </th>
           } else {
             <th class={cssClass}>
-              {header}
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}
+                  </span>
+                } else {
+                  <span>
+                    {header}
+                  </span>
+                }
+              }
             </th>
           }
         }

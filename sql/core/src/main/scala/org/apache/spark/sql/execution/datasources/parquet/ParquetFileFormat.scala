@@ -27,7 +27,6 @@ import scala.util.{Failure, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
@@ -399,7 +398,7 @@ object ParquetFileFormat extends Logging {
             logInfo(
               "Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
                 "falling back to the deprecated DataType.fromCaseClassString parser.")
-            LegacyTypeStringParser.parse(serializedSchema.get)
+            LegacyTypeStringParser.parseString(serializedSchema.get)
           }
           .recover { case cause: Throwable =>
             logWarning(
@@ -510,7 +509,7 @@ object ParquetFileFormat extends Logging {
         logInfo(
           "Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
             "falling back to the deprecated DataType.fromCaseClassString parser.")
-        LegacyTypeStringParser.parse(schemaString).asInstanceOf[StructType]
+        LegacyTypeStringParser.parseString(schemaString).asInstanceOf[StructType]
     }.recoverWith {
       case cause: Throwable =>
         logWarning(

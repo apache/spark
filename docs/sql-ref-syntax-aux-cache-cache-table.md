@@ -24,7 +24,7 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-CACHE [ LAZY ] TABLE table_name
+CACHE [ LAZY ] TABLE table_identifier
     [ OPTIONS ( 'storageLevel' [ = ] value ) ] [ [ AS ] query ]
 {% endhighlight %}
 
@@ -35,8 +35,14 @@ CACHE [ LAZY ] TABLE table_name
 </dl>
 
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of the table to be cached.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies the table or view name to be cached. The table or view name may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
@@ -80,4 +86,5 @@ CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testDat
 ### Related Statements
   * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
   * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+  * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
 

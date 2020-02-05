@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -46,7 +46,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   test("duplicated metastore relations") {
     val df = spark.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
-    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    df.as("a").join(df.as("b"), $"a.key" === $"b.key")
   }
 
   test("should not truncate struct type catalog string") {
@@ -142,8 +142,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
   import testImplicits._
 
   private val testDF = range(1, 3).select(
-    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
-    'id cast StringType as 'd2
+    ($"id" + 0.1) cast DecimalType(10, 3) as "d1",
+    $"id" cast StringType as "d2"
   ).coalesce(1)
 
   override def beforeAll(): Unit = {
@@ -357,5 +357,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
         Seq(table("src").count().toString))
     }
+  }
+
+  test("SPARK-29869: Fix convertToLogicalRelation throws unclear AssertionError") {
+    withTempPath(dir => {
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/non_partition_table"
+      val partitionLikeDir = s"$baseDir/dt=20191113"
+      spark.range(3).selectExpr("id").write.parquet(partitionLikeDir)
+      withTable("non_partition_table") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          spark.sql(
+            s"""
+               |CREATE TABLE non_partition_table (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
+               |""".stripMargin)
+          val e = intercept[AnalysisException](
+            spark.table("non_partition_table")).getMessage
+          assert(e.contains("Converted table has 2 columns, but source Hive table has 1 columns."))
+        }
+      }
+    })
   }
 }

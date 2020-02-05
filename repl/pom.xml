@@ -32,8 +32,6 @@
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>
-    <extra.source.dir>src/main/scala-${scala.binary.version}</extra.source.dir>
-    <extra.testsource.dir>src/test/scala-${scala.binary.version}</extra.testsource.dir>
   </properties>
 
   <dependencies>
@@ -146,7 +144,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>${extra.source.dir}</source>
+                <source>src/main/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>
@@ -158,7 +156,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>${extra.testsource.dir}</source>
+                <source>src/test/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>

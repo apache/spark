@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.log4j.{AppenderSkeleton, Level}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -32,14 +29,6 @@ import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  class MockAppender extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
-  }
 
   test("invalid hints should be ignored") {
     checkAnalysis(
@@ -234,7 +223,7 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("log warnings for invalid hints") {
-    val logAppender = new MockAppender()
+    val logAppender = new LogAppender("invalid hints")
     withLogAppender(logAppender) {
       checkAnalysis(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),
@@ -244,5 +233,12 @@ class ResolveHintsSuite extends AnalysisTest {
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
         e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
+  }
+
+  test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
+    checkAnalysis(
+      Project(testRelation.output, UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE"))),
+      Project(testRelation.output, testRelation),
+      caseSensitive = false)
   }
 }

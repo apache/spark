@@ -110,6 +110,16 @@ sealed trait Vector extends Serializable {
   }
 
   /**
+   * Applies a function `f` to all the elements of dense and sparse vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   */
+  private[spark] def foreach(f: (Int, Double) => Unit): Unit =
+    iterator.foreach { case (i, v) => f(i, v) }
+
+  /**
    * Applies a function `f` to all the active elements of dense and sparse vector.
    *
    * @param f the function takes two parameters where the first parameter is the index of
@@ -117,7 +127,18 @@ sealed trait Vector extends Serializable {
    *          with type `Double`.
    */
   @Since("2.0.0")
-  def foreachActive(f: (Int, Double) => Unit): Unit
+  def foreachActive(f: (Int, Double) => Unit): Unit =
+    activeIterator.foreach { case (i, v) => f(i, v) }
+
+  /**
+   * Applies a function `f` to all the non-zero elements of dense and sparse vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   */
+  private[spark] def foreachNonZero(f: (Int, Double) => Unit): Unit =
+    nonZeroIterator.foreach { case (i, v) => f(i, v) }
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
@@ -186,6 +207,23 @@ sealed trait Vector extends Serializable {
    */
   @Since("3.0.0")
   def dot(v: Vector): Double = BLAS.dot(this, v)
+
+  /**
+   * Returns an iterator over all the elements of this vector.
+   */
+  private[spark] def iterator: Iterator[(Int, Double)] =
+    Iterator.tabulate(size)(i => (i, apply(i)))
+
+  /**
+   * Returns an iterator over all the active elements of this vector.
+   */
+  private[spark] def activeIterator: Iterator[(Int, Double)]
+
+  /**
+   * Returns an iterator over all the non-zero elements of this vector.
+   */
+  private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
+    activeIterator.filter(_._2 != 0)
 }
 
 /**
@@ -473,17 +511,6 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
     new DenseVector(values.clone())
   }
 
-  override def foreachActive(f: (Int, Double) => Unit): Unit = {
-    var i = 0
-    val localValuesSize = values.length
-    val localValues = values
-
-    while (i < localValuesSize) {
-      f(i, localValues(i))
-      i += 1
-    }
-  }
-
   override def equals(other: Any): Boolean = super.equals(other)
 
   override def hashCode(): Int = {
@@ -521,12 +548,10 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
-    foreachActive { (i, v) =>
-      if (v != 0) {
-        ii(k) = i
-        vv(k) = v
-        k += 1
-      }
+    foreachNonZero { (i, v) =>
+      ii(k) = i
+      vv(k) = v
+      k += 1
     }
     new SparseVector(size, ii, vv)
   }
@@ -548,6 +573,14 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
       maxIdx
     }
   }
+
+  private[spark] override def iterator: Iterator[(Int, Double)] = {
+    val localValues = values
+    Iterator.tabulate(size)(i => (i, localValues(i)))
+  }
+
+  private[spark] override def activeIterator: Iterator[(Int, Double)] =
+    iterator
 }
 
 @Since("2.0.0")
@@ -620,18 +653,6 @@ class SparseVector @Since("2.0.0") (
     if (j < 0) 0.0 else values(j)
   }
 
-  override def foreachActive(f: (Int, Double) => Unit): Unit = {
-    var i = 0
-    val localValuesSize = values.length
-    val localIndices = indices
-    val localValues = values
-
-    while (i < localValuesSize) {
-      f(localIndices(i), localValues(i))
-      i += 1
-    }
-  }
-
   override def equals(other: Any): Boolean = super.equals(other)
 
   override def hashCode(): Int = {
@@ -672,12 +693,10 @@ class SparseVector @Since("2.0.0") (
       val ii = new Array[Int](nnz)
       val vv = new Array[Double](nnz)
       var k = 0
-      foreachActive { (i, v) =>
-        if (v != 0.0) {
-          ii(k) = i
-          vv(k) = v
-          k += 1
-        }
+      foreachNonZero { (i, v) =>
+        ii(k) = i
+        vv(k) = v
+        k += 1
       }
       new SparseVector(size, ii, vv)
     }
@@ -752,6 +771,37 @@ class SparseVector @Since("2.0.0") (
       i_v
     }.unzip
     new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+  }
+
+  private[spark] override def iterator: Iterator[(Int, Double)] = {
+    val localSize = size
+    val localNumActives = numActives
+    val localIndices = indices
+    val localValues = values
+
+    new Iterator[(Int, Double)]() {
+      private var i = 0
+      private var j = 0
+      private var k = localIndices.headOption.getOrElse(-1)
+
+      override def hasNext: Boolean = i < localSize
+
+      override def next: (Int, Double) = {
+        val v = if (i == k) {
+          j += 1
+          k = if (j < localNumActives) localIndices(j) else -1
+          localValues(j - 1)
+        } else 0.0
+        i += 1
+        (i - 1, v)
+      }
+    }
+  }
+
+  private[spark] override def activeIterator: Iterator[(Int, Double)] = {
+    val localIndices = indices
+    val localValues = values
+    Iterator.tabulate(numActives)(j => (localIndices(j), localValues(j)))
   }
 }
 

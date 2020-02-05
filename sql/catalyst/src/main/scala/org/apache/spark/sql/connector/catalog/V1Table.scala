@@ -67,14 +67,15 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override lazy val schema: StructType = v1Table.schema
 
   override lazy val partitioning: Array[Transform] = {
+    import CatalogV2Implicits._
     val partitions = new mutable.ArrayBuffer[Transform]()
 
     v1Table.partitionColumnNames.foreach { col =>
-      partitions += LogicalExpressions.identity(col)
+      partitions += LogicalExpressions.identity(LogicalExpressions.reference(Seq(col)))
     }
 
     v1Table.bucketSpec.foreach { spec =>
-      partitions += LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
+      partitions += spec.asTransform
     }
 
     partitions.toArray
@@ -84,5 +85,5 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 
   override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
 
-  override def toString: String = s"UnresolvedTable($name)"
+  override def toString: String = s"V1Table($name)"
 }

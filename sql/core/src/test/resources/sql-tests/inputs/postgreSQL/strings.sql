@@ -270,55 +270,54 @@ SELECT 'indio' NOT LIKE 'in__o' AS `false`;
 SELECT 'indio' LIKE 'in_o' AS `false`;
 SELECT 'indio' NOT LIKE 'in_o' AS `true`;
 
--- [SPARK-28083] ANSI SQL: LIKE predicate: ESCAPE clause
 -- unused escape character
--- SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
--- SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS "false";
+SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS `true`;
+SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS `false`;
 
--- SELECT 'indio' LIKE 'ind_o' ESCAPE '$' AS "true";
--- SELECT 'indio' NOT LIKE 'ind_o' ESCAPE '$' AS "false";
+SELECT 'indio' LIKE 'ind_o' ESCAPE '$' AS `true`;
+SELECT 'indio' NOT LIKE 'ind_o' ESCAPE '$' AS `false`;
 
 -- escape character
 -- E061-05 like predicate with escape clause
--- SELECT 'h%' LIKE 'h#%' ESCAPE '#' AS "true";
--- SELECT 'h%' NOT LIKE 'h#%' ESCAPE '#' AS "false";
+SELECT 'h%' LIKE 'h#%' ESCAPE '#' AS `true`;
+SELECT 'h%' NOT LIKE 'h#%' ESCAPE '#' AS `false`;
 
--- SELECT 'h%wkeye' LIKE 'h#%' ESCAPE '#' AS "false";
--- SELECT 'h%wkeye' NOT LIKE 'h#%' ESCAPE '#' AS "true";
+SELECT 'h%wkeye' LIKE 'h#%' ESCAPE '#' AS `false`;
+SELECT 'h%wkeye' NOT LIKE 'h#%' ESCAPE '#' AS `true`;
 
--- SELECT 'h%wkeye' LIKE 'h#%%' ESCAPE '#' AS "true";
--- SELECT 'h%wkeye' NOT LIKE 'h#%%' ESCAPE '#' AS "false";
+SELECT 'h%wkeye' LIKE 'h#%%' ESCAPE '#' AS `true`;
+SELECT 'h%wkeye' NOT LIKE 'h#%%' ESCAPE '#' AS `false`;
 
--- SELECT 'h%awkeye' LIKE 'h#%a%k%e' ESCAPE '#' AS "true";
--- SELECT 'h%awkeye' NOT LIKE 'h#%a%k%e' ESCAPE '#' AS "false";
+SELECT 'h%awkeye' LIKE 'h#%a%k%e' ESCAPE '#' AS `true`;
+SELECT 'h%awkeye' NOT LIKE 'h#%a%k%e' ESCAPE '#' AS `false`;
 
--- SELECT 'indio' LIKE '_ndio' ESCAPE '$' AS "true";
--- SELECT 'indio' NOT LIKE '_ndio' ESCAPE '$' AS "false";
+SELECT 'indio' LIKE '_ndio' ESCAPE '$' AS `true`;
+SELECT 'indio' NOT LIKE '_ndio' ESCAPE '$' AS `false`;
 
--- SELECT 'i_dio' LIKE 'i$_d_o' ESCAPE '$' AS "true";
--- SELECT 'i_dio' NOT LIKE 'i$_d_o' ESCAPE '$' AS "false";
+SELECT 'i_dio' LIKE 'i$_d_o' ESCAPE '$' AS `true`;
+SELECT 'i_dio' NOT LIKE 'i$_d_o' ESCAPE '$' AS `false`;
 
--- SELECT 'i_dio' LIKE 'i$_nd_o' ESCAPE '$' AS "false";
--- SELECT 'i_dio' NOT LIKE 'i$_nd_o' ESCAPE '$' AS "true";
+SELECT 'i_dio' LIKE 'i$_nd_o' ESCAPE '$' AS `false`;
+SELECT 'i_dio' NOT LIKE 'i$_nd_o' ESCAPE '$' AS `true`;
 
--- SELECT 'i_dio' LIKE 'i$_d%o' ESCAPE '$' AS "true";
--- SELECT 'i_dio' NOT LIKE 'i$_d%o' ESCAPE '$' AS "false";
+SELECT 'i_dio' LIKE 'i$_d%o' ESCAPE '$' AS `true`;
+SELECT 'i_dio' NOT LIKE 'i$_d%o' ESCAPE '$' AS `false`;
 
 -- escape character same as pattern character
--- SELECT 'maca' LIKE 'm%aca' ESCAPE '%' AS "true";
--- SELECT 'maca' NOT LIKE 'm%aca' ESCAPE '%' AS "false";
+SELECT 'maca' LIKE 'm%aca' ESCAPE '%' AS `true`;
+SELECT 'maca' NOT LIKE 'm%aca' ESCAPE '%' AS `false`;
 
--- SELECT 'ma%a' LIKE 'm%a%%a' ESCAPE '%' AS "true";
--- SELECT 'ma%a' NOT LIKE 'm%a%%a' ESCAPE '%' AS "false";
+SELECT 'ma%a' LIKE 'm%a%%a' ESCAPE '%' AS `true`;
+SELECT 'ma%a' NOT LIKE 'm%a%%a' ESCAPE '%' AS `false`;
 
--- SELECT 'bear' LIKE 'b_ear' ESCAPE '_' AS "true";
--- SELECT 'bear' NOT LIKE 'b_ear' ESCAPE '_' AS "false";
+SELECT 'bear' LIKE 'b_ear' ESCAPE '_' AS `true`;
+SELECT 'bear' NOT LIKE 'b_ear' ESCAPE '_' AS `false`;
 
--- SELECT 'be_r' LIKE 'b_e__r' ESCAPE '_' AS "true";
--- SELECT 'be_r' NOT LIKE 'b_e__r' ESCAPE '_' AS "false";
+SELECT 'be_r' LIKE 'b_e__r' ESCAPE '_' AS `true`;
+SELECT 'be_r' NOT LIKE 'b_e__r' ESCAPE '_' AS `false`;
 
--- SELECT 'be_r' LIKE '__e__r' ESCAPE '_' AS "false";
--- SELECT 'be_r' NOT LIKE '__e__r' ESCAPE '_' AS "true";
+SELECT 'be_r' LIKE '__e__r' ESCAPE '_' AS `false`;
+SELECT 'be_r' NOT LIKE '__e__r' ESCAPE '_' AS `true`;
 
 -- [SPARK-28448] Implement ILIKE operator
 --
