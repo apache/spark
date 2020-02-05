@@ -98,7 +98,7 @@ you can use:
 
 ### Recursive File Lookup
 `recursiveFileLookup` is used to recursively load files and it disables partition inferring. Its default value is `false`.
-If data source explicitly specify the `partitionSpec` when `recursiveFileLookup` is true, exception will be thrown.
+If data source explicitly specifies the `partitionSpec` when `recursiveFileLookup` is true, exception will be thrown.
 
 To load all files recursively, you can use:
 
