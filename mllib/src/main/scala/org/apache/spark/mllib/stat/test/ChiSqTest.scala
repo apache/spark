@@ -90,21 +90,22 @@ private[spark] object ChiSqTest extends Logging {
       seqOp = { case (count, t) =>
         count.changeValue(t, 1L, _ + 1L)
         count
-      }, combOp = { case (count1, count2) =>
+      },
+      combOp = { case (count1, count2) =>
         count2.iterator.foreach { case (t, c) =>
           count1.changeValue(t, c, _ + c)
         }
         count1
       }
-    ).map { case (col, map) =>
-      val labels = map.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
+    ).map { case (col, count) =>
+      val labels = count.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
       val numLabels = labels.size
       if (numLabels > maxCategories) {
         throw new SparkException(s"Chi-square test expect factors (categorical values) but "
           + s"found more than $maxCategories distinct label values.")
       }
 
-      val features = map.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
+      val features = count.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
       val numFeatures = features.size
       if (numFeatures > maxCategories) {
         throw new SparkException(s"Chi-square test expect factors (categorical values) but "
@@ -113,7 +114,7 @@ private[spark] object ChiSqTest extends Logging {
 
       val contingency = new DenseMatrix(numFeatures, numLabels,
         Array.ofDim[Double](numFeatures * numLabels))
-      map.iterator.foreach { case ((feature, label), count) =>
+      count.iterator.foreach { case ((feature, label), count) =>
         val i = features(feature)
         val j = labels(label)
         contingency.update(i, j, count)
