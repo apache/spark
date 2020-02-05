@@ -33,6 +33,7 @@ import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, Mi
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
+
   import KubernetesSuite.k8sTestTag
 
   val cName = "ceph-nano"
