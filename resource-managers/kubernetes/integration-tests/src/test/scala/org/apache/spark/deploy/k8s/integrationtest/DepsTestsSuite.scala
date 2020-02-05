@@ -53,12 +53,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).toArray
 
     val resources = Map(
-      "cpu" -> new QuantityBuilder()
-        .withAmount("1")
-        .build(),
-      "memory" -> new QuantityBuilder()
-        .withAmount("512M")
-        .build()
+      "cpu" -> new Quantity("1"),
+      "memory" -> new Quantity("512M")
     ).asJava
 
     new ContainerBuilder()
