@@ -17,16 +17,14 @@
 
 package org.apache.spark.mllib.stat.test
 
-import scala.collection.mutable
-
-import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -83,66 +81,46 @@ private[spark] object ChiSqTest extends Logging {
    */
   def chiSquaredFeatures(data: RDD[LabeledPoint],
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    val numCols = data.first().features.size
-    val results = new Array[ChiSqTestResult](numCols)
-    var labels: Map[Double, Int] = null
-    // at most 1000 columns at a time
-    val batchSize = 1000
-    var batch = 0
-    while (batch * batchSize < numCols) {
-      // The following block of code can be cleaned up and made public as
-      // chiSquared(data: RDD[(V1, V2)])
-      val startCol = batch * batchSize
-      val endCol = startCol + math.min(batchSize, numCols - startCol)
-      val pairCounts = data.mapPartitions { iter =>
-        val distinctLabels = mutable.HashSet.empty[Double]
-        val allDistinctFeatures: Map[Int, mutable.HashSet[Double]] =
-          Map((startCol until endCol).map(col => (col, mutable.HashSet.empty[Double])): _*)
-        var i = 1
-        iter.flatMap { case LabeledPoint(label, features) =>
-          if (i % 1000 == 0) {
-            if (distinctLabels.size > maxCategories) {
-              throw new SparkException(s"Chi-square test expect factors (categorical values) but "
-                + s"found more than $maxCategories distinct label values.")
-            }
-            allDistinctFeatures.foreach { case (col, distinctFeatures) =>
-              if (distinctFeatures.size > maxCategories) {
-                throw new SparkException(s"Chi-square test expect factors (categorical values) but "
-                  + s"found more than $maxCategories distinct values in column $col.")
-              }
-            }
-          }
-          i += 1
-          distinctLabels += label
-          val brzFeatures = features.asBreeze
-          (startCol until endCol).map { col =>
-            val feature = brzFeatures(col)
-            allDistinctFeatures(col) += feature
-            (col, feature, label)
-          }
-        }
-      }.countByValue()
 
-      if (labels == null) {
-        // Do this only once for the first column since labels are invariant across features.
-        labels =
-          pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct.zipWithIndex.toMap
+    data.flatMap { case LabeledPoint(label, features) =>
+      features.iterator.map { case (col, value) =>
+        (col, (value, label))
       }
-      val numLabels = labels.size
-      pairCounts.keys.groupBy(_._1).foreach { case (col, keys) =>
-        val features = keys.map(_._2).toArray.distinct.zipWithIndex.toMap
-        val numRows = features.size
-        val contingency = new BDM(numRows, numLabels, new Array[Double](numRows * numLabels))
-        keys.foreach { case (_, feature, label) =>
-          val i = features(feature)
-          val j = labels(label)
-          contingency(i, j) += pairCounts((col, feature, label))
+    }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
+      seqOp = { case (count, t) =>
+        count.changeValue(t, 1L, _ + 1L)
+        count
+      }, combOp = { case (count1, count2) =>
+        count2.iterator.foreach { case (t, c) =>
+          count1.changeValue(t, c, _ + c)
         }
-        results(col) = chiSquaredMatrix(Matrices.fromBreeze(contingency), methodName)
+        count1
       }
-      batch += 1
-    }
-    results
+    ).map { case (col, map) =>
+      val labels = map.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
+      val numLabels = labels.size
+      if (numLabels > maxCategories) {
+        throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+          + s"found more than $maxCategories distinct label values.")
+      }
+
+      val features = map.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
+      val numFeatures = features.size
+      if (numFeatures > maxCategories) {
+        throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+          + s"found more than $maxCategories distinct values in column $col.")
+      }
+
+      val contingency = new DenseMatrix(numFeatures, numLabels,
+        Array.ofDim[Double](numFeatures * numLabels))
+      map.iterator.foreach { case ((feature, label), count) =>
+        val i = features(feature)
+        val j = labels(label)
+        contingency.update(i, j, count)
+      }
+      val result = chiSquaredMatrix(contingency, methodName)
+      (col, result)
+    }.collectAsMap().toArray.sortBy(_._1).map(_._2)
   }
 
   /*

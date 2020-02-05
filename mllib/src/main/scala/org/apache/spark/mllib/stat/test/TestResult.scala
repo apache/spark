@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
  * @tparam DF Return type of `degreesOfFreedom`.
  */
 @Since("1.1.0")
-trait TestResult[DF] {
+trait TestResult[DF] extends Serializable {
 
   /**
    * The probability of obtaining a test statistic result at least as extreme as the one that was
