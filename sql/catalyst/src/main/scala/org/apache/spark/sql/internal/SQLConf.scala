@@ -2159,6 +2159,14 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
 
+  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
+    .internal()
+    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
+      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2446,6 +2454,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
