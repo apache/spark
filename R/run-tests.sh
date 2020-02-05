@@ -32,8 +32,8 @@ NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"
 CRAN_CHECK_LOG_FILE=$FWDIR/cran-check.out
 rm -f $CRAN_CHECK_LOG_FILE
 # TODO(SPARK-30737) reenable this once packages are correctly installed in Jenkins
-# NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
-# FAILED=$((PIPESTATUS[0]||$FAILED))
+NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
+FAILED=$((PIPESTATUS[0]||$FAILED))
 touch $CRAN_CHECK_LOG_FILE
 
 NUM_CRAN_WARNING="$(grep -c WARNING$ $CRAN_CHECK_LOG_FILE)"
