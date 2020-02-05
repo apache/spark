@@ -8,24 +8,24 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
-CREATE TABLE empsalary (
-    depname string,
-    empno integer,
-    salary int,
-    enroll_date date
-) USING parquet;
+-- CREATE TABLE empsalary (
+--     depname string,
+--     empno integer,
+--     salary int,
+--     enroll_date date
+--- ) USING parquet;
 
-INSERT INTO empsalary VALUES
-  ('develop', 10, 5200, date '2007-08-01'),
-  ('sales', 1, 5000, date '2006-10-01'),
-  ('personnel', 5, 3500, date '2007-12-10'),
-  ('sales', 4, 4800, date '2007-08-08'),
-  ('personnel', 2, 3900, date '2006-12-23'),
-  ('develop', 7, 4200, date '2008-01-01'),
-  ('develop', 9, 4500, date '2008-01-01'),
-  ('sales', 3, 4800, date '2007-08-01'),
-  ('develop', 8, 6000, date '2006-10-01'),
-  ('develop', 11, 5200, date '2007-08-15');
+-- INSERT INTO empsalary VALUES
+--   ('develop', 10, 5200, date '2007-08-01'),
+--   ('sales', 1, 5000, date '2006-10-01'),
+--   ('personnel', 5, 3500, date '2007-12-10'),
+--   ('sales', 4, 4800, date '2007-08-08'),
+--   ('personnel', 2, 3900, date '2006-12-23'),
+--   ('develop', 7, 4200, date '2008-01-01'),
+--   ('develop', 9, 4500, date '2008-01-01'),
+--   ('sales', 3, 4800, date '2007-08-01'),
+--   ('develop', 8, 6000, date '2006-10-01'),
+--   ('develop', 11, 5200, date '2007-08-15');
 
 -- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- CREATE TEMP VIEW v_window AS
@@ -111,9 +111,10 @@ FROM tenk1 WHERE unique1 < 10;
 -- nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
 -- salary from empsalary;
 
-select last(salary) over(order by salary range between 1000 preceding and 1000 following),
-lag(salary) over(order by salary range between 1000 preceding and 1000 following),
-salary from empsalary;
+-- [SPARK-30734] AnalysisException that window RangeFrame not match RowFrame
+-- select last(salary) over(order by salary range between 1000 preceding and 1000 following),
+-- lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+-- salary from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- select first_value(salary) over(order by salary range between 1000 following and 3000 following
@@ -298,5 +299,5 @@ from numerics
 window w as (order by f_numeric range between
              1.1 preceding and 'NaN' following);  -- error, NaN disallowed
 
-drop table empsalary;
+-- drop table empsalary;
 drop table numerics;
