@@ -40,39 +40,12 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = adaptiveExecutionContext.session.sessionState.conf
 
-  private def mayContainExchange(plan: SparkPlan): Boolean = {
-    plan.find {
-      case _: Exchange => true
-      case s: SparkPlan => !s.requiredChildDistribution.forall(_ == UnspecifiedDistribution)
-    }.isDefined
-  }
-
-  private def containSubQuery(plan: SparkPlan): Boolean = {
-    plan.find(_.expressions.exists(_.find {
-      case _: SubqueryExpression => true
-      case _ => false
-    }.isDefined)).isDefined
-  }
-
-  // AQE is only useful when the query has exchanges or sub-queries. This method returns true if one
-  // of the following conditions is satisfied:
-  //   - The config ADAPTIVE_EXECUTION_FORCE_APPLY is true.
-  //   - The input query is from a sub-query. When this happens, it means we've already decided to
-  //     apply AQE for the main query and we must continue to do it.
-  //   - The query may contains exchange. The exchanges are not added yet at this point and we can
-  //     only know if the query may contain exchange or not by checking
-  //     `SparkPlan.requiredChildDistribution`.
-  //   - The query contains sub-query.
-  private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
-    conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery ||
-      mayContainExchange(plan) || containSubQuery(plan)
-  }
-
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
+    case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
-    case _ if conf.adaptiveExecutionEnabled && shouldApplyAQE(plan, isSubquery) =>
+    case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
@@ -98,6 +71,29 @@ case class InsertAdaptiveSparkPlan(
       }
 
     case _ => plan
+  }
+
+  // AQE is only useful when the query has exchanges or sub-queries. This method returns true if
+  // one of the following conditions is satisfied:
+  //   - The config ADAPTIVE_EXECUTION_FORCE_APPLY is true.
+  //   - The input query is from a sub-query. When this happens, it means we've already decided to
+  //     apply AQE for the main query and we must continue to do it.
+  //   - The query contains exchanges.
+  //   - The query may need to add exchanges. It's an overkill to run `EnsureRequirements` here, so
+  //     we just check `SparkPlan.requiredChildDistribution` and see if it's possible that the
+  //     the query needs to add exchanges later.
+  //   - The query contains sub-query.
+  private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
+    conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
+      plan.find {
+        case _: Exchange => true
+        case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
+        case p => p.expressions.exists(_.find {
+          case _: SubqueryExpression => true
+          case _ => false
+        }.isDefined)
+      }.isDefined
+    }
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {

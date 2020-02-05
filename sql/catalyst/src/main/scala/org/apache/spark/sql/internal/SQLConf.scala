@@ -361,8 +361,8 @@ object SQLConf {
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
     .doc("Adaptive query execution is skipped when the query does not have exchanges or " +
-      "subqueries. By setting this config to true, Spark will be forced to apply adaptive " +
-      "query execution even if the query doesn't have exchange/subquery.")
+      "subqueries. By setting this config to true, Spark will force apply adaptive query " +
+      "execution for all supported queries.")
     .booleanConf
     .createWithDefault(false)
 
