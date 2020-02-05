@@ -21,7 +21,7 @@ import sys
 from collections import namedtuple
 from textwrap import dedent
 
-from mkdocs.structure.pages.markdown import markdown
+from mkdocs.structure.pages import markdown
 
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
@@ -289,7 +289,7 @@ def generate_sql_configs_table(jvm, path):
                 .format(
                     name=config.name,
                     default=default,
-                    docstring=markdown(docstring),
+                    docstring=markdown.markdown(docstring),
                 )
             ))
         f.write("</table>\n")
