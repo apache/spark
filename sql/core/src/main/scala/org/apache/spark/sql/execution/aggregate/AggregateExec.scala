@@ -24,11 +24,10 @@ import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
 /**
  * Holds common logic for aggregate operators
  */
-abstract class AggregateExec(
-    groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression],
-    resultExpressions: Seq[NamedExpression])
-  extends UnaryExecNode {
+abstract class BaseAggregateExec extends UnaryExecNode {
+  val groupingExpressions: Seq[NamedExpression]
+  val aggregateExpressions: Seq[AggregateExpression]
+  val resultExpressions: Seq[NamedExpression]
 
   override def verboseStringWithOperatorId(): String = {
     val inputString = child.output.mkString("[", ", ", "]")

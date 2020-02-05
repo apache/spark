@@ -38,8 +38,7 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends AggregateExec(groupingExpressions, aggregateExpressions, resultExpressions)
-    with AliasAwareOutputPartitioning {
+  extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
