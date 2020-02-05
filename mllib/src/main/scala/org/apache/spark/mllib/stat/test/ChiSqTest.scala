@@ -120,7 +120,7 @@ private[spark] object ChiSqTest extends Logging {
       }
       val result = chiSquaredMatrix(contingency, methodName)
       (col, result)
-    }.collectAsMap().toArray.sortBy(_._1).map(_._2)
+    }.collect().sortBy(_._1).map(_._2)
   }
 
   /*
