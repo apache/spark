@@ -792,6 +792,20 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
   }
 
+  test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
+    def checkTimeZoneParsing(expected: Any): Unit = {
+      val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+      checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
+        Row(expected))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
+      checkTimeZoneParsing(Timestamp.valueOf("2020-01-27 20:06:11.847"))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "false") {
+      checkTimeZoneParsing(null)
+    }
+  }
+
   test("to_utc_timestamp in various system and session time zones") {
     val localTs = "2020-02-04T22:42:10"
     val defaultTz = TimeZone.getDefault

@@ -1600,7 +1600,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val PANDAS_UDF_BUFFER_SIZE =
-    buildConf("spark.sql.pandas.udf.buffer.size")
+    buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
         s"Same as ${BUFFER_SIZE} but only applies to Pandas UDF executions. If it is not set, " +
         s"the fallback is ${BUFFER_SIZE}. Note that Pandas execution requires more than 4 bytes. " +
@@ -1989,6 +1989,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_EMPTY_STRING_IN_JSON =
+    buildConf("spark.sql.legacy.json.allowEmptyString.enabled")
+      .internal()
+      .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
+      "some data types such as `IntegerType`.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -2150,6 +2158,14 @@ object SQLConf {
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
+
+  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
+    .internal()
+    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
+      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2438,6 +2454,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
