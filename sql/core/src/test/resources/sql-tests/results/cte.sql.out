@@ -168,10 +168,9 @@ WITH t as (
 )
 SELECT * FROM t
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+1
 
 
 -- !query
@@ -208,7 +207,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -227,7 +226,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -246,7 +245,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -259,7 +258,7 @@ SELECT max(c) FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -274,7 +273,7 @@ SELECT sum(c) FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -290,7 +289,7 @@ SELECT sum(c) FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -303,7 +302,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -318,7 +317,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query
@@ -334,7 +333,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The ambiguous nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
+Name collision in nested CTE was founded in current plan, please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, see more detail in SPARK-28228.;
 
 
 -- !query

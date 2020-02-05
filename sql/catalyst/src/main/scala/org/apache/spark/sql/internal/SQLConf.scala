@@ -2714,8 +2714,6 @@ class SQLConf extends Serializable with Logging {
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
-  def legacyCTEPrecedenceEnabled: Option[Boolean] = getConf(LEGACY_CTE_PRECEDENCE_ENABLED)
-
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

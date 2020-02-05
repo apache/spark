@@ -22,21 +22,23 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.legacyCTEPrecedenceEnabled.isEmpty) {
-      if (hasNestedCTE(plan, inTraverse = false)) {
-        throw new AnalysisException("The ambiguous nested CTE was founded in current plan, " +
-          "please select the CTE precedence via spark.sql.legacy.ctePrecedence.enabled, " +
+    val isLegacy = SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)
+    if (isLegacy.isEmpty) {
+      if (detectConflictInNestedCTE(plan, inTraverse = false)) {
+        throw new AnalysisException("Name collision in nested CTE was founded in current plan, " +
+          s"please select the CTE precedence via ${LEGACY_CTE_PRECEDENCE_ENABLED.key}, " +
           "see more detail in SPARK-28228.")
       } else {
         traverseAndSubstituteCTE(plan, inTraverse = false)
       }
-    } else if (SQLConf.get.legacyCTEPrecedenceEnabled.get) {
+    } else if (isLegacy.get) {
       legacyTraverseAndSubstituteCTE(plan)
     } else {
       traverseAndSubstituteCTE(plan, inTraverse = false)
@@ -44,23 +46,31 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   /**
-   * Check the plan to be traversed has nested CTE or not, find the nested WITH clause in
+   * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
    * child, innerChildren and subquery for the current plan.
    */
-  private def hasNestedCTE(plan: LogicalPlan, inTraverse: Boolean): Boolean = {
+  private def detectConflictInNestedCTE(
+      plan: LogicalPlan,
+      inTraverse: Boolean,
+      cteNames: Set[String] = Set.empty): Boolean = {
     plan.foreach {
-      case _: With if inTraverse =>
-        return true
-
-      case w @ With(child: LogicalPlan, _) =>
+      case w @ With(child, relations) =>
+        val newNames = relations.map {
+          case (cteName, _) =>
+            if (cteNames.contains(cteName)) {
+              return true
+            } else {
+              cteName
+            }
+        }.toSet
         (w.innerChildren :+ child).foreach { p =>
-          if (hasNestedCTE(p, inTraverse = true)) return true
+          if (detectConflictInNestedCTE(p, inTraverse = true, cteNames ++ newNames)) return true
         }
 
       case other if inTraverse =>
         other.transformExpressions {
-          case e: SubqueryExpression if hasNestedCTE(e.plan, inTraverse = true) =>
-            return true
+          case e: SubqueryExpression
+            if detectConflictInNestedCTE(e.plan, inTraverse = true, cteNames) => return true
         }
 
       case _ =>
