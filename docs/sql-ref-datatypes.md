@@ -631,85 +631,71 @@ from pyspark.sql.types import *
 </tr>
 </table>
 </div>
-</div>
 
-## Type Names in Parser
+<div data-lang="sql"  markdown="1">
 
-The following table shows the type names used in Spark SQL parser for each data type, the alternative names listed in the "Aliases" columns.
+The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
 
 <table class="table">
 <tr>
-  <th style="width:40%">Data type</th>
-  <th style="width:30%">Name</th>
-  <th>Aliases</th></tr>
+  <th style="width:50%">Data type</th>
+  <th>SQL name</th></tr>
 <tr>
   <td> <b>BooleanType</b> </td>
   <td> boolean </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>ByteType</b> </td>
-  <td> byte </td>
-  <td> tinyint </td>
+  <td> byte, tinyint </td>
 </tr>
 <tr>
   <td> <b>ShortType</b> </td>
-  <td> shot </td>
-  <td> smallint </td>
+  <td> shot, smallint </td>
 </tr>
 <tr>
   <td> <b>IntegerType</b> </td>
-  <td> int </td>
-  <td> integer </td>
+  <td> int, integer </td>
 </tr>
 <tr>
   <td> <b>LongType</b> </td>
-  <td> long </td>
-  <td> bigint </td>
+  <td> long, bigint </td>
 </tr>
 <tr>
   <td> <b>FloatType</b> </td>
-  <td> float </td>
-  <td> real </td>
+  <td> float, real </td>
 </tr>
 <tr>
   <td> <b>DoubleType</b> </td>
   <td> double </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>DateType</b> </td>
   <td> date </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>TimestampType</b> </td>
   <td> timestamp </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>StringType</b> </td>
   <td> string </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>BinaryType</b> </td>
   <td> string </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>BinaryType</b> </td>
   <td> string </td>
-  <td></td>
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> decimal </td>
-  <td> desc, numeric </td>
+  <td> decimal, desc, numeric </td>
 </tr>
 <tr>
   <td> <b>CalendarIntervalType</b> </td>
   <td> interval </td>
-  <td></td>
 </tr>
 </table>
+</div>
+</div>
