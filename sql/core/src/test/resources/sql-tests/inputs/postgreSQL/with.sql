@@ -685,6 +685,9 @@ with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q;
 -- test WITH attached to intermediate-level set operation
 --
 
+-- CTE non-legacy substitution
+SET spark.sql.legacy.ctePrecedence.enabled=false;
+
 WITH outermost(x) AS (
   SELECT 1
   UNION (WITH innermost as (SELECT 2)
