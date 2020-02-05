@@ -632,3 +632,84 @@ from pyspark.sql.types import *
 </table>
 </div>
 </div>
+
+## Type Names in Parser
+
+The following table shows the type names used in Spark SQL parser for each data type, the alternative names listed in the "Aliases" columns.
+
+<table class="table">
+<tr>
+  <th style="width:40%">Data type</th>
+  <th style="width:30%">Name</th>
+  <th>Aliases</th></tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> boolean </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td> byte </td>
+  <td> tinyint </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td> shot </td>
+  <td> smallint </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> int </td>
+  <td> integer </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td> long </td>
+  <td> bigint </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td> float </td>
+  <td> real </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> double </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> date </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> timestamp </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> string </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> string </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> string </td>
+  <td></td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> decimal </td>
+  <td> desc, numeric </td>
+</tr>
+<tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> interval </td>
+  <td></td>
+</tr>
+</table>
