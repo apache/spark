@@ -210,7 +210,7 @@ statement
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
-    | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -771,8 +771,8 @@ primaryExpression
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
-    | (FIRST | FIRST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                     #first
-    | (LAST | LAST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                       #last
+    | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
+    | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
     | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
@@ -1120,7 +1120,6 @@ ansiNonReserved
     | REPAIR
     | REPLACE
     | RESET
-    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1280,7 +1279,6 @@ nonReserved
     | FIELDS
     | FILEFORMAT
     | FIRST
-    | FIRST_VALUE
     | FOLLOWING
     | FOR
     | FOREIGN
@@ -1310,7 +1308,6 @@ nonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LAST_VALUE
     | LATERAL
     | LAZY
     | LEADING
@@ -1374,7 +1371,6 @@ nonReserved
     | REPAIR
     | REPLACE
     | RESET
-    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1531,7 +1527,6 @@ FIELDS: 'FIELDS';
 FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
-FIRST_VALUE: 'FIRST_VALUE';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
 FOREIGN: 'FOREIGN';
@@ -1565,7 +1560,6 @@ ITEMS: 'ITEMS';
 JOIN: 'JOIN';
 KEYS: 'KEYS';
 LAST: 'LAST';
-LAST_VALUE: 'LAST_VALUE';
 LATERAL: 'LATERAL';
 LAZY: 'LAZY';
 LEADING: 'LEADING';
@@ -1632,7 +1626,6 @@ RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
-RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
