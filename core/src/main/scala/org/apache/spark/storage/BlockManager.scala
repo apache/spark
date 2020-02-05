@@ -246,7 +246,7 @@ private[spark] class BlockManager(
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
     new BlockManager.RemoteBlockDownloadFileManager(this)
-  private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+  private val maxRemoteBlockToMem = conf.get(config.NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 

@@ -168,7 +168,7 @@ private[spark] class NettyBlockTransferService(
     // Everything else is encoded using our binary protocol.
     val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize((level, classTag)))
 
-    val asStream = blockData.size() > conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+    val asStream = blockData.size() > conf.get(config.NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
         logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")

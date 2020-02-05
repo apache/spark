@@ -1810,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold

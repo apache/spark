@@ -165,7 +165,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       // also try with block replication as a stream
       val uploadStreamConf = new SparkConf()
       uploadStreamConf.setAll(conf.getAll)
-      uploadStreamConf.set(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1L)
+      uploadStreamConf.set(config.NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1L)
       test(s"$testName (with replication as stream)") {
         testCaching(uploadStreamConf, storageLevel)
       }

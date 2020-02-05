@@ -683,8 +683,9 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
-    MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+    NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
+      AlternateConfig("spark.maxRemoteBlockSizeFetchToMem", "3.0")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(

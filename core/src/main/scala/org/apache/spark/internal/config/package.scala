@@ -894,8 +894,8 @@ package object config {
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
 
-  private[spark] val MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
-    ConfigBuilder("spark.maxRemoteBlockSizeFetchToMem")
+  private[spark] val NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
+    ConfigBuilder("spark.network.maxRemoteBlockSizeFetchToMem")
       .doc("Remote block will be fetched to disk when size of the block is above this threshold " +
         "in bytes. This is to avoid a giant request takes too much memory. Note this " +
         "configuration will affect both shuffle fetch and block manager remote block fetch. " +
