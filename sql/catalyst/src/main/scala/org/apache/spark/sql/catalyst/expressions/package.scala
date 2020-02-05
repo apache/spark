@@ -153,11 +153,11 @@ package object expressions  {
     }
 
     /** Returns true if all qualifiers in `attrs` have 2 or less parts. */
-    @transient private val hasTwoOrLessPartQualifiers: Boolean =
+    @transient private val hasTwoOrLessQualifierParts: Boolean =
       attrs.forall(_.qualifier.length <= 2)
 
     /** Match attributes for the case where all qualifiers in `attrs` have 2 or less parts. */
-    private def matchWithTwoOrLessPartQualifiers(
+    private def matchWithTwoOrLessQualifierParts(
         nameParts: Seq[String],
         resolver: Resolver): (Seq[Attribute], Seq[String]) = {
       // Collect matching attributes given a name and a lookup.
@@ -221,7 +221,7 @@ package object expressions  {
     /**
      * Match attributes for the case where at least one qualifier in `attrs` has more than 2 parts.
      */
-    private def matchWithThreeOrMorePartQualifiers(
+    private def matchWithThreeOrMoreQualifierParts(
         nameParts: Seq[String],
         resolver: Resolver): (Seq[Attribute], Seq[String]) = {
       // Returns true if the `short` qualifier is a subset of the last elements of
@@ -277,10 +277,10 @@ package object expressions  {
 
     /** Perform attribute resolution given a name and a resolver. */
     def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
-      val (candidates, nestedFields) = if (hasTwoOrLessPartQualifiers) {
-        matchWithTwoOrLessPartQualifiers(nameParts, resolver)
+      val (candidates, nestedFields) = if (hasTwoOrLessQualifierParts) {
+        matchWithTwoOrLessQualifierParts(nameParts, resolver)
       } else {
-        matchWithThreeOrMorePartQualifiers(nameParts, resolver)
+        matchWithThreeOrMoreQualifierParts(nameParts, resolver)
       }
 
       def name = UnresolvedAttribute(nameParts).name

@@ -38,11 +38,26 @@ class AttributeResolutionSuite extends SparkFunSuite {
       }
     }
 
-    // Non-matching cases.
+    // Non-matching cases
     Seq(Seq("ns1", "ns2", "t1"), Seq("ns2", "a")).foreach { nameParts =>
-      val resolved = attrs.resolve(nameParts, resolver)
-      assert(resolved.isEmpty)
+      assert(attrs.resolve(nameParts, resolver).isEmpty)
     }
+  }
+
+  test("attribute resolution where table and attribute names are the same") {
+    val attrs = Seq(AttributeReference("t", IntegerType)(qualifier = Seq("ns1", "ns2", "t")))
+    // Matching cases
+    Seq(
+      Seq("t"), Seq("t", "t"), Seq("ns2", "t", "t"), Seq("ns1", "ns2", "t", "t")
+    ).foreach { nameParts =>
+      attrs.resolve(nameParts, resolver) match {
+        case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+        case _ => fail()
+      }
+    }
+
+    // Non-matching case
+    assert(attrs.resolve(Seq("ns1", "ns2", "t"), resolver).isEmpty)
   }
 
   test("attribute resolution ambiguity at the attribute name level") {
