@@ -58,10 +58,10 @@ object SQLDataSourceExample {
     // +-------------+
     // $example off:ignore_corrupt_files$
     // $example on:load_with_path_glob_filter$
-    val partitionedUsersDF = spark.read.format("parquet")
+    val testGlobFilterDF = spark.read.format("parquet")
       .option("pathGlobFilter", "*.parquet") // json file should be filtered out
       .load("examples/src/main/resources/dir1")
-    partitionedUsersDF.show()
+    testGlobFilterDF.show()
     // +-------------+
     // |         file|
     // +-------------+
