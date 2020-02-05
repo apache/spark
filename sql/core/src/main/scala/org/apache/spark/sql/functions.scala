@@ -3517,10 +3517,10 @@ object functions {
    *
    * @param expr the input array column
    * @param zero the initial value
-   * @param merge (combined_value, input_value) => combined_value, the merge function to to merge
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
    *              an input value to the combined_value
    * @param finish col => final_col, the lambda function to convert the single state into
-   *              final result
+   *               final result
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3547,7 +3547,7 @@ object functions {
    *
    * @param expr the input array column
    * @param zero the initial value
-   * @param merge (combined_value, input_value) => combined_value, the merge function to to merge
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
    *              an input value to the combined_value
    * @group collection_funcs
    * @since 3.0.0
