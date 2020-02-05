@@ -44,17 +44,6 @@ def generic_file_source_options_example(spark):
     # +-------------+
     # $example off:ignore_corrupt_files$
 
-    # $example on:load_with_path_glob_filter$
-    df = spark.read.load("examples/src/main/resources/dir1",
-                         format="parquet", pathGlobFilter="*.parquet")
-    df.show()
-    # +-------------+
-    # |         file|
-    # +-------------+
-    # |file1.parquet|
-    # +-------------+
-    # $example off:load_with_path_glob_filter$
-
     # $example on:recursive_file_lookup$
     recursive_loaded_df = spark.read.format("parquet")\
         .option("recursiveFileLookup", "true")\
@@ -69,6 +58,16 @@ def generic_file_source_options_example(spark):
     # $example off:recursive_file_lookup$
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
 
+    # $example on:load_with_path_glob_filter$
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", pathGlobFilter="*.parquet")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    # $example off:load_with_path_glob_filter$
 
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$

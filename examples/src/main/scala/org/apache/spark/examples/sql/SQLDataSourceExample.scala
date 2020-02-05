@@ -57,17 +57,6 @@ object SQLDataSourceExample {
     // |file2.parquet|
     // +-------------+
     // $example off:ignore_corrupt_files$
-    // $example on:load_with_path_glob_filter$
-    val testGlobFilterDF = spark.read.format("parquet")
-      .option("pathGlobFilter", "*.parquet") // json file should be filtered out
-      .load("examples/src/main/resources/dir1")
-    testGlobFilterDF.show()
-    // +-------------+
-    // |         file|
-    // +-------------+
-    // |file1.parquet|
-    // +-------------+
-    // $example off:load_with_path_glob_filter$
     // $example on:recursive_file_lookup$
     val recursiveLoadedDF = spark.read.format("parquet")
       .option("recursiveFileLookup", "true")
@@ -81,6 +70,17 @@ object SQLDataSourceExample {
     // +-------------+
     // $example off:recursive_file_lookup$
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
+    // $example on:load_with_path_glob_filter$
+    val testGlobFilterDF = spark.read.format("parquet")
+      .option("pathGlobFilter", "*.parquet") // json file should be filtered out
+      .load("examples/src/main/resources/dir1")
+    testGlobFilterDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_path_glob_filter$
   }
 
   private def runBasicDataSourceExample(spark: SparkSession): Unit = {
