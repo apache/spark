@@ -320,6 +320,14 @@ struct<CAST(CAST(2147483520 AS FLOAT) AS INT):int>
 
 
 -- !query
+SELECT int(float('2147483392'))
+-- !query schema
+struct<CAST(CAST(2147483392 AS FLOAT) AS INT):int>
+-- !query output
+2147483392
+
+
+-- !query
 SELECT int(float('-2147483648.5'))
 -- !query schema
 struct<CAST(CAST(-2147483648.5 AS FLOAT) AS INT):int>
