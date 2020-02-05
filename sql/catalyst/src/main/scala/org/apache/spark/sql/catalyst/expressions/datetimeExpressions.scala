@@ -1157,6 +1157,8 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 case class FromUTCTimestamp(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
+  def this(left: Expression, right: Expression) = this(left, right, None)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
   override def prettyName: String = "from_utc_timestamp"
@@ -1367,6 +1369,8 @@ case class MonthsBetween(
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
