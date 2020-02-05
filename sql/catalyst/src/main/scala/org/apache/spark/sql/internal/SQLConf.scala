@@ -1603,10 +1603,10 @@ object SQLConf {
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.pandas.udf.buffer.size")
       .doc(
-        s"Same as ${BUFFER_SIZE} but only applies to Pandas UDF executions. If it is not set, " +
-        s"the fallback is ${BUFFER_SIZE}. Note that Pandas execution requires more than 4 bytes. " +
-        "Lowering this value could make small Pandas UDF batch iterated and pipelined; however, " +
-        "it might degrade performance. See SPARK-27870.")
+        s"Same as `${BUFFER_SIZE.key}` but only applies to Pandas UDF executions. If it is not " +
+        s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
+        "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
+        "pipelined; however, it might degrade performance. See SPARK-27870.")
       .fallbackConf(BUFFER_SIZE)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =

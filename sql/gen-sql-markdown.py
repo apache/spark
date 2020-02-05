@@ -243,9 +243,6 @@ def generate_sql_configs_table(jvm, path):
     """
     sql_configs = _list_sql_configs(jvm)
     value_reference_pattern = re.compile(r"^<value of (\S*)>$")
-    # ConfigEntry(key=spark.buffer.size, defaultValue=65536, doc=, public=true)
-    config_entry_pattern = re.compile(
-        r"ConfigEntry\(key=(\S*), defaultValue=\S*, doc=\S*, public=\S*\)")
 
     with open(path, 'w') as f:
         f.write(dedent(
@@ -276,8 +273,6 @@ def generate_sql_configs_table(jvm, path):
                     )
                 )
 
-            docstring = config_entry_pattern.sub(r"\g<1>", config.docstring)
-
             f.write(dedent(
                 """
                 <tr>
@@ -289,7 +284,7 @@ def generate_sql_configs_table(jvm, path):
                 .format(
                     name=config.name,
                     default=default,
-                    docstring=markdown.markdown(docstring),
+                    docstring=markdown.markdown(config.docstring),
                 )
             ))
         f.write("</table>\n")
