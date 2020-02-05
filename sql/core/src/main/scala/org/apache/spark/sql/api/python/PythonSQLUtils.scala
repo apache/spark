@@ -42,6 +42,7 @@ private[sql] object PythonSQLUtils {
 
   def listSQLConfigs(): Array[(String, String, String)] = {
     val conf = new SQLConf()
+    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
     conf.getAllDefinedConfs.toArray
   }
 
