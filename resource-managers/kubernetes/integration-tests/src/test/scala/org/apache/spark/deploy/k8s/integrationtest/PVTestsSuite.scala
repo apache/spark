@@ -111,7 +111,6 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .delete()
 
     mountProcess.foreach(_.destroy())
-
   }
 
   private def checkPVs(pod: Pod, file: String) = {
