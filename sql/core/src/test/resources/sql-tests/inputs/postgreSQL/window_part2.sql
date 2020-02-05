@@ -13,7 +13,7 @@
 --     empno integer,
 --     salary int,
 --     enroll_date date
---- ) USING parquet;
+-- ) USING parquet;
 
 -- INSERT INTO empsalary VALUES
 --   ('develop', 10, 5200, date '2007-08-01'),
