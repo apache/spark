@@ -1819,7 +1819,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val PANDAS_UDF_BUFFER_SIZE =
-    buildConf("spark.sql.pandas.udf.buffer.size")
+    buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
         s"Same as `${BUFFER_SIZE.key}` but only applies to Pandas UDF executions. If it is not " +
         s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
