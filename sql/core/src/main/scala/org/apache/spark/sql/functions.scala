@@ -3517,7 +3517,8 @@ object functions {
    *
    * @param expr the input array column
    * @param zero the initial value
-   * @param merge (c, v) => c, the merge function to reduce all elements into a single state
+   * @param merge (combined_value, input_value) => combined_value, the merge function to to merge
+   *              an input value to the combined_value
    * @param finish col => final_col, the lambda function to convert the single state into
    *              final result
    *
@@ -3546,8 +3547,8 @@ object functions {
    *
    * @param expr the input array column
    * @param zero the initial value
-   * @param merge (c, v) => c, the merge function to reduce all elements into a single state
-   *
+   * @param merge (combined_value, input_value) => combined_value, the merge function to to merge
+   *              an input value to the combined_value
    * @group collection_funcs
    * @since 3.0.0
    */
@@ -3581,7 +3582,7 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f col => k_transformed_col, the lambda function to transform the key of input column
+   * @param f (key, value) => new_key, the lambda function to transform the key of input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3598,7 +3599,7 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f col => v_transformed_col, the lambda function to transform the value of input column
+   * @param f (key, value) => new_value, the lambda function to transform the value of input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3614,7 +3615,7 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f (k, v) => predicate, the Boolean predicate to filter the input map column
+   * @param f (key, value) => predicate, the Boolean predicate to filter the input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3631,8 +3632,8 @@ object functions {
    *
    * @param left the left input map column
    * @param right the right input map column
-   * @param f (k, v1, v2) => v, the lambda function to merge two values of input map columns into
-   *         one value
+   * @param f (key, value1, value2) => new_value, the lambda function to merge two values of
+   *          input map columns into one value
    *
    * @group collection_funcs
    * @since 3.0.0
