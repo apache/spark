@@ -48,7 +48,7 @@ private[spark] object ChiSqTest extends Logging {
   case class Method(name: String, chiSqFunc: (Double, Double) => Double)
 
   // Pearson's chi-squared test: http://en.wikipedia.org/wiki/Pearson%27s_chi-squared_test
-  val PEARSON = new Method("pearson", (observed: Double, expected: Double) => {
+  val PEARSON = Method("pearson", (observed: Double, expected: Double) => {
     val dev = observed - expected
     dev * dev / expected
   })
@@ -114,12 +114,12 @@ private[spark] object ChiSqTest extends Logging {
 
       val contingency = new DenseMatrix(numFeatures, numLabels,
         Array.ofDim[Double](numFeatures * numLabels))
-      count.iterator.foreach { case ((feature, label), count) =>
+      count.iterator.foreach { case ((feature, label), c) =>
         val i = features(feature)
         val j = labels(label)
-        contingency.update(i, j, count)
+        contingency.update(i, j, c)
       }
-      val result = chiSquaredMatrix(contingency, methodName)
+      val result = ChiSqTest.chiSquaredMatrix(contingency, methodName)
       (col, result)
     }.collect().sortBy(_._1).map(_._2)
   }
