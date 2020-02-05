@@ -37,8 +37,10 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.command.ExternalCommandExecutor
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -603,6 +605,33 @@ class SparkSession private(
       sessionState.sqlParser.parsePlan(sqlText)
     }
     Dataset.ofRows(self, plan, tracker)
+  }
+
+  /**
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
+   * This could be useful when user wants to execute some commands out of Spark. For
+   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
+   * creating cores for Solr and so on.
+   *
+   * The command will be eagerly executed after this method is called and the returned
+   * DataFrame will contain the output of the command(if any).
+   *
+   * @param runner The class name of the runner that implements `ExternalCommandRunner`.
+   * @param command The target command to be executed
+   * @param options The options for the runner.
+   *
+   * @since 3.0.0
+   */
+  @Unstable
+  def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
+    DataSource.lookupDataSource(runner, sessionState.conf) match {
+      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
+        Dataset.ofRows(self, ExternalCommandExecutor(
+          source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
+
+      case _ =>
+        throw new AnalysisException(s"Command execution is not supported in runner $runner")
+    }
   }
 
   /**

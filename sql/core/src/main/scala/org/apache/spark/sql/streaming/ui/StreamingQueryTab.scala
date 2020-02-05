@@ -34,6 +34,6 @@ private[sql] class StreamingQueryTab(
   parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
 }
 
-object StreamingQueryTab {
+private[sql] object StreamingQueryTab {
   private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }

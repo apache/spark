@@ -3383,6 +3383,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df, Row(1))
     }
   }
+
+  test("SPARK-26218: Fix the corner case when casting float to Integer") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as FLOAT) as Integer)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").collect()
+      )
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
