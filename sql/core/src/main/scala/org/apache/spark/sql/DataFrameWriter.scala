@@ -51,6 +51,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
 
+
   /**
    * Specifies the behavior when data or table already exists. Options include:
    * <ul>
@@ -196,6 +197,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
+  @scala.annotation.varargs
+  def partitionBy(needRepartition: Boolean, colNames: String*): DataFrameWriter[T] = {
+    this.partitioningColumns = Option(colNames)
+    if(needRepartition) needRepartitionBasedColumns = true
+    this
+  }
+
   /**
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
@@ -301,12 +309,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     // Code path for data source v1.
-    runCommand(df.sparkSession, "save") {
+    var dfx = df
+    if(needRepartitionBasedColumns) {
+      dfx = df.repartition(partitioningColumns.toArray.flatten.map(df.col): _*)
+    }
+
+    runCommand(dfx.sparkSession, "save") {
       DataSource(
-        sparkSession = df.sparkSession,
+        sparkSession = dfx.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = extraOptions.toMap).planForWriting(mode, dfx.logicalPlan)
     }
   }
 
@@ -848,6 +861,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var partitioningColumns: Option[Seq[String]] = None
+
+  private var needRepartitionBasedColumns: Boolean = false
 
   private var bucketColumnNames: Option[Seq[String]] = None
 
