@@ -1658,7 +1658,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("fetch remote block to local disk if block size is larger than threshold") {
-    conf.set(NETWORK_MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1000L)
+    conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1000L)
 
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val mockBlockTransferService = new MockBlockTransferService(0)
