@@ -69,6 +69,10 @@ case class ObjectHashAggregateExec(
     child: SparkPlan)
   extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
+  private[this] val aggregateBufferAttributes = {
+    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+  }
+
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)

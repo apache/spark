@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
 
@@ -27,24 +27,21 @@ import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
 abstract class BaseAggregateExec extends UnaryExecNode {
   val groupingExpressions: Seq[NamedExpression]
   val aggregateExpressions: Seq[AggregateExpression]
+  val aggregateAttributes: Seq[Attribute]
   val resultExpressions: Seq[NamedExpression]
-
-  protected val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
 
   override def verboseStringWithOperatorId(): String = {
     val inputString = child.output.mkString("[", ", ", "]")
     val keyString = groupingExpressions.mkString("[", ", ", "]")
     val functionString = aggregateExpressions.mkString("[", ", ", "]")
-    val funcBufferAttrString = aggregateBufferAttributes.mkString("[", ", ", "]")
+    val aggregateAttributeString = aggregateAttributes.mkString("[", ", ", "]")
     val resultString = resultExpressions.mkString("[", ", ", "]")
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input: $inputString
        |Keys: $keyString
        |Functions: $functionString
-       |FuncBufferAttrs: $funcBufferAttrString
+       |Aggregate Attributes: $aggregateAttributeString
        |Results: $resultString
      """.stripMargin
   }
