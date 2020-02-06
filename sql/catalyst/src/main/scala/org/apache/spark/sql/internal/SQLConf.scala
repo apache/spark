@@ -2167,6 +2167,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY =
+    buildConf("spark.sql.deduplicateMapKey.lastWinsPolicy.enabled")
+      .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
+        "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
+        "MapFromEntries, StringToMap, MapConcat and TransformKeys.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
