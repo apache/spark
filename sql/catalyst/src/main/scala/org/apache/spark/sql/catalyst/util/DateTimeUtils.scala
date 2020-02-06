@@ -802,12 +802,11 @@ object DateTimeUtils {
    * timezone-aware.
    */
   def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
-    val toInstant = microsToInstant(ts)
+    val adjustedDateTime = microsToInstant(ts)
       .atZone(toZone.toZoneId)
       .toLocalDateTime
       .atZone(fromZone.toZoneId)
-      .toInstant
-    instantToMicros(toInstant)
+    instantToMicros(adjustedDateTime.toInstant)
   }
 
   /**
