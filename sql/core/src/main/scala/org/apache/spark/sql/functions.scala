@@ -2967,7 +2967,7 @@ object functions {
    * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss`
    * @param fmt A date time pattern detailing the format of `s` when `s` is a string
    * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
    *         `fmt` was an invalid format
