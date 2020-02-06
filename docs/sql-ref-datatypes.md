@@ -638,7 +638,7 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 
 <table class="table">
 <tr>
-  <th style="width:50%">Data type</th>
+  <th style="width:40%">Data type</th>
   <th>SQL name</th></tr>
 <tr>
   <td> <b>BooleanType</b> </td>
@@ -691,6 +691,18 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 <tr>
   <td> <b>CalendarIntervalType</b> </td>
   <td> INTERVAL </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> ARRAY&lt;element_type&gt; </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> STRUCT&lt;field1_name: field1_type, field2_name: field2_type, ...&gt; </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> MAP&lt;key_type, value_type&gt; </td>
 </tr>
 </table>
 </div>
