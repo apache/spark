@@ -3516,7 +3516,7 @@ object functions {
    * }}}
    *
    * @param expr the input array column
-   * @param zero the initial value
+   * @param initialValue the initial value
    * @param merge (combined_value, input_value) => combined_value, the merge function to merge
    *              an input value to the combined_value
    * @param finish col => final_col, the lambda function to convert the single state into
@@ -3527,12 +3527,12 @@ object functions {
    */
   def aggregate(
       expr: Column,
-      zero: Column,
+      initialValue: Column,
       merge: (Column, Column) => Column,
       finish: Column => Column): Column = withExpr {
     ArrayAggregate(
       expr.expr,
-      zero.expr,
+      initialValue.expr,
       createLambda(merge),
       createLambda(finish)
     )
@@ -3546,14 +3546,14 @@ object functions {
    * }}}
    *
    * @param expr the input array column
-   * @param zero the initial value
+   * @param initialValue the initial value
    * @param merge (combined_value, input_value) => combined_value, the merge function to merge
    *              an input value to the combined_value
    * @group collection_funcs
    * @since 3.0.0
    */
-  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
-    aggregate(expr, zero, merge, c => c)
+  def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
 
   /**
    * Merge two given arrays, element-wise, into a single array using a function.
