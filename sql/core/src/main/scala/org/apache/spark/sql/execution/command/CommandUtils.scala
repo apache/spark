@@ -78,7 +78,7 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateTotalLocationSize(spark, catalogTable.identifier, paths).sum
+      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -137,7 +137,7 @@ object CommandUtils extends Logging {
     size
   }
 
-  def calculateTotalLocationSize(
+  def calculateMultipleLocationSizes(
       sparkSession: SparkSession,
       tid: TableIdentifier,
       paths: Seq[Option[URI]]): Seq[Long] = {
