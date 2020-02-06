@@ -274,9 +274,6 @@ def generate_sql_configs_table(jvm, path):
                 default = "none"
             elif config.default.startswith("<value of "):
                 referenced_config_name = value_reference_pattern.match(config.default).group(1)
-                # difficultes in looking this up:
-                #   a) potential recursion
-                #   b) references to non-SQL configs
                 default = "value of <code>{}</code>".format(referenced_config_name)
             else:
                 default = config.default
