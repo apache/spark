@@ -776,8 +776,8 @@ object DateTimeUtils {
    * timezone-aware.
    */
   def convertTz(ts: SQLTimestamp, fromZone: ZoneId, toZone: ZoneId): SQLTimestamp = {
-    val adjustedDateTime = microsToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
-    instantToMicros(adjustedDateTime.toInstant)
+    val rebasedDateTime = microsToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
+    instantToMicros(rebasedDateTime.toInstant)
   }
 
   /**
