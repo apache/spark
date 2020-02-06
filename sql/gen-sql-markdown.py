@@ -241,6 +241,23 @@ def generate_sql_configs_table(jvm, path):
     """
     Generates an HTML table at `path` that lists all public SQL
     configuration options.
+
+    The table will look something like this:
+
+    ```html
+    <table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+
+    <tr>
+        <td><code>spark.sql.adaptive.enabled</code></td>
+        <td>false</td>
+        <td><p>When true, enable adaptive query execution.</p></td>
+    </tr>
+
+    ...
+
+    </table>
+    ```
     """
     sql_configs = _list_sql_configs(jvm)
     value_reference_pattern = re.compile(r"^<value of (\S*)>$")
