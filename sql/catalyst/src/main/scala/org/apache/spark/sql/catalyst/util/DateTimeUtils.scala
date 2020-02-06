@@ -775,11 +775,8 @@ object DateTimeUtils {
    * mapping, the conversion here may return wrong result, we should make the timestamp
    * timezone-aware.
    */
-  def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
-    val adjustedDateTime = microsToInstant(ts)
-      .atZone(toZone.toZoneId)
-      .toLocalDateTime
-      .atZone(fromZone.toZoneId)
+  def convertTz(ts: SQLTimestamp, fromZone: ZoneId, toZone: ZoneId): SQLTimestamp = {
+    val adjustedDateTime = microsToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
     instantToMicros(adjustedDateTime.toInstant)
   }
 
@@ -788,7 +785,7 @@ object DateTimeUtils {
    * representation in their timezone.
    */
   def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, TimeZoneGMT, getTimeZone(timeZone))
+    convertTz(time, ZoneOffset.UTC, getZoneId(timeZone))
   }
 
   /**
@@ -796,7 +793,7 @@ object DateTimeUtils {
    * string representation in their timezone.
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
+    convertTz(time, getZoneId(timeZone), ZoneOffset.UTC)
   }
 
   /**
