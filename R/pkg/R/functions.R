@@ -3382,7 +3382,7 @@ create_lambda <- function(fun) {
   )
 
   # Create Scala LambdaFunction
-  sparkR.newJObject(
+  newJObject(
     "org.apache.spark.sql.catalyst.expressions.LambdaFunction",
     jexpr,
     jargs,
@@ -3405,13 +3405,13 @@ invoke_higher_order_function <- function(name, cols, funs) {
     callJMethod(x@jc, "expr")
   }
 
-  jexpr <- do.call(sparkR.newJObject, c(
+  jexpr <- do.call(newJObject, c(
     paste("org.apache.spark.sql.catalyst.expressions", name, sep = "."),
     lapply(cols, as_jexpr),
     lapply(funs, create_lambda)
   ))
 
-  column(sparkR.newJObject("org.apache.spark.sql.Column", jexpr))
+  column(newJObject("org.apache.spark.sql.Column", jexpr))
 }
 
 #' @details
