@@ -21,6 +21,7 @@ import sys
 from collections import namedtuple
 from textwrap import dedent
 
+# To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
 
 ExpressionInfo = namedtuple(
