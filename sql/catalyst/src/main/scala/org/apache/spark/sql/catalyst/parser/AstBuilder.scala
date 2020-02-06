@@ -1387,7 +1387,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
-        Option(ctx.operator).map(_.getType) match {
+        Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) if !ctx.expression.isEmpty =>
             ctx.expression.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
               .reduceLeft(Or)
