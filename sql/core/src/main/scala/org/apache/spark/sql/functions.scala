@@ -3519,8 +3519,8 @@ object functions {
    * @param initialValue the initial value
    * @param merge (combined_value, input_value) => combined_value, the merge function to merge
    *              an input value to the combined_value
-   * @param finish col => final_col, the lambda function to convert the single state into
-   *               final result
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *               of all inputs to final result
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3582,7 +3582,7 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f (key, value) => new_key, the lambda function to transform the key of input column
+   * @param f (key, value) => new_key, the lambda function to transform the key of input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3599,7 +3599,7 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f (key, value) => new_value, the lambda function to transform the value of input column
+   * @param f (key, value) => new_value, the lambda function to transform the value of input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3632,8 +3632,7 @@ object functions {
    *
    * @param left the left input map column
    * @param right the right input map column
-   * @param f (key, value1, value2) => new_value, the lambda function to merge two values of
-   *          input map columns into one value
+   * @param f (key, value1, value2) => new_value, the lambda function to merge the map values
    *
    * @group collection_funcs
    * @since 3.0.0
