@@ -79,7 +79,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Number of executors for each ResourceProfile requested by the cluster
   // manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private var requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+  private val requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
   private val listenerBus = scheduler.sc.listenerBus
 
@@ -621,8 +621,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
     val response = synchronized {
-      this.requestedTotalExecutorsPerResourceProfile =
-        new HashMap[ResourceProfile, Int] ++= resourceProfileToNumExecutors
+      this.requestedTotalExecutorsPerResourceProfile.clear()
+      this.requestedTotalExecutorsPerResourceProfile ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)

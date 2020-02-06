@@ -59,8 +59,9 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * quickly over time in case the maximum number of executors is very high. Otherwise, it will take
  * a long time to ramp up under heavy workloads.
  *
- * The remove policy is simpler: If an executor has been idle for K seconds and the number of
- * executors is more then what is needed, meaning there are not enough tasks that could use
+ * The remove policy is simpler and is applied on each ResourceProfile separately. If an executor
+ * for that ResourceProfile has been idle for K seconds and the number of executors is more
+ * then what is needed for that ResourceProfile, meaning there are not enough tasks that could use
  * the executor, then it is removed. Note that an executor caching any data
  * blocks will be removed if it has been idle for more than L seconds.
  *
@@ -240,10 +241,14 @@ private[spark] class ExecutorAllocationManager(
     }
     executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
 
-    client.requestTotalExecutors(
-      numExecutorsTargetPerResourceProfileId.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap,
-      rpIdToHostToLocalTaskCount)
+    // copy the maps inside synchonize to ensure not being modified
+    val (numExecutorsTarget, numLocalityAware) = synchronized {
+      val numTarget = numExecutorsTargetPerResourceProfileId.toMap
+      val numLocality = numLocalityAwareTasksPerResourceProfileId.toMap
+      (numTarget, numLocality)
+    }
+
+    client.requestTotalExecutors(numExecutorsTarget, numLocalityAware, rpIdToHostToLocalTaskCount)
   }
 
   /**
@@ -500,23 +505,21 @@ private[spark] class ExecutorAllocationManager(
     delta
   }
 
-  private def getResourceProfileIdOfExecutor(executorId: String): Int = {
-    executorMonitor.getResourceProfileId(executorId)
-  }
-
   /**
    * Request the cluster manager to remove the given executors.
    * Returns the list of executors which are removed.
    */
-  private def removeExecutors(executors: Seq[String]): Seq[String] = synchronized {
+  private def removeExecutors(executors: Seq[(String, Int)]): Seq[String] = synchronized {
     val executorIdsToBeRemoved = new ArrayBuffer[String]
     logDebug(s"Request to remove executorIds: ${executors.mkString(", ")}")
     val numExecutorsTotalPerRpId = mutable.Map[Int, Int]()
-    executors.foreach { executorIdToBeRemoved =>
-      val rpId = getResourceProfileIdOfExecutor(executorIdToBeRemoved)
+    executors.foreach { case (executorIdToBeRemoved, rpId) =>
       if (rpId == UNKNOWN_RESOURCE_PROFILE_ID) {
-        logWarning(s"Not removing executor $executorIdsToBeRemoved because couldn't find " +
-          "ResourceProfile for it!")
+        if (testing) {
+          throw new SparkException("ResourceProfile Id was UNKNOWN, this is not expected")
+        }
+        logWarning(s"Not removing executor $executorIdsToBeRemoved because the " +
+          "ResourceProfile was UNKNOWN!")
       } else {
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
@@ -590,7 +593,7 @@ private[spark] class ExecutorAllocationManager(
   private def onSchedulerQueueEmpty(): Unit = synchronized {
     logDebug("Clearing timer to add executors because there are no more pending tasks")
     addTime = NOT_SET
-    numExecutorsToAddPerResourceProfileId.keys.foreach(numExecutorsToAddPerResourceProfileId(_) = 1)
+    numExecutorsToAddPerResourceProfileId.transform { case (_, _) => 1 }
   }
 
   private case class StageAttempt(stageId: Int, stageAttemptId: Int) {
@@ -784,43 +787,39 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingTasksPerResourceProfile(rpId: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
-      getPendingTaskSum(attempts)
+      attempts.map(attempt => getPendingTaskSum(attempt)).sum
     }
 
     def hasPendingRegularTasks: Boolean = {
-      val attempts = resourceProfileIdToStageAttempt.values.flatten.toSeq
-      val pending = getPendingTaskSum(attempts)
-      (pending > 0)
+      val attemptSets = resourceProfileIdToStageAttempt.values
+      attemptSets.exists(attempts => attempts.exists(getPendingTaskSum(_) > 0))
     }
 
-    private def getPendingTaskSum(attempts: Seq[StageAttempt]): Int = {
-      attempts.map { attempt =>
-        val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
-        val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
-        numTotalTasks - numRunning
-      }.sum
+    private def getPendingTaskSum(attempt: StageAttempt): Int = {
+      val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
+      val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
+      numTotalTasks - numRunning
     }
 
     def pendingSpeculativeTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      getPendingSpeculativeTaskSum(attempts)
+      attempts.map(attempt => getPendingSpeculativeTaskSum(attempt)).sum
     }
 
     def hasPendingSpeculativeTasks: Boolean = {
-      val attempts = resourceProfileIdToStageAttempt.values.flatten.toSeq
-      val pending = getPendingSpeculativeTaskSum(attempts)
-      (pending > 0)
+      val attemptSets = resourceProfileIdToStageAttempt.values
+      attemptSets.exists { attempts =>
+        attempts.exists(getPendingSpeculativeTaskSum(_) > 0)
+      }
     }
 
-    private def getPendingSpeculativeTaskSum(attempts: Seq[StageAttempt]): Int = {
-      attempts.map { attempt =>
-        val numTotalTasks = stageAttemptToNumSpeculativeTasks.getOrElse(attempt, 0)
-        val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
-        numTotalTasks - numRunning
-      }.sum
+    private def getPendingSpeculativeTaskSum(attempt: StageAttempt): Int = {
+      val numTotalTasks = stageAttemptToNumSpeculativeTasks.getOrElse(attempt, 0)
+      val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
+      numTotalTasks - numRunning
     }
 
-    def hasPendingTasks(): Boolean = {
+    def hasPendingTasks: Boolean = {
       hasPendingSpeculativeTasks || hasPendingRegularTasks
     }
 

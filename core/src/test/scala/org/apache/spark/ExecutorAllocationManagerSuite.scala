@@ -179,7 +179,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     rp1.require(execReqs).require(taskReqs)
-
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
@@ -266,7 +265,92 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, rprof1.id) === 10)
   }
 
-  def  testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+  test("remove executors multiple profiles") {
+    val manager = createManager(createConf(5, 10, 5))
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build
+    val rp2 = new ResourceProfileBuilder()
+    val execReqs2 = new ExecutorResourceRequests().cores(1)
+    val taskReqs2 = new TaskResourceRequests().cpus(1)
+    rp2.require(execReqs2).require(taskReqs2)
+    val rprof2 = rp2.build
+    rpManager.addResourceProfile(rprof1)
+    rpManager.addResourceProfile(rprof2)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 10, rp = rprof1)))
+    post(SparkListenerStageSubmitted(createStageInfo(2, 10, rp = rprof2)))
+
+    (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id, rprof1) }
+    (11 to 20).map(_.toString).foreach { id => onExecutorAdded(manager, id, rprof2) }
+    (21 to 30).map(_.toString).foreach { id => onExecutorAdded(manager, id, defaultProfile) }
+
+    // Keep removing until the limit is reached
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(removeExecutor(manager, "1", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 1)
+    assert(executorsPendingToRemove(manager).contains("1"))
+    assert(removeExecutor(manager, "11", rprof2.id))
+    assert(removeExecutor(manager, "2", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 3)
+    assert(executorsPendingToRemove(manager).contains("2"))
+    assert(executorsPendingToRemove(manager).contains("11"))
+    assert(removeExecutor(manager, "21", defaultProfile.id))
+    assert(removeExecutor(manager, "3", rprof1.id))
+    assert(removeExecutor(manager, "4", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(executorsPendingToRemove(manager).contains("21"))
+    assert(executorsPendingToRemove(manager).contains("3"))
+    assert(executorsPendingToRemove(manager).contains("4"))
+    assert(removeExecutor(manager, "5", rprof1.id))
+    assert(!removeExecutor(manager, "6", rprof1.id)) // reached the limit of 5
+    assert(executorsPendingToRemove(manager).size === 7)
+    assert(executorsPendingToRemove(manager).contains("5"))
+    assert(!executorsPendingToRemove(manager).contains("6"))
+
+    // Kill executors previously requested to remove
+    onExecutorRemoved(manager, "1")
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(!executorsPendingToRemove(manager).contains("1"))
+    onExecutorRemoved(manager, "2")
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 4)
+    assert(!executorsPendingToRemove(manager).contains("2"))
+    assert(!executorsPendingToRemove(manager).contains("3"))
+    onExecutorRemoved(manager, "2") // duplicates should not count
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 4)
+    onExecutorRemoved(manager, "4")
+    onExecutorRemoved(manager, "5")
+    assert(executorsPendingToRemove(manager).size === 2)
+    assert(executorsPendingToRemove(manager).contains("11"))
+    assert(executorsPendingToRemove(manager).contains("21"))
+
+    // Try removing again
+    // This should still fail because the number pending + running is still at the limit
+    assert(!removeExecutor(manager, "7", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 2)
+    assert(!removeExecutor(manager, "8", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 2)
+
+    // make sure rprof2 has the same min limit or 5
+    assert(removeExecutor(manager, "12", rprof2.id))
+    assert(removeExecutor(manager, "13", rprof2.id))
+    assert(removeExecutor(manager, "14", rprof2.id))
+    assert(removeExecutor(manager, "15", rprof2.id))
+    assert(!removeExecutor(manager, "16", rprof2.id)) // reached the limit of 5
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(!executorsPendingToRemove(manager).contains("16"))
+    onExecutorRemoved(manager, "11")
+    onExecutorRemoved(manager, "12")
+    onExecutorRemoved(manager, "13")
+    onExecutorRemoved(manager, "14")
+    onExecutorRemoved(manager, "15")
+    assert(executorsPendingToRemove(manager).size === 1)
+  }
+
+  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
     val conf = createConf(3, 15)
@@ -429,7 +513,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
-    (0 to 6).foreach { i => assert(removeExecutor(manager, i.toString))}
+    (0 to 6).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
     (0 to 6).foreach { i => onExecutorRemoved(manager, i.toString)}
 
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
@@ -459,7 +543,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 4)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
-    assert(removeExecutor(manager, "10"))
+    assert(removeExecutorDefaultProfile(manager, "10"))
     onExecutorRemoved(manager, "10")
     // At this point, we still have 5 executors running: ["7", "8", "9", "11", "12"]
 
@@ -472,7 +556,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
-    (7 to 8).foreach { i => assert(removeExecutor(manager, i.toString))}
+    (7 to 8).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
     (7 to 8).foreach { i => onExecutorRemoved(manager, i.toString)}
     // At this point, we still have 3 executors running: ["9", "11", "12"]
 
@@ -502,7 +586,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
-    assert(removeExecutor(manager, "11"))
+    assert(removeExecutorDefaultProfile(manager, "11"))
     onExecutorRemoved(manager, "11")
     // At this point, we still have 2 executors running: ["9", "12"]
 
@@ -536,9 +620,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 0)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 0)
-    assert(removeExecutor(manager, "9"))
+    assert(removeExecutorDefaultProfile(manager, "9"))
     onExecutorRemoved(manager, "9")
-    assert(removeExecutor(manager, "12"))
+    assert(removeExecutorDefaultProfile(manager, "12"))
     onExecutorRemoved(manager, "12")
   }
 
@@ -622,18 +706,17 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutor(manager, "1"))
+    assert(removeExecutorDefaultProfile(manager, "1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutor(manager, "2"))
-    assert(removeExecutor(manager, "3"))
+    assert(removeExecutorDefaultProfile(manager, "2"))
+    assert(removeExecutorDefaultProfile(manager, "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
-    assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutor(manager, "5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    assert(removeExecutorDefaultProfile(manager, "5"))
+    assert(!removeExecutorDefaultProfile(manager, "6")) // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -657,9 +740,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    assert(!removeExecutorDefaultProfile(manager, "7"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(!removeExecutor(manager, "8"))
+    assert(!removeExecutorDefaultProfile(manager, "8"))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -669,17 +752,17 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("1")) === Seq("1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("1")) === Seq("1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutors(manager, Seq("2", "3")) === Seq("2", "3"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3")) === Seq("2", "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
     assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutors(manager, Seq("5")) === Seq("5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("5")) === Seq("5"))
+    assert(!removeExecutorDefaultProfile(manager, "6")) // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -703,9 +786,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    assert(!removeExecutorDefaultProfile(manager, "7"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("8")) !== Seq("8"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("8")) !== Seq("8"))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -730,7 +813,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 8)
     // won't work since numExecutorsTargetForDefaultProfileId == numExecutors
-    assert(!removeExecutor(manager, "1"))
+    assert(!removeExecutorDefaultProfile(manager, "1"))
 
     // Remove executors when numExecutorsTargetForDefaultProfileId is lower than
     // current number of executors
@@ -741,8 +824,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 8)
     assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3"))=== Seq("2", "3"))
+    assert(removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3"))=== Seq("2", "3"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -753,7 +836,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 5)
     assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
-    assert(!removeExecutor(manager, "4")) // lower limit
+    assert(!removeExecutorDefaultProfile(manager, "4")) // lower limit
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0) // upper limit
   }
 
@@ -782,8 +865,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
 
     // Remove when numTargetExecutors is equal to the current number of executors
-    assert(!removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3")) !== Seq("2", "3"))
+    assert(!removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3")) !== Seq("2", "3"))
 
     // Remove until limit
     onExecutorAddedDefaultProfile(manager, "9")
@@ -793,10 +876,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 12)
     assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
 
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3", "4")) === Seq("2", "3", "4"))
-    assert(!removeExecutor(manager, "5")) // lower limit reached
-    assert(!removeExecutor(manager, "6"))
+    assert(removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3", "4")) === Seq("2", "3", "4"))
+    assert(!removeExecutorDefaultProfile(manager, "5")) // lower limit reached
+    assert(!removeExecutorDefaultProfile(manager, "6"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -804,7 +887,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 8)
 
     // Add until limit
-    assert(!removeExecutor(manager, "7")) // still at lower limit
+    assert(!removeExecutorDefaultProfile(manager, "7")) // still at lower limit
     assert((manager, Seq("8")) !== Seq("8"))
     onExecutorAddedDefaultProfile(manager, "13")
     onExecutorAddedDefaultProfile(manager, "14")
@@ -813,8 +896,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 12)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(removeExecutors(manager, Seq("5", "6", "7")) === Seq("5", "6", "7"))
-    assert(removeExecutor(manager, "8"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("5", "6", "7")) === Seq("5", "6", "7"))
+    assert(removeExecutorDefaultProfile(manager, "8"))
     assert(manager.executorMonitor.executorCount === 12)
     onExecutorRemoved(manager, "5")
     onExecutorRemoved(manager, "6")
@@ -1226,8 +1309,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorAddedDefaultProfile(manager, "eighth")
     assert(manager.executorMonitor.executorCount === 8)
 
-    removeExecutor(manager, "first")
-    removeExecutors(manager, Seq("second", "third"))
+    removeExecutorDefaultProfile(manager, "first")
+    removeExecutorsDefaultProfile(manager, Seq("second", "third"))
     assert(executorsPendingToRemove(manager) === Set("first", "second", "third"))
     assert(manager.executorMonitor.executorCount === 8)
 
@@ -1377,8 +1460,18 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskEnd(1, 1, "foo", Success, info, new ExecutorMetrics, null))
   }
 
-  private def removeExecutor(manager: ExecutorAllocationManager, executorId: String): Boolean = {
-    val executorsRemoved = removeExecutors(manager, Seq(executorId))
+  private def removeExecutorDefaultProfile(
+      manager: ExecutorAllocationManager,
+      executorId: String): Boolean = {
+    val executorsRemoved = removeExecutorsDefaultProfile(manager, Seq(executorId))
+    executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
+  }
+
+  private def removeExecutor(
+      manager: ExecutorAllocationManager,
+      executorId: String,
+      rpId: Int): Boolean = {
+    val executorsRemoved = removeExecutors(manager, Seq((executorId, rpId)))
     executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
   }
 
@@ -1520,7 +1613,16 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(0L)
   }
 
-  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Seq[String] = {
+  private def removeExecutorsDefaultProfile(
+      manager: ExecutorAllocationManager,
+      ids: Seq[String]): Seq[String] = {
+    val idsAndProfileIds = ids.map((_, defaultProfile.id))
+    manager invokePrivate _removeExecutors(idsAndProfileIds)
+  }
+
+  private def removeExecutors(
+      manager: ExecutorAllocationManager,
+      ids: Seq[(String, Int)]): Seq[String] = {
     manager invokePrivate _removeExecutors(ids)
   }
 
