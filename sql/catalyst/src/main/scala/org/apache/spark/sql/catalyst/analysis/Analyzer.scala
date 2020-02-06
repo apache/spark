@@ -2428,6 +2428,10 @@ class Analyzer(
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
 
+          case WindowExpression(ae: AggregateExpression, _) if ae.filter.isDefined =>
+            failAnalysis(
+              "window aggregate function with filter predicate is not supported yet.")
+
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
               ae @ AggregateExpression(function, _, _, _, _),

@@ -308,6 +308,9 @@ trait CheckAnalysis extends PredicateHelper {
                 case a: AggregateExpression if a.isDistinct =>
                   e.failAnalysis(
                     "distinct aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case a: AggregateExpression if a.filter.isDefined =>
+                  e.failAnalysis("aggregates with filter predicate are not allowed in " +
+                    "observed metrics, but found: " + s.sql)
                 case _: Attribute if !seenAggregate =>
                   e.failAnalysis (s"attribute ${s.sql} can only be used as an argument to an " +
                     "aggregate function.")
