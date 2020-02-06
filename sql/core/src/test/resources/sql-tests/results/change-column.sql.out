@@ -27,11 +27,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'ALTER TABLE test_change CHANGE a'(line 1, pos 32)
+Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)
 
 == SQL ==
 ALTER TABLE test_change CHANGE a
---------------------------------^^^
+^^^
 
 
 -- !query

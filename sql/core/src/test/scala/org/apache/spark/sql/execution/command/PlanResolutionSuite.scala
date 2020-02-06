@@ -1069,6 +1069,14 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
+  test("alter table: alter column action is not specified") {
+    val e = intercept[AnalysisException] {
+      parseAndResolve("ALTER TABLE v1Table ALTER COLUMN i")
+    }
+    assert(e.getMessage.contains(
+      "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"))
+  }
+
   test("alter table: alter column case sensitivity for v1 table") {
     val tblName = "v1Table"
     Seq(true, false).foreach { caseSensitive =>

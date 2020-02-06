@@ -101,7 +101,7 @@ class ResolveSessionCatalog(
           // Add Hive type string to metadata.
           val cleanedDataType = HiveStringType.replaceCharType(dataType)
           if (dataType != cleanedDataType) {
-            builder.putString(HIVE_TYPE_STRING, a.dataType.get.catalogString)
+            builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
           }
           val newColumn = StructField(
             colName,
