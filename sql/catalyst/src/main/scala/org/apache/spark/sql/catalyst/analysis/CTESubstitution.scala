@@ -31,13 +31,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val isLegacy = SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)
     if (isLegacy.isEmpty) {
-      if (detectConflictInNestedCTE(plan, inTraverse = false)) {
-        throw new AnalysisException("Name collision in nested CTE was founded in current plan, " +
-          s"please select the CTE precedence via ${LEGACY_CTE_PRECEDENCE_ENABLED.key}, " +
-          "see more detail in SPARK-28228.")
-      } else {
-        traverseAndSubstituteCTE(plan, inTraverse = false)
-      }
+      assertNoNameConflictsInCTE(plan, inTraverse = false)
+      traverseAndSubstituteCTE(plan, inTraverse = false)
     } else if (isLegacy.get) {
       legacyTraverseAndSubstituteCTE(plan)
     } else {
@@ -49,33 +44,35 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
    * child, innerChildren and subquery for the current plan.
    */
-  private def detectConflictInNestedCTE(
+  private def assertNoNameConflictsInCTE(
       plan: LogicalPlan,
       inTraverse: Boolean,
-      cteNames: Set[String] = Set.empty): Boolean = {
+      cteNames: Set[String] = Set.empty): Unit = {
     plan.foreach {
       case w @ With(child, relations) =>
         val newNames = relations.map {
           case (cteName, _) =>
             if (cteNames.contains(cteName)) {
-              return true
+              throw new AnalysisException(s"Name $cteName is conflict in nested CTE. " +
+                s"Please set ${LEGACY_CTE_PRECEDENCE_ENABLED.key} to false so that name defined " +
+                "in inner CTE takes precedence. See more details in SPARK-28228.")
             } else {
               cteName
             }
         }.toSet
         (w.innerChildren :+ child).foreach { p =>
-          if (detectConflictInNestedCTE(p, inTraverse = true, cteNames ++ newNames)) return true
+          assertNoNameConflictsInCTE(p, inTraverse = true, cteNames ++ newNames)
         }
 
       case other if inTraverse =>
         other.transformExpressions {
-          case e: SubqueryExpression
-            if detectConflictInNestedCTE(e.plan, inTraverse = true, cteNames) => return true
+          case e: SubqueryExpression =>
+            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames)
+            e
         }
 
       case _ =>
     }
-    false
   }
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
