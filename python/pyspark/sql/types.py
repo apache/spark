@@ -1524,7 +1524,7 @@ class Row(tuple):
 
     def asDict(self, recursive=False):
         """
-        Return as an dict
+        Return as a dict
 
         :param recursive: turns the nested Row as dict (default: False).
 
