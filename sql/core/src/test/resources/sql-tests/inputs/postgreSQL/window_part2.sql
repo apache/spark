@@ -112,9 +112,9 @@ FROM tenk1 WHERE unique1 < 10;
 -- salary from empsalary;
 
 -- [SPARK-30734] AnalysisException that window RangeFrame not match RowFrame
-select last(salary) over(order by salary range between 1000 preceding and 1000 following),
-lag(salary) over(order by salary range between 1000 preceding and 1000 following),
-salary from empsalary;
+-- select last(salary) over(order by salary range between 1000 preceding and 1000 following),
+-- lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+-- salary from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- select first_value(salary) over(order by salary range between 1000 following and 3000 following
