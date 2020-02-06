@@ -57,7 +57,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
         Default: SCALAR.
 
-        .. note:: This parameter exists for compatibility. Using Python type hints are encouraged.
+        .. note:: This parameter exists for compatibility. Using Python type hints is encouraged.
 
     In order to use this API, customarily the below are imported:
 
@@ -72,7 +72,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ... def slen(s):
     ...     return s.str.len()
 
-    From Spark 3.0 with Python 3.6+, Python type hints detect the function types as below:
+    From Spark 3.0 with Python 3.6+, `Python type hints <https://www.python.org/dev/peps/pep-0484>`_
+    detect the function types as below:
 
     >>> @pandas_udf(IntegerType())
     ... def slen(s: pd.Series) -> pd.Series:
@@ -81,9 +82,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     It is preferred to specify type hints for the pandas UDF instead of specifying pandas UDF
     type via `functionType` which will be deprecated in the future releases.
 
-    The below combinations of the type hints are supported by Python type hints for Pandas UDFs.
-    Note that `pandas.DataFrame` is mapped to the column of :class:`pyspark.sql.types.StructType`;
-    otherwise, `pandas.Series` is mapped in all occurrences below.
+    The below combinations of the type hints are supported for Pandas UDFs.
+    Note that the type hint should be `pandas.Series` in all cases but there is one variant case
+    that `pandas.DataFrame` should be mapped as its input or output type hint instead when
+    the input or output column is of :class:`pyspark.sql.types.StructType`.
 
     * Series to Series
         `pandas.Series`, ... -> `pandas.Series`
@@ -123,11 +125,25 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
         The function takes an iterator of `pandas.Series` and outputs an iterator of
         `pandas.Series`. In this case, the created pandas UDF instance requires one input
-        column when this is called as a PySpark column. It is useful when the UDF execution
-        requires initializing some states.
+        column when this is called as a PySpark column. The output of each series from
+        the function should always be of the same length as the input.
 
-        The output of each series from the function should always be of the
-        same length as the input.
+        It is useful when the UDF execution
+        requires initializing some states although internally it works identically as
+        Series to Series case. The pseudocode below illustrates the example.
+
+        .. highlight:: python
+        .. code-block:: python
+
+            @pandas_udf("long")
+            def calculate(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                # Do some expensive initialization with a state
+                state = very_expensive_initialization()
+                for x in iterator:
+                    # Use that state for whole iterator.
+                    yield calculate_with_state(x, state)
+
+            df.select(calculate("value")).show()
 
         >>> from typing import Iterator
         >>> @pandas_udf("long")
@@ -153,10 +169,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         The function takes an iterator of a tuple of multiple `pandas.Series` and outputs an
         iterator of `pandas.Series`. In this case, the created pandas UDF instance requires
         input columns as many as the series when this is called as a PySpark column.
-        It is useful when the UDF execution requires initializing some states.
-
-        The output of each series from the function should always be of the same
-        length as the input.
+        It works identically as Iterator of Series to Iterator of Series case except
+        the parameter difference. The output of each series from the function should always
+        be of the same length as the input.
 
         >>> from typing import Iterator, Tuple
         >>> from pyspark.sql.functions import struct, col
@@ -174,6 +189,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         |  2|     4|
         |  3|     9|
         +---+------+
+
+        .. note:: The length of each series is the length of a batch internally used.
 
     * Series to Scalar
         `pandas.Series`, ... -> `Any`

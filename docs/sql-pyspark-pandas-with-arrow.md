@@ -35,7 +35,7 @@ working with Arrow-enabled data.
 
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.12.1.
+is installed and available on all cluster nodes. The current supported version is 0.15.1+.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -71,12 +71,14 @@ UDF is defined using the `pandas_udf` as a decorator or to wrap the function, an
 configuration is required. A Pandas UDF behaves as a regular PySpark function API in general.
 
 Before Spark 3.0, Pandas UDFs used to be defined with `PandasUDFType`. From Spark 3.0
-with Python 3.6+, you can also use Python type hints. Using Python type hints are preferred and the
-previous way will be deprecated in the future release.
+with Python 3.6+, you can also use [Python type hints](https://www.python.org/dev/peps/pep-0484).
+Using Python type hints are preferred and using `PandasUDFType` will be deprecated in
+the future release.
 
-The below combinations of the type hints are supported by Python type hints for Pandas UDFs.
-Note that `pandas.DataFrame` is mapped to the column of `StructType`; otherwise, `pandas.Series` is
-mapped in all occurrences below.
+
+The below combinations of the type hints are supported for Pandas UDFs. Note that the type hint should
+be `pandas.Series` in all cases but there is one variant case that `pandas.DataFrame` should be mapped
+as its input or output type hint instead when the input or output column is of `StructType`.
 
 ### Series to Series
 
@@ -105,8 +107,22 @@ The type hint can be expressed as `Iterator[pandas.Series]` -> `Iterator[pandas.
 By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the given
 function takes an iterator of `pandas.Series` and outputs an iterator of `pandas.Series`. The output of each
 series from the function should always be of the same length as the input. In this case, the created
-Pandas UDF requires one input column when the Pandas UDF is called. It is useful when the UDF execution
-requires initializing some states. Internally, it works identically as Series to Series case.
+Pandas UDF requires one input column when the Pandas UDF is called.
+
+It is useful when the UDF execution requires initializing some states although internally it works
+identically as Series to Series case. The pseudocode below illustrates the example.
+
+{% highlight python %}
+@pandas_udf("long")
+def calculate(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    # Do some expensive initialization with a state
+    state = very_expensive_initialization()
+    for x in iterator:
+        # Use that state for whole iterator.
+        yield calculate_with_state(x, state)
+
+df.select(calculate("value")).show()
+{% endhighlight %}
 
 The following example shows how to create this Pandas UDF:
 
@@ -125,8 +141,7 @@ The type hint can be expressed as `Iterator[Tuple[pandas.Series, ...]]` -> `Iter
 By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the
 given function takes an iterator of a tuple of multiple `pandas.Series` and outputs an iterator of `pandas.Series`.
 In this case, the created pandas UDF requires multiple input columns as many as the series in the tuple
-when the Pandas UDF is called. It is useful when the UDF execution requires initializing some states.
-Internally, it works identically as Series to Series case.
+when the Pandas UDF is called. It works identically as Iterator of Series to Iterator of Series case except the parameter difference.
 
 The following example shows how to create this Pandas UDF:
 
@@ -170,19 +185,20 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 ## Pandas Function APIs
 
 Pandas function APIs can directly apply a Python native function against the whole the DataFrame by
-using Pandas instances. Internally it works similar with Pandas UDFs by Spark using Arrow to transfer
+using Pandas instances. Internally it works similarly with Pandas UDFs by Spark using Arrow to transfer
 data and Pandas to work with the data, which allows vectorized operations. A Pandas function API behaves
 as a regular API under PySpark `DataFrame` in general.
 
-From Spark 3.0, Grouped map pandas UDF is now categorized as a separate API,
+From Spark 3.0, Grouped map pandas UDF is now categorized as a separate Pandas Function API,
 `DataFrame.groupby().applyInPandas()`. It is still possible to use it with `PandasUDFType`
 and `DataFrame.groupby().apply()` as it was; however, it is preferred to use
-`DataFrame.groupby().applyInPandas()` directly. The previous way will be deprecated in the future.
+`DataFrame.groupby().applyInPandas()` directly. Using `PandasUDFType` will be deprecated
+in the future.
 
 ### Grouped Map
 
-Grouped map operations with Pandas instances is supported by `DataFrame.groupby().applyInPandas()`
-which takes a Python function that takes a `pandas.DataFrame` and return another `pandas.DataFrame`.
+Grouped map operations with Pandas instances are supported by `DataFrame.groupby().applyInPandas()`
+which requires a Python function that takes a `pandas.DataFrame` and return another `pandas.DataFrame`.
 It maps each group to each `pandas.DataFrame` in the Python function.
 
 This API implements the "split-apply-combine" pattern which consists of three steps:
@@ -218,7 +234,7 @@ For detailed usage, please see [`pyspark.sql.GroupedData.applyInPandas`](api/pyt
 
 ### Map
 
-Map operations with Pandas instances is supported by `DataFrame.mapInPandas()` which maps an iterator
+Map operations with Pandas instances are supported by `DataFrame.mapInPandas()` which maps an iterator
 of `pandas.DataFrame`s to another iterator of `pandas.DataFrame`s that represents the current
 PySpark `DataFrame` and returns the result as a PySpark `DataFrame`. The functions takes and outputs
 an iterator of `pandas.DataFrame`. It can return the output of arbitrary length in contrast to some
@@ -236,7 +252,7 @@ For detailed usage, please see [`pyspark.sql.DataFrame.mapsInPandas`](api/python
 
 ### Co-grouped Map
 
-Co-grouped map operations with Pandas instances is supported by `DataFrame.cogroup().applyInPandas()` which
+Co-grouped map operations with Pandas instances are supported by `DataFrame.cogroup().applyInPandas()` which
 allows two PySpark `DataFrame`s to be cogrouped by a common key and then a Python function applied to each
 cogroup. It consists of the following steps:
 * Shuffle the data such that the groups of each dataframe which share a key are cogrouped together.

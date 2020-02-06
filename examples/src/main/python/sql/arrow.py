@@ -110,8 +110,6 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark):
         for x in iterator:
             yield x + 1
 
-    # The function for a pandas_udf should be able to execute with local Pandas data
-    # against the iterator of pandas series.
     df.select(plus_one("x")).show()
     # +-----------+
     # |plus_one(x)|
