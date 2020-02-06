@@ -529,9 +529,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           insideDoubleQuote = !insideDoubleQuote
         }
       } else if (line.charAt(index) == '-') {
-        val hasNext: Boolean = index + 1 < line.length
+        val hasNext = index + 1 < line.length
         if (insideDoubleQuote || insideSingleQuote || insideComment) {
-          // ignore
+          // Ignores '-' in any case of quotes or comment.
+          // Avoids to start a comment(--) within a quoted segment or already in a comment.
+          // Sample query: select "quoted value --"
+          //                                    ^^ avoids starting a comment if it's inside quotes.
         } else if (hasNext && line.charAt(index + 1) == '-') {
           // ignore quotes and ;
           insideComment = true
