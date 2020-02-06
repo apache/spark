@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -736,5 +736,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
       CollectMetrics("evt1", count :: Nil, tblB))
     assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+
+    // Aggregate with filter predicate - fail
+    val sumWithFilter = sum.transform {
+      case a: AggregateExpression => a.copy(filter = Some(true))
+    }.asInstanceOf[NamedExpression]
+    assertAnalysisError(
+      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
+      "aggregates with filter predicate are not allowed" :: Nil)
   }
 }
