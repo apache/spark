@@ -83,8 +83,8 @@ object DateTimeUtils {
   }
 
   def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
-    val millisLocal = days.toLong * MILLIS_PER_DAY
-    millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
+    val instant = daysToLocalDate(days).atStartOfDay(timeZone.toZoneId).toInstant
+    instantToMicros(instant) / MICROS_PER_MILLIS
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
