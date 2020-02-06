@@ -27,7 +27,7 @@ from mkdocs.structure.pages import markdown
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
 SQLConfEntry = namedtuple(
-    "SQLConfEntry", ["name", "default", "docstring"])
+    "SQLConfEntry", ["name", "default", "description"])
 
 
 def _list_function_infos(jvm):
@@ -59,7 +59,7 @@ def _list_sql_configs(jvm):
         SQLConfEntry(
             name=_sql_config._1(),
             default=_sql_config._2(),
-            docstring=_sql_config._3(),
+            description=_sql_config._3(),
         )
         for _sql_config in jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
     ]
@@ -293,13 +293,13 @@ def generate_sql_configs_table(jvm, path):
                 <tr>
                     <td><code>{name}</code></td>
                     <td>{default}</td>
-                    <td>{docstring}</td>
+                    <td>{description}</td>
                 </tr>
                 """
                 .format(
                     name=config.name,
                     default=default,
-                    docstring=markdown.markdown(config.docstring),
+                    description=markdown.markdown(config.description),
                 )
             ))
         f.write("</table>\n")
