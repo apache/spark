@@ -120,8 +120,11 @@ private[spark] object ChiSqTest extends Logging {
         contingency.update(i, j, c)
       }
       val result = ChiSqTest.chiSquaredMatrix(contingency, methodName)
-      (col, result)
-    }.collect().sortBy(_._1).map(_._2)
+      (col, result.pValue, result.degreesOfFreedom, result.statistic, result.nullHypothesis)
+    }.collect().sortBy(_._1).map {
+      case (_, pValue, degreesOfFreedom, statistic, nullHypothesis) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
+    }
   }
 
   /*
