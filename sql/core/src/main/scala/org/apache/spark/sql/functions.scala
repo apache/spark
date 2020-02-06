@@ -3599,7 +3599,8 @@ object functions {
    * }}}
    *
    * @param expr the input map column
-   * @param f (key, value) => new_value, the lambda function to transform the value of input map column
+   * @param f (key, value) => new_value, the lambda function to transform the value of input map
+   *          column
    *
    * @group collection_funcs
    * @since 3.0.0
