@@ -358,6 +358,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
+    .internal()
+    .doc("Adaptive query execution is skipped when the query does not have exchanges or " +
+      "sub-queries. By setting this config to true (together with " +
+      s"'${ADAPTIVE_EXECUTION_ENABLED.key}' enabled), Spark will force apply adaptive query " +
+      "execution for all supported queries.")
+    .booleanConf
+    .createWithDefault(false)
+
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +

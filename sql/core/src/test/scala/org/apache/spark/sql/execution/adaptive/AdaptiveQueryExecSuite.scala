@@ -780,4 +780,13 @@ class AdaptiveQueryExecSuite
       )
     }
   }
+
+  test("force apply AQE") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
+      assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
 }
