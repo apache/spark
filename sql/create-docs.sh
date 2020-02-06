@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Script to create SQL API docs. This requires `mkdocs` and to build
+# Script to create SQL API and config docs. This requires `mkdocs` and to build
 # Spark first. After running this script the html docs can be found in
 # $SPARK_HOME/sql/site
 
