@@ -802,26 +802,12 @@ object DateTimeUtils {
    * timezone-aware.
    */
   def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
-    // We always use local timezone to parse or format a timestamp
-    val localZone = defaultTimeZone()
-    val utcTs = if (fromZone.getID == localZone.getID) {
-      ts
-    } else {
-      // get the human time using local time zone, that actually is in fromZone.
-      val localZoneOffsetMs = localZone.getOffset(MICROSECONDS.toMillis(ts))
-      val localTsUs = ts + MILLISECONDS.toMicros(localZoneOffsetMs)  // in fromZone
-      val offsetFromLocalMs = getOffsetFromLocalMillis(MICROSECONDS.toMillis(localTsUs), fromZone)
-      localTsUs - MILLISECONDS.toMicros(offsetFromLocalMs)
-    }
-    if (toZone.getID == localZone.getID) {
-      utcTs
-    } else {
-      val toZoneOffsetMs = toZone.getOffset(MICROSECONDS.toMillis(utcTs))
-      val localTsUs = utcTs + MILLISECONDS.toMicros(toZoneOffsetMs)  // in toZone
-      // treat it as local timezone, convert to UTC (we could get the expected human time back)
-      val offsetFromLocalMs = getOffsetFromLocalMillis(MICROSECONDS.toMillis(localTsUs), localZone)
-      localTsUs - MILLISECONDS.toMicros(offsetFromLocalMs)
-    }
+    val toInstant = microsToInstant(ts)
+      .atZone(toZone.toZoneId)
+      .toLocalDateTime
+      .atZone(fromZone.toZoneId)
+      .toInstant
+    instantToMicros(toInstant)
   }
 
   /**
