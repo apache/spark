@@ -2400,9 +2400,16 @@ Please refer to the [Security](security.html) page for available options on how 
 Spark subsystems.
 
 
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-{% include sql-configs.html %}
+        {% include_relative sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
+
+
 
 
 ### Spark Streaming
