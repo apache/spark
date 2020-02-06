@@ -505,12 +505,7 @@ test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
   expect_true(is.na(DF$date[2]))
   expect_equal(DF$date[1], as.Date("2016-10-01"))
   expect_true(is.na(DF$time[2]))
-  # Warnings were suppressed due to Jenkins environment issues.
-  # It shows both warnings as below in Jenkins:
-  # - Your system is mis-configured: /etc/localtime is not a symlink
-  # - It is strongly recommended to set environment variable TZ to
-  #     America/Los_Angeles (or equivalent)
-  suppressWarnings(expect_equal(DF$time[1], as.POSIXlt("2016-01-10")))
+  expect_equal(DF$time[1], as.POSIXlt("2016-01-10"))
 })
 
 test_that("create DataFrame with complex types", {
