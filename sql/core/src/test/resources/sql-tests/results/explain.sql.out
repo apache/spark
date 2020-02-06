@@ -86,8 +86,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max#x]
-Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
@@ -96,8 +96,8 @@ Input: [key#x, max#x]
 Input: [key#x, max#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max(val#x)#x AS max(val)#x]
-Output: [key#x, max(val)#x]
      
 (8) Exchange 
 Input: [key#x, max(val)#x]
@@ -150,8 +150,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max#x]
-Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
@@ -160,8 +160,8 @@ Input: [key#x, max#x]
 Input: [key#x, max#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max(val#x)#x AS max(val)#x, max(val#x)#x AS max(val#x)#x]
-Output: [key#x, max(val)#x, max(val#x)#x]
      
 (8) Filter [codegen id : 2]
 Input     : [key#x, max(val)#x, max(val#x)#x]
@@ -237,8 +237,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x, val#x]
 Functions: []
+FuncBufferAttrs: []
 Results: [key#x, val#x]
-Output: [key#x, val#x]
      
 (11) Exchange 
 Input: [key#x, val#x]
@@ -247,8 +247,8 @@ Input: [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x, val#x]
 Functions: []
+FuncBufferAttrs: []
 Results: [key#x, val#x]
-Output: [key#x, val#x]
 
 
 -- !query
@@ -447,8 +447,8 @@ Input     : [key#x, val#x]
 Input: [key#x]
 Keys: []
 Functions: [partial_max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max#x]
-Output: [max#x]
      
 (10) Exchange 
 Input: [max#x]
@@ -457,8 +457,8 @@ Input: [max#x]
 Input: [max#x]
 Keys: []
 Functions: [max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max(key#x)#x AS max(key)#x]
-Output: [max(key)#x]
      
 Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (18)
@@ -492,8 +492,8 @@ Input     : [key#x, val#x]
 Input: [key#x]
 Keys: []
 Functions: [partial_max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max#x]
-Output: [max#x]
      
 (17) Exchange 
 Input: [max#x]
@@ -502,8 +502,8 @@ Input: [max#x]
 Input: [max#x]
 Keys: []
 Functions: [max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max(key#x)#x AS max(key)#x]
-Output: [max(key)#x]
 
 
 -- !query
@@ -514,7 +514,7 @@ EXPLAIN FORMATTED
                 FROM   explain_temp2 
                 WHERE  val > 0) 
          OR
-         key = (SELECT max(key) 
+         key = (SELECT avg(key)
                 FROM   explain_temp3
                 WHERE  val > 0)
 -- !query schema
@@ -537,7 +537,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : ((key#x = Subquery scalar-subquery#x, [id=#x]) OR (key#x = Subquery scalar-subquery#x, [id=#x]))
+Condition : ((key#x = Subquery scalar-subquery#x, [id=#x]) OR (cast(key#x as double) = Subquery scalar-subquery#x, [id=#x]))
      
 ===== Subqueries =====
 
@@ -573,8 +573,8 @@ Input     : [key#x, val#x]
 Input: [key#x]
 Keys: []
 Functions: [partial_max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max#x]
-Output: [max#x]
      
 (9) Exchange 
 Input: [max#x]
@@ -583,8 +583,8 @@ Input: [max#x]
 Input: [max#x]
 Keys: []
 Functions: [max(key#x)]
+FuncBufferAttrs: [max#x]
 Results: [max(key#x)#x AS max(key)#x]
-Output: [max(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (17)
@@ -617,19 +617,19 @@ Input     : [key#x, val#x]
 (15) HashAggregate [codegen id : 1]
 Input: [key#x]
 Keys: []
-Functions: [partial_max(key#x)]
-Results: [max#x]
-Output: [max#x]
+Functions: [partial_avg(cast(key#x as bigint))]
+FuncBufferAttrs: [sum#x, count#xL]
+Results: [sum#x, count#xL]
      
 (16) Exchange 
-Input: [max#x]
+Input: [sum#x, count#xL]
      
 (17) HashAggregate [codegen id : 2]
-Input: [max#x]
+Input: [sum#x, count#xL]
 Keys: []
-Functions: [max(key#x)]
-Results: [max(key#x)#x AS max(key)#x]
-Output: [max(key)#x]
+Functions: [avg(cast(key#x as bigint))]
+FuncBufferAttrs: [sum#x, count#xL]
+Results: [avg(cast(key#x as bigint))#x AS avg(key)#x]
 
 
 -- !query
@@ -681,8 +681,8 @@ Input: [key#x]
 Input: [key#x]
 Keys: []
 Functions: [partial_avg(cast(key#x as bigint))]
+FuncBufferAttrs: [sum#x, count#xL]
 Results: [sum#x, count#xL]
-Output: [sum#x, count#xL]
      
 (7) Exchange 
 Input: [sum#x, count#xL]
@@ -691,8 +691,8 @@ Input: [sum#x, count#xL]
 Input: [sum#x, count#xL]
 Keys: []
 Functions: [avg(cast(key#x as bigint))]
+FuncBufferAttrs: [sum#x, count#xL]
 Results: [avg(cast(key#x as bigint))#x AS avg(key)#x]
-Output: [avg(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
@@ -814,8 +814,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x]
 Functions: [partial_max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max#x]
-Output: [key#x, max#x]
      
 (6) Exchange 
 Input: [key#x, max#x]
@@ -824,8 +824,8 @@ Input: [key#x, max#x]
 Input: [key#x, max#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max(val#x)#x AS max(val)#x]
-Output: [key#x, max(val)#x]
      
 (8) ReusedExchange  [Reuses operator id: 6]
 Output : ArrayBuffer(key#x, max#x)
@@ -834,8 +834,8 @@ Output : ArrayBuffer(key#x, max#x)
 Input: [key#x, max#x]
 Keys: [key#x]
 Functions: [max(val#x)]
+FuncBufferAttrs: [max#x]
 Results: [key#x, max(val#x)#x AS max(val)#x]
-Output: [key#x, max(val)#x]
      
 (10) BroadcastExchange 
 Input: [key#x, max(val)#x]
@@ -900,8 +900,8 @@ Input: [key#x, val#x]
 Input: [key#x, val#x]
 Keys: []
 Functions: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+FuncBufferAttrs: [count#xL, sum#xL, count#xL]
 Results: [count#xL, sum#xL, count#xL]
-Output: [count#xL, sum#xL, count#xL]
      
 (4) Exchange 
 Input: [count#xL, sum#xL, count#xL]
@@ -910,8 +910,8 @@ Input: [count#xL, sum#xL, count#xL]
 Input: [count#xL, sum#xL, count#xL]
 Keys: []
 Functions: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
+FuncBufferAttrs: [count#xL, sum#xL, count#xL]
 Results: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
-Output: [TOTAL#xL, count(key) FILTER (WHERE (val > 1))#xL]
 
 
 -- !query
@@ -943,8 +943,8 @@ Input: [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x]
 Functions: [partial_collect_set(val#x, 0, 0)]
+FuncBufferAttrs: [buf#x]
 Results: [key#x, buf#x]
-Output: [key#x, buf#x]
      
 (4) Exchange 
 Input: [key#x, buf#x]
@@ -953,8 +953,8 @@ Input: [key#x, buf#x]
 Input: [key#x, buf#x]
 Keys: [key#x]
 Functions: [collect_set(val#x, 0, 0)]
+FuncBufferAttrs: [buf#x]
 Results: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
-Output: [key#x, sort_array(collect_set(val), true)[0]#x]
 
 
 -- !query
@@ -991,8 +991,8 @@ Input: [key#x, val#x]
 Input: [key#x, val#x]
 Keys: [key#x]
 Functions: [partial_min(val#x)]
+FuncBufferAttrs: [min#x]
 Results: [key#x, min#x]
-Output: [key#x, min#x]
      
 (5) Exchange 
 Input: [key#x, min#x]
@@ -1004,8 +1004,8 @@ Input: [key#x, min#x]
 Input: [key#x, min#x]
 Keys: [key#x]
 Functions: [min(val#x)]
+FuncBufferAttrs: [min#x]
 Results: [key#x, min(val#x)#x AS min(val)#x]
-Output: [key#x, min(val)#x]
 
 
 -- !query

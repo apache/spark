@@ -55,10 +55,6 @@ case class HashAggregateExec(
     child: SparkPlan)
   extends BaseAggregateExec with BlockingOperatorWithCodegen with AliasAwareOutputPartitioning {
 
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
-
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: AttributeSeq =

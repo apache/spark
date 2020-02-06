@@ -29,19 +29,23 @@ abstract class BaseAggregateExec extends UnaryExecNode {
   val aggregateExpressions: Seq[AggregateExpression]
   val resultExpressions: Seq[NamedExpression]
 
+  protected val aggregateBufferAttributes = {
+    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+  }
+
   override def verboseStringWithOperatorId(): String = {
     val inputString = child.output.mkString("[", ", ", "]")
     val keyString = groupingExpressions.mkString("[", ", ", "]")
     val functionString = aggregateExpressions.mkString("[", ", ", "]")
+    val funcBufferAttrString = aggregateBufferAttributes.mkString("[", ", ", "]")
     val resultString = resultExpressions.mkString("[", ", ", "]")
-    val outputString = output.mkString("[", ", ", "]")
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input: $inputString
        |Keys: $keyString
        |Functions: $functionString
+       |FuncBufferAttrs: $funcBufferAttrString
        |Results: $resultString
-       |Output: $outputString
      """.stripMargin
   }
 }

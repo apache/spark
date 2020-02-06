@@ -62,7 +62,7 @@ EXPLAIN FORMATTED
                 FROM   explain_temp2 
                 WHERE  val > 0) 
          OR
-         key = (SELECT max(key) 
+         key = (SELECT avg(key)
                 FROM   explain_temp3
                 WHERE  val > 0);
 
