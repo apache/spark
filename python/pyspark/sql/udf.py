@@ -417,7 +417,7 @@ def _test():
     globs['spark'] = spark
     # Hack to skip the unit tests in register. These are currently being tested in proper tests.
     # We should reenable this test once we completely drop Python 2.
-    pyspark.sql.udf.register.__doc__ = ""
+    del pyspark.sql.udf.UDFRegistration.register
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.udf, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
