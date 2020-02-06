@@ -39,14 +39,16 @@ fi
 
 pushd "$FWDIR" > /dev/null
 
-# Now create the markdown file
 rm -fr docs
 mkdir docs
-echo "Generating SQL documentation: markdown files + config table"
-"$SPARK_HOME/bin/spark-submit" gen-sql-markdown.py
 
-# Now create the HTML files
-echo "Generating HTML files for SQL documentation."
+echo "Generating SQL API Markdown files."
+"$SPARK_HOME/bin/spark-submit" gen-sql-api-docs.py
+
+echo "Generating SQL config HTML file."
+"$SPARK_HOME/bin/spark-submit" gen-sql-config-docs.py
+
+echo "Generating HTML files for SQL API documentation."
 mkdocs build --clean
 rm -fr docs
 
