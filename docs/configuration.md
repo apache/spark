@@ -2410,8 +2410,6 @@ Spark subsystems.
 {% endfor %}
 
 
-
-
 ### Spark Streaming
 
 <table class="table">
