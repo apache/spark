@@ -22,12 +22,19 @@ from textwrap import dedent
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
+from pyspark.java_gateway import launch_gateway
 
 SQLConfEntry = namedtuple(
     "SQLConfEntry", ["name", "default", "description"])
 
+SELECTION_OF_PRIVATE_CONFIGS = {
+    "spark.sql.limit.scaleUpFactor",
+    "spark.sql.streaming.schemaInference",
+    "spark.sql.view.maxNestedViewDepth",
+}
 
-def _list_sql_configs(jvm):
+
+def get_public_sql_configs(jvm):
     sql_configs = [
         SQLConfEntry(
             name=_sql_config._1(),
@@ -39,7 +46,7 @@ def _list_sql_configs(jvm):
     return sql_configs
 
 
-def generate_sql_configs_table(jvm, path):
+def generate_sql_configs_table(sql_configs, path):
     """
     Generates an HTML table at `path` that lists all public SQL
     configuration options.
@@ -61,7 +68,6 @@ def generate_sql_configs_table(jvm, path):
     </table>
     ```
     """
-    sql_configs = _list_sql_configs(jvm)
     value_reference_pattern = re.compile(r"^<value of (\S*)>$")
 
     with open(path, 'w') as f:
@@ -108,10 +114,17 @@ def generate_sql_configs_table(jvm, path):
 
 
 if __name__ == "__main__":
-    from pyspark.java_gateway import launch_gateway
-
     jvm = launch_gateway().jvm
-    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
+    sql_configs = get_public_sql_configs(jvm)
 
+    private_configs = {_.name for _ in sql_configs}.intersection(SELECTION_OF_PRIVATE_CONFIGS)
+    if private_configs:
+        raise Exception(
+            "get_public_sql_configs() returned the following private configs:",
+            ', '.join(private_configs)
+        )
+
+    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
     sql_configs_table_path = os.path.join(spark_root_dir, "docs/sql-configs.html")
-    generate_sql_configs_table(jvm, sql_configs_table_path)
+
+    generate_sql_configs_table(sql_configs, path=sql_configs_table_path)
