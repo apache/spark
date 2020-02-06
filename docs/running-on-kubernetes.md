@@ -345,12 +345,13 @@ The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 ### Setting up custom logging configuration
-Spark uses `log4j.properties` under the conf dir as the standard way of setting up a logger configuration.
+Spark uses `log4j.properties` under the `SPARK_HOME/conf` dir as the standard way of setting up a logger configuration.
 
 1) Kubernetes lets us define a
- [config map](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) and can be sometimes convenient
- to provide custom logging configuration using a config map. For example, config map can be updated irrespective
- of point of submission of spark job.
+ [configMap](https://kubernetes.io/docs/concepts/storage/volumes/#configmap) and can be sometimes convenient
+ to provide custom logging configuration using a configMap. For example, configMap can be updated irrespective
+ of point of submission of spark job. This is particularly useful in automated deployment and building 
+ spark as a service. 
  Once the user defined config map is created inside the kubernetes cluster, we can mount it and configure
  for spark to use it, by setting the property: `spark.kubernetes.loggingConf.configMapName` and 
  `spark.kubernetes.loggingConf.fileName`. `spark.kubernetes.loggingConf.configMapName` is the name of config map

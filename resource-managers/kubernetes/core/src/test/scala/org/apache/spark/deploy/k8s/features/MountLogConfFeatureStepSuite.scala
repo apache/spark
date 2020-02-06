@@ -17,13 +17,17 @@
 
 package org.apache.spark.deploy.k8s.features
 
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.Pod
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, KubernetesTestConf, SparkPod}
 import org.apache.spark.launcher.SparkLauncher
 
 class MountLogConfFeatureStepSuite extends SparkFunSuite {
 
-  test("Do not enable mount logger config feature," +
+  test("Do not enable, mount logger configuration feature," +
     " if neither of logging configuration file or user defined config map is configured.") {
     val sparkConf = new SparkConf(false)
       .set(SparkLauncher.DEPLOY_MODE, "cluster")
@@ -35,10 +39,9 @@ class MountLogConfFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod == initPod, "Pod should be unchanged.")
   }
 
-  test("Do not enable mount logger config for client mode, unless an explicit" +
-    " config map is configured") {
-    // For client mode we cannot create k8s resources like config maps, so we rely on explicit
-    // setup by the user.
+  test("Do not mount logger config for client mode," +
+    " unless an explicit config map is configured") {
+
     val sparkConf = new SparkConf(false)
       .set(SparkLauncher.DEPLOY_MODE, "client")
       .set(Config.KUBERNETES_LOGGING_CONF_FILE_NAME, "log4j.properties")
@@ -56,12 +59,29 @@ class MountLogConfFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod2.pod.getSpec.getVolumes.get(0).getConfigMap.getName == configMapName)
   }
 
-  test("Do not create a config map if user provided configMap is configured.") {
+  test("Do not auto-create a ConfigMap if user provided ConfigMap is configured.") {
     val sparkConf = new SparkConf(false)
       .set(SparkLauncher.DEPLOY_MODE, "cluster")
       .set(Config.KUBERNETES_LOGGING_CONF_CONFIG_MAP, "user-created-config-map-name")
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     val step = new MountLogConfFeatureStep(conf)
     assert(step.getAdditionalKubernetesResources() == Seq.empty)
+  }
+
+  test("User provided ConfigMap takes precedence and is configured properly.") {
+    val configMapName = "user-created-config-map-name"
+    val sparkConf = new SparkConf(false)
+      .set(SparkLauncher.DEPLOY_MODE, "cluster")
+      .set(Config.KUBERNETES_LOGGING_CONF_CONFIG_MAP, configMapName)
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val step = new MountLogConfFeatureStep(conf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+    assert(hasConfigMap(configuredPod.pod, configMapName))
+  }
+
+  private def hasConfigMap(pod: Pod, configMapName: String): Boolean = {
+    pod.getSpec.getVolumes.asScala.exists { volume =>
+      volume.getConfigMap.getName == configMapName
+    }
   }
 }

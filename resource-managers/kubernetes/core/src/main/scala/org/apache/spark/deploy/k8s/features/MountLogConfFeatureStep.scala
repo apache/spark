@@ -116,7 +116,6 @@ private[k8s] object MountLogConfFeatureStep extends Logging {
   // Logging configuration for containers.
   val JAVA_OPT_FOR_LOGGING = s"-Dlog4j.configuration=file://$LOGGING_MOUNT_DIR/"
 
-  // exposed for testing.
   private[k8s] def buildConfigMap(
       loggingConfUrl: URL, loggingConfigFileName: String, configMapName: String): ConfigMap = {
     logInfo(s"Logging configuration is picked up from: $loggingConfigFileName")
