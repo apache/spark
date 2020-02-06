@@ -642,59 +642,55 @@ The following table shows the type names as well as aliases used in Spark SQL pa
   <th>SQL name</th></tr>
 <tr>
   <td> <b>BooleanType</b> </td>
-  <td> boolean </td>
+  <td> BOOLEAN </td>
 </tr>
 <tr>
   <td> <b>ByteType</b> </td>
-  <td> byte, tinyint </td>
+  <td> BYTE, TINYINT </td>
 </tr>
 <tr>
   <td> <b>ShortType</b> </td>
-  <td> shot, smallint </td>
+  <td> SHORT, SMALLINT </td>
 </tr>
 <tr>
   <td> <b>IntegerType</b> </td>
-  <td> int, integer </td>
+  <td> INT, INTEGER </td>
 </tr>
 <tr>
   <td> <b>LongType</b> </td>
-  <td> long, bigint </td>
+  <td> LONG, BIGINT </td>
 </tr>
 <tr>
   <td> <b>FloatType</b> </td>
-  <td> float, real </td>
+  <td> FLOAT, REAL </td>
 </tr>
 <tr>
   <td> <b>DoubleType</b> </td>
-  <td> double </td>
+  <td> DOUBLE </td>
 </tr>
 <tr>
   <td> <b>DateType</b> </td>
-  <td> date </td>
+  <td> DATE </td>
 </tr>
 <tr>
   <td> <b>TimestampType</b> </td>
-  <td> timestamp </td>
+  <td> TIMESTAMP </td>
 </tr>
 <tr>
   <td> <b>StringType</b> </td>
-  <td> string </td>
+  <td> STRING </td>
 </tr>
 <tr>
   <td> <b>BinaryType</b> </td>
-  <td> string </td>
-</tr>
-<tr>
-  <td> <b>BinaryType</b> </td>
-  <td> string </td>
+  <td> BINARY </td>
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> decimal, desc, numeric </td>
+  <td> DECIMAL, DEC, NUMERIC </td>
 </tr>
 <tr>
   <td> <b>CalendarIntervalType</b> </td>
-  <td> interval </td>
+  <td> INTERVAL </td>
 </tr>
 </table>
 </div>
