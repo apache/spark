@@ -15,7 +15,7 @@ struct<>
 
 
 -- !query
-select company from like_any_table where company like any ('%oo%', '%in', 'fa%')
+SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', '%in', 'fa%')
 -- !query schema
 struct<company:string>
 -- !query output
@@ -25,7 +25,7 @@ linkedin
 
 
 -- !query
-select company from like_any_table where company like any ('microsoft', '%yoo%')
+SELECT company FROM like_any_table WHERE company LIKE ANY ('microsoft', '%yoo%')
 -- !query schema
 struct<company:string>
 -- !query output
@@ -36,14 +36,14 @@ struct<company:string>
 select
     company,
     CASE
-        WHEN company like any ('%oo%', '%in', 'fa%') THEN 'Y'
+        WHEN company LIKE ANY ('%oo%', '%in', 'fa%') THEN 'Y'
         ELSE 'N'
     END AS is_available,
     CASE
-        WHEN company like any ('%oo%', 'fa%') OR company like any ('%in', 'ms%') THEN 'Y'
+        WHEN company LIKE ANY ('%oo%', 'fa%') OR company LIKE ANY ('%in', 'ms%') THEN 'Y'
         ELSE 'N'
     END AS mix
-From like_any_table
+FROM like_any_table
 -- !query schema
 struct<company:string,is_available:string,mix:string>
 -- !query output
@@ -53,7 +53,7 @@ linkedin	Y	Y
 
 
 -- !query
-select company from like_any_table where company like any ('%zz%', pat)
+SELECT company FROM like_any_table WHERE company LIKE ANY ('%zz%', pat)
 -- !query schema
 struct<company:string>
 -- !query output
@@ -63,7 +63,7 @@ linkedin
 
 
 -- !query
-select company from like_any_table where company not like any ('%oo%', '%in', 'fa%')
+SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', '%in', 'fa%')
 -- !query schema
 struct<company:string>
 -- !query output
@@ -73,7 +73,7 @@ linkedin
 
 
 -- !query
-select company from like_any_table where company not like any ('microsoft', '%yoo%')
+SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('microsoft', '%yoo%')
 -- !query schema
 struct<company:string>
 -- !query output
@@ -83,7 +83,7 @@ linkedin
 
 
 -- !query
-select company from like_any_table where company like any ('%oo%', null)
+SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', NULL)
 -- !query schema
 struct<company:string>
 -- !query output
@@ -92,7 +92,7 @@ google
 
 
 -- !query
-select company from like_any_table where company not like any ('%oo%', null)
+SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', NULL)
 -- !query schema
 struct<company:string>
 -- !query output
@@ -100,7 +100,7 @@ linkedin
 
 
 -- !query
-select company from like_any_table where company like any (null, null)
+SELECT company FROM like_any_table WHERE company LIKE ANY (NULL, NULL)
 -- !query schema
 struct<company:string>
 -- !query output
@@ -108,7 +108,7 @@ struct<company:string>
 
 
 -- !query
-select company from like_any_table where company not like any (null, null)
+SELECT company FROM like_any_table WHERE company NOT LIKE ANY (NULL, NULL)
 -- !query schema
 struct<company:string>
 -- !query output
@@ -116,7 +116,7 @@ struct<company:string>
 
 
 -- !query
-select company from like_any_table where company like any ()
+SELECT company FROM like_any_table WHERE company LIKE ANY ()
 -- !query schema
 struct<>
 -- !query output
@@ -125,5 +125,5 @@ org.apache.spark.sql.catalyst.parser.ParseException
 Syntax error: expected something between '(' and ')'.(line 1, pos 49)
 
 == SQL ==
-select company from like_any_table where company like any ()
+SELECT company FROM like_any_table WHERE company LIKE ANY ()
 -------------------------------------------------^^^

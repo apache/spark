@@ -4,39 +4,34 @@ CREATE OR REPLACE TEMPORARY VIEW like_all_table AS SELECT * FROM (VALUES
   ('linkedin', '%in'))
   as t1(company, pat);
 
-select company from like_all_table where company like all ('%oo%', '%go%');
+SELECT company FROM like_all_table WHERE company LIKE ALL ('%oo%', '%go%');
 
-select company from like_all_table where company like all ('microsoft', '%yoo%');
+SELECT company FROM like_all_table WHERE company LIKE ALL ('microsoft', '%yoo%');
 
-select
+SELECT 
     company,
     CASE
-        WHEN company like all ('%oo%', '%go%') THEN 'Y'
+        WHEN company LIKE ALL ('%oo%', '%go%') THEN 'Y'
         ELSE 'N'
     END AS is_available,
     CASE
-        WHEN company like all ('%oo%', 'go%') OR company like all ('%in', 'ms%') THEN 'Y'
+        WHEN company LIKE ALL ('%oo%', 'go%') OR company LIKE ALL ('%in', 'ms%') THEN 'Y'
         ELSE 'N'
     END AS mix
-From like_all_table ;
+FROM like_all_table ;
 
 -- Mix test with constant pattern and column value
-select company from like_all_table where company like all ('%oo%', pat);
+SELECT company FROM like_all_table WHERE company LIKE ALL ('%oo%', pat);
 
 -- not like all test
-
-select company from like_all_table where company not like all ('%oo%', '%in', 'fa%');
-select company from like_all_table where company not like all ('microsoft', '%yoo%');
+SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('%oo%', '%in', 'fa%');
+SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('microsoft', '%yoo%');
 
 -- null test
-
-select company from like_all_table where company like all ('%oo%', null);
-
-select company from like_all_table where company not like all ('%oo%', null);
-
-select company from like_all_table where company not like all (null, null);
-
-select company from like_all_table where company not like all (null, null);
+SELECT company FROM like_all_table WHERE company LIKE ALL ('%oo%', NULL);
+SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('%oo%', NULL);
+SELECT company FROM like_all_table WHERE company LIKE ALL (NULL, NULL);
+SELECT company FROM like_all_table WHERE company NOT LIKE ALL (NULL, NULL);
 
 -- negative case
-select company from like_any_table where company like all ();
+SELECT company FROM like_any_table WHERE company LIKE ALL ();
