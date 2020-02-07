@@ -1176,14 +1176,12 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
            |long ${ev.value} = 0;
          """.stripMargin)
       } else {
-        val tzClass = classOf[TimeZone].getName
+        val tzClass = classOf[ZoneId].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
-        val utcTerm = "tzUTC"
-        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
-          v => s"""$v = $dtu.getTimeZone("UTC");""")
+          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val utcTerm = "java.time.ZoneOffset.UTC"
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
            |${eval.code}
@@ -1382,14 +1380,12 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
            |long ${ev.value} = 0;
          """.stripMargin)
       } else {
-        val tzClass = classOf[TimeZone].getName
+        val tzClass = classOf[ZoneId].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
-        val utcTerm = "tzUTC"
-        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
-          v => s"""$v = $dtu.getTimeZone("UTC");""")
+          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val utcTerm = "java.time.ZoneOffset.UTC"
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
            |${eval.code}
