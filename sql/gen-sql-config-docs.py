@@ -27,12 +27,6 @@ from pyspark.java_gateway import launch_gateway
 SQLConfEntry = namedtuple(
     "SQLConfEntry", ["name", "default", "description"])
 
-SELECTION_OF_PRIVATE_CONFIGS = {
-    "spark.sql.limit.scaleUpFactor",
-    "spark.sql.streaming.schemaInference",
-    "spark.sql.view.maxNestedViewDepth",
-}
-
 
 def get_public_sql_configs(jvm):
     sql_configs = [
@@ -116,13 +110,6 @@ def generate_sql_configs_table(sql_configs, path):
 if __name__ == "__main__":
     jvm = launch_gateway().jvm
     sql_configs = get_public_sql_configs(jvm)
-
-    private_configs = {_.name for _ in sql_configs}.intersection(SELECTION_OF_PRIVATE_CONFIGS)
-    if private_configs:
-        raise Exception(
-            "get_public_sql_configs() returned the following private configs:",
-            ', '.join(private_configs)
-        )
 
     spark_root_dir = os.path.dirname(os.path.dirname(__file__))
     sql_configs_table_path = os.path.join(spark_root_dir, "docs/sql-configs.html")
