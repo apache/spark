@@ -57,6 +57,36 @@ def dataframe_with_arrow_example(spark):
     print("Pandas DataFrame result statistics:\n%s\n" % str(result_pdf.describe()))
 
 
+def ser_to_frame_pandas_udf_example(spark):
+    # $example on:ser_to_frame_pandas_udf$
+    import pandas as pd
+
+    from pyspark.sql.functions import pandas_udf
+
+    @pandas_udf("col1 string, col2 long")
+    def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
+        s3['col2'] = s1 + s2.str.len()
+        return s3
+
+    # Create a Spark DataFrame that has three columns including a sturct column.
+    df = spark.createDataFrame(
+        [[1, "a string", ("a nested string",)]],
+        "long_col long, string_col string, struct_col struct<col1:string>")
+
+    df.printSchema()
+    # root
+    # |-- long_column: long (nullable = true)
+    # |-- string_column: string (nullable = true)
+    # |-- struct_column: struct (nullable = true)
+    # |    |-- col1: string (nullable = true)
+
+    df.select(func("long_col", "string_col", "struct_col")).printSchema()
+    # |-- func(long_col, string_col, struct_col): struct (nullable = true)
+    # |    |-- col1: string (nullable = true)
+    # |    |-- col2: long (nullable = true)
+    # $example off:ser_to_frame_pandas_udf$$
+
+
 def ser_to_ser_pandas_udf_example(spark):
     # $example on:ser_to_ser_pandas_udf$
     import pandas as pd
@@ -274,6 +304,8 @@ if __name__ == "__main__":
 
     print("Running Pandas to/from conversion example")
     dataframe_with_arrow_example(spark)
+    print("Running pandas_udf example: Series to Frame")
+    ser_to_frame_pandas_udf_example(spark)
     print("Running pandas_udf example: Series to Series")
     ser_to_ser_pandas_udf_example(spark)
     print("Running pandas_udf example: Iterator of Series to Iterator of Seires")

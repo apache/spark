@@ -75,10 +75,22 @@ with Python 3.6+, you can also use [Python type hints](https://www.python.org/de
 Using Python type hints are preferred and using `PandasUDFType` will be deprecated in
 the future release.
 
+Note that the type hint should use `pandas.Series` in all cases but there is one variant
+that `pandas.DataFrame` should be used for its input or output type hint instead when the input
+or output column is of `StructType`. The following example shows a Pandas UDF which takes long
+column, string column and struct column, and outputs a struct column. It requires the function to
+specify the type hints of `pandas.Series` and `pandas.DataFrame` as below:
 
-The below combinations of the type hints are supported for Pandas UDFs. Note that the type hint should
-be `pandas.Series` in all cases but there is one variant case that `pandas.DataFrame` should be mapped
-as its input or output type hint instead when the input or output column is of `StructType`.
+<p>
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example ser_to_frame_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+</p>
+
+In the following sections, it describes the cominations of the supported type hints. For simplicity,
+`pandas.DataFrame` variant is omitted.
 
 ### Series to Series
 
@@ -169,9 +181,8 @@ represents a column within the group or window.
 
 Note that this type of UDF does not support partial aggregation and all data for a group or window
 will be loaded into memory. Also, only unbounded window is supported with Grouped aggregate Pandas
-UDFs currently.
-
-The following example shows how to use this type of UDF to compute mean with a group-by and window operations:
+UDFs currently. The following example shows how to use this type of UDF to compute mean with a group-by
+and window operations:
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -252,7 +263,7 @@ For detailed usage, please see [`pyspark.sql.DataFrame.mapsInPandas`](api/python
 
 ### Co-grouped Map
 
-Co-grouped map operations with Pandas instances are supported by `DataFrame.cogroup().applyInPandas()` which
+Co-grouped map operations with Pandas instances are supported by `DataFrame.groupby().cogroup().applyInPandas()` which
 allows two PySpark `DataFrame`s to be cogrouped by a common key and then a Python function applied to each
 cogroup. It consists of the following steps:
 * Shuffle the data such that the groups of each dataframe which share a key are cogrouped together.
@@ -281,7 +292,7 @@ The following example shows how to use `groupby().cogroup().applyInPandas()` to 
 </div>
 </div>
 
-For detailed usage, please see [`pyspark.sql.CoGroupedData.applyInPandas()`](api/python/pyspark.sql.html#pyspark.sql.CoGroupedData.applyInPandas).
+For detailed usage, please see [`pyspark.sql.PandasCogroupedOps.applyInPandas()`](api/python/pyspark.sql.html#pyspark.sql.PandasCogroupedOps.applyInPandas).
 
 
 ## Usage Notes

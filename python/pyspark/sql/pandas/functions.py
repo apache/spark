@@ -87,6 +87,37 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     that `pandas.DataFrame` should be mapped as its input or output type hint instead when
     the input or output column is of :class:`pyspark.sql.types.StructType`.
 
+    Note that the type hint should use `pandas.Series` in all cases but there is one variant
+    that `pandas.DataFrame` should be used for its input or output type hint instead when the input
+    or output column is of :class:`pyspark.sql.types.StructType`. The following example shows
+    a Pandas UDF which takes long column, string column and struct column, and outputs a struct
+    column. It requires the function to specify the type hints of `pandas.Series` and
+    `pandas.DataFrame` as below:
+
+    >>> @pandas_udf("col1 string, col2 long")
+    >>> def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
+    ...     s3['col2'] = s1 + s2.str.len()
+    ...     return s3
+    ...
+    >>> # Create a Spark DataFrame that has three columns including a sturct column.
+    ... df = spark.createDataFrame(
+    ...     [[1, "a string", ("a nested string",)]],
+    ...     "long_col long, string_col string, struct_col struct<col1:string>")
+    >>> df.printSchema()
+    root
+    |-- long_column: long (nullable = true)
+    |-- string_column: string (nullable = true)
+    |-- struct_column: struct (nullable = true)
+    |    |-- col1: string (nullable = true)
+    >>> df.select(func("long_col", "string_col", "struct_col")).printSchema()
+    |-- func(long_col, string_col, struct_col): struct (nullable = true)
+    |    |-- col1: string (nullable = true)
+    |    |-- col2: long (nullable = true)
+
+    In the following sections, it describes the cominations of the supported type hints. For
+    simplicity, `pandas.DataFrame` variant is omitted.
+
+
     * Series to Series
         `pandas.Series`, ... -> `pandas.Series`
 
