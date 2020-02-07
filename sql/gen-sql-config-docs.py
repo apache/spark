@@ -79,10 +79,10 @@ def generate_sql_configs_table(sql_configs, path):
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
             if config.default == "<undefined>":
-                default = "none"
+                default = "(none)"
             elif config.default.startswith("<value of "):
                 referenced_config_name = value_reference_pattern.match(config.default).group(1)
-                default = "value of <code>{}</code>".format(referenced_config_name)
+                default = "(value of <code>{}</code>)".format(referenced_config_name)
             else:
                 default = config.default
 
