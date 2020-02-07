@@ -2171,7 +2171,9 @@ object SQLConf {
     buildConf("spark.sql.deduplicateMapKey.lastWinsPolicy.enabled")
       .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
         "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
-        "MapFromEntries, StringToMap, MapConcat and TransformKeys.")
+        "MapFromEntries, StringToMap, MapConcat and TransformKeys. Otherwise, if this is false, " +
+        "which is the default, Spark will throw an exception while duplicated map keys are " +
+        "detected.")
       .booleanConf
       .createWithDefault(false)
 

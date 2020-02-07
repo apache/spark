@@ -44,6 +44,13 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
+  test("fail while duplicated keys detected") {
+    val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    builder.put(1, 1)
+    val e = intercept[RuntimeException](builder.put(1, 2))
+    assert(e.getMessage.contains("Duplicate map key 1 was founded"))
+  }
+
   test("remove duplicated keys with last wins policy") {
     withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
       val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)

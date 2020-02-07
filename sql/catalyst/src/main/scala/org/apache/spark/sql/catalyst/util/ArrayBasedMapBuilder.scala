@@ -50,6 +50,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
 
+  private val deduplicateWithLastWinsPolicy =
+    SQLConf.get.getConf(DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY)
+
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
       throw new RuntimeException("Cannot use null as map key.")
@@ -65,7 +68,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       keys.append(key)
       values.append(value)
     } else {
-      if (!SQLConf.get.getConf(DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY)) {
+      if (!deduplicateWithLastWinsPolicy) {
         throw new RuntimeException(s"Duplicate map key $key was founded, please set " +
           s"${DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key} to true to remove it with " +
           "last wins policy.")
