@@ -158,12 +158,9 @@ statement
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
-    | ALTER TABLE table=multipartIdentifier
+    |ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        (TYPE dataType)? commentSpec? colPosition?                     #alterTableColumn
-    | ALTER TABLE table=multipartIdentifier
-        ALTER COLUMN? column=multipartIdentifier
-        setOrDrop=(SET | DROP) NOT NULL                                #alterColumnNullability
+        alterColumnAction?                                             #alterTableAlterColumn
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -981,6 +978,13 @@ number
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
+    ;
+
+alterColumnAction
+    : TYPE dataType
+    | commentSpec
+    | colPosition
+    | setOrDrop=(SET | DROP) NOT NULL
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
