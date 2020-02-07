@@ -804,7 +804,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("convert time zones on a daylight saving day") {
+  test("SPARK-30752: convert time zones on a daylight saving day") {
     val systemTz = "PST"
     val sessionTz = "UTC"
     val fromTz = "Asia/Hong_Kong"
