@@ -821,7 +821,7 @@ object SQLConf {
     .createWithDefault(true)
 
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
-    .doc("The maximum number of buckets allowed. Defaults to 100000")
+    .doc("The maximum number of buckets allowed.")
     .intConf
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
@@ -1163,7 +1163,7 @@ object SQLConf {
       .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
         "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
         "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
-        "When disabled, records go directly to the 2nd level. Defaults to true.")
+        "When disabled, records go directly to the 2nd level.")
       .booleanConf
       .createWithDefault(true)
 
