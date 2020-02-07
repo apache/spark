@@ -1073,4 +1073,20 @@ trait AlterTableTests extends SharedSparkSession {
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
+
+  test("AlterTable: replace columns") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 int, col2 int) USING $v2Format")
+      sql(s"ALTER TABLE $t REPLACE COLUMNS " +
+        "(col2 string COMMENT 'comment2', col3 int COMMENT 'comment3')")
+
+      val table = getTableMetadata(t)
+
+      assert(table.name === fullTableName(t))
+      assert(table.schema === StructType(Seq(
+        StructField("col2", StringType).withComment("comment2"),
+        StructField("col3", IntegerType).withComment("comment3"))))
+    }
+  }
 }

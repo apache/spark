@@ -470,9 +470,15 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
+            val colsToDelete = mutable.Set.empty[Seq[String]]
+
             alter.changes.foreach {
               case add: AddColumn =>
-                checkColumnNotExists("add", add.fieldNames(), table.schema)
+                // If a column to add is a part of columns to delete, we don't need to check
+                // if column already exists - applies to REPLACE COLUMNS scenario.
+                if (!colsToDelete.contains(add.fieldNames())) {
+                  checkColumnNotExists("add", add.fieldNames(), table.schema)
+                }
                 val parent = findParentStruct("add", add.fieldNames())
                 positionArgumentExists(add.position(), parent)
                 TypeUtils.failWithIntervalType(add.dataType())
@@ -523,6 +529,10 @@ trait CheckAnalysis extends PredicateHelper {
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>
                 findField("delete", delete.fieldNames)
+                // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
+                // so that add operations do not fail when the columns to add exist and they
+                // are to be deleted.
+                colsToDelete += delete.fieldNames
               case _ =>
               // no validation needed for set and remove property
             }
