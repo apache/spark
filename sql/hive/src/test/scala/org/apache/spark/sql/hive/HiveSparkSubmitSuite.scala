@@ -127,6 +127,25 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-30755: Support Hive 1.2.1's Serde after making built-in Hive to 2.3") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
+    val jar3 = HiveTestJars.getHiveContribJar("1.2.1").getCanonicalPath
+    val jar4 = HiveTestJars.getHiveHcatalogCoreJar("1.2.1").getCanonicalPath
+    val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
+    val args = Seq(
+      "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
+      "--name", "SparkSubmitClassLoaderTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      "--jars", jarsString,
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
+    runSparkSubmit(args)
+  }
+
   test("SPARK-8020: set sql conf in spark conf") {
     assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
