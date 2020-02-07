@@ -492,8 +492,8 @@ class StructType(DataType):
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it, to define the schema. The method accepts
-        either:
+        Construct a StructType by adding new elements to it, to define the schema.
+        The method accepts either:
 
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
