@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.util.{Locale, TimeZone}
+import java.util.regex.Pattern
 
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -262,11 +264,35 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }.flatten
 
     // List of SQL queries to run
-    // note: this is not a robust way to split queries using semicolon, but works for now.
-    val queries = (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);")
+    // Replace bracketed comments with a placeholder
+    var codeStr = (importedCode ++ code).mkString("\n")
+    val m = Pattern.compile("/\\*(\\s|.)*?\\*/").matcher(codeStr)
+    val multiCommentMap = new HashMap[String, String]()
+    var i = 0
+    while(m.find()) {
+      val group = m.group
+      val placeHolder = s"/*$i*/"
+      multiCommentMap(placeHolder) = group
+      codeStr = codeStr.replace(group, placeHolder)
+      i += 1
+    }
+
+    val tempQueries = codeStr.split("(?<=[^\\\\]);")
       .map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
+
+    // Replace placeholders with original bracketed comments
+    val pattern = Pattern.compile("/\\*[0-9]+\\*/")
+    val queries = tempQueries.map { query =>
+      var newQuery = query
+      val m = pattern.matcher(query)
+      while(m.find()) {
+        val group = m.group
+        newQuery = newQuery.replace(group, multiCommentMap(group))
+      }
+      newQuery
+    }
 
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
     val settings = settingLines.flatMap(_.split(",").map { kv =>
