@@ -494,7 +494,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Valid range of DateType is [0001-01-01, 9999-12-31]
     val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("0001-01-01")), Literal(maxMonthInterval)), 2933261)
+      AddMonths(Literal(LocalDate.parse("0001-01-01")), Literal(maxMonthInterval)), 2933263)
     checkEvaluation(
       AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
     // Test evaluation results between Interpreted mode and Codegen mode
