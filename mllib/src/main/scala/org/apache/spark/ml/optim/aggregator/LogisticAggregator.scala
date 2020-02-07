@@ -18,8 +18,8 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
@@ -171,6 +171,7 @@ import org.apache.spark.mllib.util.MLUtils
  *
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
+ * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
@@ -182,12 +183,13 @@ import org.apache.spark.mllib.util.MLUtils
  * since this form is optimal for the matrix operations used for prediction.
  */
 private[ml] class LogisticAggregator(
-    numFeatures: Int,
+    bcFeaturesStd: Broadcast[Array[Double]],
     numClasses: Int,
     fitIntercept: Boolean,
     multinomial: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[InstanceBlock, LogisticAggregator] with Logging {
+  extends DifferentiableLossAggregator[Instance, LogisticAggregator] with Logging {
 
+  private val numFeatures = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficientSize = bcCoefficients.value.size
   protected override val dim: Int = coefficientSize
@@ -207,31 +209,6 @@ private[ml] class LogisticAggregator(
       s"got type ${bcCoefficients.value.getClass}.)")
   }
 
-  @transient private lazy val binaryLinear = {
-    if (!multinomial) {
-      if (fitIntercept) {
-        new DenseVector(coefficientsArray.take(numFeatures))
-      } else {
-        new DenseVector(coefficientsArray)
-      }
-    } else {
-      null
-    }
-  }
-
-  @transient private lazy val multinomialLinear = {
-    if (multinomial) {
-      if (fitIntercept) {
-        new DenseMatrix(numClasses, numFeatures, coefficientsArray.take(numClasses * numFeatures))
-      } else {
-        new DenseMatrix(numClasses, numFeatures, coefficientsArray)
-      }
-    } else {
-      null
-    }
-  }
-
-
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
       s"coefficients for positive and negative classes. When no regularization is applied, the" +
@@ -242,12 +219,15 @@ private[ml] class LogisticAggregator(
   /** Update gradient and loss using binary loss function. */
   private def binaryUpdateInPlace(features: Vector, weight: Double, label: Double): Unit = {
 
+    val localFeaturesStd = bcFeaturesStd.value
     val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
     val margin = - {
       var sum = 0.0
       features.foreachNonZero { (index, value) =>
-        sum += localCoefficients(index) * value
+        if (localFeaturesStd(index) != 0.0) {
+          sum += localCoefficients(index) * value / localFeaturesStd(index)
+        }
       }
       if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
       sum
@@ -256,7 +236,9 @@ private[ml] class LogisticAggregator(
     val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
     features.foreachNonZero { (index, value) =>
-      localGradientArray(index) += multiplier * value
+      if (localFeaturesStd(index) != 0.0) {
+        localGradientArray(index) += multiplier * value / localFeaturesStd(index)
+      }
     }
 
     if (fitIntercept) {
@@ -271,61 +253,6 @@ private[ml] class LogisticAggregator(
     }
   }
 
-  /** Update gradient and loss using binary loss function. */
-  private def binaryUpdateInPlace(block: InstanceBlock): Unit = {
-    val size = block.size
-    val localGradientSumArray = gradientSumArray
-
-    // vec here represents margins or negative dotProducts
-    val vec = if (fitIntercept && coefficientsArray.last != 0) {
-      val intercept = coefficientsArray.last
-      new DenseVector(Array.fill(size)(intercept))
-    } else {
-      new DenseVector(Array.ofDim[Double](size))
-    }
-
-    if (fitIntercept) {
-      BLAS.gemv(-1.0, block.matrix, binaryLinear, -1.0, vec)
-    } else {
-      BLAS.gemv(-1.0, block.matrix, binaryLinear, 0.0, vec)
-    }
-
-    // in-place convert margins to multiplier
-    // then, vec represents multiplier
-    var i = 0
-    while (i < size) {
-      val weight = block.getWeight(i)
-      if (weight > 0) {
-        weightSum += weight
-        val label = block.getLabel(i)
-        val margin = vec(i)
-        if (label > 0) {
-          // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-          lossSum += weight * MLUtils.log1pExp(margin)
-        } else {
-          lossSum += weight * (MLUtils.log1pExp(margin) - margin)
-        }
-        val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
-        vec.values(i) = multiplier
-      } else {
-        vec.values(i) = 0.0
-      }
-      i += 1
-    }
-
-    if (fitIntercept) {
-      // localGradientSumArray is of size numFeatures+1, so can not
-      // be directly used as the output of BLAS.gemv
-      val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
-      BLAS.gemv(1.0, block.matrix.transpose, vec, 0.0, linearGradSumVec)
-      linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
-      localGradientSumArray(numFeatures) += vec.values.sum
-    } else {
-      val gradSumVec = new DenseVector(localGradientSumArray)
-      BLAS.gemv(1.0, block.matrix.transpose, vec, 1.0, gradSumVec)
-    }
-  }
-
   /** Update gradient and loss using multinomial (softmax) loss function. */
   private def multinomialUpdateInPlace(features: Vector, weight: Double, label: Double): Unit = {
     // TODO: use level 2 BLAS operations
@@ -333,6 +260,7 @@ private[ml] class LogisticAggregator(
       Note: this can still be used when numClasses = 2 for binary
       logistic regression without pivoting.
      */
+    val localFeaturesStd = bcFeaturesStd.value
     val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
 
@@ -342,10 +270,13 @@ private[ml] class LogisticAggregator(
 
     val margins = new Array[Double](numClasses)
     features.foreachNonZero { (index, value) =>
-      var j = 0
-      while (j < numClasses) {
-        margins(j) += localCoefficients(index * numClasses + j) * value
-        j += 1
+      if (localFeaturesStd(index) != 0.0) {
+        val stdValue = value / localFeaturesStd(index)
+        var j = 0
+        while (j < numClasses) {
+          margins(j) += localCoefficients(index * numClasses + j) * stdValue
+          j += 1
+        }
       }
     }
     var i = 0
@@ -383,10 +314,13 @@ private[ml] class LogisticAggregator(
       multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
     }
     features.foreachNonZero { (index, value) =>
-      var j = 0
-      while (j < numClasses) {
-        localGradientArray(index * numClasses + j) += weight * multipliers(j) * value
-        j += 1
+      if (localFeaturesStd(index) != 0.0) {
+        val stdValue = value / localFeaturesStd(index)
+        var j = 0
+        while (j < numClasses) {
+          localGradientArray(index * numClasses + j) += weight * multipliers(j) * stdValue
+          j += 1
+        }
       }
     }
     if (fitIntercept) {
@@ -403,112 +337,6 @@ private[ml] class LogisticAggregator(
       math.log(sum) - marginOfLabel
     }
     lossSum += weight * loss
-  }
-
-  /** Update gradient and loss using multinomial (softmax) loss function. */
-  private def multinomialUpdateInPlace(block: InstanceBlock): Unit = {
-    val size = block.size
-    val localGradientSumArray = gradientSumArray
-
-    // mat here represents margins, shape: S X C
-    val mat = new DenseMatrix(size, numClasses, Array.ofDim[Double](size * numClasses))
-
-    if (fitIntercept) {
-      val intercept = coefficientsArray.takeRight(numClasses)
-      var i = 0
-      while (i < size) {
-        var j = 0
-        while (j < numClasses) {
-          mat.update(i, j, intercept(j))
-          j += 1
-        }
-        i += 1
-      }
-      BLAS.gemm(1.0, block.matrix, multinomialLinear.transpose, 1.0, mat)
-    } else {
-      BLAS.gemm(1.0, block.matrix, multinomialLinear.transpose, 0.0, mat)
-    }
-
-    // in-place convert margins to multipliers
-    // then, mat represents multipliers
-    var i = 0
-    val tmp = Array.ofDim[Double](numClasses)
-    while (i < size) {
-      val weight = block.getWeight(i)
-      if (weight > 0) {
-        weightSum += weight
-        val label = block.getLabel(i)
-
-        var maxMargin = Double.NegativeInfinity
-        var j = 0
-        while (j < numClasses) {
-          tmp(j) = mat(i, j)
-          maxMargin = math.max(maxMargin, tmp(j))
-          j += 1
-        }
-
-        // marginOfLabel is margins(label) in the formula
-        val marginOfLabel = tmp(label.toInt)
-
-        var sum = 0.0
-        j = 0
-        while (j < numClasses) {
-          if (maxMargin > 0) tmp(j) -= maxMargin
-          val exp = math.exp(tmp(j))
-          sum += exp
-          tmp(j) = exp
-          j += 1
-        }
-
-        j = 0
-        while (j < numClasses) {
-          val multiplier = weight * (tmp(j) / sum - (if (label == j) 1.0 else 0.0))
-          mat.update(i, j, multiplier)
-          j += 1
-        }
-
-        if (maxMargin > 0) {
-          lossSum += weight * (math.log(sum) - marginOfLabel + maxMargin)
-        } else {
-          lossSum += weight * (math.log(sum) - marginOfLabel)
-        }
-      } else {
-        var j = 0
-        while (j < numClasses) {
-          mat.update(i, j, 0.0)
-          j += 1
-        }
-      }
-      i += 1
-    }
-
-    // block.matrix:                  S X F, unknown type
-    // mat (multipliers):             S X C, dense
-    // gradSumMat(gradientSumArray):  C X FPI (numFeaturesPlusIntercept), dense
-    block.matrix match {
-      case dm: DenseMatrix if !fitIntercept =>
-        // If fitIntercept==false, gradientSumArray += mat.T X matrix
-        // GEMM requires block.matrix is dense
-        val gradSumMat = new DenseMatrix(numClasses, numFeatures, localGradientSumArray)
-        BLAS.gemm(1.0, mat.transpose, dm, 1.0, gradSumMat)
-
-      case _ =>
-        // Otherwise, use linearGradSumMat (F X C) as a temp matrix:
-        // linearGradSumMat = matrix.T X mat
-        val linearGradSumMat = new DenseMatrix(numFeatures, numClasses,
-          Array.ofDim[Double](numFeatures * numClasses))
-        BLAS.gemm(1.0, block.matrix.transpose, mat, 0.0, linearGradSumMat)
-        linearGradSumMat.foreachActive { (i, j, v) =>
-          if (v != 0) localGradientSumArray(i * numClasses + j) += v
-        }
-
-        if (fitIntercept) {
-          val start = numClasses * numFeatures
-          mat.foreachActive { (i, j, v) =>
-            if (v != 0) localGradientSumArray(start + j) += v
-          }
-        }
-    }
   }
 
   /**
@@ -534,29 +362,5 @@ private[ml] class LogisticAggregator(
       weightSum += weight
       this
     }
-  }
-
-  /**
-   * Add a new training instance block to this LogisticAggregator, and update the loss and gradient
-   * of the objective function.
-   *
-   * @param block The instance block of data point to be added.
-   * @return This LogisticAggregator object.
-   */
-  def add(block: InstanceBlock): this.type = {
-    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
-      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
-    require(block.weightIter.forall(_ >= 0),
-      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
-
-    if (block.weightIter.forall(_ == 0)) return this
-
-    if (multinomial) {
-      multinomialUpdateInPlace(block)
-    } else {
-      binaryUpdateInPlace(block)
-    }
-
-    this
   }
 }

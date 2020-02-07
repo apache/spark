@@ -216,7 +216,7 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     >>> model.getThreshold()
     0.5
     >>> model.getBlockSize()
-    1024
+    4096
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -255,19 +255,19 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2, blockSize=1024):
+                 aggregationDepth=2, blockSize=4096):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, blockSize=1024):
+                 aggregationDepth=2, blockSize=4096):
         """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
                          standardization=True, threshold=0.0, aggregationDepth=2,
-                         blockSize=1024)
+                         blockSize=4096)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -276,12 +276,12 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                  aggregationDepth=2, blockSize=1024):
+                  aggregationDepth=2, blockSize=4096):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, blockSize=1024):
+                  aggregationDepth=2, blockSize=4096):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -388,7 +388,7 @@ class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, 
 class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
                                 HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
                                 HasStandardization, HasWeightCol, HasAggregationDepth,
-                                HasThreshold, HasBlockSize):
+                                HasThreshold):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
@@ -570,8 +570,6 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     10
     >>> blor.clear(blor.maxIter)
     >>> blorModel = blor.fit(bdf)
-    >>> blorModel.getBlockSize()
-    1024
     >>> blorModel.setFeaturesCol("features")
     LogisticRegressionModel...
     >>> blorModel.setProbabilityCol("newProbability")
@@ -640,7 +638,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
                  aggregationDepth=2, family="auto",
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, blockSize=1024):
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
 
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -649,14 +647,13 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
                  aggregationDepth=2, family="auto", \
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, blockSize=1024):
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
-                         blockSize=1024)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -669,7 +666,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
                   aggregationDepth=2, family="auto",
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, blockSize=1024):
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
@@ -677,7 +674,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
                   aggregationDepth=2, family="auto", \
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, blockSize=1024):
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -771,13 +768,6 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
-
-    @since("3.0.0")
-    def setBlockSize(self, value):
-        """
-        Sets the value of :py:attr:`blockSize`.
-        """
-        return self._set(blockSize=value)
 
 
 class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticRegressionParams,
