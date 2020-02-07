@@ -67,21 +67,21 @@ object DateTimeUtils {
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
-    millisToDays(millisUtc, defaultTimeZone())
+    millisToDays(millisUtc, defaultTimeZone().toZoneId)
   }
 
-  def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
+  def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
     val instant = microsToInstant(Math.multiplyExact(millisUtc, MICROS_PER_MILLIS))
-    localDateToDays(LocalDateTime.ofInstant(instant, timeZone.toZoneId).toLocalDate)
+    localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
-    daysToMillis(days, defaultTimeZone())
+    daysToMillis(days, defaultTimeZone().toZoneId)
   }
 
-  def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
-    val instant = daysToLocalDate(days).atStartOfDay(timeZone.toZoneId).toInstant
+  def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
+    val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant) / MICROS_PER_MILLIS
   }
 
@@ -585,11 +585,11 @@ object DateTimeUtils {
       time1: SQLTimestamp,
       time2: SQLTimestamp,
       roundOff: Boolean,
-      timeZone: TimeZone): Double = {
+      zoneId: ZoneId): Double = {
     val millis1 = MICROSECONDS.toMillis(time1)
     val millis2 = MICROSECONDS.toMillis(time2)
-    val date1 = millisToDays(millis1, timeZone)
-    val date2 = millisToDays(millis2, timeZone)
+    val date1 = millisToDays(millis1, zoneId)
+    val date2 = millisToDays(millis2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -603,8 +603,8 @@ object DateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, timeZone))
-    val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, timeZone))
+    val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, zoneId))
+    val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, zoneId))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
     val secondsInMonth = DAYS.toSeconds(31)
     val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
@@ -733,8 +733,8 @@ object DateTimeUtils {
         millis += offset
         millis - millis % MILLIS_PER_DAY - offset
       case _ => // Try to truncate date levels
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
+        val dDays = millisToDays(millis, timeZone.toZoneId)
+        daysToMillis(truncDate(dDays, level), timeZone.toZoneId)
     }
     truncated * MICROS_PER_MILLIS
   }
