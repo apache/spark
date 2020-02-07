@@ -324,11 +324,11 @@ object SQLConf {
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
-      "command <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
+      "command `ANALYZE TABLE <tableName> COMPUTE STATISTICS noscan` has been " +
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(10L * 1024 * 1024)
+    .createWithDefaultString("10MB")
 
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
@@ -393,7 +393,7 @@ object SQLConf {
         s"an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefaultString("64MB")
 
   val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.shuffle.maxNumPostShufflePartitions")
@@ -427,7 +427,7 @@ object SQLConf {
       .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
         "partition in adaptive skewed join.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefaultString("64MB")
 
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")
@@ -761,7 +761,7 @@ object SQLConf {
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
     .timeConf(TimeUnit.SECONDS)
-    .createWithDefault(5 * 60)
+    .createWithDefaultString("300")
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
@@ -1013,7 +1013,7 @@ object SQLConf {
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(128 * 1024 * 1024) // parquet.block.size
+    .createWithDefaultString("128MB") // parquet.block.size
 
   val FILES_OPEN_COST_IN_BYTES = buildConf("spark.sql.files.openCostInBytes")
     .internal()
@@ -1317,10 +1317,10 @@ object SQLConf {
 
   val STREAMING_STOP_TIMEOUT =
     buildConf("spark.sql.streaming.stopTimeout")
-      .doc("How long to wait for the streaming execution thread to stop when calling the " +
-        "streaming query's stop() method in milliseconds. 0 or negative values wait indefinitely.")
+      .doc("How long to wait in milliseconds for the streaming execution thread to stop when " +
+        "calling the streaming query's stop() method. 0 or negative values wait indefinitely.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(0L)
+      .createWithDefaultString("0")
 
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
@@ -2021,7 +2021,7 @@ object SQLConf {
     .checkValue(i => i >= 0 && i <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, "Invalid " +
       "value for 'spark.sql.maxPlanStringLength'.  Length must be a valid string length " +
       "(nonnegative and shorter than the maximum size).")
-    .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+    .createWithDefaultString(s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}")
 
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
