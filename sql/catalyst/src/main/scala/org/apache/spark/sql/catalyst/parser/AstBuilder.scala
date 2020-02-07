@@ -1357,7 +1357,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE
+   * - (NOT) LIKE (ANY | SOME)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1375,6 +1375,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other => Seq(other)
     }
 
+    def getLikeQuantifierExps(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
+      if (expressions.isEmpty) {
+        throw new ParseException("Syntax error: expected something between '(' and ')'.", ctx)
+      } else {
+        expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
+      }
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1388,12 +1396,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
         Option(ctx.quantifier).map(_.getType) match {
-          case Some(SqlBaseParser.ANY) if !ctx.expression.isEmpty =>
-            ctx.expression.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
-              .reduceLeft(Or)
-          case Some(SqlBaseParser.ALL) if !ctx.expression.isEmpty =>
-            ctx.expression.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
-              .reduceLeft(And)
+          case Some(SqlBaseParser.ANY) =>
+            getLikeQuantifierExps(ctx.expression).reduceLeft(Or)
+          case Some(SqlBaseParser.ALL) =>
+            getLikeQuantifierExps(ctx.expression).reduceLeft(And)
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
               if (str.length != 1) {
