@@ -284,7 +284,6 @@ class FPGrowthModel private[ml] (
       .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
     val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
 
-    val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
     val predictUDF = udf((items: Seq[Any]) => {
       if (items != null) {
@@ -293,7 +292,7 @@ class FPGrowthModel private[ml] (
           .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }}, dt)
+      }})
     dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 

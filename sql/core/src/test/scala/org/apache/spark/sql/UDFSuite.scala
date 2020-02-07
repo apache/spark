@@ -134,10 +134,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df1.head().getDouble(0) >= 0.0)
 
-    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
-    val df2 = testData.select(bar())
-    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
-    assert(df2.head().getDouble(0) >= 0.0)
+    withSQLConf(SQLConf.LEGACY_USE_UNTYPED_UDF.key -> "true") {
+      val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+      val df2 = testData.select(bar())
+      assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+      assert(df2.head().getDouble(0) >= 0.0)
+    }
 
     val javaUdf = udf(new UDF0[Double] {
       override def call(): Double = Math.random()
@@ -441,15 +443,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf(Any, DataType)") {
-    val f = udf((x: Int) => x, IntegerType)
-    checkAnswer(
-      Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
-      Row(1) :: Row(0) :: Nil)
+    withSQLConf(SQLConf.LEGACY_USE_UNTYPED_UDF.key -> "true") {
+      val f = udf((x: Int) => x, IntegerType)
+      checkAnswer(
+        Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
+        Row(1) :: Row(0) :: Nil)
 
-    val f2 = udf((x: Double) => x, DoubleType)
-    checkAnswer(
-      Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
-      Row(1.1) :: Row(0.0) :: Nil)
+      val f2 = udf((x: Double) => x, DoubleType)
+      checkAnswer(
+        Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
+        Row(1.1) :: Row(0.0) :: Nil)
+    }
 
   }
 
