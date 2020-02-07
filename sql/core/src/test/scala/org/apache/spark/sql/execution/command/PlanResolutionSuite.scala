@@ -1013,27 +1013,29 @@ class PlanResolutionSuite extends AnalysisTest {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
-        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint COMMENT 'new comment'"
-        val sql3 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
 
         val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
+          val oldColumn = StructField("i", IntegerType)
           val newColumn = StructField("i", LongType)
           val expected1 = AlterTableChangeColumnCommand(
             tableIdent, "i", newColumn)
           val expected2 = AlterTableChangeColumnCommand(
-            tableIdent, "i", newColumn.withComment("new comment"))
+            tableIdent, "i", oldColumn.withComment("new comment"))
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
 
+          val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
           val e1 = intercept[AnalysisException] {
             parseAndResolve(sql3)
           }
-          assert(e1.getMessage.contains("ALTER COLUMN with v1 tables must specify new data type"))
+          assert(e1.getMessage.contains(
+            "ALTER COLUMN cannot find column j in v1 table. Available: i, s"))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1051,8 +1053,6 @@ class PlanResolutionSuite extends AnalysisTest {
           val parsed5 = parseAndResolve(sql5)
           comparePlans(parsed5, expected5)
         } else {
-          val parsed3 = parseAndResolve(sql3)
-
           parsed1 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
@@ -1063,18 +1063,41 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed2 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
-                TableChange.updateColumnType(Array("i"), LongType),
-                TableChange.updateColumnComment(Array("i"), "new comment")))
-            case _ => fail("expect AlterTable")
-          }
-
-          parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
                 TableChange.updateColumnComment(Array("i"), "new comment")))
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  test("alter table: alter column action is not specified") {
+    val e = intercept[AnalysisException] {
+      parseAndResolve("ALTER TABLE v1Table ALTER COLUMN i")
+    }
+    assert(e.getMessage.contains(
+      "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"))
+  }
+
+  test("alter table: alter column case sensitivity for v1 table") {
+    val tblName = "v1Table"
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val sql = s"ALTER TABLE $tblName ALTER COLUMN I COMMENT 'new comment'"
+        if (caseSensitive) {
+          val e = intercept[AnalysisException] {
+            parseAndResolve(sql)
+          }
+          assert(e.getMessage.contains(
+            "ALTER COLUMN cannot find column I in v1 table. Available: i, s"))
+        } else {
+          val actual = parseAndResolve(sql)
+          val expected = AlterTableChangeColumnCommand(
+            TableIdentifier(tblName, None),
+            "I",
+            StructField("I", IntegerType).withComment("new comment"))
+          comparePlans(actual, expected)
+        }
+      }
     }
   }
 
