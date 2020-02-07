@@ -53,14 +53,19 @@ object CTESubstitution extends Rule[LogicalPlan] {
         val newNames = relations.map {
           case (cteName, _) =>
             if (cteNames.contains(cteName)) {
-              throw new AnalysisException(s"Name $cteName is conflict in nested CTE. " +
+              throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
                 s"Please set ${LEGACY_CTE_PRECEDENCE_ENABLED.key} to false so that name defined " +
                 "in inner CTE takes precedence. See more details in SPARK-28228.")
             } else {
               cteName
             }
         }.toSet
-        (w.innerChildren :+ child).foreach { p =>
+        child.transformExpressions {
+          case e: SubqueryExpression =>
+            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames ++ newNames)
+            e
+        }
+        w.innerChildren.foreach { p =>
           assertNoNameConflictsInCTE(p, inTraverse = true, cteNames ++ newNames)
         }
 

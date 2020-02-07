@@ -207,7 +207,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -226,7 +226,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -245,7 +245,7 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -255,10 +255,9 @@ SELECT max(c) FROM (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<max(c):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -270,10 +269,9 @@ SELECT sum(c) FROM (
   )
 )
 -- !query schema
-struct<>
+struct<sum(c):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -286,10 +284,9 @@ SELECT sum(c) FROM (
   )
 )
 -- !query schema
-struct<>
+struct<sum(c):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+3
 
 
 -- !query
@@ -302,7 +299,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -317,7 +314,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -333,7 +330,7 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is conflict in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
 
 
 -- !query
