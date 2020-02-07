@@ -45,7 +45,7 @@ mkdir docs
 echo "Generating SQL API Markdown files."
 "$SPARK_HOME/bin/spark-submit" gen-sql-api-docs.py
 
-echo "Generating SQL config HTML file."
+echo "Generating SQL configuration table HTML file."
 "$SPARK_HOME/bin/spark-submit" gen-sql-config-docs.py
 
 echo "Generating HTML files for SQL API documentation."
