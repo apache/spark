@@ -378,12 +378,12 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   }
 
   def checkNumBroadcastHashJoins(df: DataFrame, expectedNumBhj: Int, clue: String): Unit = {
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(df.queryExecution.sparkPlan)
-    assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === expectedNumBhj, clue)
+    val numNumBhj = df.queryExecution.sparkPlan.collect { case _: BroadcastHashJoinExec => }.size
+    assert(numNumBhj === expectedNumBhj, clue)
   }
 
   def checkNumSortMergeJoins(df: DataFrame, expectedNumSmj: Int, clue: String): Unit = {
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(df.queryExecution.sparkPlan)
-    assert(plan.collect { case p: SortMergeJoinExec => p }.size === expectedNumSmj, clue)
+    val numNumSmj = df.queryExecution.sparkPlan.collect { case _: SortMergeJoinExec => }.size
+    assert(numNumSmj === expectedNumSmj, clue)
   }
 }
