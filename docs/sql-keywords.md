@@ -119,7 +119,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>FILTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FILEFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FIRST_VALUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FOLLOWING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FOR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FOREIGN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -153,7 +152,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>JOIN</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>KEYS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>LAST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LAST_VALUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LATERAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>LAZY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>LEADING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -221,7 +219,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>REPAIR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>REPLACE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>RESET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RESPECT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>RESTRICT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>REVOKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>RIGHT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>

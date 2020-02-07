@@ -32,6 +32,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 {:.no_toc}
 
 * `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
+* `org.apache.spark.ml.image.ImageSchema.readImages` which is deprecated in 2.3, is removed in 3.0, use `spark.read.format('image')` instead.
 
 ### Changes of behavior
 {:.no_toc}
