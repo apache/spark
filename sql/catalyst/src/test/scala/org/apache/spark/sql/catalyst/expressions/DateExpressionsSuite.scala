@@ -811,6 +811,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val fmt3 = "yy-MM-dd"
     val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
     sdf3.setTimeZone(TimeZoneGMT)
+    val fmt4 = "YYYY-ww"
 
     withDefaultTimeZone(TimeZoneGMT) {
       for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
@@ -853,6 +854,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
         checkEvaluation(
           ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
+        val expectedResults = Map(
+          TimeZoneGMT -> 1580688000L,
+          TimeZoneJST -> (1580688000L - 32400L),
+          TimeZonePST -> (1580688000L + 28800L))
+        // Sixth week from 2020 is: Monday, February 3, 2020 0:00:00 GMT: 1580688000
+        checkEvaluation(
+          ToUnixTimestamp(Literal("2020-06"), Literal(fmt4), timeZoneId), expectedResults.get(tz).head)
 
         // SPARK-28072 The codegen path for non-literal input should also work
         checkEvaluation(

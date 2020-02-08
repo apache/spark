@@ -97,6 +97,9 @@ private object DateTimeFormatterHelper {
 
   def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val builder = createBuilder().appendPattern(pattern)
+    // Default values for parser needs to be changed when the pattern
+    // is week/year based.
+    // DAY_OF_MONTH and MONTH_OF_YEAR will be added by the week of the year.
     if (isWeekBasedPattern(pattern)) {
       toWeekBasedFormatter(builder, locale)
     } else {
