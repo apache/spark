@@ -3,30 +3,35 @@ CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (1, 1), (null, 2), (1, null), (null, null)
 AS testData(a, b);
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case one
 -- /* This is the first example of bracketed comment.
 -- SELECT * FROM testData;
 -- */
 -- SELECT * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case two
 -- /* This is the second example of bracketed comment.
 -- SELECT '/', * FROM testData;
 -- */
 -- SELECT '/', * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case three
 -- /* This is the third example of bracketed comment.
 --  *SELECT '*', * FROM testData;
 --  */
 -- SELECT '*', * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case one
 -- /* This is the first example of nested bracketed comment.
 -- /* I am a nested bracketed comment.*/
 -- */
 -- SELECT * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case two
 -- /* This is the second example of nested bracketed comment.
 -- /* I am a nested bracketed comment.
@@ -34,6 +39,7 @@ AS testData(a, b);
 -- */
 -- SELECT * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case three
 -- /*
 --  * This is the third example of nested bracketed comment.
@@ -43,6 +49,7 @@ AS testData(a, b);
 --  */
 -- SELECT * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case four
 -- /* 
 --  * This is the four example of nested bracketed comment.
@@ -50,6 +57,7 @@ AS testData(a, b);
 --  */
 -- SELECT * FROM testData;
 
+-- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case five
 -- SELECT * /*
 --  * This is the five example of nested bracketed comment.
