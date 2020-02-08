@@ -2098,9 +2098,11 @@ object SQLConf {
 
   val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
     .internal()
-    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
+    .doc("When true, outer CTE definitions takes precedence over inner definitions. If set to " +
+      "false, inner CTE definitions take precedence. The default value is empty, " +
+      "AnalysisException is thrown while name conflict is detected in nested CTE.")
     .booleanConf
-    .createWithDefault(false)
+    .createOptional
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
