@@ -766,6 +766,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val message = intercept[TreeNodeException[LogicalPlan]] {
       testAnalyzer.execute(plan)
     }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution"))
+    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+      "increasing the value of SQLConf.ANALYZER_MAX_ITERATIONS."))
   }
 }
