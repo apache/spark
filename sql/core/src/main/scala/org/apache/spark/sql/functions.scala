@@ -352,8 +352,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(ExpressionEncoder[Long]())
+  def count(columnName: String): Column = count(Column(columnName))
 
   /**
    * Aggregate function: returns the number of distinct items in a group.

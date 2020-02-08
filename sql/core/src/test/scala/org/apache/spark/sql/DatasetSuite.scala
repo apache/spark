@@ -597,7 +597,8 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
-      ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
+      ds.groupByKey(_._1).agg(sum("_2").as[Long],
+        sum($"_2" + 1).as[Long], count("*").as[Long]),
       ("a", 30L, 32L, 2L), ("b", 3L, 5L, 2L), ("c", 1L, 2L, 1L))
   }
 
