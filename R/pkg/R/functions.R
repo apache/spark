@@ -244,7 +244,7 @@ NULL
 #' @param zero a \code{Column} used as the initial value in \code{array_aggregate}
 #' @param merge a \code{function} a binary function \code{(Column, Column) -> Column}
 #'          used in \code{array_aggregate}to merge values (the second argument)
-  #'        into accumulator (the first argument).
+#'          into accumulator (the first argument).
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
 #' @param ... additional argument(s).
