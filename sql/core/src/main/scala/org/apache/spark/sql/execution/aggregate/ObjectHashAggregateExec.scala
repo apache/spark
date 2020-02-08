@@ -61,11 +61,11 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class ObjectHashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
-    groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression],
-    aggregateAttributes: Seq[Attribute],
+    override val groupingExpressions: Seq[NamedExpression],
+    override val aggregateExpressions: Seq[AggregateExpression],
+    override val aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
-    resultExpressions: Seq[NamedExpression],
+    override val resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
