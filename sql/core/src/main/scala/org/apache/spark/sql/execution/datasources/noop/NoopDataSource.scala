@@ -22,9 +22,10 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -33,7 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * This is no-op datasource. It does not do anything besides consuming its input.
  * This can be useful for benchmarking or to cache data without any additional overhead.
  */
-class NoopDataSource extends TableProvider with DataSourceRegister {
+class NoopDataSource extends SimpleTableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }

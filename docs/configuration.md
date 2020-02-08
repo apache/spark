@@ -244,6 +244,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    Comma-separated list of class names implementing
+    org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.
+    This is for advanced users to replace the resource discovery class with a
+    custom implementation. Spark will try each class specified until one of them
+    returns the resource information for that resource. It tries the discovery
+    script last if none of the plugins return information for that resource.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
@@ -1624,6 +1636,43 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics (in milliseconds).
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
+    If positive, the polling is done at this interval.
+  </td>
+</tr>
+</table>
+
 ### Networking
 
 <table class="table">
@@ -1761,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold

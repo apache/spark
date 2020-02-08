@@ -542,7 +542,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("sparse coefficients in LogisticAggregator") {
     val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
+    val binaryAgg = new LogisticAggregator(1, 2,
       fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
     val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
@@ -552,7 +552,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
+    val multinomialAgg = new LogisticAggregator(1, 3,
       fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
     val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {

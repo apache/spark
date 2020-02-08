@@ -443,12 +443,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   test("SPARK-25044 Verify null input handling for primitive types - with udf(Any, DataType)") {
     val f = udf((x: Int) => x, IntegerType)
     checkAnswer(
-      Seq(new Integer(1), null).toDF("x").select(f($"x")),
+      Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
       Row(1) :: Row(0) :: Nil)
 
     val f2 = udf((x: Double) => x, DoubleType)
     checkAnswer(
-      Seq(new java.lang.Double(1.1), null).toDF("x").select(f2($"x")),
+      Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
       Row(1.1) :: Row(0.0) :: Nil)
 
   }

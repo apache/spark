@@ -721,19 +721,7 @@ private[ui] class TaskPagedTable(
       } else {
         error
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{error}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, error)
     <td>{errorSummary}{details}</td>
   }
 }

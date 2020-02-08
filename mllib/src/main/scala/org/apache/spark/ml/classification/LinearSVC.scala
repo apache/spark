@@ -157,7 +157,7 @@ class LinearSVC @Since("2.2.0") (
 
   /**
    * Set block size for stacking input data in matrices.
-   * Default is 4096.
+   * Default is 1024.
    *
    * @group expertSetParam
    */
@@ -240,7 +240,7 @@ class LinearSVC @Since("2.2.0") (
         .persist(StorageLevel.MEMORY_AND_DISK)
         .setName(s"training dataset (blockSize=${$(blockSize)})")
 
-      val getAggregatorFunc = new HingeAggregator(numFeatures, $(fitIntercept), $(blockSize))(_)
+      val getAggregatorFunc = new HingeAggregator(numFeatures, $(fitIntercept))(_)
       val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,
         $(aggregationDepth))
 

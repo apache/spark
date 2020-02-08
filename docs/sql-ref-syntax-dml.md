@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+Data Manipulation Statements are used to add, change, or delete data. Spark SQL supports the following Data Manipulation Statements:
+
+- [INSERT](sql-ref-syntax-dml-insert.html)
+- [LOAD](sql-ref-syntax-dml-load.html)

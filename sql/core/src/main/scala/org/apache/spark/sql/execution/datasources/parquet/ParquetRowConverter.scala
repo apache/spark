@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -125,7 +125,7 @@ private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    convertTz: Option[TimeZone],
+    convertTz: Option[ZoneId],
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -153,8 +153,6 @@ private[parquet] class ParquetRowConverter(
        |Catalyst form:
        |${catalystType.prettyJson}
      """.stripMargin)
-
-  private[this] val UTC = DateTimeUtils.TimeZoneUTC
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -292,7 +290,8 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
+              .getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }

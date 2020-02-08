@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -675,6 +676,44 @@ class DataSourceV2SQLSuite
           |WHERE t1.id + 1 = t2.id
         """.stripMargin),
         df_joined)
+    }
+  }
+
+  test("qualified column names for v2 tables") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, point struct<x: bigint, y: bigint>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, (10, 20))")
+
+      checkAnswer(
+        sql(s"SELECT testcat.ns1.ns2.tbl.id, testcat.ns1.ns2.tbl.point.x FROM $t"),
+        Row(1, 10))
+      checkAnswer(sql(s"SELECT ns1.ns2.tbl.id, ns1.ns2.tbl.point.x FROM $t"), Row(1, 10))
+      checkAnswer(sql(s"SELECT ns2.tbl.id, ns2.tbl.point.x FROM $t"), Row(1, 10))
+      checkAnswer(sql(s"SELECT tbl.id, tbl.point.x FROM $t"), Row(1, 10))
+
+      val ex = intercept[AnalysisException] {
+        sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
+      }
+      assert(ex.getMessage.contains("cannot resolve '`ns1.ns2.ns3.tbl.id`"))
+    }
+  }
+
+  test("qualified column names for v1 tables") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+      checkAnswer(sql("select default.t.i from spark_catalog.t"), Row(1))
+      checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
+      checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
+
+      // catalog name cannot be used for v1 tables.
+      val ex = intercept[AnalysisException] {
+        sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
+      }
+      assert(ex.getMessage.contains("cannot resolve '`spark_catalog.default.t.i`"))
     }
   }
 
@@ -2230,7 +2269,7 @@ class DataSourceV2SQLSuite
 
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends TableProvider {
+class FakeV2Provider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }

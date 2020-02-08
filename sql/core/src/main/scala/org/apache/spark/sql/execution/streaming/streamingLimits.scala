@@ -20,21 +20,21 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{LimitExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.StateStoreOps
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{LongType, NullType, StructField, StructType}
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 /**
  * A physical operator for executing a streaming limit, which makes sure no more than streamLimit
- * rows are returned. This operator is meant for streams in Append mode only.
+ * rows are returned. This physical operator is only meant for logical limit operations that
+ * will get a input stream of rows that are effectively appends. For example,
+ * - limit on any query in append mode
+ * - limit before the aggregation in a streaming aggregation query complete mode
  */
 case class StreamingGlobalLimitExec(
     streamLimit: Long,
@@ -48,9 +48,6 @@ case class StreamingGlobalLimitExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
-
-    assert(outputMode.isDefined && outputMode.get == InternalOutputModes.Append,
-      "StreamingGlobalLimitExec is only valid for streams in Append output mode")
 
     child.execute().mapPartitionsWithStateStore(
         getStateInfo,
@@ -99,4 +96,42 @@ case class StreamingGlobalLimitExec(
   private def getValueRow(value: Long): UnsafeRow = {
     UnsafeProjection.create(valueSchema)(new GenericInternalRow(Array[Any](value)))
   }
+}
+
+
+/**
+ * A physical operator for executing limits locally on each partition. The main difference from
+ * LocalLimitExec is that this will fully consume `child` plan's iterators to ensure that any
+ * stateful operation within `child` commits all the state changes (many stateful operations
+ * commit state changes only after the iterator is consumed).
+ */
+case class StreamingLocalLimitExec(limit: Int, child: SparkPlan)
+  extends LimitExec {
+
+  override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+
+    var generatedCount = 0
+
+    new NextIterator[InternalRow]() {
+      override protected def getNext(): InternalRow = {
+        if (generatedCount < limit && iter.hasNext) {
+          generatedCount += 1
+          iter.next()
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {
+        while (iter.hasNext) iter.next() // consume the iterator completely
+      }
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def output: Seq[Attribute] = child.output
 }

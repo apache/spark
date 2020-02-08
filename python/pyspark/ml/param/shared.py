@@ -591,7 +591,7 @@ class HasBlockSize(Params):
 
     def __init__(self):
         super(HasBlockSize, self).__init__()
-        self._setDefault(blockSize=4096)
+        self._setDefault(blockSize=1024)
 
     def getBlockSize(self):
         """

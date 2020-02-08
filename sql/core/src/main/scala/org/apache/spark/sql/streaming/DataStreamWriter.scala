@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -308,7 +308,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
-      val useV1Source = disabledSources.contains(cls.getCanonicalName)
+      val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
+        // file source v2 does not support streaming yet.
+        classOf[FileDataSourceV2].isAssignableFrom(cls)
 
       val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
@@ -316,8 +318,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           source = provider, conf = df.sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val table = DataSourceV2Utils.getTableFromProvider(
+          provider, dsOptions, userSpecifiedSchema = None)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-        provider.getTable(dsOptions) match {
+        table match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
             table
           case _ => createV1Sink()

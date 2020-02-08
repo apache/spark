@@ -358,6 +358,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
+    .internal()
+    .doc("Adaptive query execution is skipped when the query does not have exchanges or " +
+      "sub-queries. By setting this config to true (together with " +
+      s"'${ADAPTIVE_EXECUTION_ENABLED.key}' enabled), Spark will force apply adaptive query " +
+      "execution for all supported queries.")
+    .booleanConf
+    .createWithDefault(false)
+
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
@@ -1600,7 +1609,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val PANDAS_UDF_BUFFER_SIZE =
-    buildConf("spark.sql.pandas.udf.buffer.size")
+    buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
         s"Same as ${BUFFER_SIZE} but only applies to Pandas UDF executions. If it is not set, " +
         s"the fallback is ${BUFFER_SIZE}. Note that Pandas execution requires more than 4 bytes. " +
@@ -1916,6 +1925,7 @@ object SQLConf {
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
+    .internal()
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
       "The size function returns null for null input if the flag is disabled.")
     .booleanConf
@@ -1923,6 +1933,7 @@ object SQLConf {
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
+      .internal()
       .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
         "to the built-in but external Avro data source module for backward compatibility.")
       .booleanConf
@@ -1987,6 +1998,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_EMPTY_STRING_IN_JSON =
+    buildConf("spark.sql.legacy.json.allowEmptyString.enabled")
+      .internal()
+      .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
+      "some data types such as `IntegerType`.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -2048,10 +2067,11 @@ object SQLConf {
 
   val LEGACY_CAST_DATETIME_TO_STRING =
     buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
+      .internal()
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
         "with String")
-    .booleanConf
-    .createWithDefault(false)
+      .booleanConf
+      .createWithDefault(false)
 
   val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
     .doc("Name of the default catalog. This will be the current catalog if users have not " +
@@ -2071,6 +2091,7 @@ object SQLConf {
       .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+    .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
@@ -2083,6 +2104,7 @@ object SQLConf {
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+      .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
@@ -2135,6 +2157,24 @@ object SQLConf {
     .doc("When true, enable filter pushdown to CSV datasource.")
     .booleanConf
     .createWithDefault(true)
+
+  val ADD_PARTITION_BATCH_SIZE =
+    buildConf("spark.sql.addPartitionInBatch.size")
+      .internal()
+      .doc("The number of partitions to be handled in one turn when use " +
+        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
+        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
+      .createWithDefault(100)
+
+  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
+    .internal()
+    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
+      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2423,6 +2463,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
