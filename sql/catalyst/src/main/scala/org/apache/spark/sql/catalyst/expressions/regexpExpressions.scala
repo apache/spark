@@ -59,7 +59,7 @@ trait StringRegexExpression extends Expression
 
   def nullSafeMatch(input1: Any, input2: Any): Any = {
     val patternStr = input2.asInstanceOf[UTF8String].toString
-    val regex = if (cache == null || !(patternStr).equals(lastPatternStr)) {
+    val regex = if (cache == null) {
       if (!(patternStr).equals(lastPatternStr)) {
         compiledPattern = compile(patternStr)
         lastPatternStr = patternStr
