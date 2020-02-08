@@ -2078,8 +2078,8 @@ object SQLConf {
   val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
     .internal()
     .doc("When true, outer CTE definitions takes precedence over inner definitions. If set to " +
-      "false, inner CTE definitions take precedence. The default value is empty, which keep the " +
-      "behavior of throwing an AnalysisException while name conflict is detected in nested CTE.")
+      "false, inner CTE definitions take precedence. The default value is empty, " +
+      "AnalysisException is thrown while name conflict is detected in nested CTE.")
     .booleanConf
     .createOptional
 
