@@ -54,9 +54,20 @@ trait StringRegexExpression extends Expression
     Pattern.compile(escape(str))
   }
 
+  var lastPatternStr: String = null
+  var compiledPattern: Pattern = null
+
   def nullSafeMatch(input1: Any, input2: Any): Any = {
-    val s = input2.asInstanceOf[UTF8String].toString
-    val regex = if (cache == null) compile(s) else cache
+    val patternStr = input2.asInstanceOf[UTF8String].toString
+    val regex = if (cache == null || !(patternStr).equals(lastPatternStr)) {
+      if (!(patternStr).equals(lastPatternStr)) {
+        compiledPattern = compile(patternStr)
+        lastPatternStr = patternStr
+      }
+      compiledPattern
+    } else {
+      cache
+    }
     if(regex == null) {
       null
     } else {
