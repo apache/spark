@@ -204,10 +204,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -223,10 +222,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -242,10 +240,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<3:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+3
 
 
 -- !query
@@ -296,10 +293,9 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -311,10 +307,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+2
 
 
 -- !query
@@ -327,10 +322,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedence.enabled to false so that name defined in inner CTE takes precedence. See more details in SPARK-28228.;
+3
 
 
 -- !query
