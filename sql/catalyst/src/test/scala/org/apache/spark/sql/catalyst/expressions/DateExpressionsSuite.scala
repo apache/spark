@@ -860,7 +860,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimeZonePST -> (1580688000L + 28800L))
         // Sixth week from 2020 is: Monday, February 3, 2020 0:00:00 GMT: 1580688000
         checkEvaluation(
-          ToUnixTimestamp(Literal("2020-06"), Literal(fmt4), timeZoneId), expectedResults.get(tz).head)
+          ToUnixTimestamp(Literal("2020-06"), Literal(fmt4), timeZoneId),
+          expectedResults.get(tz).head)
 
         // SPARK-28072 The codegen path for non-literal input should also work
         checkEvaluation(
