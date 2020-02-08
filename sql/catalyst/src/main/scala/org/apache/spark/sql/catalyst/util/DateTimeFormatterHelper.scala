@@ -68,6 +68,17 @@ private object DateTimeFormatterHelper {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
   }
 
+  def toWeekBasedFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
+    builder
+      .parseDefaulting(ChronoField.ERA, 1)
+      .parseDefaulting(ChronoField.DAY_OF_WEEK, 1)
+      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+      .toFormatter(locale)
+      .withChronology(IsoChronology.INSTANCE)
+      .withResolverStyle(ResolverStyle.STRICT)
+  }
+
   def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
     builder
       .parseDefaulting(ChronoField.ERA, 1)
@@ -80,9 +91,17 @@ private object DateTimeFormatterHelper {
       .withResolverStyle(ResolverStyle.STRICT)
   }
 
+  def isWeekBasedPattern(pattern: String): Boolean = {
+    Seq("YY", "w").exists(pattern.contains)
+  }
+
   def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val builder = createBuilder().appendPattern(pattern)
-    toFormatter(builder, locale)
+    if (isWeekBasedPattern(pattern)) {
+      toWeekBasedFormatter(builder, locale)
+    } else {
+      toFormatter(builder, locale)
+    }
   }
 
   lazy val fractionFormatter: DateTimeFormatter = {
