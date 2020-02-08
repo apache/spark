@@ -41,7 +41,7 @@ trait StringRegexExpression extends Expression
 
   override def dataType: DataType = BooleanType
 
-  // try cache the pattern for Literal
+  // try cache foldable pattern
   private lazy val cache: Pattern = pattern match {
     case p: Expression if p.foldable =>
       compile(p.eval().asInstanceOf[UTF8String].toString)
