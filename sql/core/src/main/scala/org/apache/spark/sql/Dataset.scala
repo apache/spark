@@ -1430,6 +1430,11 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
+    cols.find(_.isInstanceOf[TypedColumn[_, _]]).foreach { typedCol =>
+      throw new AnalysisException(s"$typedCol is a typed column that " +
+        "cannot be passed in untyped `select` API. If you are going to select " +
+        "multiple typed columns, you can use `Dataset.selectUntyped` API.")
+    }
     Project(cols.map(_.named), logicalPlan)
   }
 
@@ -1493,11 +1498,12 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Internal helper function for building typed selects that return tuples. For simplicity and
-   * code reuse, we do this without the help of the type system and then use helper functions
-   * that cast appropriately for the user facing interface.
+   * Selects a set of typed column based expressions.
+   *
+   * @group typedrel
+   * @since 3.1.0
    */
-  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
