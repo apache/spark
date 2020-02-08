@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.util.Locale
+import java.time.{Instant, LocalDateTime}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
@@ -788,5 +788,44 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+  }
+
+  test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
+    def checkTimeZoneParsing(expected: Any): Unit = {
+      val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+      checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
+        Row(expected))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
+      checkTimeZoneParsing(Timestamp.valueOf("2020-01-27 20:06:11.847"))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "false") {
+      checkTimeZoneParsing(null)
+    }
+  }
+
+  test("SPARK-30752: convert time zones on a daylight saving day") {
+    val systemTz = "PST"
+    val sessionTz = "UTC"
+    val fromTz = "Asia/Hong_Kong"
+    val fromTs = "2019-11-03T12:00:00" // daylight saving date in PST
+    val utsTs = "2019-11-03T04:00:00"
+    val defaultTz = TimeZone.getDefault
+    try {
+      TimeZone.setDefault(DateTimeUtils.getTimeZone(systemTz))
+      withSQLConf(
+        SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz) {
+        val expected = LocalDateTime.parse(utsTs)
+          .atZone(DateTimeUtils.getZoneId(sessionTz))
+          .toInstant
+        val df = Seq(fromTs).toDF("localTs")
+        checkAnswer(
+          df.select(to_utc_timestamp(col("localTs"), fromTz)),
+          Row(expected))
+      }
+    } finally {
+      TimeZone.setDefault(defaultTz)
+    }
   }
 }

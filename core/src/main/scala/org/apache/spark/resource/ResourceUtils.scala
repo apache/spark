@@ -17,8 +17,8 @@
 
 package org.apache.spark.resource
 
-import java.io.File
 import java.nio.file.{Files, Paths}
+import java.util.Optional
 
 import scala.util.control.NonFatal
 
@@ -26,39 +26,75 @@ import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.SPARK_TASK_PREFIX
-import org.apache.spark.util.Utils.executeAndGetOutput
+import org.apache.spark.internal.config.{RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
+import org.apache.spark.util.Utils
 
 /**
  * Resource identifier.
  * @param componentName spark.driver / spark.executor / spark.task
  * @param resourceName  gpu, fpga, etc
+ *
+ * @since 3.0.0
  */
-private[spark] case class ResourceID(componentName: String, resourceName: String) {
-  def confPrefix: String = s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
-  def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-  def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
-  def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+@DeveloperApi
+class ResourceID(val componentName: String, val resourceName: String) {
+  private[spark] def confPrefix: String = {
+    s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
+  }
+  private[spark] def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
+  private[spark] def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
+  private[spark] def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ResourceID =>
+        that.getClass == this.getClass &&
+          that.componentName == componentName && that.resourceName == resourceName
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(componentName, resourceName).hashCode()
 }
 
 /**
- * Case class that represents a resource request at the executor level.
+ * Class that represents a resource request.
  *
  * The class used when discovering resources (using the discovery script),
- * or via the context as it is parsing configuration, for SPARK_EXECUTOR_PREFIX.
+ * or via the context as it is parsing configuration for the ResourceID.
  *
  * @param id object identifying the resource
  * @param amount integer amount for the resource. Note that for a request (executor level),
  *               fractional resources does not make sense, so amount is an integer.
  * @param discoveryScript optional discovery script file name
  * @param vendor optional vendor name
+ *
+ * @since 3.0.0
  */
-private[spark] case class ResourceRequest(
-    id: ResourceID,
-    amount: Int,
-    discoveryScript: Option[String],
-    vendor: Option[String])
+@DeveloperApi
+class ResourceRequest(
+    val id: ResourceID,
+    val amount: Long,
+    val discoveryScript: Optional[String],
+    val vendor: Optional[String]) {
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ResourceRequest =>
+        that.getClass == this.getClass &&
+          that.id == id && that.amount == amount && discoveryScript == discoveryScript &&
+          vendor == vendor
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(id, amount, discoveryScript, vendor).hashCode()
+}
 
 /**
  * Case class that represents resource requirements for a component in a
@@ -105,15 +141,15 @@ private[spark] object ResourceUtils extends Logging {
     val amount = settings.getOrElse(AMOUNT,
       throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
     ).toInt
-    val discoveryScript = settings.get(DISCOVERY_SCRIPT)
-    val vendor = settings.get(VENDOR)
-    ResourceRequest(resourceId, amount, discoveryScript, vendor)
+    val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRIPT).orNull)
+    val vendor = Optional.ofNullable(settings.get(VENDOR).orNull)
+    new ResourceRequest(resourceId, amount, discoveryScript, vendor)
   }
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
-    }.toSet.toSeq.map(name => ResourceID(componentName, name))
+    }.toSet.toSeq.map(name => new ResourceID(componentName, name))
   }
 
   def parseAllResourceRequests(
@@ -218,7 +254,7 @@ private[spark] object ResourceUtils extends Logging {
     val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
-        Some(ResourceAllocation(id, discoverResource(request).addresses))
+        Some(ResourceAllocation(id, discoverResource(sparkConf, request).addresses))
       } else {
         None
       }
@@ -274,6 +310,15 @@ private[spark] object ResourceUtils extends Logging {
     resourceInfoMap
   }
 
+  // create an empty Optional if the string is empty
+  private def emptyStringToOptional(optStr: String): Optional[String] = {
+    if (optStr.isEmpty) {
+      Optional.empty[String]
+    } else {
+      Optional.of(optStr)
+    }
+  }
+
   /**
    * This function is similar to getOrDiscoverallResources, except for it uses the ResourceProfile
    * information instead of the application level configs.
@@ -290,14 +335,19 @@ private[spark] object ResourceUtils extends Logging {
   def getOrDiscoverAllResourcesForResourceProfile(
       resourcesFileOpt: Option[String],
       componentName: String,
-      resourceProfile: ResourceProfile): Map[String, ResourceInformation] = {
+      resourceProfile: ResourceProfile,
+      sparkConf: SparkConf): Map[String, ResourceInformation] = {
     val fileAllocated = parseAllocated(resourcesFileOpt, componentName)
     val fileAllocResMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     // only want to look at the ResourceProfile for resources not in the resources file
     val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
     val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
     val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
-      val addrs = discoverResource(rName, Option(execRequest.discoveryScript)).addresses
+      val resourceId = new ResourceID(componentName, rName)
+      val scriptOpt = emptyStringToOptional(execRequest.discoveryScript)
+      val vendorOpt = emptyStringToOptional(execRequest.vendor)
+      val resourceReq = new ResourceRequest(resourceId, execRequest.amount, scriptOpt, vendorOpt)
+      val addrs = discoverResource(sparkConf, resourceReq).addresses
       (rName, new ResourceInformation(rName, addrs))
     }
     val allAllocations = fileAllocResMap ++ rpAllocations
@@ -312,36 +362,24 @@ private[spark] object ResourceUtils extends Logging {
     logInfo("==============================================================")
   }
 
-  // visible for test
   private[spark] def discoverResource(
-      resourceName: String,
-      script: Option[String]): ResourceInformation = {
-    val result = if (script.nonEmpty) {
-      val scriptFile = new File(script.get)
-      // check that script exists and try to execute
-      if (scriptFile.exists()) {
-        val output = executeAndGetOutput(Seq(script.get), new File("."))
-        ResourceInformation.parseJson(output)
-      } else {
-        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
-          "doesn't exist!")
+      sparkConf: SparkConf,
+      resourceRequest: ResourceRequest): ResourceInformation = {
+    // always put the discovery script plugin as last plugin
+    val discoveryScriptPlugin = "org.apache.spark.resource.ResourceDiscoveryScriptPlugin"
+    val pluginClasses = sparkConf.get(RESOURCES_DISCOVERY_PLUGIN) :+ discoveryScriptPlugin
+    val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClasses,
+      sparkConf)
+    // apply each plugin until one of them returns the information for this resource
+    var riOption: Optional[ResourceInformation] = Optional.empty()
+    resourcePlugins.foreach { plugin =>
+      val riOption = plugin.discoverResource(resourceRequest, sparkConf)
+      if (riOption.isPresent()) {
+        return riOption.get()
       }
-    } else {
-      throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
-        "didn't specify a discovery script!")
     }
-    if (!result.name.equals(resourceName)) {
-      throw new SparkException(s"Error running the resource discovery script ${script.get}: " +
-        s"script returned resource name ${result.name} and we were expecting $resourceName.")
-    }
-    result
-  }
-
-  // visible for test
-  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
-    val resourceName = resourceRequest.id.resourceName
-    val script = resourceRequest.discoveryScript
-    discoverResource(resourceName, script)
+    throw new SparkException(s"None of the discovery plugins returned ResourceInformation for " +
+      s"${resourceRequest.id.resourceName}")
   }
 
   // known types of resources

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -2286,6 +2286,17 @@ class DataFrameSuite extends QueryTest
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
     assert(err.getMessage.contains("cannot resolve '`d`'"))
+  }
+
+  test("emptyDataFrame should be foldable") {
+    val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
+    val joined = spark.range(10).join(emptyDf, "id")
+    joined.queryExecution.optimizedPlan match {
+      case LocalRelation(Seq(id), Nil, _) =>
+        assert(id.name == "id")
+      case _ =>
+        fail("emptyDataFrame should be foldable")
+    }
   }
 }
 

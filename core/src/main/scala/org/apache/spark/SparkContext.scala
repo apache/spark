@@ -542,7 +542,7 @@ class SparkContext(config: SparkConf) extends Logging {
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Initialize any plugins before the task scheduler is initialized.
-    _plugins = PluginContainer(this)
+    _plugins = PluginContainer(this, _resources.asJava)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -2806,17 +2806,17 @@ object SparkContext extends Logging {
         // Make sure the executor resources were specified through config.
         val execAmount = executorResourcesAndAmounts.getOrElse(taskReq.resourceName,
           throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
+            new ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
             " needs to be specified since a task requirement config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
+            new ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
             " was specified")
         )
         // Make sure the executor resources are large enough to launch at least one task.
         if (execAmount < taskReq.amount) {
           throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
+            new ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
             s" = $execAmount has to be >= the requested amount in task resource config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
+            new ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
             s" = ${taskReq.amount}")
         }
         // Compare and update the max slots each executor can provide.

@@ -22,10 +22,14 @@ import java.time._
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit.SECONDS
 
-import DateTimeUtils.convertSpecialTimestamp
+import org.apache.commons.lang3.time.FastDateFormat
+
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.convertSpecialTimestamp
+import org.apache.spark.sql.internal.SQLConf
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -86,12 +90,32 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 }
 
+class LegacyTimestampFormatter(
+    pattern: String,
+    zoneId: ZoneId,
+    locale: Locale) extends TimestampFormatter {
+
+  @transient private lazy val format =
+    FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
+
+  protected def toMillis(s: String): Long = format.parse(s).getTime
+
+  override def parse(s: String): Long = toMillis(s) * MICROS_PER_MILLIS
+
+  override def format(us: Long): String = {
+    format.format(DateTimeUtils.toJavaTimestamp(us))
+  }
+}
+
 object TimestampFormatter {
-  val defaultPattern: String = "uuuu-MM-dd HH:mm:ss"
   val defaultLocale: Locale = Locale.US
 
   def apply(format: String, zoneId: ZoneId, locale: Locale): TimestampFormatter = {
-    new Iso8601TimestampFormatter(format, zoneId, locale)
+    if (SQLConf.get.legacyTimeParserEnabled) {
+      new LegacyTimestampFormatter(format, zoneId, locale)
+    } else {
+      new Iso8601TimestampFormatter(format, zoneId, locale)
+    }
   }
 
   def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
@@ -99,7 +123,11 @@ object TimestampFormatter {
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    apply(defaultPattern, zoneId, defaultLocale)
+    if (SQLConf.get.legacyTimeParserEnabled) {
+      new LegacyTimestampFormatter("yyyy-MM-dd HH:mm:ss", zoneId, defaultLocale)
+    } else {
+      new Iso8601TimestampFormatter("uuuu-MM-dd HH:mm:ss", zoneId, defaultLocale)
+    }
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {

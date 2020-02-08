@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.{Locale, Map => JMap, TimeZone}
+import java.time.ZoneId
+import java.util.{Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 
@@ -49,7 +50,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-class ParquetReadSupport(val convertTz: Option[TimeZone],
+class ParquetReadSupport(val convertTz: Option[ZoneId],
     enableVectorizedReader: Boolean)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _

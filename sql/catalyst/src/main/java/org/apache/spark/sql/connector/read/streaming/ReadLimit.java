@@ -15,17 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.connector.read.streaming;
 
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.annotation.Evolving;
 
-// A special `MicroBatchStream` that can get latestOffset with a start offset.
-trait RateControlMicroBatchStream extends MicroBatchStream {
+/**
+ * Interface representing limits on how much to read from a {@link MicroBatchStream} when it
+ * implements {@link SupportsAdmissionControl}. There are several child interfaces representing
+ * various kinds of limits.
+ *
+ * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
+ * @see ReadAllAvailable
+ * @see ReadMaxRows
+ */
+@Evolving
+public interface ReadLimit {
+  static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
 
-  override def latestOffset(): Offset = {
-    throw new IllegalAccessException(
-      "latestOffset should not be called for RateControlMicroBatchReadSupport")
-  }
+  static ReadLimit maxFiles(int files) { return new ReadMaxFiles(files); }
 
-  def latestOffset(start: Offset): Offset
+  static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
 }

@@ -49,4 +49,18 @@ class DataSourceV2SQLSessionCatalogSuite
     v2Catalog.asInstanceOf[TableCatalog]
       .loadTable(Identifier.of(Array.empty, nameParts.last))
   }
+
+  test("SPARK-30697: catalog.isView doesn't throw an error for specialized identifiers") {
+    val t1 = "tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+
+      def idResolver(id: Identifier): Identifier = Identifier.of(Array.empty, id.name())
+
+      InMemoryTableSessionCatalog.withCustomIdentifierResolver(idResolver) {
+        // The following should not throw AnalysisException.
+        sql(s"DESCRIBE TABLE ignored.$t1")
+      }
+    }
+  }
 }
