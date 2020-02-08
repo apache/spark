@@ -43,8 +43,10 @@ trait StringRegexExpression extends Expression
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = pattern match {
-    case Literal(value: String, StringType) => compile(value)
-    case _ => null
+    case p: Expression if p.foldable =>
+      compile(p.eval().asInstanceOf[UTF8String].toString)
+    case _ =>
+      null
   }
 
   protected def compile(str: String): Pattern = if (str == null) {
