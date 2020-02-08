@@ -55,6 +55,54 @@ class PlanParserSuite extends AnalysisTest {
     With(plan, ctes)
   }
 
+  test("single comment") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\nSELECT * FROM a", plan)
+  }
+
+  test("bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual("/* This is an example of SQL which should not execute:\n" +
+      " * select 'multi-line';\n" +
+      " */\n" +
+      "SELECT * FROM a", plan)
+  }
+
+  test("bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual("/*\n" +
+      "SELECT 'trailing' as x1; -- inside block comment\n" +
+      "*/\n" +
+      "SELECT * FROM a", plan)
+  }
+
+  test("nexted bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual("/* This block comment surrounds a query which itself has a block comment...\n" +
+      "SELECT /* embedded single line */ 'embedded' AS x2;\n" +
+      "*/\n" +
+      "SELECT * FROM a", plan)
+  }
+
+  test("nexted bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual("SELECT -- continued after the following block comments...\n" +
+      "/* Deeply nested comment.\n" +
+      "   This includes a single apostrophe to make sure we aren't decoding this part as a " +
+      "string.\n" +
+      "SELECT 'deep nest' AS n1;\n" +
+      "/* Second level of nesting...\n" +
+      "SELECT 'deeper nest' as n2;\n" +
+      "/* Third level of nesting...\n" +
+      "SELECT 'deepest nest' as n3;\n" +
+      "*/\n" +
+      "Hoo boy. Still two deep...\n" +
+      "*/\n" +
+      "Now just one deep...\n" +
+      "*/\n" +
+      "* FROM a", plan)
+  }
+
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)
