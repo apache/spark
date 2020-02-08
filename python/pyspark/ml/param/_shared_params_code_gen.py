@@ -164,7 +164,10 @@ if __name__ == "__main__":
          "'euclidean'", "TypeConverters.toString"),
         ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
          "training or for validation. False indicates training; true indicates validation.",
-         None, "TypeConverters.toString")]
+         None, "TypeConverters.toString"),
+        ("blockSize", "block size for stacking input data in matrices. Data is stacked within "
+         "partitions. If block size is more than remaining data in a partition then it is "
+         "adjusted to the size of this data.", None, "TypeConverters.toInt")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:
