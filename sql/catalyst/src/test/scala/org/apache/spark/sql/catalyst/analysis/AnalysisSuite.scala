@@ -767,6 +767,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       testAnalyzer.execute(plan)
     }.getMessage
     assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      "increasing the value of SQLConf.ANALYZER_MAX_ITERATIONS."))
+      s"increasing the value of '${SQLConf.ANALYZER_MAX_ITERATIONS.key}'."))
   }
 }
