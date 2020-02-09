@@ -82,11 +82,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     It is preferred to specify type hints for the pandas UDF instead of specifying pandas UDF
     type via `functionType` which will be deprecated in the future releases.
 
-    The below combinations of the type hints are supported for Pandas UDFs.
-    Note that the type hint should be `pandas.Series` in all cases but there is one variant case
-    that `pandas.DataFrame` should be mapped as its input or output type hint instead when
-    the input or output column is of :class:`pyspark.sql.types.StructType`.
-
     Note that the type hint should use `pandas.Series` in all cases but there is one variant
     that `pandas.DataFrame` should be used for its input or output type hint instead when the input
     or output column is of :class:`pyspark.sql.types.StructType`. The following example shows
@@ -116,7 +111,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     In the following sections, it describes the cominations of the supported type hints. For
     simplicity, `pandas.DataFrame` variant is omitted.
-
 
     * Series to Series
         `pandas.Series`, ... -> `pandas.Series`

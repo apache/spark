@@ -119,7 +119,8 @@ The type hint can be expressed as `Iterator[pandas.Series]` -> `Iterator[pandas.
 By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the given
 function takes an iterator of `pandas.Series` and outputs an iterator of `pandas.Series`. The output of each
 series from the function should always be of the same length as the input. In this case, the created
-Pandas UDF requires one input column when the Pandas UDF is called.
+Pandas UDF requires one input column when the Pandas UDF is called. To use multiple input columns,
+a different type hint is required. See Iterator of Multiple Series to Iterator of Series.
 
 It is useful when the UDF execution requires initializing some states although internally it works
 identically as Series to Series case. The pseudocode below illustrates the example.
@@ -195,7 +196,7 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ## Pandas Function APIs
 
-Pandas function APIs can directly apply a Python native function against the whole the DataFrame by
+Pandas function APIs can directly apply a Python native function against the whole DataFrame by
 using Pandas instances. Internally it works similarly with Pandas UDFs by Spark using Arrow to transfer
 data and Pandas to work with the data, which allows vectorized operations. A Pandas function API behaves
 as a regular API under PySpark `DataFrame` in general.
