@@ -1224,6 +1224,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
+
+  test("SPARK-30755: Support Hive 1.2.1's Serde after making built-in Hive to 2.3") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1(val string) " +
+        s"ROW FORMAT SERDE '${classOf[DummyHiveSerde].getName}'")
+      spark.sql("INSERT INTO t1 values ('val')")
+      assertResult(Array(Row("val"))) {
+        spark.table("t1").collect()
+      }
+    }
+  }
 }
 
 // for SPARK-2180 test
