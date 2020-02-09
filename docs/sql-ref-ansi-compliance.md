@@ -29,10 +29,10 @@ The following subsections present behaviour changes in arithmetic operations, ty
 
 ### Arithmetic Operations
 
-In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflow by default.
-This means that in case an operation causes an overflow, the result is the same that the same operation returns in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
-On the other hand, Spark SQL returns null for decimal overflow.
-When `spark.sql.ansi.enabled` is set to `true` and overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
+In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflows by default.
+This means that in case an operation causes overflows, the result is the same that the same operation returns in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
+On the other hand, Spark SQL returns null for decimal overflows.
+When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
 
 {% highlight sql %}
 -- `spark.sql.ansi.enabled=true`
@@ -54,7 +54,7 @@ SELECT 2147483647 + 1;
 ### Type Conversion
 
 Spark SQL has three kinds of type conversions: explicit casting, type coercion, and store assignment casting.
-When `spark.sql.ansi.enabled` is set to `true`, explicit castings by `CAST` syntax throws a number-format exception at runtime for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
+When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a number-format exception at runtime for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
 
 Currently, the ANSI mode affects explicit casting and assignment casting only.
@@ -68,7 +68,7 @@ SELECT CAST('a' AS INT);
 
   java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
--- `spark.sql.ansi.enabled=false` (This is a legacy behaviour until Spark 2.x)
+-- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
 
   +--------------+
