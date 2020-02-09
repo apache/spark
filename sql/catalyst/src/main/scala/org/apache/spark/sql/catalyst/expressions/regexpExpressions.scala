@@ -568,7 +568,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   examples = """
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
-       [100, 300]
+       ["100","300"]
   """,
   since = "3.0.0")
 case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
