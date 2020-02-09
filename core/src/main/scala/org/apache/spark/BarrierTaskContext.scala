@@ -190,12 +190,13 @@ class BarrierTaskContext private[spark] (
    */
   @Experimental
   @Since("3.0.0")
-  def allGather(message: Array[Byte]): ArrayBuffer[Array[Byte]] = {
-    val messagesSerialized = runBarrier(RequestMethod.ALL_GATHER, message)
+  def allGather(message: String): ArrayBuffer[String] = {
+    val messagesSerialized = runBarrier(RequestMethod.ALL_GATHER, message.getBytes(UTF_8))
     val ois = new ObjectInputStream(new ByteArrayInputStream(messagesSerialized))
     val messages = ois.readObject.asInstanceOf[Array[Array[Byte]]]
     ois.close()
-    ArrayBuffer(messages: _*)
+    ArrayBuffer(messages: _*).map(msg => new String(msg, UTF_8))
+
   }
 
   /**

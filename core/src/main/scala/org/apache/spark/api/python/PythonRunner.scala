@@ -435,12 +435,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        val msgs: ArrayBuffer[Array[Byte]] = context.asInstanceOf[BarrierTaskContext].allGather(
-          message
+        val msgs: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+          new String(message, UTF_8)
         )
         val json: String = compact(render(JArray(
           msgs.map(
-            (message) => JString(new String(message, UTF_8))
+            (message) => JString(message)
           ).toList
         )))
         writeUTF(json, out)

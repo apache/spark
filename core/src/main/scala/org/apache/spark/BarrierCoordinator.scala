@@ -110,7 +110,7 @@ private[spark] class BarrierCoordinator(
     private val allGatherMessages: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]](numTasks)
 
     // The blocking requestMethod called by tasks to sync up for this stage attempt
-    private var requestMethodToSync: Int = 0
+    private var requestMethodToSync: Int = RequestMethod.BARRIER
 
     // A timer task that ensures we may timeout for a barrier() call.
     private var timerTask: TimerTask = null
