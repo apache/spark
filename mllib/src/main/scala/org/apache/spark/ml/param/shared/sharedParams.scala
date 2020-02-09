@@ -578,4 +578,21 @@ trait HasValidationIndicatorCol extends Params {
   /** @group getParam */
   final def getValidationIndicatorCol: String = $(validationIndicatorCol)
 }
+
+/**
+ * Trait for shared param blockSize. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasBlockSize extends Params {
+
+  /**
+   * Param for block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data..
+   * @group expertParam
+   */
+  final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  final def getBlockSize: Int = $(blockSize)
+}
 // scalastyle:on
