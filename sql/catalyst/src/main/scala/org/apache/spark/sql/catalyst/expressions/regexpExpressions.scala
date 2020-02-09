@@ -483,6 +483,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val m = pattern.matcher(s.toString)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
+      val index = r.asInstanceOf[Int]
+      if (mr.groupCount < index) {
+        throw new AnalysisException(
+          s"Regex group count is: ${mr.groupCount}, but the specified group index is $index")
+      }
       val group = mr.group(r.asInstanceOf[Int])
       if (group == null) { // Pattern matched, but not optional group
         UTF8String.EMPTY_UTF8
@@ -501,6 +506,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNamePattern = classOf[Pattern].getCanonicalName
+    val classNameException = classOf[AnalysisException].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
@@ -524,6 +530,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         $termPattern.matcher($subject.toString());
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
+        if ($matchResult.groupCount() < $idx) {
+          throw new $classNameException("Regex group count is: $matchResult.groupCount()," +
+            " but the specified group index is $idx")
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {
