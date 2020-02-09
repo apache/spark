@@ -1,0 +1,22 @@
+	import org.apache.spark.{SparkContext,SparkConf}
+  
+	import org.apache.spark.sql.hive.HiveContext
+  
+	import org.apache.spark.sql.SQLContext
+  
+	import org.apache.spark.sql.SaveMode
+
+
+	val conf = new SparkConf().setMaster("local").setAppName("HiveContext")
+	val sc = new SparkContext(conf);
+	val hiveContext:SQLContext = new HiveContext(sc)
+	hiveContext.setConf("hive.metastore.uris","thrift://ip-XXX-XX-XX-XXX.ec2.internal:XXXX")  // open ambari and find the ip, there for hive 
+
+	hiveContext.tables("default").show
+
+
+	hiveContext.sql("use default")
+
+	val orders = hiveContext.read.parquet("/user/support1161/Divya4")  // Not to give parquete file name
+
+	orders.write.format("orc").mode(SaveMode.Append).saveAsTable("dee")

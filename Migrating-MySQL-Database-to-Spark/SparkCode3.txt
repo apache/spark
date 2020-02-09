@@ -1,0 +1,27 @@
+	import org.apache.spark.{SparkContext,SparkConf}
+  
+	import org.apache.spark.sql.hive.HiveContext
+  
+	import org.apache.spark.sql.SQLContext
+  
+	import org.apache.spark.sql.SaveMode
+  
+	val conf = new SparkConf().setMaster("local").setAppName("HiveContext")
+	val sc = new SparkContext(conf);
+	val hiveContext:SQLContext = new HiveContext(sc)
+	hiveContext.setConf("hive.metastore.uris","thrift://ip-XXX-XX-XX-XXX.ec2.internal:XXXX")
+
+	val prop = new java.util.Properties
+
+	prop.put("user","sqoopuser")
+	prop.put("password","****") ///must mention your password
+	prop.put("driverClass","com.mysql.jdbc.Driver")
+	val uri = "jdbc:mysql://ip-XXXX-XX-XX-XXX:XXXX/sqoopex"
+	val table = "pipeline"
+      //while setting up above properties must check that it should not store null, if so re run these above properties in spark-shell
+
+	val orders = hiveContext.read.jdbc(uri,table,prop)
+
+	orders.createOrReplaceTempView("orders")
+
+	hiveContext.sql("select * from orders").write.format("orc").mode(SaveMode.Append).saveAsTable("dd")
