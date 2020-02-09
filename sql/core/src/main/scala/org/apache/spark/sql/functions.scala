@@ -2384,6 +2384,17 @@ object functions {
   }
 
   /**
+   * Extract all specific group matched by a Java regex, from the specified string column.
+   * If the regex did not match, or the specified group did not match, an empty array is returned.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def regexp_extract_all(e: Column, exp: String, groupIdx: Int): Column = withExpr {
+    RegExpExtractAll(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs

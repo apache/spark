@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-import java.util.regex.{MatchResult, Pattern}
+import java.util.regex.{Matcher, MatchResult, Pattern}
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -452,6 +454,46 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   }
 }
 
+abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInputTypes {
+  def subject: Expression
+  def regexp: Expression
+  def idx: Expression
+
+  // last regex in string, we will update the pattern iff regexp value changed.
+  @transient private var lastRegex: UTF8String = _
+  // last regex pattern, we cache it for performance concern
+  @transient private var pattern: Pattern = _
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
+
+  protected def getLastMatcher(s: Any, p: Any): Matcher = {
+    if (!p.equals(lastRegex)) {
+      // regex value changed
+      lastRegex = p.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(lastRegex.toString)
+    }
+    pattern.matcher(s.toString)
+  }
+
+  protected def getGenCodeVals(ctx: CodegenContext, ev: ExprCode) = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
+
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
+
+    (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull)
+  }
+}
+
 /**
  * Extract a specific(idx) group identified by a Java regex.
  *
@@ -466,21 +508,11 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   """,
   since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
-  // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
-
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
-    }
-    val m = pattern.matcher(s.toString)
+    val m = getLastMatcher(s, p)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val group = mr.group(r.asInstanceOf[Int])
@@ -495,23 +527,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   }
 
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
-    val setEvNotNull = if (nullable) {
-      s"${ev.isNull} = false;"
-    } else {
-      ""
-    }
+    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
+      getGenCodeVals(ctx, ev)
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
@@ -534,6 +554,74 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         ${ev.value} = UTF8String.EMPTY_UTF8;
         $setEvNotNull
       }"""
+    })
+  }
+}
+
+/**
+ * Extract all specific(idx) group identified by a Java regex.
+ *
+ * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp[, idx]) - Extracts all group that matches `regexp`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
+       [100, 300]
+  """,
+  since = "3.0.0")
+case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
+  extends RegExpExtractBase {
+  def this(s: Expression, r: Expression) = this(s, r, Literal(1))
+
+  override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
+    val m = getLastMatcher(s, p)
+    val matchResults = new ArrayBuffer[UTF8String]()
+    val mr: MatchResult = m.toMatchResult
+    while(m.find) {
+      val mr: MatchResult = m.toMatchResult
+      val index = r.asInstanceOf[Int]
+      if (mr.groupCount < index) { // Pattern matched, but not optional group
+        matchResults += UTF8String.EMPTY_UTF8
+      } else {
+        matchResults += UTF8String.fromString(mr.group(index))
+      }
+    }
+
+    new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
+  }
+
+  override def dataType: DataType = ArrayType(StringType)
+  override def prettyName: String = "regexp_extract_all"
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
+      getGenCodeVals(ctx, ev)
+    val matchResults = ctx.freshName("matchResults")
+    val arrayClass = classOf[GenericArrayData].getName
+
+    nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
+      s"""
+         | if (!$regexp.equals($termLastRegex)) {
+         |   // regex value changed
+         |   $termLastRegex = $regexp.clone();
+         |   $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         | }
+         | java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
+         | while ($matcher.find()) {
+         |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
+         |   if ($matchResult.groupCount() < $idx) {
+         |     $matchResults.add(UTF8String.EMPTY_UTF8);
+         |   } else {
+         |     $matchResults.add(UTF8String.fromString($matchResult.group($idx)));
+         |   }
+         | }
+         | ${ev.value} =
+         |   new $arrayClass($matchResults.toArray(new UTF8String[$matchResults.size()]));
+         | $setEvNotNull
+         """
     })
   }
 }

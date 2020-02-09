@@ -94,6 +94,34 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
+  test("string regex_extract_all") {
+    val df = Seq(
+      ("100-200,300-400", "(\\d+)-(\\d+)", "300"),
+      ("101-201,301-401", "(\\d+)-(\\d+)", "400"),
+      ("102-202,302-402", "(\\d+)", "400")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        regexp_extract_all($"a", "(\\d+)-(\\d+)", 1),
+        regexp_extract_all($"a", "(\\d+)-(\\d+)", 2)),
+      Row(Seq("100", "300"), Seq("200", "400")) ::
+        Row(Seq("101", "301"), Seq("201", "401")) ::
+        Row(Seq("102", "302"), Seq("202", "402")) :: Nil)
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection followed by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    checkAnswer(
+      df.filter("isnotnull(a)").selectExpr(
+        "regexp_extract_all(a, b, 1)",
+        "regexp_extract_all(a, b, 2)"),
+      Row(Seq("100", "300"), Seq("200", "400")) ::
+        Row(Seq("101", "301"), Seq("201", "401")) ::
+        Row(Seq("102", "202", "302", "402"), Seq("", "", "", "")) :: Nil)
+  }
+
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
     checkAnswer(
