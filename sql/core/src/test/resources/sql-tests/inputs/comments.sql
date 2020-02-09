@@ -5,69 +5,69 @@ AS testData(a, b);
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case one
--- /* This is the first example of bracketed comment.
--- SELECT * FROM testData;
--- */
--- SELECT * FROM testData;
+/* This is the first example of bracketed comment.
+SELECT * FROM testData;
+*/
+SELECT * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case two
--- /* This is the second example of bracketed comment.
--- SELECT '/', * FROM testData;
--- */
--- SELECT '/', * FROM testData;
+/* This is the second example of bracketed comment.
+SELECT '/', * FROM testData;
+*/
+SELECT '/', * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- bracketed comment case three
--- /* This is the third example of bracketed comment.
---  *SELECT '*', * FROM testData;
---  */
--- SELECT '*', * FROM testData;
+/* This is the third example of bracketed comment.
+ *SELECT '*', * FROM testData;
+ */
+SELECT '*', * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case one
--- /* This is the first example of nested bracketed comment.
--- /* I am a nested bracketed comment.*/
--- */
--- SELECT * FROM testData;
+/* This is the first example of nested bracketed comment.
+/* I am a nested bracketed comment.*/
+*/
+SELECT * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case two
--- /* This is the second example of nested bracketed comment.
--- /* I am a nested bracketed comment.
--- */
--- */
--- SELECT * FROM testData;
+/* This is the second example of nested bracketed comment.
+/* I am a nested bracketed comment.
+ */
+ */
+SELECT * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case three
--- /*
---  * This is the third example of nested bracketed comment.
---   /*
---    * I am a nested bracketed comment.
---    */
---  */
--- SELECT * FROM testData;
+/*
+ * This is the third example of nested bracketed comment.
+  /*
+   * I am a nested bracketed comment.
+   */
+ */
+SELECT * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case four
--- /* 
---  * This is the four example of nested bracketed comment.
--- SELECT /* I am a nested bracketed comment.*/ * FROM testData;
---  */
--- SELECT * FROM testData;
+/* 
+ * This is the four example of nested bracketed comment.
+SELECT /* I am a nested bracketed comment.*/ * FROM testData;
+ */
+SELECT * FROM testData;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case five
--- SELECT * /*
---  * This is the five example of nested bracketed comment.
--- /* I am a second level of nested bracketed comment.
--- /* I am a third level of nested bracketed comment.
--- Other information of third level.
--- SELECT * FROM testData;
--- */
--- Other information of second level.
--- */
--- Other information of first level.
--- */
--- FROM testData;
+SELECT * /*
+ * This is the five example of nested bracketed comment.
+/* I am a second level of nested bracketed comment.
+/* I am a third level of nested bracketed comment.
+Other information of third level.
+SELECT * FROM testData;
+*/
+Other information of second level.
+*/
+Other information of first level.
+*/
+FROM testData;
