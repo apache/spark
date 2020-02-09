@@ -106,8 +106,11 @@ object NestedColumnAliasing {
    *
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
+   *
+   * @param exprList a sequence of expressions that possibly access nested fields.
+   * @param skipAttrs a set of attributes we do not want to replace nested fields within.
    */
-  def getAliasSubMap(exprList: Seq[Expression])
+  def getAliasSubMap(exprList: Seq[Expression], skipAttrs: AttributeSet = AttributeSet.empty)
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       exprList.flatMap(collectRootReferenceAndExtractValue).partition {
@@ -116,7 +119,10 @@ object NestedColumnAliasing {
       }
 
     val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
-      .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+      .filter { nestedRef =>
+        !nestedRef.references.subsetOf(AttributeSet(otherRootReferences)) &&
+          !nestedRef.references.subsetOf(skipAttrs)
+      }
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
         // Each expression can contain multiple nested fields.
@@ -179,7 +185,10 @@ object GeneratorNestedColumnAliasing {
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
-      NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
+      // For the child outputs required by the operator on top of `Generate`, we do not want
+      // to prune it.
+      val requiredAttrs = AttributeSet(g.requiredChildOutput)
+      NestedColumnAliasing.getAliasSubMap(g.generator.children, requiredAttrs).map {
         case (nestedFieldToAlias, attrToAliases) =>
           pruneGenerate(g, nestedFieldToAlias, attrToAliases)
       }
