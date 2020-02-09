@@ -713,32 +713,34 @@ object DateTimeUtils {
     }
   }
 
+  private def truncToUnit(t: SQLTimestamp, tz: TimeZone, unit: ChronoUnit): SQLTimestamp = {
+    val truncated = microsToInstant(t).atZone(tz.toZoneId).truncatedTo(unit)
+    instantToMicros(truncated.toInstant)
+  }
+
   /**
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    if (level == TRUNC_TO_MICROSECOND) return t
-    var millis = MICROSECONDS.toMillis(t)
-    val truncated = level match {
-      case TRUNC_TO_MILLISECOND => millis
-      case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
-      case TRUNC_TO_MINUTE =>
-        millis - millis % MILLIS_PER_MINUTE
-      case TRUNC_TO_HOUR =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_HOUR - offset
-      case TRUNC_TO_DAY =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_DAY - offset
-      case _ => // Try to truncate date levels
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
+    level match {
+      case TRUNC_TO_MICROSECOND => t
+      case TRUNC_TO_HOUR => truncToUnit(t, timeZone, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY => truncToUnit(t, timeZone, ChronoUnit.DAYS)
+      case _ =>
+        val millis = MICROSECONDS.toMillis(t)
+        val truncated = level match {
+          case TRUNC_TO_MILLISECOND => millis
+          case TRUNC_TO_SECOND =>
+            millis - millis % MILLIS_PER_SECOND
+          case TRUNC_TO_MINUTE =>
+            millis - millis % MILLIS_PER_MINUTE
+          case _ => // Try to truncate date levels
+            val dDays = millisToDays(millis, timeZone)
+            daysToMillis(truncDate(dDays, level), timeZone)
+        }
+        truncated * MICROS_PER_MILLIS
     }
-    truncated * MICROS_PER_MILLIS
   }
 
   /**
