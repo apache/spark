@@ -291,6 +291,15 @@ private[spark] class BarrierCoordinator(
 
 private[spark] sealed trait BarrierCoordinatorMessage extends Serializable
 
+private[spark] sealed trait RequestToSync extends BarrierCoordinatorMessage {
+  def numTasks: Int
+  def stageId: Int
+  def stageAttemptId: Int
+  def taskAttemptId: Long
+  def barrierEpoch: Int
+  def requestMethod: RequestMethod.Value
+}
+
 /**
  * A global sync request message from BarrierTaskContext, by `barrier()` call. Each request is
  * identified by stageId + stageAttemptId + barrierEpoch.
@@ -301,27 +310,7 @@ private[spark] sealed trait BarrierCoordinatorMessage extends Serializable
  * @param taskAttemptId Unique ID of current task
  * @param barrierEpoch ID of the `barrier()` call, a task may consist multiple `barrier()` calls.
  * @param requestMethod The BarrierTaskContext method that was called to trigger BarrierCoordinator
- * @param allGatherMessage Message sent from the BarrierTaskContext if requestMethod is ALL_GATHER
  */
-// private[spark] case class RequestToSync(
-//     numTasks: Int,
-//     stageId: Int,
-//     stageAttemptId: Int,
-//     taskAttemptId: Long,
-//     barrierEpoch: Int,
-//     requestMethod: RequestMethod.Value,
-//     allGatherMessage: Array[Byte]) extends BarrierCoordinatorMessage
-
-private[spark] sealed trait RequestToSync extends BarrierCoordinatorMessage {
-  def numTasks: Int
-  def stageId: Int
-  def stageAttemptId: Int
-  def taskAttemptId: Long
-  def barrierEpoch: Int
-  def requestMethod: RequestMethod.Value
-  // def allGatherMessage: Array[Byte]
-}
-
 private[spark] case class BarrierRequestToSync(
   numTasks: Int,
   stageId: Int,
@@ -331,6 +320,18 @@ private[spark] case class BarrierRequestToSync(
   requestMethod: RequestMethod.Value
 ) extends RequestToSync
 
+/**
+ * A global sync request message from BarrierTaskContext, by `allGather()` call. Each request is
+ * identified by stageId + stageAttemptId + barrierEpoch.
+ *
+ * @param numTasks The number of global sync requests the BarrierCoordinator shall receive
+ * @param stageId ID of current stage
+ * @param stageAttemptId ID of current stage attempt
+ * @param taskAttemptId Unique ID of current task
+ * @param barrierEpoch ID of the `barrier()` call, a task may consist multiple `barrier()` calls.
+ * @param requestMethod The BarrierTaskContext method that was called to trigger BarrierCoordinator
+ * @param allGatherMessage Message sent from the BarrierTaskContext if requestMethod is ALL_GATHER
+ */
 private[spark] case class AllGatherRequestToSync(
   numTasks: Int,
   stageId: Int,
