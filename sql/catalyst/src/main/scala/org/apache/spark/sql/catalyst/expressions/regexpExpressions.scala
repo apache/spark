@@ -452,6 +452,15 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   }
 }
 
+object RegExpExtract {
+  def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
+    if (groupCount < groupIndex) {
+      throw new AnalysisException(
+        s"Regex group count is: $groupCount, but the specified group index is $groupIndex")
+    }
+  }
+}
+
 /**
  * Extract a specific(idx) group identified by a Java regex.
  *
@@ -484,11 +493,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      if (mr.groupCount < index) {
-        throw new AnalysisException(
-          s"Regex group count is: ${mr.groupCount}, but the specified group index is $index")
-      }
-      val group = mr.group(r.asInstanceOf[Int])
+      RegExpExtract.checkGroupIndex(mr.groupCount, index)
+      val group = mr.group(index)
       if (group == null) { // Pattern matched, but not optional group
         UTF8String.EMPTY_UTF8
       } else {
@@ -506,7 +512,6 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNamePattern = classOf[Pattern].getCanonicalName
-    val classNameException = classOf[AnalysisException].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
@@ -530,9 +535,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         $termPattern.matcher($subject.toString());
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        if ($matchResult.groupCount() < $idx) {
-          throw new $classNameException("Regex group count is: $matchResult.groupCount()," +
-            " but the specified group index is $idx")
+        org.apache.spark.sql.catalyst.expressions.RegExpExtract
+          .checkGroupIndex($matchResult.groupCount(), $idx);
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {
