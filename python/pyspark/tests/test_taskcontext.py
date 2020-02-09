@@ -147,7 +147,7 @@ class TaskContextTests(PySparkTestCase):
         def context_barrier(x):
             tc = BarrierTaskContext.get()
             time.sleep(random.randint(1, 10))
-            out = tc.allGather(str(context.partitionId()))  
+            out = tc.allGather(str(context.partitionId()))
             pids = [int(e) for e in out]
             return [pids]
 
