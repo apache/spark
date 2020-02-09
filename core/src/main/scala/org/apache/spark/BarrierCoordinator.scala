@@ -110,7 +110,7 @@ private[spark] class BarrierCoordinator(
     private val allGatherMessages: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]](numTasks)
 
     // The blocking requestMethod called by tasks to sync up for this stage attempt
-    private var requestMethodToSync: Int = RequestMethod.BARRIER
+    private var requestMethodToSync: RequestMethod.Value = RequestMethod.BARRIER
 
     // A timer task that ensures we may timeout for a barrier() call.
     private var timerTask: TimerTask = null
@@ -139,12 +139,15 @@ private[spark] class BarrierCoordinator(
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
     // within a configured time, otherwise fail all the pending requests.
-    def handleRequest(requester: RpcCallContext, request: RequestToSync): Unit = synchronized {
-      val taskId = request.taskAttemptId
-      val epoch = request.barrierEpoch
-      val allGatherMessage = request.allGatherMessage
-      val requestMethod = request.requestMethod
-
+    private def handleRequest(
+      requester: RpcCallContext,
+      newNumTasks: Int,
+      stageId: Int,
+      taskAttemptId: Long,
+      epoch: Int,
+      requestMethod: RequestMethod.Value,
+      allGatherMessage: Array[Byte] = Array[Byte]()
+    ): Unit = synchronized {
       if (requesters.size == 0) {
           requestMethodToSync = requestMethod
       }
@@ -159,14 +162,14 @@ private[spark] class BarrierCoordinator(
       }
 
       // Require the number of tasks is correctly set from the BarrierTaskContext.
-      require(request.numTasks == numTasks, s"Number of tasks of $barrierId is " +
-        s"${request.numTasks} from Task $taskId, previously it was $numTasks.")
+      require(newNumTasks == numTasks, s"Number of tasks of $barrierId is " +
+        s"${newNumTasks} from Task $taskAttemptId, previously it was $numTasks.")
 
       // Check whether the epoch from the barrier tasks matches current barrierEpoch.
       logInfo(s"Current barrier epoch for $barrierId is $barrierEpoch.")
       if (epoch != barrierEpoch) {
         requester.sendFailure(new SparkException(s"The request to sync of $barrierId with " +
-          s"barrier epoch $barrierEpoch has already finished. Maybe task $taskId is not " +
+          s"barrier epoch $barrierEpoch has already finished. Maybe task $taskAttemptId is not " +
           "properly killed."))
       } else {
         // If this is the first sync message received for a barrier() call, start timer to ensure
@@ -177,9 +180,9 @@ private[spark] class BarrierCoordinator(
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
-        allGatherMessages += request.allGatherMessage
+        allGatherMessages += allGatherMessage
         logInfo(s"Barrier sync epoch $barrierEpoch from $barrierId received update from Task " +
-          s"$taskId, current progress: ${requesters.size}/$numTasks.")
+          s"$taskAttemptId, current progress: ${requesters.size}/$numTasks.")
         if (maybeFinishAllRequesters(requesters, numTasks, requestMethod)) {
           // Finished current barrier() call successfully, clean up ContextBarrierState and
           // increase the barrier epoch.
@@ -193,12 +196,41 @@ private[spark] class BarrierCoordinator(
       }
     }
 
+    def handleBarrierRequest(
+      requester: RpcCallContext,
+      request: BarrierRequestToSync
+    ): Unit = synchronized {
+      handleRequest(
+        requester,
+        request.numTasks,
+        request.stageId,
+        request.taskAttemptId,
+        request.barrierEpoch,
+        request.requestMethod
+      )
+    }
+
+    def handleAllGatherRequest(
+      requester: RpcCallContext,
+      request: AllGatherRequestToSync
+    ): Unit = synchronized {
+      handleRequest(
+        requester,
+        request.numTasks,
+        request.stageId,
+        request.taskAttemptId,
+        request.barrierEpoch,
+        request.requestMethod,
+        request.allGatherMessage
+      )
+    }
+
     // Finish all the blocking barrier sync requests from a stage attempt successfully if we
     // have received all the sync requests.
     private def maybeFinishAllRequesters(
         requesters: ArrayBuffer[RpcCallContext],
         numTasks: Int,
-        requestMethod: Int): Boolean = {
+        requestMethod: RequestMethod.Value): Boolean = {
       if (requesters.size == numTasks) {
         if (requestMethod == RequestMethod.BARRIER) {
           requesters.foreach(_.reply(Array[Byte]()))
@@ -236,14 +268,20 @@ private[spark] class BarrierCoordinator(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case request @ RequestToSync(numTasks, stageId, stageAttemptId, _, _, _, _) =>
+    case request @ BarrierRequestToSync(numTasks, stageId, stageAttemptId, _, _, _) =>
       // Get or init the ContextBarrierState correspond to the stage attempt.
       val barrierId = ContextBarrierId(stageId, stageAttemptId)
       states.computeIfAbsent(barrierId,
         (key: ContextBarrierId) => new ContextBarrierState(key, numTasks))
       val barrierState = states.get(barrierId)
-
-      barrierState.handleRequest(context, request)
+      barrierState.handleBarrierRequest(context, request)
+    case request @ AllGatherRequestToSync(numTasks, stageId, stageAttemptId, _, _, _, _) =>
+      // Get or init the ContextBarrierState correspond to the stage attempt.
+      val barrierId = ContextBarrierId(stageId, stageAttemptId)
+      states.computeIfAbsent(barrierId,
+        (key: ContextBarrierId) => new ContextBarrierState(key, numTasks))
+      val barrierState = states.get(barrierId)
+      barrierState.handleAllGatherRequest(context, request)
   }
 
   private val clearStateConsumer = new Consumer[ContextBarrierState] {
@@ -265,16 +303,44 @@ private[spark] sealed trait BarrierCoordinatorMessage extends Serializable
  * @param requestMethod The BarrierTaskContext method that was called to trigger BarrierCoordinator
  * @param allGatherMessage Message sent from the BarrierTaskContext if requestMethod is ALL_GATHER
  */
-private[spark] case class RequestToSync(
-    numTasks: Int,
-    stageId: Int,
-    stageAttemptId: Int,
-    taskAttemptId: Long,
-    barrierEpoch: Int,
-    requestMethod: Int,
-    allGatherMessage: Array[Byte]) extends BarrierCoordinatorMessage
+// private[spark] case class RequestToSync(
+//     numTasks: Int,
+//     stageId: Int,
+//     stageAttemptId: Int,
+//     taskAttemptId: Long,
+//     barrierEpoch: Int,
+//     requestMethod: RequestMethod.Value,
+//     allGatherMessage: Array[Byte]) extends BarrierCoordinatorMessage
 
-private[spark] object RequestMethod {
-  val BARRIER = 1
-  val ALL_GATHER = 2
+private[spark] sealed trait RequestToSync extends BarrierCoordinatorMessage {
+  def numTasks: Int
+  def stageId: Int
+  def stageAttemptId: Int
+  def taskAttemptId: Long
+  def barrierEpoch: Int
+  def requestMethod: RequestMethod.Value
+  // def allGatherMessage: Array[Byte]
+}
+
+private[spark] case class BarrierRequestToSync(
+  numTasks: Int,
+  stageId: Int,
+  stageAttemptId: Int,
+  taskAttemptId: Long,
+  barrierEpoch: Int,
+  requestMethod: RequestMethod.Value
+) extends RequestToSync
+
+private[spark] case class AllGatherRequestToSync(
+  numTasks: Int,
+  stageId: Int,
+  stageAttemptId: Int,
+  taskAttemptId: Long,
+  barrierEpoch: Int,
+  requestMethod: RequestMethod.Value,
+  allGatherMessage: Array[Byte]
+) extends RequestToSync
+
+private[spark] object RequestMethod extends Enumeration {
+  val BARRIER, ALL_GATHER = Value
 }

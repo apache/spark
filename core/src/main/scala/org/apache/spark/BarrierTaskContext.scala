@@ -63,8 +63,25 @@ class BarrierTaskContext private[spark] (
   // from different tasks within the same barrier stage attempt to succeed.
   private lazy val numTasks = getTaskInfos().size
 
+  private def getRequestToSync(
+    requestMethod: RequestMethod.Value,
+    numTasks: Int,
+    stageId: Int,
+    stageAttemptNumber: Int,
+    taskAttemptId: Long,
+    barrierEpoch: Int,
+    allGatherMessage: Array[Byte]
+  ): RequestToSync = {
+    if (requestMethod == RequestMethod.BARRIER) {
+      return BarrierRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+        barrierEpoch, requestMethod)
+    }
+    AllGatherRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+      barrierEpoch, requestMethod, allGatherMessage)
+  }
+
   private def runBarrier(
-    requestMethod: Int,
+    requestMethod: RequestMethod.Value,
     allGatherMessage: Array[Byte] = Array[Byte]()
   ): Array[Byte] = {
 
@@ -88,8 +105,8 @@ class BarrierTaskContext private[spark] (
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[Byte]](
-        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
-          barrierEpoch, requestMethod, allGatherMessage),
+        message = getRequestToSync(requestMethod, numTasks, stageId, stageAttemptNumber,
+          taskAttemptId, barrierEpoch, allGatherMessage),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
@@ -183,10 +200,13 @@ class BarrierTaskContext private[spark] (
 
   /**
    * :: Experimental ::
-   * Blocks until all tasks in the same stage have reached this routine.  Each task passes in
+   * Blocks until all tasks in the same stage have reached this routine. Each task passes in
    * a message and returns with a list of all the messages passed in by each of those tasks.
    *
    * CAUTION! The allGather method requires the same precautions as the barrier method
+   *
+   * The message is type String rather than Array[Byte] because it is more convenient for
+   * the user at the cost of worse performance.
    */
   @Experimental
   @Since("3.0.0")
