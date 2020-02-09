@@ -189,8 +189,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     val codegenIdStr =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
     val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val argStr = argString(SQLConf.get.maxToStringFields)
+
     s"""
        |($operatorId) $nodeName $codegenIdStr
+       |Arguments: ${if (argStr != null && !argStr.isEmpty) argStr else "None"}
      """.stripMargin
   }
 

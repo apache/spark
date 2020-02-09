@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 object SparkPlan {
@@ -512,9 +513,11 @@ trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
+       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
      """.stripMargin
   }
 }
@@ -531,9 +534,11 @@ trait UnaryExecNode extends SparkPlan {
 
   override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Input: ${child.output.mkString("[", ", ", "]")}
+       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
      """.stripMargin
   }
 }
@@ -544,10 +549,12 @@ trait BinaryExecNode extends SparkPlan {
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Left output: ${left.output.mkString("[", ", ", "]")}
-       |Right output: ${right.output.mkString("[", ", ", "]")}
+       |${ExplainUtils.generateFieldString("Left output", left.output)}
+       |${ExplainUtils.generateFieldString("Right output", right.output)}
+       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
      """.stripMargin
   }
 }
