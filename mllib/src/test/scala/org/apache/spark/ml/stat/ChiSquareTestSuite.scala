@@ -53,6 +53,20 @@ class ChiSquareTestSuite
       assert(degreesOfFreedom === Array(2, 3))
       assert(statistics ~== Vectors.dense(0.75, 1.5) relTol 1e-4)
     }
+
+    val sparseData = data.map { case LabeledPoint(label, features) =>
+      LabeledPoint(label, features.toSparse)
+    }
+    for (numParts <- List(2, 4, 6, 8)) {
+      val df = spark.createDataFrame(sc.parallelize(sparseData, numParts))
+      val chi = ChiSquareTest.test(df, "features", "label")
+      val (pValues: Vector, degreesOfFreedom: Array[Int], statistics: Vector) =
+        chi.select("pValues", "degreesOfFreedom", "statistics")
+          .as[(Vector, Array[Int], Vector)].head()
+      assert(pValues ~== Vectors.dense(0.6873, 0.6823) relTol 1e-4)
+      assert(degreesOfFreedom === Array(2, 3))
+      assert(statistics ~== Vectors.dense(0.75, 1.5) relTol 1e-4)
+    }
   }
 
   test("large number of features (SPARK-3087)") {
