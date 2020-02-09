@@ -26,11 +26,14 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
-abstract class WindowExecBase(
-    windowExpression: Seq[NamedExpression],
-    partitionSpec: Seq[Expression],
-    orderSpec: Seq[SortOrder],
-    child: SparkPlan) extends UnaryExecNode {
+abstract class WindowExecBase extends UnaryExecNode {
+  def windowExpression: Seq[NamedExpression]
+
+  def partitionSpec: Seq[Expression]
+
+  def orderSpec: Seq[SortOrder]
+
+  override def child: SparkPlan
 
   /**
    * Create the resulting projection.

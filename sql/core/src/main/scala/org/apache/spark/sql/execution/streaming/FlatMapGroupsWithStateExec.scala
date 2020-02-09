@@ -47,7 +47,7 @@ case class FlatMapGroupsWithStateExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    outputObjAttr: Attribute,
+    override val outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
     stateFormatVersion: Int,

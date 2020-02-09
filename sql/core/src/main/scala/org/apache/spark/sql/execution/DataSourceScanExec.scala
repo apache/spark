@@ -102,7 +102,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
-    @transient relation: BaseRelation,
+    @transient override val relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
@@ -158,7 +158,7 @@ case class RowDataSourceScanExec(
  * @param tableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
-    @transient relation: HadoopFsRelation,
+    @transient override val relation: HadoopFsRelation,
     output: Seq[Attribute],
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],

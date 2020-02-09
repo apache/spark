@@ -41,7 +41,7 @@ trait LimitExec extends UnaryExecNode {
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(override val limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -71,7 +71,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
  * This operator will be used when a logical `Tail` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectTailExec(override val limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTail(limit)
@@ -142,7 +142,7 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
 /**
  * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
-case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+case class LocalLimitExec(override val limit: Int, child: SparkPlan) extends BaseLimitExec {
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
@@ -152,7 +152,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 /**
  * Take the first `limit` elements of the child's single output partition.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+case class GlobalLimitExec(override val limit: Int, child: SparkPlan) extends BaseLimitExec {
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 

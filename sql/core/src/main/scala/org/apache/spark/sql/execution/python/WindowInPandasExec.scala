@@ -80,11 +80,11 @@ import org.apache.spark.util.Utils
  * window.
  */
 case class WindowInPandasExec(
-    windowExpression: Seq[NamedExpression],
-    partitionSpec: Seq[Expression],
-    orderSpec: Seq[SortOrder],
+    override val windowExpression: Seq[NamedExpression],
+    override val partitionSpec: Seq[Expression],
+    override val orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+  extends WindowExecBase {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

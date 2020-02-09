@@ -79,11 +79,11 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
 case class WindowExec(
-    windowExpression: Seq[NamedExpression],
-    partitionSpec: Seq[Expression],
-    orderSpec: Seq[SortOrder],
+    override val windowExpression: Seq[NamedExpression],
+    override val partitionSpec: Seq[Expression],
+    override val orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+  extends WindowExecBase {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

@@ -275,10 +275,10 @@ case class StateStoreRestoreExec(
  * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
  */
 case class StateStoreSaveExec(
-    keyExpressions: Seq[Attribute],
+    override val keyExpressions: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
-    eventTimeWatermark: Option[Long] = None,
+    override val eventTimeWatermark: Option[Long] = None,
     stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
@@ -427,10 +427,10 @@ case class StateStoreSaveExec(
 
 /** Physical operator for executing streaming Deduplicate. */
 case class StreamingDeduplicateExec(
-    keyExpressions: Seq[Attribute],
+    override val keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
-    eventTimeWatermark: Option[Long] = None)
+    override val eventTimeWatermark: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */

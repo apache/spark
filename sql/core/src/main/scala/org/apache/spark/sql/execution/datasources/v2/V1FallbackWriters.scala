@@ -37,9 +37,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Rows in the output data set are appended.
  */
 case class AppendDataExecV1(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
+    override val table: SupportsWrite,
+    override val writeOptions: CaseInsensitiveStringMap,
+    override val plan: LogicalPlan) extends V1FallbackWriters {
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV1(newWriteBuilder().buildForV1Write())
@@ -58,10 +58,10 @@ case class AppendDataExecV1(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExecV1(
-    table: SupportsWrite,
+    override val table: SupportsWrite,
     deleteWhere: Array[Filter],
-    writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
+    override val writeOptions: CaseInsensitiveStringMap,
+    override val plan: LogicalPlan) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]

@@ -32,13 +32,13 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
  */
 case class ShuffledHashJoinExec(
-    leftKeys: Seq[Expression],
-    rightKeys: Seq[Expression],
-    joinType: JoinType,
-    buildSide: BuildSide,
-    condition: Option[Expression],
-    left: SparkPlan,
-    right: SparkPlan)
+    override val leftKeys: Seq[Expression],
+    override val rightKeys: Seq[Expression],
+    override val joinType: JoinType,
+    override val buildSide: BuildSide,
+    override val condition: Option[Expression],
+    override val left: SparkPlan,
+    override val right: SparkPlan)
   extends BinaryExecNode with HashJoin {
 
   override lazy val metrics = Map(

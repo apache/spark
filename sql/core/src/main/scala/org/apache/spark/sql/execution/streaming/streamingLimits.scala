@@ -105,7 +105,7 @@ case class StreamingGlobalLimitExec(
  * stateful operation within `child` commits all the state changes (many stateful operations
  * commit state changes only after the iterator is consumed).
  */
-case class StreamingLocalLimitExec(limit: Int, child: SparkPlan)
+case class StreamingLocalLimitExec(override val limit: Int, child: SparkPlan)
   extends LimitExec {
 
   override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>

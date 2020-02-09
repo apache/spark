@@ -39,10 +39,10 @@ import org.apache.spark.util.ThreadUtils
  * @param child the BroadcastExchange from the build side of the join
  */
 case class SubqueryBroadcastExec(
-    name: String,
+    override val name: String,
     index: Int,
     buildKeys: Seq[Expression],
-    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
+    override val child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
