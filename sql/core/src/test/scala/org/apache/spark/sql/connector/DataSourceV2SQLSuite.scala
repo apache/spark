@@ -685,12 +685,21 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $t (id bigint, point struct<x: bigint, y: bigint>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, (10, 20))")
 
-      checkAnswer(
-        sql(s"SELECT testcat.ns1.ns2.tbl.id, testcat.ns1.ns2.tbl.point.x FROM $t"),
-        Row(1, 10))
-      checkAnswer(sql(s"SELECT ns1.ns2.tbl.id, ns1.ns2.tbl.point.x FROM $t"), Row(1, 10))
-      checkAnswer(sql(s"SELECT ns2.tbl.id, ns2.tbl.point.x FROM $t"), Row(1, 10))
-      checkAnswer(sql(s"SELECT tbl.id, tbl.point.x FROM $t"), Row(1, 10))
+      def check(tbl: String): Unit = {
+        checkAnswer(
+          sql(s"SELECT testcat.ns1.ns2.tbl.id, testcat.ns1.ns2.tbl.point.x FROM $tbl"),
+          Row(1, 10))
+        checkAnswer(sql(s"SELECT ns1.ns2.tbl.id, ns1.ns2.tbl.point.x FROM $tbl"), Row(1, 10))
+        checkAnswer(sql(s"SELECT ns2.tbl.id, ns2.tbl.point.x FROM $tbl"), Row(1, 10))
+        checkAnswer(sql(s"SELECT tbl.id, tbl.point.x FROM $tbl"), Row(1, 10))
+      }
+
+      // Test with qualified table name "testcat.ns1.ns2.tbl".
+      check(t)
+
+      // Test if current catalog and namespace is respected in column resolution.
+      sql("USE testcat.ns1.ns2")
+      check("tbl")
 
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
