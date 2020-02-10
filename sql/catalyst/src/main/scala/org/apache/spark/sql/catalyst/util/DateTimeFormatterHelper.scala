@@ -85,11 +85,10 @@ private object DateTimeFormatterHelper {
         (ChronoField.DAY_OF_MONTH, 1))
     }
 
-    (defaults ++ weekDayBased).foldLeft(builder){
+    (defaults ++ weekDayBased).foldLeft(builder) {
       case (builder, (chrono, value)) =>
         builder.parseDefaulting(chrono, value)
     }
-
   }
 
   def toFormatter(builder: DateTimeFormatterBuilder,
