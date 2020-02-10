@@ -4733,7 +4733,7 @@ object functions {
    * @since 2.0.0
    */
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_USE_UNTYPED_UDF)) {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
       val errorMsg = "You're using untyped udf, which does not have the input type information. " +
         "So, Spark may blindly pass null to the Scala closure with primitive-type argument, " +
         "and the closure will see the default value of the Java type for the null argument, " +
