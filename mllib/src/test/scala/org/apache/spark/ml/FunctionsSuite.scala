@@ -34,9 +34,8 @@ class FunctionsSuite extends MLTest {
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
 
-      val result = df.select(vector_to_array('vec), vector_to_array('oldVec))
-      .as[(Seq[Double], Seq[Double])]
-      .collect().toSeq
+    val df_array_double = df.select(vector_to_array('vec), vector_to_array('oldVec))
+    val result = df_array_double.as[(Seq[Double], Seq[Double])].collect().toSeq
 
     val expected = Seq(
       (Seq(1.0, 2.0, 3.0), Seq(10.0, 20.0, 30.0)),
@@ -67,14 +66,19 @@ class FunctionsSuite extends MLTest {
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
 
-    val result3 = df3.select(
+    val df_array_float = df3.select(
       vector_to_array('vec, dtype = "float32"), vector_to_array('oldVec, dtype = "float32"))
-      .collect().toSeq
+    val result3 = df_array_float.collect().toSeq
 
     val expected3 = Seq(
       (Seq(1.0, 2.0, 3.0), Seq(10.0, 20.0, 30.0)),
       (Seq(2.0, 0.0, 3.0), Seq(20.0, 0.0, 30.0))
     )
     assert(result3 === expected3)
+
+    df_array_double.schema.fields(0).dataType.simpleString == "array<double>"
+    df_array_double.schema.fields(1).dataType.simpleString == "array<double>"
+    df_array_float.schema.fields(0).dataType.simpleString == "array<float>"
+    df_array_float.schema.fields(1).dataType.simpleString == "array<float>"
   }
 }

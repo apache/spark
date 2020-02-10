@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.udf
 
 // scalastyle:off
@@ -28,25 +29,25 @@ import org.apache.spark.sql.functions.udf
 object functions {
 // scalastyle:on
 
-  private val vectorToArrayUdf = udf { vec: Any =>
-    vec match {
-      case v: Vector => v.toArray
-      case v: OldVector => v.toArray
-      case v => throw new IllegalArgumentException(
-        "function vector_to_array requires a non-null input argument and input type must be " +
-        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
-    }
-  }.asNonNullable()
-
-  private val vectorToArrayFloatUdf = udf { vec: Any =>
-    vec match {
-      case v: Vector => v.toArray.map(_.toFloat)
-      case v: OldVector => v.toArray.map(_.toFloat)
-      case v => throw new IllegalArgumentException(
-        "function vector_to_array requires a non-null input argument and input type must be " +
-        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+  private val vectorToArrayUdf = udf { (vec: Any, dtype: String) => {
+      val new_vec =
+        vec match {
+          case v: Vector => v.toArray
+          case v: OldVector => v.toArray
+          case v => throw new IllegalArgumentException(
+            "function vector_to_array requires a non-null input argument and input type must be " +
+              "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+              s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+        }
+      if (dtype == "float64") {
+        new_vec
+      } else if (dtype == "float32") {
+        new_vec.map(_.toFloat)
+      } else {
+        throw new IllegalArgumentException(
+          s"Unsupported dtype: $dtype. Valid values: float64, float32."
+        )
+      }
     }
   }.asNonNullable()
 
@@ -55,15 +56,6 @@ object functions {
    *
    * @since 3.0.0
    */
-  def vector_to_array(v: Column, dtype: String = "float64"): Column = {
-    if (dtype == "float64") {
-      vectorToArrayUdf(v)
-    } else if (dtype == "float32") {
-      vectorToArrayFloatUdf(v)
-    } else {
-      throw new IllegalArgumentException(
-        s"Unsupported dtype: $dtype. Valid values: float64, float32."
-      )
-    }
-  }
+  def vector_to_array(v: Column, dtype: String = "float64"): Column =
+    vectorToArrayUdf(v, lit(dtype))
 }
