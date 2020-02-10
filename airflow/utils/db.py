@@ -104,6 +104,16 @@ def create_default_connections(session=None):
     )
     merge_conn(
         Connection(
+            conn_id='azure_data_explorer_default', conn_type='azure_data_explorer',
+            host='https://<CLUSTER>.kusto.windows.net',
+            extra='''{"auth_method": "<AAD_APP | AAD_APP_CERT | AAD_CREDS | AAD_DEVICE>",
+                    "tenant": "<TENANT ID>", "certificate": "<APPLICATION PEM CERTIFICATE>",
+                    "thumbprint": "<APPLICATION CERTIFICATE THUMBPRINT>"}'''
+        ),
+        session,
+    )
+    merge_conn(
+        Connection(
             conn_id="azure_data_lake_default",
             conn_type="azure_data_lake",
             extra='{"tenant": "<TENANT>", "account_name": "<ACCOUNTNAME>" }',

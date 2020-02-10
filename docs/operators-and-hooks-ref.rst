@@ -242,6 +242,11 @@ These integrations allow you to perform various operations within the Microsoft 
      - :mod:`airflow.providers.microsoft.azure.operators.adls_list`
      -
 
+   * - `Azure Data Explorer <https://azure.microsoft.com/en-us/services/data-explorer//>`__
+     - :mod:`airflow.providers.microsoft.azure.hooks.adx`
+     - :mod:`airflow.providers.microsoft.azure.operators.adx`
+     -
+
    * - `Azure Files <https://azure.microsoft.com/en-us/services/storage/files/>`__
      - :mod:`airflow.providers.microsoft.azure.hooks.azure_fileshare`
      -
