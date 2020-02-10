@@ -257,7 +257,7 @@ case class ArrayTransform(
     }
   }
 
-  @transient lazy val (elementVar, indexVar) = {
+  @transient private lazy val tuple = {
     val LambdaFunction(_, (elementVar: NamedLambdaVariable) +: tail, _) = function
     val indexVar = if (tail.nonEmpty) {
       Some(tail.head.asInstanceOf[NamedLambdaVariable])
@@ -266,6 +266,8 @@ case class ArrayTransform(
     }
     (elementVar, indexVar)
   }
+  @transient lazy val elementVar = tuple._1
+  @transient lazy val indexVar = tuple._2
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
@@ -409,10 +411,12 @@ case class MapFilter(
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  @transient lazy val (keyVar, valueVar) = {
+  @transient private lazy val tuple = {
     val args = function.asInstanceOf[LambdaFunction].arguments
     (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
   }
+  @transient lazy val keyVar = tuple._1
+  @transient lazy val valueVar = tuple._2
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -478,11 +482,13 @@ case class ArrayFilter(
     }
   }
 
-  @transient lazy val (elementVar, indexVar) = {
+  @transient private lazy val tuple = {
     val LambdaFunction(_, (elementVar: NamedLambdaVariable) +: tail, _) = function
     val indexVar = tail.headOption.map(_.asInstanceOf[NamedLambdaVariable])
     (elementVar, indexVar)
   }
+  @transient lazy val elementVar = tuple._1
+  @transient lazy val indexVar = tuple._2
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
