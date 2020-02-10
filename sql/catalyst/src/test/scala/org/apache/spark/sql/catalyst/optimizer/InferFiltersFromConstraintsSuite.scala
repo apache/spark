@@ -263,4 +263,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.subquery('y)
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
+
+  test("SPARK-30768: Constraints should be inferred from inequality attributes") {
+    val condition = Some("x.a".attr > "y.a".attr)
+    val optimizedLeft = testRelation.where(IsNotNull('a) && 'a === 1).as("x")
+    val optimizedRight = testRelation.where(Literal(1) > 'a && IsNotNull('a) ).as("y")
+    val correct = optimizedLeft.join(optimizedRight, Inner, condition)
+
+    Seq(Literal(1) === 'a, 'a === Literal(1)).foreach { filter =>
+      val original = testRelation.where(filter).as("x").join(testRelation.as("y"), Inner, condition)
+      comparePlans(Optimize.execute(original.analyze), correct.analyze)
+    }
+  }
 }

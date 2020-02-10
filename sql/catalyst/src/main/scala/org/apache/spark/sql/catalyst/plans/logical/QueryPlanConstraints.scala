@@ -67,6 +67,10 @@ trait ConstraintHelper {
         val candidateConstraints = constraints - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualTo(l: Attribute, r : Literal) =>
+        inferredConstraints ++= replaceConstraints(constraints - eq, l, r)
+      case eq @ EqualTo(l : Literal, r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(constraints - eq, r, l)
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -75,7 +79,7 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: Set[Expression],
       source: Expression,
-      destination: Attribute): Set[Expression] = constraints.map(_ transform {
+      destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
 
