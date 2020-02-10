@@ -45,8 +45,7 @@ trait StringRegexExpression extends Expression
   private lazy val cache: Pattern = pattern match {
     case p: Expression if p.foldable =>
       compile(p.eval().asInstanceOf[UTF8String].toString)
-    case _ =>
-      null
+    case _ => null
   }
 
   protected def compile(str: String): Pattern = if (str == null) {
