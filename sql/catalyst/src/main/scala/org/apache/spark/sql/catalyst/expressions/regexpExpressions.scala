@@ -512,6 +512,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNamePattern = classOf[Pattern].getCanonicalName
+    val classNameRegExpExtract = classOf[RegExpExtract].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
@@ -535,8 +536,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         $termPattern.matcher($subject.toString());
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        org.apache.spark.sql.catalyst.expressions.RegExpExtract
-          .checkGroupIndex($matchResult.groupCount(), $idx);
+        $classNameRegExpExtract.checkGroupIndex($matchResult.groupCount(), $idx);
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {

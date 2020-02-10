@@ -299,21 +299,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row9 = create_row("100-200", "(\\d+).*", 2)
     val row10 = create_row("100-200", "\\d+", 1)
 
-    val invalidGroupIndex1 = intercept[AnalysisException] {
-      evaluateWithoutCodegen(expr, row8)
-    }
-    assert(invalidGroupIndex1.getMessage.contains(
-      "Regex group count is: 2, but the specified group index is 3"))
-    val invalidGroupIndex2 = intercept[AnalysisException] {
-      evaluateWithoutCodegen(expr, row9)
-    }
-    assert(invalidGroupIndex2.getMessage.contains(
-      "Regex group count is: 1, but the specified group index is 2"))
-    val invalidGroupIndex3 = intercept[AnalysisException] {
-      evaluateWithoutCodegen(expr, row10)
-    }
-    assert(invalidGroupIndex3.getMessage.contains(
-      "Regex group count is: 0, but the specified group index is 1"))
+    checkExceptionInExpression[AnalysisException](
+      expr, row8, "Regex group count is: 2, but the specified group index is 3")
+    checkExceptionInExpression[AnalysisException](
+      expr, row9, "Regex group count is: 1, but the specified group index is 2")
+    checkExceptionInExpression[AnalysisException](
+      expr, row10, "Regex group count is: 0, but the specified group index is 1")
   }
 
   test("SPLIT") {
