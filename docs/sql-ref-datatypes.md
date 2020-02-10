@@ -631,4 +631,79 @@ from pyspark.sql.types import *
 </tr>
 </table>
 </div>
+
+<div data-lang="sql"  markdown="1">
+
+The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
+
+<table class="table">
+<tr>
+  <th style="width:40%">Data type</th>
+  <th>SQL name</th></tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> BOOLEAN </td>
+</tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td> BYTE, TINYINT </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td> SHORT, SMALLINT </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> INT, INTEGER </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td> LONG, BIGINT </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td> FLOAT, REAL </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> DOUBLE </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> DATE </td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> TIMESTAMP </td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> STRING </td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> BINARY </td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> DECIMAL, DEC, NUMERIC </td>
+</tr>
+<tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> INTERVAL </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> ARRAY&lt;element_type&gt; </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> STRUCT&lt;field1_name: field1_type, field2_name: field2_type, ...&gt; </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> MAP&lt;key_type, value_type&gt; </td>
+</tr>
+</table>
+</div>
 </div>

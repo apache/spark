@@ -615,34 +615,33 @@ class DataFrameAggregateSuite extends QueryTest
          Seq((true, true), (true, false), (false, true), (false, false))) {
       withSQLConf(
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
-        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString),
-        (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")) {
-        // When enable AQE, the WholeStageCodegenExec is added during QueryStageExec.
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
         // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find {
+          assert(find(hashAggPlan) {
             case WholeStageCodegenExec(_: HashAggregateExec) => true
             case _ => false
           }.isDefined)
         } else {
-          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+          assert(stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec])
         }
-        hashAggDF.collect()
 
         // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        objHashAggOrSortAggDF.collect()
+        val objHashAggOrSortAggPlan =
+          stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan)
         if (useObjectHashAgg) {
           assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
           assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashAggOrSortAggDF.collect()
       }
     }
   }

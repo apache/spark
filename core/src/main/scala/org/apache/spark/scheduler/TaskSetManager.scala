@@ -229,6 +229,8 @@ private[spark] class TaskSetManager(
       index: Int,
       resolveRacks: Boolean = true,
       speculatable: Boolean = false): Unit = {
+    // A zombie TaskSetManager may reach here while handling failed task.
+    if (isZombie) return
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
       loc match {
@@ -1082,6 +1084,8 @@ private[spark] class TaskSetManager(
   }
 
   def recomputeLocality(): Unit = {
+    // A zombie TaskSetManager may reach here while executorLost happens
+    if (isZombie) return
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)

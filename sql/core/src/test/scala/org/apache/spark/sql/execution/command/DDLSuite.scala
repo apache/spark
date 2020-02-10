@@ -188,7 +188,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       sql("CREATE TABLE t(i INT) USING parquet")
       val e = intercept[AnalysisException] {
-        sql("ALTER TABLE t ALTER COLUMN i TYPE INT FIRST")
+        sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
       assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
     }
@@ -1786,7 +1786,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }

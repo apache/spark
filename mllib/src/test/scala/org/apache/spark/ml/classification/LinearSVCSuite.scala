@@ -179,7 +179,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
   test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new HingeAggregator(1, true)(bcCoefficients)
+    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))

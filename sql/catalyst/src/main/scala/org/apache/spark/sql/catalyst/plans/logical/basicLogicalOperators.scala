@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -849,18 +850,18 @@ case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservi
 /**
  * Aliased subquery.
  *
- * @param name the alias identifier for this subquery.
+ * @param identifier the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    name: AliasIdentifier,
+    identifier: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  def alias: String = name.identifier
+  def alias: String = identifier.name
 
   override def output: Seq[Attribute] = {
-    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
   override def doCanonicalize(): LogicalPlan = child.canonicalized
@@ -877,7 +878,13 @@ object SubqueryAlias {
       identifier: String,
       database: String,
       child: LogicalPlan): SubqueryAlias = {
-    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+    SubqueryAlias(AliasIdentifier(identifier, Seq(database)), child)
+  }
+
+  def apply(
+      multipartIdentifier: Seq[String],
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
 }
 /**
