@@ -39,10 +39,31 @@ object functions {
     }
   }.asNonNullable()
 
+  private val vectorToArrayFloatUdf = udf { vec: Any =>
+    vec match {
+      case v: Vector => v.toArray.map(_.toFloat)
+      case v: OldVector => v.toArray.map(_.toFloat)
+      case v => throw new IllegalArgumentException(
+        "function vector_to_array requires a non-null input argument and input type must be " +
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+    }
+  }.asNonNullable()
+
   /**
    * Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
    *
    * @since 3.0.0
    */
-  def vector_to_array(v: Column): Column = vectorToArrayUdf(v)
+  def vector_to_array(v: Column, dtype: String = "float64"): Column = {
+    if (dtype == "float64") {
+      vectorToArrayUdf(v)
+    } else if (dtype == "float32") {
+      vectorToArrayFloatUdf(v)
+    } else {
+      throw new IllegalArgumentException(
+        s"Unsupported dtype: $dtype. Valid values: float64, float32."
+      )
+    }
+  }
 }

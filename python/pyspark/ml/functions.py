@@ -20,7 +20,7 @@ from pyspark.sql.column import Column, _to_java_column
 
 
 @since(3.0)
-def vector_to_array(col):
+def vector_to_array(col, dtype="float64"):
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
@@ -39,7 +39,7 @@ def vector_to_array(col):
     """
     sc = SparkContext._active_spark_context
     return Column(
-        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col)))
+        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype))
 
 
 def _test():

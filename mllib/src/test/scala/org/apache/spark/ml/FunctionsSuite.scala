@@ -61,5 +61,20 @@ class FunctionsSuite extends MLTest {
         "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
         s"but got ${valType}"))
     }
+
+    val df3 = Seq(
+      (Vectors.dense(1.0, 2.0, 3.0), OldVectors.dense(10.0, 20.0, 30.0)),
+      (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
+    ).toDF("vec", "oldVec")
+
+    val result3 = df3.select(
+      vector_to_array('vec, dtype = "float32"), vector_to_array('oldVec, dtype = "float32"))
+      .collect().toSeq
+
+    val expected3 = Seq(
+      (Seq(1.0, 2.0, 3.0), Seq(10.0, 20.0, 30.0)),
+      (Seq(2.0, 0.0, 3.0), Seq(20.0, 0.0, 30.0))
+    )
+    assert(result3 === expected3)
   }
 }
