@@ -2572,3 +2572,10 @@ class JsonV2Suite extends JsonSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }
+
+class JsonLegacyTimeParserSuite extends JsonSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.LEGACY_TIME_PARSER_ENABLED, true)
+}
