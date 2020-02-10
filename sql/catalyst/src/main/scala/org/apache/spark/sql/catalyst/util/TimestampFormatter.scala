@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.sql.Timestamp
-import java.text.{ParseException, SimpleDateFormat}
+import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
-import java.util.{Date, Locale, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit.SECONDS
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.convertSpecialTimestamp
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{ convertSpecialTimestamp, SQLTimestamp}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.Decimal
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -91,43 +91,112 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 }
 
-trait LegacyTimestampFormatter extends TimestampFormatter {
-  def parseToDate(s: String): Date
-  def formatTimestamp(t: Timestamp): String
-
-  override def parse(s: String): Long = {
-    parseToDate(s).getTime * MICROS_PER_MILLIS
+/**
+ * The custom sub-class of `GregorianCalendar` is needed to get access to
+ * protected `fields` immediately after parsing. We cannot use
+ * the `get()` method because it performs normalization of the fraction
+ * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
+ *
+ * Also this class allows to set raw value to the `MILLISECOND` field
+ * directly before formatting.
+ */
+class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
+  extends GregorianCalendar(tz, Locale.US) {
+  // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
+  // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
+  // if the `MILLISECOND` field was parsed to `1234`.
+  def getMicros(): SQLTimestamp = {
+    // Append 6 zeros to the field: 1234 -> 1234000000
+    val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
+    // Take the first 6 digits from `d`: 1234000000 -> 123400
+    // The rest contains exactly `digitsInFraction`: `0000` = 10 ^ digitsInFraction
+    // So, the result is `(1234 * 1000000) / (10 ^ digitsInFraction)
+    d / Decimal.POW_10(digitsInFraction)
   }
 
-  override def format(us: Long): String = {
-    val timestamp = DateTimeUtils.toJavaTimestamp(us)
-    formatTimestamp(timestamp)
+  // Converts the seconds fraction in microsecond precision to a value
+  // that can be correctly formatted according to the specified fraction pattern.
+  // The method performs operations opposite to `getMicros()`.
+  def setMicros(micros: Long): Unit = {
+    val d = micros * Decimal.POW_10(digitsInFraction)
+    fields(Calendar.MILLISECOND) = (d / MICROS_PER_SECOND).toInt
+  }
+}
+
+/**
+ * An instance of the class is aimed to re-use many times. It contains helper objects
+ * `cal` which is reused between `parse()` and `format` invokes.
+ */
+class LegacyFastDateFormat(fastDateFormat: FastDateFormat) {
+  private val cal = new MicrosCalendar(
+    fastDateFormat.getTimeZone,
+    fastDateFormat.getPattern.count(_ == 'S'))
+
+  def parse(s: String): SQLTimestamp = {
+    cal.clear() // Clear the calendar because it can be re-used many times
+    if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+      throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+    }
+    val micros = cal.getMicros()
+    cal.set(Calendar.MILLISECOND, 0)
+    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+  }
+
+  def format(timestamp: SQLTimestamp): String = {
+    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+    fastDateFormat.format(cal)
   }
 }
 
 class LegacyFastTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
-    locale: Locale) extends LegacyTimestampFormatter {
-  @transient private lazy val fdf =
+    locale: Locale) extends TimestampFormatter {
+
+  @transient private lazy val fastDateFormat =
     FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
-  override def parseToDate(s: String): Date = fdf.parse(s)
-  override def formatTimestamp(t: Timestamp): String = fdf.format(t)
+  @transient private lazy val cal = new MicrosCalendar(
+    fastDateFormat.getTimeZone,
+    fastDateFormat.getPattern.count(_ == 'S'))
+
+  def parse(s: String): SQLTimestamp = {
+    cal.clear() // Clear the calendar because it can be re-used many times
+    if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+      throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+    }
+    val micros = cal.getMicros()
+    cal.set(Calendar.MILLISECOND, 0)
+    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+  }
+
+  def format(timestamp: SQLTimestamp): String = {
+    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+    fastDateFormat.format(cal)
+  }
 }
 
 class LegacySimpleTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
-    lenient: Boolean = true) extends LegacyTimestampFormatter {
+    lenient: Boolean = true) extends TimestampFormatter {
   @transient private lazy val sdf = {
     val formatter = new SimpleDateFormat(pattern, locale)
     formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
     formatter.setLenient(lenient)
     formatter
   }
-  override def parseToDate(s: String): Date = sdf.parse(s)
-  override def formatTimestamp(t: Timestamp): String = sdf.format(t)
+
+  override def parse(s: String): Long = {
+    sdf.parse(s).getTime * MICROS_PER_MILLIS
+  }
+
+  override def format(us: Long): String = {
+    val timestamp = DateTimeUtils.toJavaTimestamp(us)
+    sdf.format(timestamp)
+  }
 }
 
 object LegacyDateFormats extends Enumeration {
