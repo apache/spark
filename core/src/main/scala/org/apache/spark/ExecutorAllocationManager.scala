@@ -275,7 +275,7 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * The maximum number of executors, for the ResourceProifle id passed in, that we would need
+   * The maximum number of executors, for the ResourceProfile id passed in, that we would need
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
@@ -489,7 +489,7 @@ private[spark] class ExecutorAllocationManager(
     var numExecutorsTarget = math.max(numExecutorsTargetPerResourceProfileId(rpId),
         executorMonitor.executorCountWithResourceProfile(rpId))
     // Boost our target with the number to add for this round:
-    numExecutorsTarget += numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rpId, 1)
+    numExecutorsTarget += numExecutorsToAddPerResourceProfileId(rpId)
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
     // Ensure that our target fits within configured bounds:
@@ -893,16 +893,15 @@ private[spark] class ExecutorAllocationManager(
       })
     }
 
-    // The metrics are going to return the numbers for the default ResourceProfile.
-    // It would be nice to do include each profile somehow in the future.
+    // The metrics are going to return the sum for all the different ResourceProfiles.
     registerGauge("numberExecutorsToAdd",
-      numExecutorsToAddPerResourceProfileId(defaultProfileId), 0)
+      numExecutorsToAddPerResourceProfileId.values.sum, 0)
     registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors",
-      numExecutorsTargetPerResourceProfileId(defaultProfileId), 0)
-    registerGauge("numberMaxNeededExecutors",
-      maxNumExecutorsNeededPerResourceProfile(defaultProfileId), 0)
+      numExecutorsTargetPerResourceProfileId.values.sum, 0)
+    registerGauge("numberMaxNeededExecutors", numExecutorsTargetPerResourceProfileId.keys
+        .map(maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
   }
 }
 
