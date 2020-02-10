@@ -168,13 +168,13 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            val message = batch.strategy.maxIterationsSetting match {
-              case setting: String if setting != null =>
-                s"Max iterations (${iteration - 1}) reached for batch ${batch.name}, " +
-                  s"increasing the value of '${setting}'."
-              case _ =>
-                s"Max iterations (${iteration - 1}) reached for batch ${batch.name}."
+            val endingMsg = if (batch.strategy.maxIterationsSetting == null) {
+              "."
+            } else {
+              s", please set '${batch.strategy.maxIterationsSetting}' to a larger value."
             }
+            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
+              s"$endingMsg"
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
               throw new TreeNodeException(curPlan, message, null)
             } else {

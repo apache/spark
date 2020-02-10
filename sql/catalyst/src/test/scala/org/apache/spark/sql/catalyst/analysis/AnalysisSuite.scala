@@ -753,8 +753,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val maxIterations = 2
     val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
     val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf),
-      new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations))
+      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
 
     val plan = testRelation2.select(
       $"a" / Literal(2) as "div1",
@@ -767,6 +766,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       testAnalyzer.execute(plan)
     }.getMessage
     assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      s"increasing the value of '${SQLConf.ANALYZER_MAX_ITERATIONS.key}'."))
+      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
   }
 }
