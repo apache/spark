@@ -150,7 +150,8 @@ To work around this limitation for Python, install [`entr`](http://eradman.com/e
 
 ```sh
 cd "$SPARK_HOME/python/docs"
-find .. -type f -name '*.py' | entr -s 'make html'
+find .. -type f -name '*.py' \
+| entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
 ```
 
 Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.
