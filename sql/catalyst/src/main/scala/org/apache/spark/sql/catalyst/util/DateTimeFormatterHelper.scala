@@ -68,24 +68,34 @@ private object DateTimeFormatterHelper {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
   }
 
-  def toWeekBasedFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
-    builder
-      .parseDefaulting(ChronoField.ERA, 1)
-      .parseDefaulting(ChronoField.DAY_OF_WEEK, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
-      .toFormatter(locale)
-      .withChronology(IsoChronology.INSTANCE)
-      .withResolverStyle(ResolverStyle.STRICT)
+  def setDefaulting(builder: DateTimeFormatterBuilder,
+                     isWeekBased: Boolean = false): DateTimeFormatterBuilder = {
+
+    val defaults = Seq(
+      (ChronoField.ERA, 1),
+      (ChronoField.MINUTE_OF_HOUR, 0),
+      (ChronoField.SECOND_OF_MINUTE, 0)
+    )
+
+    val weekDayBased = if (isWeekBased) {
+      Seq((ChronoField.DAY_OF_WEEK, 1))
+    } else {
+      Seq(
+        (ChronoField.MONTH_OF_YEAR, 1),
+        (ChronoField.DAY_OF_MONTH, 1))
+    }
+
+    (defaults ++ weekDayBased).foldLeft(builder){
+      case (builder, (chrono, value)) =>
+        builder.parseDefaulting(chrono, value)
+    }
+
   }
 
-  def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
-    builder
-      .parseDefaulting(ChronoField.ERA, 1)
-      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+  def toFormatter(builder: DateTimeFormatterBuilder,
+                  locale: Locale,
+                  isWeekBased: Boolean = false): DateTimeFormatter = {
+    setDefaulting(builder, isWeekBased)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
@@ -100,11 +110,7 @@ private object DateTimeFormatterHelper {
     // Default values for parser needs to be changed when the pattern
     // is week/year based.
     // DAY_OF_MONTH and MONTH_OF_YEAR will be added by the week of the year.
-    if (isWeekBasedPattern(pattern)) {
-      toWeekBasedFormatter(builder, locale)
-    } else {
-      toFormatter(builder, locale)
-    }
+    toFormatter(builder, locale, isWeekBasedPattern(pattern))
   }
 
   lazy val fractionFormatter: DateTimeFormatter = {
