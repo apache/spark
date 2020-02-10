@@ -34,6 +34,15 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.1.x
+  lazy val v31excludes = v30excludes ++ Seq(
+    // [SPARK-26111] Support ANOVA F-value between label/feature for the continuous distribution feature selection
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.ChiSqSelector.fit")
+  )
+
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
     // [SPARK-29306] Add support for Stage level scheduling for executors
@@ -1705,6 +1714,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.1") => v31excludes
     case v if v.startsWith("3.0") => v30excludes
     case v if v.startsWith("2.4") => v24excludes
     case v if v.startsWith("2.3") => v23excludes
