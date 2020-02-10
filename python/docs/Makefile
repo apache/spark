@@ -24,9 +24,5 @@ clean:
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
-	mkdir -p $(PYTHONAPIDIR)
-	rm -rf $(PYTHONAPIDIR)/*
-	cp -r $(BUILDDIR)/html/. $(PYTHONAPIDIR)
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
-	@echo "A copy has been placed in $(PYTHONAPIDIR)."

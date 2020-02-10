@@ -32,8 +32,6 @@ if errorlevel 9009 (
 if "%1" == "html" (
 	%SPHINXBUILD% -b html %ALLSPHINXOPTS% %BUILDDIR%/html
 	if errorlevel 1 exit /b 1
-	rem Need to copy docs to api/python. How do you do that?
-	rem Is this file even maintained anymore?
 	echo.
 	echo.Build finished. The HTML pages are in %BUILDDIR%/html.
 	goto end
