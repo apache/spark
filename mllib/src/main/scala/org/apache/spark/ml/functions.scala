@@ -21,37 +21,35 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SparseVector, Vector}
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.udf
 
 // scalastyle:off
 @Since("3.0.0")
 object functions {
 // scalastyle:on
+  private val vectorToArrayUdf = udf { vec: Any =>
+    vec match {
+      case v: Vector => v.toArray
+      case v: OldVector => v.toArray
+      case v => throw new IllegalArgumentException(
+        "function vector_to_array requires a non-null input argument and input type must be " +
+          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+          s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+    }
+  }.asNonNullable()
 
-  private val vectorToArrayUdf = udf { (vec: Any, dtype: String) => {
-      if (dtype != "float64" && dtype != "float32") {
-        throw new IllegalArgumentException(
-          s"Unsupported dtype: $dtype. Valid values: float64, float32."
-        )
-      }
-
-      vec match {
-        case v: SparseVector =>
-          if (dtype == "float32") {
-            val data = new Array[Float](v.size)
-            v.foreachActive { (index, value) => data(index) = value.toFloat }
-            data
-          } else {
-            v.toArray
-          }
-        case v: Vector => if (dtype == "float64") v.toArray else v.toArray.map(_.toFloat)
-        case v: OldVector => if (dtype == "float64") v.toArray else v.toArray.map(_.toFloat)
-        case v => throw new IllegalArgumentException(
-          "function vector_to_array requires a non-null input argument and input type must be " +
-            "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-            s"but got ${ if (v == null) "null" else v.getClass.getName }.")
-      }
+  private val vectorToArrayFloatUdf = udf { vec: Any =>
+    vec match {
+      case v: SparseVector =>
+        val data = new Array[Float](v.size)
+        v.foreachActive { (index, value) => data(index) = value.toFloat }
+        data
+      case v: Vector => v.toArray.map(_.toFloat)
+      case v: OldVector => v.toArray.map(_.toFloat)
+      case v => throw new IllegalArgumentException(
+        "function vector_to_array requires a non-null input argument and input type must be " +
+          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+          s"but got ${ if (v == null) "null" else v.getClass.getName }.")
     }
   }.asNonNullable()
 
@@ -60,6 +58,15 @@ object functions {
    *
    * @since 3.0.0
    */
-  def vector_to_array(v: Column, dtype: String = "float64"): Column =
-    vectorToArrayUdf(v, lit(dtype))
+  def vector_to_array(v: Column, dtype: String = "float64"): Column = {
+    if (dtype == "float64") {
+      vectorToArrayUdf(v)
+    } else if (dtype == "float32") {
+      vectorToArrayFloatUdf(v)
+    } else {
+      throw new IllegalArgumentException(
+        s"Unsupported dtype: $dtype. Valid values: float64, float32."
+      )
+    }
+  }
 }
