@@ -98,9 +98,9 @@ private[spark] class TaskSchedulerImpl(
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
-  // keyed by task set stage id
+  // keyed by taskset
   // value is true if the task set's locality wait timer was reset on the last resource offer
-  private val resetOnPreviousOffer = new mutable.HashMap[Int, Boolean]()
+  private val resetOnPreviousOffer = new mutable.HashMap[TaskSet, Boolean]()
   private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
 
   // Protected by `this`
@@ -324,7 +324,7 @@ private[spark] class TaskSchedulerImpl(
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
       }
     }
-    resetOnPreviousOffer -= manager.taskSet.stageId
+    resetOnPreviousOffer -= manager.taskSet
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
       s" ${manager.parent.name}")
@@ -337,8 +337,8 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) :
-  (Boolean, Boolean, Option[TaskLocality]) = {
+      addressesWithDescs: ArrayBuffer[(String, TaskDescription)])
+    : (Boolean, Boolean, Option[TaskLocality]) = {
     var launchedTask = false
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
@@ -358,7 +358,7 @@ private[spark] class TaskSchedulerImpl(
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject) =
-              taskSet.resourceOfferInternal(execId, host, maxLocality, availableResources(i))
+              taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               tasks(i) += task
@@ -591,12 +591,12 @@ private[spark] class TaskSchedulerImpl(
 
         if (!legacyLocalityWaitReset) {
           if (noDelaySchedulingRejects && launchedAnyTask) {
-            if (isAllFreeResources || resetOnPreviousOffer.getOrElse(taskSet.stageId, true)) {
+            if (isAllFreeResources || resetOnPreviousOffer.getOrElse(taskSet.taskSet, true)) {
               taskSet.resetDelayScheduleTimer(globalMinLocality)
-              resetOnPreviousOffer.update(taskSet.stageId, true)
+              resetOnPreviousOffer.update(taskSet.taskSet, true)
             }
           } else {
-            resetOnPreviousOffer.update(taskSet.stageId, false)
+            resetOnPreviousOffer.update(taskSet.taskSet, false)
           }
         }
 

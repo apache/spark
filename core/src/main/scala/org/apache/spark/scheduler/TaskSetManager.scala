@@ -387,15 +387,6 @@ private[spark] class TaskSetManager(
     None
   }
 
-  def resourceOffer(
-      execId: String,
-      host: String,
-      maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, Seq[String]] = Map.empty)
-  : Option[TaskDescription] = {
-    resourceOfferInternal(execId, host, maxLocality, availableResources)._1
-  }
-
   private[scheduler] def resetDelayScheduleTimer(
       minLocality: Option[TaskLocality.TaskLocality]): Unit = {
     lastLocalityWaitResetTime = clock.getTimeMillis()
@@ -414,9 +405,12 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
+   *
+   * @return Tuple containing:
+   *         (TaskDescription of launched task if any, rejected resource due to delay scheduling?)
    */
   @throws[TaskNotSerializableException]
-  def resourceOfferInternal(
+  def resourceOffer(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
@@ -442,7 +436,7 @@ private[spark] class TaskSetManager(
 
       val taskDescription =
         dequeueTask(execId, host, allowedLocality)
-          .map { case ((index, taskLocality, speculative)) =>
+          .map { case (index, taskLocality, speculative) =>
         // Found a task; do some bookkeeping and return a task description
         val task = tasks(index)
         val taskId = sched.newTaskId()
@@ -499,8 +493,9 @@ private[spark] class TaskSetManager(
           taskResourceAssignments,
           serializedTask)
       }
-      (taskDescription,
-        taskDescription.isEmpty && maxLocality == TaskLocality.ANY && pendingTasks.all.nonEmpty)
+      val hasScheduleDelayReject =
+        taskDescription.isEmpty && maxLocality == TaskLocality.ANY && pendingTasks.all.nonEmpty
+      (taskDescription, hasScheduleDelayReject)
     } else {
       (None, false)
     }
