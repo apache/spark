@@ -1503,7 +1503,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.1.0
    */
-  def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  def selectUntyped(columns: TypedColumn[T, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
