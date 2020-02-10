@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.text.ParseException
+import java.sql.Timestamp
+import java.text.{ParseException, SimpleDateFormat}
 import java.time._
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
-import java.util.{Locale, TimeZone}
+import java.util.{Date, Locale, TimeZone}
 import java.util.concurrent.TimeUnit.SECONDS
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -90,47 +91,105 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 }
 
-class LegacyTimestampFormatter(
-    pattern: String,
-    zoneId: ZoneId,
-    locale: Locale) extends TimestampFormatter {
+trait LegacyTimestampFormatter extends TimestampFormatter {
+  def parseToDate(s: String): Date
+  def formatTimestamp(t: Timestamp): String
 
-  @transient private lazy val format =
-    FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
-
-  protected def toMillis(s: String): Long = format.parse(s).getTime
-
-  override def parse(s: String): Long = toMillis(s) * MICROS_PER_MILLIS
+  override def parse(s: String): Long = {
+    parseToDate(s).getTime * MICROS_PER_MILLIS
+  }
 
   override def format(us: Long): String = {
-    format.format(DateTimeUtils.toJavaTimestamp(us))
+    val timestamp = DateTimeUtils.toJavaTimestamp(us)
+    formatTimestamp(timestamp)
   }
 }
 
+class LegacyFastDateFormatter(
+    pattern: String,
+    zoneId: ZoneId,
+    locale: Locale) extends LegacyTimestampFormatter {
+  @transient private lazy val fdf =
+    FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
+  override def parseToDate(s: String): Date = fdf.parse(s)
+  override def formatTimestamp(t: Timestamp): String = fdf.format(t)
+}
+
+class LegacySimpleDateFormatter(
+    pattern: String,
+    zoneId: ZoneId,
+    locale: Locale,
+    lenient: Boolean = true) extends LegacyTimestampFormatter {
+  @transient private lazy val sdf = {
+    val formatter = new SimpleDateFormat(pattern, locale)
+    formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
+    formatter.setLenient(lenient)
+    formatter
+  }
+  override def parseToDate(s: String): Date = sdf.parse(s)
+  override def formatTimestamp(t: Timestamp): String = sdf.format(t)
+}
+
+object LegacyDateFormats extends Enumeration {
+  type LegacyDateFormat = Value
+  val FAST_DATE_FORMAT, SIMPLE_DATE_FORMAT, LENIENT_SIMPLE_DATE_FORMAT = Value
+}
+
 object TimestampFormatter {
+  import LegacyDateFormats._
+
   val defaultLocale: Locale = Locale.US
 
-  def apply(format: String, zoneId: ZoneId, locale: Locale): TimestampFormatter = {
+  def defaultPattern(): String = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyTimestampFormatter(format, zoneId, locale)
+      "yyyy-MM-dd HH:mm:ss"
     } else {
-      new Iso8601TimestampFormatter(format, zoneId, locale)
+      "uuuu-MM-dd HH:mm:ss"
     }
+  }
+
+  private def getFormatter(
+    format: Option[String],
+    zoneId: ZoneId,
+    locale: Locale,
+    legacyFormat: LegacyDateFormat): TimestampFormatter = {
+
+    val pattern = format.getOrElse(defaultPattern)
+    if (SQLConf.get.legacyTimeParserEnabled) {
+      legacyFormat match {
+        case FAST_DATE_FORMAT =>
+          new LegacyFastDateFormatter(pattern, zoneId, locale)
+        case SIMPLE_DATE_FORMAT =>
+          new LegacySimpleDateFormatter(pattern, zoneId, locale, lenient = false)
+        case LENIENT_SIMPLE_DATE_FORMAT =>
+          new LegacySimpleDateFormatter(pattern, zoneId, locale, lenient = true)
+      }
+    } else {
+      new Iso8601TimestampFormatter(pattern, zoneId, locale)
+    }
+  }
+
+  def apply(
+    format: String,
+    zoneId: ZoneId,
+    locale: Locale,
+    legacyFormat: LegacyDateFormat): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 
   def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
-    apply(format, zoneId, defaultLocale)
+    apply(format, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyTimestampFormatter("yyyy-MM-dd HH:mm:ss", zoneId, defaultLocale)
-    } else {
-      new Iso8601TimestampFormatter("uuuu-MM-dd HH:mm:ss", zoneId, defaultLocale)
-    }
+    getFormatter(None, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
     new FractionTimestampFormatter(zoneId)
+  }
+
+  def withStrongLegacy(format: String, zoneId: ZoneId): TimestampFormatter = {
+    apply(format, zoneId, defaultLocale, SIMPLE_DATE_FORMAT)
   }
 }

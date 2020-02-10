@@ -628,7 +628,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId)
+      TimestampFormatter.withStrongLegacy(format.toString, zoneId)
     } else {
       formatter.get
     }
@@ -645,7 +645,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid)
+        s"""UTF8String.fromString($tf$$.MODULE$$.withStrongLegacy($format.toString(), $zid)
           .format($timestamp))"""
       })
     }
@@ -688,7 +688,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal("uuuu-MM-dd HH:mm:ss"))
+    this(time, Literal(TimestampFormatter.defaultPattern))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -732,7 +732,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal("uuuu-MM-dd HH:mm:ss"))
+    this(time, Literal(TimestampFormatter.defaultPattern))
   }
 
   def this() = {
@@ -758,7 +758,7 @@ abstract class ToTimestamp
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId)
+      TimestampFormatter.withStrongLegacy(constFormat.toString, zoneId)
     } catch {
       case NonFatal(_) => null
     }
@@ -791,7 +791,7 @@ abstract class ToTimestamp
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, zoneId).parse(
+              TimestampFormatter.withStrongLegacy(formatString, zoneId).parse(
                 t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
@@ -831,12 +831,11 @@ abstract class ToTimestamp
         }
       case StringType =>
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-        val locale = ctx.addReferenceObj("locale", Locale.US)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
+              ${ev.value} = $tf$$.MODULE$$.withStrongLegacy($format.toString(), $zid)
                 .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
@@ -908,7 +907,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal("uuuu-MM-dd HH:mm:ss"))
+    this(unix, Literal(TimestampFormatter.defaultPattern))
   }
 
   override def dataType: DataType = StringType
@@ -922,7 +921,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId)
+      TimestampFormatter.withStrongLegacy(constFormat.toString, zoneId)
     } catch {
       case NonFatal(_) => null
     }
@@ -948,7 +947,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter(f.toString, zoneId)
+            UTF8String.fromString(TimestampFormatter.withStrongLegacy(f.toString, zoneId)
               .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
@@ -980,12 +979,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       }
     } else {
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val locale = ctx.addReferenceObj("locale", Locale.US)
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($tf$$.MODULE$$.apply($f.toString(), $zid, $locale).
+          ${ev.value} = UTF8String.fromString($tf$$.MODULE$$.withStrongLegacy($f.toString(), $zid).
             format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
