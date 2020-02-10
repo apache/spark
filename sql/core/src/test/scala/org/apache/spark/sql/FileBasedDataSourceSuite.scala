@@ -787,6 +787,42 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("File source v2: involve partition filters in statistic estimation") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      allFileBasedDataSources.foreach { format =>
+        withTempPath { dir =>
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format(format)
+            .partitionBy("p1", "p2")
+            .option("header", true)
+            .save(dir.getCanonicalPath)
+          val df1 = spark
+            .read
+            .format(format)
+            .option("header", true)
+            .load(dir.getCanonicalPath)
+            .where("p1 = 1 and p2 = 2")
+          val df2 = spark
+            .read
+            .format(format)
+            .option("header", true)
+            .load(dir.getCanonicalPath)
+            .where("p1 = 2 and p2 = 1")
+          val fileScan1 = df1.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: FileScan) => f
+          }
+          val fileScan2 = df2.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: FileScan) => f
+          }
+          assert(fileScan1.get.estimateStatistics().sizeInBytes().getAsLong / 2 ===
+            fileScan2.get.estimateStatistics().sizeInBytes().getAsLong)
+        }
+      }
+    }
+  }
+
   test("File source v2: support passing data filters to FileScan without partitionFilters") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>
