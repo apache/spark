@@ -114,7 +114,7 @@ object DateFormatter {
     zoneId: ZoneId,
     locale: Locale,
     legacyFormat: LegacyDateFormat): DateFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat)
+    getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 
   def apply(format: String, zoneId: ZoneId): DateFormatter = {
