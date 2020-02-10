@@ -1076,7 +1076,9 @@ case class ShowCreateTableCommand(table: TableIdentifier)
             "Failed to execute SHOW CREATE TABLE against table " +
               s"${tableMetadata.identifier}, which is created by Hive and uses the " +
               "following unsupported feature(s)\n" +
-              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n")
+              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead."
           )
         }
 
@@ -1086,7 +1088,9 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
         if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
           throw new AnalysisException(
-            "SHOW CREATE TABLE doesn't support transactional Hive table")
+            "SHOW CREATE TABLE doesn't support transactional Hive table. " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead.")
         }
 
         convertTableMetadata(tableMetadata)
