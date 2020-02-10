@@ -32,10 +32,25 @@ def vector_to_array(col, dtype="float64"):
     ...     (Vectors.sparse(3, [(0, 2.0), (2, 3.0)]),
     ...      OldVectors.sparse(3, [(0, 20.0), (2, 30.0)]))],
     ...     ["vec", "oldVec"])
-    >>> df.select(vector_to_array("vec").alias("vec"),
-    ...           vector_to_array("oldVec").alias("oldVec")).collect()
+    >>> df1 = df.select(vector_to_array("vec").alias("vec"),
+    ...                 vector_to_array("oldVec").alias("oldVec"))
+    >>> df1.collect()
     [Row(vec=[1.0, 2.0, 3.0], oldVec=[10.0, 20.0, 30.0]),
      Row(vec=[2.0, 0.0, 3.0], oldVec=[20.0, 0.0, 30.0])]
+    >>> df2 = df.select(vector_to_array("vec", "float32").alias("vec"),
+    ...                 vector_to_array("oldVec", "float32").alias("oldVec"))
+    >>> df2.collect()
+    [Row(vec=[1.0, 2.0, 3.0], oldVec=[10.0, 20.0, 30.0]),
+     Row(vec=[2.0, 0.0, 3.0], oldVec=[20.0, 0.0, 30.0])]
+    >>> df1.schema.fields
+    [StructField(vec,ArrayType(DoubleType,false),false), StructField(oldVec,ArrayType(DoubleType,false),false)]
+    >>> df2.schema.fields
+    [StructField(vec,ArrayType(FloatType,false),false), StructField(oldVec,ArrayType(FloatType,false),false)]
+    >>> df.select(vector_to_array("vec", "float16").alias("vec"),
+    ...           vector_to_array("oldVec", "float16").alias("oldVec")).collect()
+    Traceback (most recent call last):
+        ...
+    pyspark.sql.utils.IllegalArgumentException: Unsupported dtype: float16. Valid values: float64, float32.
     """
     sc = SparkContext._active_spark_context
     return Column(
