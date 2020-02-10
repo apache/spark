@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.clustering
 
-import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -168,8 +167,8 @@ class GaussianMixtureModel private[ml] (
 
   @Since("3.0.0")
   def predictProbability(features: Vector): Vector = {
-    val probs: Array[Double] =
-      GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
+    val probs = GaussianMixtureModel
+      .computeProbabilities(features, gaussians, weights)
     Vectors.dense(probs)
   }
 
@@ -282,19 +281,25 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
    */
   private[clustering]
   def computeProbabilities(
-      features: BDV[Double],
+      features: Vector,
       dists: Array[MultivariateGaussian],
       weights: Array[Double]): Array[Double] = {
-    val p = weights.zip(dists).map {
-      case (weight, dist) => EPSILON + weight * dist.pdf(features)
-    }
-    val pSum = p.sum
+    val probArray = Array.ofDim[Double](weights.length)
+    var probSum = 0.0
     var i = 0
     while (i < weights.length) {
-      p(i) /= pSum
+      val p = EPSILON + weights(i) * dists(i).pdf(features)
+      probArray(i) = p
+      probSum += p
       i += 1
     }
-    p
+
+    i = 0
+    while (i < weights.length) {
+      probArray(i) /= probSum
+      i += 1
+    }
+    probArray
   }
 }
 
