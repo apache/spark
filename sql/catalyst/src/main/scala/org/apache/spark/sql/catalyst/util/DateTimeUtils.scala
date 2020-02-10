@@ -337,6 +337,8 @@ object DateTimeUtils {
 
   def microsToInstant(us: Long): Instant = {
     val secs = Math.floorDiv(us, MICROS_PER_SECOND)
+    // Unfolded Math.floorMod(us, MICROS_PER_SECOND) to reuse the result of
+    // the above calculation of `secs` via `floorDiv`.
     val mos = us - secs * MICROS_PER_SECOND
     Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
   }
