@@ -185,10 +185,13 @@ object GeneratorNestedColumnAliasing {
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
-      // For the child outputs required by the operator on top of `Generate`, we do not want
-      // to prune it.
-      val requiredAttrs = AttributeSet(g.requiredChildOutput)
-      NestedColumnAliasing.getAliasSubMap(g.generator.children, requiredAttrs).map {
+      // If any child output is required by higher projection, we cannot prune on it even we
+      // only use part of nested column of it. A required child output means it is referred
+      // as a whole or partially by higher projection, pruning it here will cause unresolved
+      // query plan.
+      val requiredChildAttrs = AttributeSet(g.requiredChildOutput)
+      NestedColumnAliasing.getAliasSubMap(
+        g.generator.children, skipAttrs = requiredChildAttrs).map {
         case (nestedFieldToAlias, attrToAliases) =>
           pruneGenerate(g, nestedFieldToAlias, attrToAliases)
       }
