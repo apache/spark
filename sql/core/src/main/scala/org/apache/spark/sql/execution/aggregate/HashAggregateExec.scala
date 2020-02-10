@@ -47,11 +47,11 @@ import org.apache.spark.util.Utils
  */
 case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
-    override val groupingExpressions: Seq[NamedExpression],
-    override val aggregateExpressions: Seq[AggregateExpression],
-    override val aggregateAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
-    override val resultExpressions: Seq[NamedExpression],
+    resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec with BlockingOperatorWithCodegen with AliasAwareOutputPartitioning {
 

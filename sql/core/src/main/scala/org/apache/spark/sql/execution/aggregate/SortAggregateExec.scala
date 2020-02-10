@@ -32,11 +32,11 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class SortAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
-    override val groupingExpressions: Seq[NamedExpression],
-    override val aggregateExpressions: Seq[AggregateExpression],
-    override val aggregateAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
-    override val resultExpressions: Seq[NamedExpression],
+    resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
