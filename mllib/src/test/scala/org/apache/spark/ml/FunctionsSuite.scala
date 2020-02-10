@@ -49,7 +49,6 @@ class FunctionsSuite extends MLTest {
       (null, null, 0)
     ).toDF("vec", "oldVec", "label")
 
-
     for ((colName, valType) <- Seq(
         ("vec", "null"), ("oldVec", "null"), ("label", "java.lang.Integer"))) {
       val thrown1 = intercept[SparkException] {
@@ -65,10 +64,11 @@ class FunctionsSuite extends MLTest {
       (Vectors.dense(1.0, 2.0, 3.0), OldVectors.dense(10.0, 20.0, 30.0)),
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
-
     val df_array_float = df3.select(
       vector_to_array('vec, dtype = "float32"), vector_to_array('oldVec, dtype = "float32"))
-    val result3 = df_array_float.collect().toSeq
+
+    // Check values are correct
+    val result3 = df_array_float.as[(Seq[Float], Seq[Float])].collect().toSeq
 
     val expected3 = Seq(
       (Seq(1.0, 2.0, 3.0), Seq(10.0, 20.0, 30.0)),
@@ -76,9 +76,17 @@ class FunctionsSuite extends MLTest {
     )
     assert(result3 === expected3)
 
+    // Check data types are correct
     df_array_double.schema.fields(0).dataType.simpleString == "array<double>"
     df_array_double.schema.fields(1).dataType.simpleString == "array<double>"
     df_array_float.schema.fields(0).dataType.simpleString == "array<float>"
     df_array_float.schema.fields(1).dataType.simpleString == "array<float>"
+
+    val thrown2 = intercept[SparkException] {
+      df3.select(
+        vector_to_array('vec, dtype = "float16"), vector_to_array('oldVec, dtype = "float16"))
+    }
+    assert(thrown2.getCause.getMessage.contains(
+      s"Unsupported dtype: float16. Valid values: float64, float32."))
   }
 }
