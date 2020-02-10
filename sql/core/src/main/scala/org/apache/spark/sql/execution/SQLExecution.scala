@@ -186,6 +186,8 @@ object SQLExecution {
       sc.setLocalProperties(originalLocalProps)
       if (originalSession.nonEmpty) {
         SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
       }
       res
     }(exec)
