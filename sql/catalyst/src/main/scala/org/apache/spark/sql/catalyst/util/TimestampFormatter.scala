@@ -105,7 +105,7 @@ trait LegacyTimestampFormatter extends TimestampFormatter {
   }
 }
 
-class LegacyFastDateFormatter(
+class LegacyFastTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale) extends LegacyTimestampFormatter {
@@ -115,7 +115,7 @@ class LegacyFastDateFormatter(
   override def formatTimestamp(t: Timestamp): String = fdf.format(t)
 }
 
-class LegacySimpleDateFormatter(
+class LegacySimpleTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
@@ -140,29 +140,23 @@ object TimestampFormatter {
 
   val defaultLocale: Locale = Locale.US
 
-  def defaultPattern(): String = {
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      "yyyy-MM-dd HH:mm:ss"
-    } else {
-      "uuuu-MM-dd HH:mm:ss"
-    }
-  }
+  def defaultPattern(): String = s"${DateFormatter.defaultPattern()} HH:mm:ss"
 
   private def getFormatter(
     format: Option[String],
     zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat): TimestampFormatter = {
+    locale: Locale = defaultLocale,
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
 
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserEnabled) {
       legacyFormat match {
         case FAST_DATE_FORMAT =>
-          new LegacyFastDateFormatter(pattern, zoneId, locale)
+          new LegacyFastTimestampFormatter(pattern, zoneId, locale)
         case SIMPLE_DATE_FORMAT =>
-          new LegacySimpleDateFormatter(pattern, zoneId, locale, lenient = false)
+          new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = false)
         case LENIENT_SIMPLE_DATE_FORMAT =>
-          new LegacySimpleDateFormatter(pattern, zoneId, locale, lenient = true)
+          new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = true)
       }
     } else {
       new Iso8601TimestampFormatter(pattern, zoneId, locale)
@@ -178,11 +172,11 @@ object TimestampFormatter {
   }
 
   def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
-    apply(format, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
+    getFormatter(Some(format), zoneId)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(None, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
+    getFormatter(None, zoneId)
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {

@@ -64,7 +64,8 @@ class JacksonParser(
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

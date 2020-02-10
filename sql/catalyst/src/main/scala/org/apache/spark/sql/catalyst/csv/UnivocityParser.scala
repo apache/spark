@@ -92,7 +92,8 @@ class UnivocityParser(
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   private val csvFilters = new CSVFilters(filters, requiredSchema)
 

@@ -86,7 +86,8 @@ private[sql] class JacksonGenerator(
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
