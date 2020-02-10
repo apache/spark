@@ -56,7 +56,7 @@ the Spark home directory. Whenever you navigate to this directory or any of its 
 rbenv install 2.7.0
 pyenv install 3.7.6
 
-cd /path/to/spark/home
+cd /path/to/spark/root
 rbenv local 2.7.0
 pyenv local 3.7.6
 ```
