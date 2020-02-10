@@ -5,7 +5,6 @@
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 BUILDDIR      ?= _build
-PYTHONAPIDIR  ?= ../../docs/api/python
 
 export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.8.1-src.zip)
 
