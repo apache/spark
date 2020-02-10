@@ -127,15 +127,18 @@ private[spark] class Client(
         .pods()
         .withName(driverPodName)
         .watch(watcher)) { _ =>
-      val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+      var createdDriverPod: Option[Pod] = None
       try {
         val otherKubernetesResources =
           resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
-        addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
         kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
+        createdDriverPod = Some(kubernetesClient.pods().create(resolvedDriverPod))
+        addDriverOwnerReference(createdDriverPod.get, otherKubernetesResources)
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods().delete(createdDriverPod)
+          if (createdDriverPod.isDefined) {
+            kubernetesClient.pods().delete(createdDriverPod.get)
+          }
           throw e
       }
 
