@@ -499,7 +499,7 @@ case class NthValue(input: Expression, offset: Expression)
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else {
+    } else if (offset.foldable) {
       offset.eval() match {
         case i: Int if i <= 0 => TypeCheckFailure(
           s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
@@ -507,6 +507,8 @@ case class NthValue(input: Expression, offset: Expression)
         case other => TypeCheckFailure(
           s"The 'offset' parameter must be a int literal but it is $other.")
       }
+    } else {
+      TypeCheckFailure("The 'offset' parameter must be a int literal.")
     }
   }
 }

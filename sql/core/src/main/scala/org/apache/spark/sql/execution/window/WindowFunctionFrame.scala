@@ -157,6 +157,11 @@ class OffsetWindowFunctionFrame(
   override def currentUpperBound(): Int = throw new UnsupportedOperationException()
 }
 
+/**
+ * The fixed offset window frame calculates frames containing
+ * NTH_VALUE/FIRST_VALUE/LAST_VALUE statements.
+ * The fixed offset windwo frame return the same value for all rows in the window partition.
+ */
 class FixedOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
