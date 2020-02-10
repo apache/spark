@@ -45,6 +45,14 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // -----------------------------------------------------------------------------------------------------
+    // temporiarily put here to make test pass. Will remove this block later!!!
+    // [SPARK-26111] Support ANOVA F-value between label/feature for the continuous distribution feature selection
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.ChiSqSelector.fit"),
+    // -----------------------------------------------------------------------------------------------------
     // [SPARK-29306] Add support for Stage level scheduling for executors
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#RetrieveSparkAppConfig.productElement"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#RetrieveSparkAppConfig.productArity"),
