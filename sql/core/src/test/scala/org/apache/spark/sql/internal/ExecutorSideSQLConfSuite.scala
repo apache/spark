@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.UUID
+
+import org.scalatest.Assertions._
+
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, SparkSession}
@@ -148,14 +152,14 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         }
 
         // set local configuration and assert
-        val confValue1 = "e"
+        val confValue1 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue1).createOrReplaceTempView("m")
         spark.sparkContext.setLocalProperty(confKey, confValue1)
         val result1 = sql("SELECT value, (SELECT MAX(*) FROM m) x FROM l").collect
         assert(result1.forall(_.getBoolean(1)))
 
         // change the conf value and assert again
-        val confValue2 = "f"
+        val confValue2 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue2).createOrReplaceTempView("n")
         spark.sparkContext.setLocalProperty(confKey, confValue2)
         val result2 = sql("SELECT value, (SELECT MAX(*) FROM n) x FROM l").collect
