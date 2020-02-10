@@ -177,6 +177,8 @@ case class Like(str: Expression, pattern: Expression, escape: Expression)
         """)
       }
     } else {
+      val patternStr = ctx.freshName("patternStr")
+      val compiledPattern = ctx.freshName("compiledPattern")
       // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
       // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
       // '\"' will cause exception 'Line break in literal not allowed'.
@@ -185,17 +187,11 @@ case class Like(str: Expression, pattern: Expression, escape: Expression)
       } else {
         escapeChar
       }
-      val patternStr = ctx.freshName("patternStr")
-      val compiledPattern = ctx.addMutableState(patternClass, "compiledPattern")
-      val lastPatternStr = ctx.addMutableState(classOf[String].getName, "lastPatternStr")
-
       nullSafeCodeGen(ctx, ev, (eval1, eval2, _) => {
         s"""
           String $patternStr = $eval2.toString();
-          if (!$patternStr.equals($lastPatternStr)) {
-            $compiledPattern = $patternClass.compile($escapeFunc($patternStr, '$newEscapeChar'));
-            $lastPatternStr = $patternStr;
-          }
+          $patternClass $compiledPattern = $patternClass.compile(
+            $escapeFunc($patternStr, '$newEscapeChar'));
           ${ev.value} = $compiledPattern.matcher($eval1.toString()).matches();
         """
       })
@@ -278,16 +274,11 @@ case class RLike(left: Expression, right: Expression)
       }
     } else {
       val rightStr = ctx.freshName("rightStr")
-      val pattern = ctx.addMutableState(patternClass, "pattern")
-      val lastRightStr = ctx.addMutableState(classOf[String].getName, "lastRightStr")
-
+      val pattern = ctx.freshName("pattern")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          if (!$rightStr.equals($lastRightStr)) {
-            $pattern = $patternClass.compile($rightStr);
-            $lastRightStr = $rightStr;
-          }
+          $patternClass $pattern = $patternClass.compile($rightStr);
           ${ev.value} = $pattern.matcher($eval1.toString()).find(0);
         """
       })
