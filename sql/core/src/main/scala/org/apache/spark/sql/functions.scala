@@ -4739,7 +4739,7 @@ object functions {
         "and the closure will see the default value of the Java type for the null argument, " +
         "e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. You could use " +
         "other typed udf APIs to avoid this problem, or set " +
-        "spark.sql.legacy.useUnTypedUdf.enabled to true to insistently use this."
+        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true to insistently use this."
       throw new SparkException(errorMsg)
     }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
