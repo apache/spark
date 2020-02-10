@@ -157,6 +157,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
+      // This is used to delay the creation of non-skew partitions so that we can potentially
+      // coalesce them like `ReduceNumShufflePartitions` does.
       val nonSkewPartitionIndices = mutable.ArrayBuffer.empty[Int]
       val skewDesc = mutable.ArrayBuffer.empty[String]
       for (partitionIndex <- 0 until numPartitions) {
@@ -166,6 +168,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val isRightSkew = isSkewed(rightSize, rightMedSize) && canSplitRightSide(joinType)
         if (isLeftSkew || isRightSkew) {
           if (nonSkewPartitionIndices.nonEmpty) {
+            // As soon as we see a skew, we'll "flush" out unhandled non-skew partitions.
             createNonSkewPartitions(leftStats, rightStats, nonSkewPartitionIndices).foreach { p =>
               leftSidePartitions += p
               rightSidePartitions += p
@@ -173,47 +176,40 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
             nonSkewPartitionIndices.clear()
           }
 
-          if (!isLeftSkew) {
-            // only right side is skewed
-            skewDesc += s"right $partitionIndex (${FileUtils.byteCountToDisplaySize(rightSize)})"
-            val skewPartitions = createSkewPartitions(
-              partitionIndex,
-              getMapStartIndices(right, partitionIndex),
-              getNumMappers(right))
-            for (rightSidePartition <- skewPartitions) {
-              leftSidePartitions += NormalPartitionSpec(partitionIndex)
-              rightSidePartitions += rightSidePartition
-            }
-          } else if (!isRightSkew) {
-            // only left side is skewed
-            skewDesc += s"left $partitionIndex (${FileUtils.byteCountToDisplaySize(leftSize)})"
-            val skewPartitions = createSkewPartitions(
-              partitionIndex,
-              getMapStartIndices(left, partitionIndex),
-              getNumMappers(left))
-            for (leftSidePartition <- skewPartitions) {
-              leftSidePartitions += leftSidePartition
-              rightSidePartitions += NormalPartitionSpec(partitionIndex)
-            }
-          } else {
-            // both sides are skewed
+          // Updates the skew partition descriptions.
+          if (isLeftSkew && isRightSkew) {
             skewDesc += s"both $partitionIndex (${FileUtils.byteCountToDisplaySize(leftSize)}, " +
               s"${FileUtils.byteCountToDisplaySize(leftSize)})"
-            val leftSkewPartitions = createSkewPartitions(
+          } else if (isLeftSkew) {
+            skewDesc += s"left $partitionIndex (${FileUtils.byteCountToDisplaySize(leftSize)})"
+          } else if (isRightSkew) {
+            skewDesc += s"right $partitionIndex (${FileUtils.byteCountToDisplaySize(rightSize)})"
+          }
+
+          val leftParts = if (isLeftSkew) {
+            createSkewPartitions(
               partitionIndex,
               getMapStartIndices(left, partitionIndex),
               getNumMappers(left))
-            val rightSkewPartitions = createSkewPartitions(
+          } else {
+            Seq(NormalPartitionSpec(partitionIndex))
+          }
+
+          val rightParts = if (isRightSkew) {
+            createSkewPartitions(
               partitionIndex,
               getMapStartIndices(right, partitionIndex),
               getNumMappers(right))
-            for {
-              leftSidePartition <- leftSkewPartitions
-              rightSidePartition <- rightSkewPartitions
-            } {
-              leftSidePartitions += leftSidePartition
-              rightSidePartitions += rightSidePartition
-            }
+          } else {
+            Seq(NormalPartitionSpec(partitionIndex))
+          }
+
+          for {
+            leftSidePartition <- leftParts
+            rightSidePartition <- rightParts
+          } {
+            leftSidePartitions += leftSidePartition
+            rightSidePartitions += rightSidePartition
           }
         } else {
           // Add to `nonSkewPartitionIndices` first, and add real partitions later, in case we can

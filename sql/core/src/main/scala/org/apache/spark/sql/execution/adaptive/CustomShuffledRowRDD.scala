@@ -40,7 +40,7 @@ case class PartialPartitionSpec(
 private final case class CustomShufflePartition(
     index: Int, spec: ShufflePartitionSpec) extends Partition
 
-// TODO: merge this with `ShuffledRowRDD`.
+// TODO: merge this with `ShuffledRowRDD`, and replace `LocalShuffledRowRDD` with this RDD.
 class CustomShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],

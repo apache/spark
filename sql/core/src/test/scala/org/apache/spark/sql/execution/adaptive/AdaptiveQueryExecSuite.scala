@@ -20,14 +20,24 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
+import scala.util.Random
+
+import org.apache.spark.TaskContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Strategy}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, UnsafeProjection}
+import org.apache.spark.sql.catalyst.planning.ScanOperation
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.physical.PassThroughPartitioning
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -604,20 +614,22 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-29544: adaptive skew join with different join types") {
+    // Unfortunately, we can't remove the injected extension. The `SkewJoinTestStrategy` is
+    // harmless and only affects this test suite.
+    spark.extensions.injectPlannerStrategy(_ => SkewJoinTestStrategy)
+    def createRelation(partitionRowCount: Int*): DataFrame = {
+      val output = new StructType().add("key", "int").toAttributes
+      Dataset.ofRows(spark, SkewJoinTestSource(output, partitionRowCount))
+    }
+
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
-      withTempView("skewData1", "skewData2") {
-        spark
-          .range(0, 1000, 1, 10)
-          .selectExpr("id % 2 as key1", "id as value1")
-          .createOrReplaceTempView("skewData1")
-        spark
-          .range(0, 1000, 1, 10)
-          .selectExpr("id % 1 as key2", "id as value2")
-          .createOrReplaceTempView("skewData2")
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR.key -> "2") {
+      withTempView("t1", "t2") {
+        createRelation(3100, 100, 3200, 300, 3300, 400, 500).createTempView("t1")
+        createRelation(3400, 200, 300, 2900, 3200, 100, 600).createTempView("t2")
 
         def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
           assert(joins.size == 1 && joins.head.isSkewJoin)
@@ -631,49 +643,55 @@ class AdaptiveQueryExecSuite
 
         // skewed inner join optimization
         val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // the partition 0 in both left and right side are all skewed.
-        // And divide into 5 splits both in left and right (the max splits number).
-        // So there are 5 x 5 sub-partitions for partition 0.
-        // Partition 4 in left side is skewed and is divided into 5 splits.
-        // The right side of partition 4 is not skewed.
-        // So there are 5 sub-partitions for partition 4.
-        // The middle 3 partitions are coalesced into one.
-        // So total (25 + 5 + 1) partitions.
+          "SELECT * FROM t1 join t2 ON t1.key = t2.key")
+        // Partition 0: both left and right sides are skewed, and divide into 5 splits, so
+        //              5 x 5 sub-partitions.
+        // Partition 1: not skewed, just 1 partition.
+        // Partition 2: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // Partition 3: only right side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // Partition 4: both left and right sides are skewed, and divide into 5 splits, so
+        //              5 x 5 sub-partitions.
+        // Partition 5, 6: not skewed, and coalesced into 1 partition.
+        // So total (25 + 1 + 5 + 5 + 25 + 1) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 31)
+        checkSkewJoin(innerSmj, 25 + 1 + 5 + 5 + 25 + 1)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // The partition 0 in both left and right are all skewed.
-        // The partition 4 in left side is skewed.
-        // But for left outer join, we don't split the right partition even skewed.
-        // So the partition 0 in left side is divided into 5 splits(the max split number).
-        // the partition 4 in left side is divided into 5 splits(the max split number).
-        // The middle 3 partitions are coalesced into one.
-        // So total (5 + 5 + 1) partitions.
+          "SELECT * FROM t1 left outer join t2 ON t1.key = t2.key")
+        // Partition 0: both left and right sides are skewed, but left join can't split right side,
+        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1: not skewed, just 1 partition.
+        // Partition 2: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // Partition 3: only right side is skewed, but left join can't split right side, so just
+        //              1 partition.
+        // Partition 4: both left and right sides are skewed, but left join can't split right side,
+        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 5, 6: not skewed, and coalesced into 1 partition.
+        // So total (5 + 1 + 5 + 1 + 5 + 1) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 11)
+        checkSkewJoin(leftSmj, 5 + 1 + 5 + 1 + 5 + 1)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // The partition 0 in both left and right side are all skewed.
-        // And the partition 4 in left side is skewed.
-        // But for right outer join, we don't split the left partition even skewed, so only
-        // partition 0 is treated as skewed.
-        // So the partition 0 in right side is divided into 5 splits(the max split number)
-        // The the remaining partitions are coalesced into one.
-        // So total (5 + 1) partitions.
+          "SELECT * FROM t1 right outer join t2 ON t1.key = t2.key")
+        // Partition 0: both left and right sides are skewed, but right join can't split left side,
+        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1: not skewed, just 1 partition.
+        // Partition 2: only left side is skewed, but right join can't split left side, so just
+        //              1 partition.
+        // Partition 1 and 2 get coalesced.
+        // Partition 3: only right side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // Partition 4: both left and right sides are skewed, but right join can't split left side,
+        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 5, 6: not skewed, and coalesced into 1 partition.
+        // So total (5 + 1 + 5 + 5 + 1) partitions.
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
-        checkSkewJoin(rightSmj, 6)
+        checkSkewJoin(rightSmj, 5 + 1 + 5 + 5 + 1)
       }
     }
   }
@@ -714,5 +732,55 @@ class AdaptiveQueryExecSuite
       val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
       assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
     }
+  }
+}
+
+case class SkewJoinTestSource(output: Seq[Attribute], partitionRowCount: Seq[Int])
+  extends LeafNode {
+  override def computeStats(): Statistics = Statistics(Long.MaxValue)
+}
+
+case class SkewJoinTestSourceExec(output: Seq[Attribute], partitionRowCount: Seq[Int])
+  extends LeafExecNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val sum = partitionRowCount.sum
+    sparkContext.makeRDD(Seq.empty[Byte], 10).mapPartitions { _ =>
+      val proj = UnsafeProjection.create(output, output)
+      val rand = new Random(TaskContext.getPartitionId())
+
+      // Each RDD partition generates different partition IDs, but overall the partition ID
+      // distribution respects the ratio specified in `partitionRowCount`.
+      Seq.fill(sum / 10) {
+        val value = rand.nextInt(sum)
+        var partId = -1
+        var currentSum = 0
+        var i = 0
+        while (partId == -1 && i < partitionRowCount.length) {
+          currentSum += partitionRowCount(i)
+          if (value < currentSum) partId = i
+          i += 1
+        }
+        // Increase the partition ID diversity to avoid the join outputing too many results.
+        InternalRow(rand.nextInt(50) + partId * 100)
+      }.iterator.map(proj)
+    }
+  }
+}
+
+object SkewJoinTestStrategy extends Strategy {
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case ScanOperation(projectList, filters, s: SkewJoinTestSource) =>
+      assert(projectList == s.output)
+      val sourceExec = SkewJoinTestSourceExec(s.output, s.partitionRowCount)
+      val withFilter = if (filters.isEmpty) {
+        sourceExec
+      } else {
+        FilterExec(filters.reduce(And), sourceExec)
+      }
+      ShuffleExchangeExec(
+        PassThroughPartitioning(s.output.head, 100, s.partitionRowCount.length),
+        withFilter) :: Nil
+    case _ => Nil
   }
 }
