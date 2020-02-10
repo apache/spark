@@ -293,6 +293,27 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpExtract(Literal("100-200"), Literal("(\\d+)-(\\d+)"), Literal(1))
     checkEvaluation(nonNullExpr, "100", row1)
+
+    // invalid group index
+    val row8 = create_row("100-200", "(\\d+)-(\\d+)", 3)
+    val row9 = create_row("100-200", "(\\d+).*", 2)
+    val row10 = create_row("100-200", "\\d+", 1)
+
+    val invalidGroupIndex1 = intercept[AnalysisException] {
+      evaluateWithoutCodegen(expr, row8)
+    }
+    assert(invalidGroupIndex1.getMessage.contains(
+      "Regex group count is: 2, but the specified group index is 3"))
+    val invalidGroupIndex2 = intercept[AnalysisException] {
+      evaluateWithoutCodegen(expr, row9)
+    }
+    assert(invalidGroupIndex2.getMessage.contains(
+      "Regex group count is: 1, but the specified group index is 2"))
+    val invalidGroupIndex3 = intercept[AnalysisException] {
+      evaluateWithoutCodegen(expr, row10)
+    }
+    assert(invalidGroupIndex3.getMessage.contains(
+      "Regex group count is: 0, but the specified group index is 1"))
   }
 
   test("SPLIT") {
