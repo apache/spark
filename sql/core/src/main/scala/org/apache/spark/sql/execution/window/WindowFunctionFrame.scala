@@ -172,21 +172,19 @@ class FixedOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
+  var rowOption: Option[UnsafeRow] = None
+
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    input = rows
-    inputIndex = 0
+    super.prepare(rows)
+    if (inputIndex >= 0 && inputIndex < input.length) {
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      rowOption = Some(r)
+    }
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    inputIterator = input.generateIterator()
-    var newInputIndex = inputIndex
-    while (newInputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      newInputIndex += 1
-    }
-    if (newInputIndex >= 0 && newInputIndex < input.length) {
-      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      projection(r)
+    if (rowOption.isDefined) {
+      projection(rowOption.get)
     } else {
       // Use default values since the offset row does not exist.
       fillDefaultValue(current)
