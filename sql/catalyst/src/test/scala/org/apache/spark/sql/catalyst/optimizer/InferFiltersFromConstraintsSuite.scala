@@ -283,11 +283,13 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
     val testRelation1 = LocalRelation('a.int)
     val testRelation2 = LocalRelation('b.long)
-    val originalLeft = testRelation1.where('a === 1).subquery('left)
-    val originalRight = testRelation2.subquery('right)
+    val originalLeft = testRelation1.where('a > 1).subquery('left)
+    val originalRight = testRelation2.where('b < 10).subquery('right)
 
-    val left = testRelation1.where(IsNotNull('a) && 'a === 1).subquery('left)
-    val right = testRelation2.where(IsNotNull('b)).subquery('right)
+    val left = testRelation1.where(
+      IsNotNull('a) && 'a > 1 && 'a.cast(LongType) < Literal(10).cast(LongType)).subquery('left)
+    val right = testRelation2.where(
+      IsNotNull('b) && 'b < Literal(10).cast(LongType)).subquery('right)
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
