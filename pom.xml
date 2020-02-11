@@ -136,7 +136,7 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.5.9</orc.version>
-    <orc.classifier></orc.classifier>
+    <orc.classifier>nohive</orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.18.v20190429</jetty.version>
@@ -3037,7 +3037,6 @@
         <hive.llap.scope>provided</hive.llap.scope>
         <hive.serde.scope>provided</hive.serde.scope>
         <hive.shims.scope>provided</hive.shims.scope>
-        <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
       </properties>
     </profile>
