@@ -68,7 +68,7 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
  *  parameter "isAllFreeResources" is set to true. A "delay scheduling reject" is when a resource
  *  is not utilized despite there being pending tasks (implemented inside [[TaskSetManager]]).
  *  The legacy heuristic only measured the time since the [[TaskSetManager]] last launched a task,
- *  and can be re-enabled by setting [[LEGACY_LOCALITY_WAIT_RESET]] to true.
+ *  and can be re-enabled by setting spark.locality.wait.legacyResetOnTaskLaunch to true.
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
