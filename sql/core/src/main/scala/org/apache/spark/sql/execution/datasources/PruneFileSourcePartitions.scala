@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Prune the partitions of file source based table using partition filters. Currently, this rule
- * is applied to [[HadoopFsRelation]] and [[DataSourceV2ScanRelation]].
+ * is applied to [[HadoopFsRelation]] with [[CatalogFileIndex]] and [[DataSourceV2ScanRelation]]
+ * with [[FileScan]].
  *
  * For [[HadoopFsRelation]], the location will be replaced by pruned file index, and corresponding
  * statistics will be updated. And the partition filters will be kept in the filters of returned
