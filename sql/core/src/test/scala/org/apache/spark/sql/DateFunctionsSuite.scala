@@ -377,6 +377,14 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
+  def checkExceptionMessage(df: DataFrame): Unit = {
+    val message = intercept[Exception] {
+      df.collect()
+    }.getCause.getMessage
+    assert(message.contains(s"set ${SQLConf.LEGACY_TIME_PARSER_ENABLED.key} to true to restore " +
+      "the behavior before Spark 3.0"))
+  }
+
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
@@ -422,19 +430,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(to_date(col("d"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
         Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
-
-    // now switch format
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-MM")),
-      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+    checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
 
     // invalid format
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-hh-MM")),
-      Seq(Row(null), Row(null), Row(null)))
+    checkExceptionMessage(df.select(to_date(col("s"), "yyyy-hh-MM")))
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-aa")),
       Seq(Row(null), Row(null), Row(null)))
@@ -562,6 +561,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   private def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
 
   test("unix_timestamp") {
+<<<<<<< HEAD
     Seq(false, true).foreach { legacyParser =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
         val date1 = Date.valueOf("2015-07-24")
@@ -819,16 +819,23 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
-    def checkTimeZoneParsing(expected: Any): Unit = {
-      val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
-      checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
-        Row(expected))
-    }
-    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
-      checkTimeZoneParsing(Timestamp.valueOf("2020-01-27 20:06:11.847"))
-    }
-    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "false") {
-      checkTimeZoneParsing(null)
+    Seq(true, false).foreach { wholeStageCodegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegen.toString) {
+        val confKey = SQLConf.LEGACY_TIME_PARSER_ENABLED.key
+        withSQLConf(confKey -> "true") {
+          val expected = Timestamp.valueOf("2020-01-27 20:06:11.847")
+          val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+          checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
+            Row(expected))
+        }
+        withSQLConf(confKey -> "false") {
+          val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+          val message = intercept[Exception] {
+            df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")).collect()
+          }.getCause.getMessage
+          assert(message.contains(s"set $confKey to true to restore the behavior before Spark 3.0"))
+        }
+      }
     }
   }
 

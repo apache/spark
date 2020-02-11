@@ -229,4 +229,21 @@ object TimestampFormatter {
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
     new FractionTimestampFormatter(zoneId)
   }
+
+  def checkLegacyFormatter(
+      e: DateTimeParseException, s: String, format: String, zoneId: ZoneId): Unit = {
+    assert(!SQLConf.get.legacyTimeParserEnabled,
+      "Only check legacy formatter while legacy parser disabled.")
+    val formatter = new LegacyTimestampFormatter(format, zoneId, defaultLocale)
+    val res = try {
+      Some(formatter.parse(s))
+    } catch {
+      case _: Throwable => None
+    }
+    if (res.nonEmpty) {
+      throw new RuntimeException(e.getMessage + ", set " +
+        s"${SQLConf.LEGACY_TIME_PARSER_ENABLED.key} to true to restore the behavior before " +
+        "Spark 3.0.")
+    }
+  }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
+import java.time.format.DateTimeParseException
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -789,6 +790,10 @@ abstract class ToTimestamp
               formatter.parse(
                 t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
+              case e: DateTimeParseException =>
+                TimestampFormatter.checkLegacyFormatter(
+                  e, t.asInstanceOf[UTF8String].toString, constFormat.toString, zoneId)
+                null
               case NonFatal(_) => null
             }
           }
@@ -802,6 +807,10 @@ abstract class ToTimestamp
               TimestampFormatter(formatString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
+              case e: DateTimeParseException =>
+                TimestampFormatter.checkLegacyFormatter(
+                  e, t.asInstanceOf[UTF8String].toString, formatString, zoneId)
+                null
               case NonFatal(_) => null
             }
           }
@@ -811,6 +820,7 @@ abstract class ToTimestamp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
+    val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
     left.dataType match {
       case StringType if right.foldable =>
         val df = classOf[TimestampFormatter].getName
@@ -818,7 +828,9 @@ abstract class ToTimestamp
           ExprCode.forNullValue(dataType)
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
+          val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
           val eval1 = left.genCode(ctx)
+          val formatString = right.genCode(ctx)
           ev.copy(code = code"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
@@ -831,6 +843,8 @@ abstract class ToTimestamp
               } catch (java.text.ParseException e) {
                 ${ev.isNull} = true;
               } catch (java.time.format.DateTimeParseException e) {
+                $tf$$.MODULE$$.checkLegacyFormatter(
+                  e, ${eval1.value}.toString(), ${formatString.value}.toString(), $zid);
                 ${ev.isNull} = true;
               } catch (java.time.DateTimeException e) {
                 ${ev.isNull} = true;
@@ -839,7 +853,6 @@ abstract class ToTimestamp
         }
       case StringType =>
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-        val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
@@ -854,6 +867,8 @@ abstract class ToTimestamp
             } catch (java.text.ParseException e) {
               ${ev.isNull} = true;
             } catch (java.time.format.DateTimeParseException e) {
+              $tf$$.MODULE$$.checkLegacyFormatter(
+                e, $string.toString(), $format.toString(), $zid)};
               ${ev.isNull} = true;
             } catch (java.time.DateTimeException e) {
               ${ev.isNull} = true;
