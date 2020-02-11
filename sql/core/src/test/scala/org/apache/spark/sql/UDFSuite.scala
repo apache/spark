@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -458,9 +457,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   }
 
-  test("use untyped UDF should fail by default") {
-    val e = intercept[SparkException](udf((x: Int) => x, IntegerType))
-    assert(e.getMessage.contains("You're using untyped udf"))
+  test("use untyped Scala UDF should fail by default") {
+    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
+    assert(e.getMessage.contains("You're using untyped Scala UDF"))
   }
 
   test("SPARK-26308: udf with decimal") {
