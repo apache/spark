@@ -123,32 +123,6 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   }
 }
 
-/**
- * An instance of the class is aimed to re-use many times. It contains helper objects
- * `cal` which is reused between `parse()` and `format` invokes.
- */
-class LegacyFastDateFormat(fastDateFormat: FastDateFormat) {
-  private val cal = new MicrosCalendar(
-    fastDateFormat.getTimeZone,
-    fastDateFormat.getPattern.count(_ == 'S'))
-
-  def parse(s: String): SQLTimestamp = {
-    cal.clear() // Clear the calendar because it can be re-used many times
-    if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
-    }
-    val micros = cal.getMicros()
-    cal.set(Calendar.MILLISECOND, 0)
-    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
-  }
-
-  def format(timestamp: SQLTimestamp): String = {
-    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
-    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
-    fastDateFormat.format(cal)
-  }
-}
-
 class LegacyFastTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
