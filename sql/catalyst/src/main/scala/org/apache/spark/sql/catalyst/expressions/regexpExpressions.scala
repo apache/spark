@@ -157,8 +157,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
         """)
       }
     } else {
-      val patternStr = ctx.freshName("patternStr")
-      val compiledPattern = ctx.freshName("compiledPattern")
+      val pattern = ctx.freshName("pattern")
+      val rightStr = ctx.freshName("rightStr")
       // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
       // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
       // '\"' will cause exception 'Line break in literal not allowed'.
@@ -169,10 +169,10 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String $$rightStr = $eval2.toString();
-          $patternClass $$pattern = $patternClass.compile(
-            $escapeFunc($$rightStr, '$newEscapeChar'));
-          ${ev.value} = $$pattern.matcher($eval1.toString()).matches();
+          String $rightStr = $eval2.toString();
+          $patternClass $pattern = $patternClass.compile(
+            $escapeFunc($rightStr, '$newEscapeChar'));
+          ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
     }
