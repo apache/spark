@@ -2007,6 +2007,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ARRAY_DEFAULT_TO_STRING =
+    buildConf("spark.sql.legacy.arrayDefaultToStringType.enabled")
+      .internal()
+      .doc("When set to true, it returns an empty array of string type when the `array` " +
+        "function is called without any parameters. Otherwise, it returns an empty " +
+        "array of `NullType`")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
