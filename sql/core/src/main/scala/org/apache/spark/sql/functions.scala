@@ -23,7 +23,6 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -4734,13 +4733,13 @@ object functions {
    */
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      val errorMsg = "You're using untyped udf, which does not have the input type information. " +
-        "So, Spark may blindly pass null to the Scala closure with primitive-type argument, " +
-        "and the closure will see the default value of the Java type for the null argument, " +
-        "e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. You could use " +
-        "other typed udf APIs to avoid this problem, or set " +
-        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true to insistently use this."
-      throw new SparkException(errorMsg)
+      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
+        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+        "argument, and the closure will see the default value of the Java type for the null " +
+        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+        "You could use other typed Scala UDF APIs to avoid this problem, or set " +
+        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
+      throw new AnalysisException(errorMsg)
     }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
   }
