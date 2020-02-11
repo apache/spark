@@ -57,6 +57,18 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
  *   * Periodic revival of all offers from the CoarseGrainedSchedulerBackend, to accommodate delay
  *      scheduling
  *   * task-result-getter threads
+ *
+ * Delay Scheduling:
+ *  Delay scheduling is an optimization that sacrifices job fairness for data locality in order to
+ *  improve cluster and workload throughput. One useful definition of "delay" is how much time
+ *  has passed since the TaskSet was using its fair share of resources. Since it is impractical to
+ *  calculate this delay without a full simulation, the heuristic used is the time since the
+ *  TaskSetManager last launched a task and has not rejected any resources due to delay scheduling
+ *  since it was last offered its "fair share". A "fair share" offer is when [[resourceOffers]]'s
+ *  parameter "isAllFreeResources" is set to true. A "delay scheduling reject" is when a resource
+ *  is not utilized despite there being pending tasks (implemented inside [[TaskSetManager]]).
+ *  The legacy heuristic only measured the time since the [[TaskSetManager]] last launched a task,
+ *  and can be re-enabled by setting [[LEGACY_LOCALITY_WAIT_RESET]] to true.
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
