@@ -55,27 +55,6 @@ class PlanParserSuite extends AnalysisTest {
     With(plan, ctes)
   }
 
-  test("single comment") {
-    val plan = table("a").select(star())
-    assertEqual("-- single comment\nSELECT * FROM a", plan)
-  }
-
-  test("bracketed comment case one") {
-    val plan = table("a").select(star())
-    assertEqual("/* This is an example of SQL which should not execute:\n" +
-      " * select 'multi-line';\n" +
-      " */\n" +
-      "SELECT * FROM a", plan)
-  }
-
-  test("bracketed comment case two") {
-    val plan = table("a").select(star())
-    assertEqual("/*\n" +
-      "SELECT 'trailing' as x1; -- inside block comment\n" +
-      "*/\n" +
-      "SELECT * FROM a", plan)
-  }
-
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)
