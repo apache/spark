@@ -204,9 +204,7 @@ private[hive] class SparkExecuteStatementOperation(
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      sqlContext.sparkSession.withActive {
-        execute()
-      }
+      execute()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -219,9 +217,7 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Unit = {
               registerCurrentOperationLog()
               try {
-                sqlContext.sparkSession.withActive {
-                  execute()
-                }
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
