@@ -62,8 +62,8 @@ case class CreateTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    override val plan: LogicalPlan,
-    override val query: SparkPlan,
+    plan: LogicalPlan,
+    query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends V2TableWriteExec with SupportsV1Write {

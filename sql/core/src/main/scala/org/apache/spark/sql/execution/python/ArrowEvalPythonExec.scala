@@ -59,11 +59,9 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 /**
  * A physical plan that evaluates a [[PythonUDF]].
  */
-case class ArrowEvalPythonExec(
-    override val udfs: Seq[PythonUDF],
-    override val resultAttrs: Seq[Attribute],
-    child: SparkPlan,
-    evalType: Int) extends EvalPythonExec {
+case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan,
+    evalType: Int)
+  extends EvalPythonExec {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone

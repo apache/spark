@@ -79,9 +79,9 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
 case class WindowExec(
-    override val windowExpression: Seq[NamedExpression],
-    override val partitionSpec: Seq[Expression],
-    override val orderSpec: Seq[SortOrder],
+    windowExpression: Seq[NamedExpression],
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
     child: SparkPlan)
   extends WindowExecBase {
 

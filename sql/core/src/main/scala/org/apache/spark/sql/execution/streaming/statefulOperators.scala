@@ -275,10 +275,10 @@ case class StateStoreRestoreExec(
  * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
  */
 case class StateStoreSaveExec(
-    override val keyExpressions: Seq[Attribute],
+    keyExpressions: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
-    override val eventTimeWatermark: Option[Long] = None,
+    eventTimeWatermark: Option[Long] = None,
     stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {

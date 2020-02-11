@@ -74,7 +74,7 @@ trait ObjectConsumerExec extends UnaryExecNode {
  */
 case class DeserializeToObjectExec(
     deserializer: Expression,
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with CodegenSupport {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -182,7 +182,7 @@ object ObjectOperator {
  */
 case class MapPartitionsExec(
     func: Iterator[Any] => Iterator[Any],
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     child: SparkPlan)
   extends ObjectConsumerExec with ObjectProducerExec {
 
@@ -263,7 +263,7 @@ case class MapPartitionsInRWithArrowExec(
  */
 case class MapElementsExec(
     func: AnyRef,
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     child: SparkPlan)
   extends ObjectConsumerExec with ObjectProducerExec with CodegenSupport {
 
@@ -378,7 +378,7 @@ case class MapGroupsExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -444,7 +444,7 @@ case class FlatMapGroupsInRExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -586,7 +586,7 @@ case class CoGroupExec(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
 

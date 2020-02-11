@@ -33,8 +33,6 @@ abstract class WindowExecBase extends UnaryExecNode {
 
   def orderSpec: Seq[SortOrder]
 
-  override def child: SparkPlan
-
   /**
    * Create the resulting projection.
    *

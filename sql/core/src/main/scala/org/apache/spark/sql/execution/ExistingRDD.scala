@@ -57,7 +57,7 @@ case class ExternalRDD[T](
 
 /** Physical plan node for scanning data from an RDD. */
 case class ExternalRDDScanExec[T](
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
 
   override lazy val metrics = Map(

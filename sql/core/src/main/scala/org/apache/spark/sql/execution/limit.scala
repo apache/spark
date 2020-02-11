@@ -41,7 +41,7 @@ trait LimitExec extends UnaryExecNode {
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(override val limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)

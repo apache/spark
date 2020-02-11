@@ -47,14 +47,14 @@ case class FlatMapGroupsWithStateExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    override val outputObjAttr: Attribute,
+    outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
     stateFormatVersion: Int,
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    override val eventTimeWatermark: Option[Long],
+    eventTimeWatermark: Option[Long],
     child: SparkPlan
   ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 

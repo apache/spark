@@ -31,10 +31,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * A physical plan that evaluates a [[PythonUDF]]
  */
-case class BatchEvalPythonExec(
-    override val udfs: Seq[PythonUDF],
-    override val resultAttrs: Seq[Attribute],
-    child: SparkPlan) extends EvalPythonExec {
+case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+  extends EvalPythonExec {
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],

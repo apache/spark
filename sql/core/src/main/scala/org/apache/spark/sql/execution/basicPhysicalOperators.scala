@@ -738,7 +738,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
 /**
  * Physical plan for a subquery.
  */
-case class SubqueryExec(override val name: String, override val child: SparkPlan)
+case class SubqueryExec(name: String, child: SparkPlan)
   extends BaseSubqueryExec with UnaryExecNode {
 
   override lazy val metrics = Map(

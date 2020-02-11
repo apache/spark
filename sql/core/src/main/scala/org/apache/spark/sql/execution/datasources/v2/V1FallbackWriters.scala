@@ -58,10 +58,10 @@ case class AppendDataExecV1(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExecV1(
-    override val table: SupportsWrite,
+    table: SupportsWrite,
     deleteWhere: Array[Filter],
-    override val writeOptions: CaseInsensitiveStringMap,
-    override val plan: LogicalPlan) extends V1FallbackWriters {
+    writeOptions: CaseInsensitiveStringMap,
+    plan: LogicalPlan) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
