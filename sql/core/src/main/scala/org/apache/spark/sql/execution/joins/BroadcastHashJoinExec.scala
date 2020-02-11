@@ -37,13 +37,13 @@ import org.apache.spark.sql.types.{BooleanType, LongType}
  * relation is not shuffled.
  */
 case class BroadcastHashJoinExec(
-    override val leftKeys: Seq[Expression],
-    override val rightKeys: Seq[Expression],
-    override val joinType: JoinType,
-    override val buildSide: BuildSide,
-    override val condition: Option[Expression],
-    override val left: SparkPlan,
-    override val right: SparkPlan)
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    joinType: JoinType,
+    buildSide: BuildSide,
+    condition: Option[Expression],
+    left: SparkPlan,
+    right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
   override lazy val metrics = Map(
