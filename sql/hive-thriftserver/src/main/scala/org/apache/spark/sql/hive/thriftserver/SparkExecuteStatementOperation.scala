@@ -360,7 +360,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def withSchedulerPool[T](body: => T): T = {
+  private def withSchedulerPool[T](body: => T): T = sqlContext.sparkSession.withActive {
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
       sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
