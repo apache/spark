@@ -75,7 +75,11 @@ private[yarn] class YarnAllocator(
   import YarnAllocator._
 
   // Visible for testing.
-  val allocatedHostToContainersMap = new HashMap[String, collection.mutable.Set[ContainerId]]
+  val allocatedHostToContainersMapPerRPId =
+    new HashMap[Int, HashMap[String, collection.mutable.Set[ContainerId]]]
+  allocatedHostToContainersMapPerRPId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+    new HashMap[String, mutable.Set[ContainerId]]()
+
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
 
   // Containers that we no longer care about. We've either already told the RM to release them or
@@ -84,10 +88,14 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = Collections.newSetFromMap[ContainerId](
     new ConcurrentHashMap[ContainerId, java.lang.Boolean])
 
-  private val runningExecutors = Collections.newSetFromMap[String](
-    new ConcurrentHashMap[String, java.lang.Boolean]())
+  private val runningExecutorsPerResourceProfileId =
+    new ConcurrentHashMap[Int, java.util.Set[String]]()
+  runningExecutorsPerResourceProfileId.put(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+    Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
 
-  private val numExecutorsStarting = new AtomicInteger(0)
+  private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
+  numExecutorsStartingPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+    new AtomicInteger(0)
 
   /**
    * Used to generate a unique ID per executor
@@ -110,9 +118,9 @@ private[yarn] class YarnAllocator(
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
-  @volatile private var targetNumExecutors =
+  private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
+  targetNumExecutorsPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
-
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -129,6 +137,7 @@ private[yarn] class YarnAllocator(
 
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
+  private val containerIdToResourceProfileId = new HashMap[ContainerId, Int]
 
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
@@ -143,7 +152,7 @@ private[yarn] class YarnAllocator(
     0
   }
   // Number of cores per executor.
-  protected val executorCores = sparkConf.get(EXECUTOR_CORES)
+  protected val defaultExecutorCores = sparkConf.get(EXECUTOR_CORES)
 
   private val executorResourceRequests =
     getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
@@ -151,12 +160,21 @@ private[yarn] class YarnAllocator(
 
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {
-    val resource = Resource.newInstance(
-      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
+    val resource: Resource = Resource.newInstance(
+      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory,
+      defaultExecutorCores)
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
     logDebug(s"Created resource capability: $resource")
     resource
   }
+
+  private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
+  rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
+
+  // note currently we don't remove ResourceProfiles
+  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+  rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+    ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
@@ -166,17 +184,30 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
-  // A map to store preferred hostname and possible task numbers running on it.
-  private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
+  // A map of ResourceProfile id to a map of preferred hostname and possible
+  // task numbers running on it.
+  private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
+    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
 
-  // Number of tasks that have locality preferences in active stages
-  private[yarn] var numLocalityAwareTasks: Int = 0
+  // ResourceProfile Id to number of tasks that have locality preferences in active stages
+  private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
+    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
-    new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
+    new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
 
-  def getNumExecutorsRunning: Int = runningExecutors.size()
+  def getNumExecutorsRunning: Int = {
+    runningExecutorsPerResourceProfileId.values.stream.mapToInt(s => s.size).sum()
+  }
+
+  def getNumLocalityAwareTasks: Int = {
+    numLocalityAwareTasksPerResourceProfileId.values.sum
+  }
+
+  def getNumExecutorsStarting: Int = {
+    numExecutorsStartingPerResourceProfileId.values.map(_.get()).sum
+  }
 
   def getNumReleasedContainers: Int = releasedContainers.size()
 
@@ -186,49 +217,145 @@ private[yarn] class YarnAllocator(
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
+   * ResourceProfile id -> pendingAllocate container request
    */
-  def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
+  def getPendingAllocate: Map[Int, Seq[ContainerRequest]] = getPendingAtLocation(ANY_HOST)
 
-  def numContainersPendingAllocate: Int = synchronized {
-    getPendingAllocate.size
+  def getNumContainersPendingAllocate: Int = synchronized {
+    getPendingAllocate.values.flatten.size
+  }
+
+  // YARN priorities are such that lower number is higher priority.
+  // We need to allocate a different priority for each ResourceProfile because YARN
+  // won't allow different container resource requirements within a Priority.
+  // We could allocate per Stage to make sure earlier stages get priority but Spark
+  // always finishes a stage before starting a later one and if we have 2 running in parallel
+  // I don't think the priority matters.
+  private def getContainerPriority(resourceProfileId: Int): Priority = {
+    Priority.newInstance(resourceProfileId)
+  }
+
+  // The ResourceProfile id is the priority
+  private def getResourceProfileIdFromPriority(priority: Int): Int = {
+    priority
+  }
+
+  private def getOrUpdateAllocatedHostToContainersMapForRPId(
+      rpId: Int): HashMap[String, collection.mutable.Set[ContainerId]] = {
+    allocatedHostToContainersMapPerRPId.getOrElseUpdate(rpId,
+      new HashMap[String, mutable.Set[ContainerId]]())
+  }
+
+  private def getOrUpdateRunningExecutorForRPId(rpId: Int): java.util.Set[String] = {
+    runningExecutorsPerResourceProfileId.putIfAbsent(rpId,
+      Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
+  }
+
+  private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = {
+    numExecutorsStartingPerResourceProfileId.getOrElseUpdate(rpId, new AtomicInteger(0))
+  }
+
+  private def getTargetNumExecutorsForRPId(rpId: Int): Int = {
+    targetNumExecutorsPerResourceProfileId.getOrElseUpdate(rpId,
+      SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf))
   }
 
   /**
-   * A sequence of pending container requests at the given location that have not yet been
-   * fulfilled.
+   * A sequence of pending container requests at the given location for each ResourceProfile id
+   * that have not yet been fulfilled.
    */
-  private def getPendingAtLocation(location: String): Seq[ContainerRequest] =
-    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
-      .flatMap(_.asScala)
+  private def getPendingAtLocation(location: String): Map[Int, Seq[ContainerRequest]] = {
+    val allContainerRequests = new mutable.HashMap[Int, Seq[ContainerRequest]]
+    rpIdToYarnResource.map { case (id, profResource) =>
+      val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
+        .asScala.flatMap(_.asScala)
+      allContainerRequests(id) = result
+    }
+    allContainerRequests.toMap
+  }
+
+  // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
+  private def createYarnResourceForResourceProfile(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+    resourceProfileToTotalExecs.foreach { case (rp, num) =>
+      if (!rpIdToYarnResource.contains(rp.id)) {
+        // Start with the application or default settings
+        var heapMem = executorMemory.toLong
+        // TODO - do we want to add to ExecutorResource?
+        var offHeapMem = executorOffHeapMemory.toLong
+        var overheadMem = memoryOverhead.toLong
+        var pysparkMem = pysparkWorkerMemory.toLong
+        var cores = defaultExecutorCores
+        val customResources = new mutable.HashMap[String, String]
+        // track the resource profile if not already there
+        getOrUpdateRunningExecutorForRPId(rp.id)
+        logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
+        val execResources = rp.executorResources
+        execResources.foreach { case (r, execReq) =>
+          r match {
+            case ResourceProfile.MEMORY =>
+              heapMem = execReq.amount
+            case ResourceProfile.OVERHEAD_MEM =>
+              overheadMem = execReq.amount
+            case ResourceProfile.PYSPARK_MEM =>
+              pysparkMem = execReq.amount
+            case ResourceProfile.CORES =>
+              cores = execReq.amount.toInt
+            case "gpu" =>
+              customResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
+            case "fpga" =>
+              customResources(YARN_FPGA_RESOURCE_CONFIG) = execReq.amount.toString
+            case rName =>
+              customResources(rName) = execReq.amount.toString
+          }
+        }
+        val totalMem = (heapMem + offHeapMem + overheadMem + pysparkMem).toInt
+        val resource = Resource.newInstance(totalMem, cores)
+        ResourceRequestHelper.setResourceRequests(customResources.toMap, resource)
+        logDebug(s"Created resource capability: $resource")
+        rpIdToYarnResource(rp.id) = resource
+        rpIdToResourceProfile(rp.id) = rp
+      }
+    }
+  }
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
    * the requested total is smaller than the current number of running executors, no executors will
    * be killed.
-   * @param requestedTotal total number of containers requested
-   * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
-   * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
-   *                             container placement hint.
+   * @param resourceProfileToTotalExecs total number of containers requested for each
+   *                                    ResourceProfile
+   * @param numLocalityAwareTasksPerResourceProfileId number of locality aware tasks for each
+   *                                                  ResourceProfile id to be used as container
+   *                                                  placement hint.
+   * @param hostToLocalTaskCount a map of preferred hostname to possible task counts for each
+   *                             ResourceProfile id to be used as container placement hint.
    * @param nodeBlacklist blacklisted nodes, which is passed in to avoid allocating new containers
    *                      on them. It will be used to update the application master's blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
-      requestedTotal: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int],
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int],
+      numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
+      hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]],
       nodeBlacklist: Set[String]): Boolean = synchronized {
-    this.numLocalityAwareTasks = localityAwareTasks
-    this.hostToLocalTaskCounts = hostToLocalTaskCount
+    this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
+    this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
-    if (requestedTotal != targetNumExecutors) {
-      logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
-      targetNumExecutors = requestedTotal
-      allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
-      true
-    } else {
-      false
+    createYarnResourceForResourceProfile(resourceProfileToTotalExecs)
+
+    val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
+      if (numExecs != getTargetNumExecutorsForRPId(rp.id)) {
+        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+          s"for resource profile id: ${rp.id}.")
+        targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
+        allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
+        true
+      } else {
+        false
+      }
     }
+    res.exists(_ == true)
   }
 
   /**
@@ -237,8 +364,9 @@ private[yarn] class YarnAllocator(
   def killExecutor(executorId: String): Unit = synchronized {
     executorIdToContainer.get(executorId) match {
       case Some(container) if !releasedContainers.contains(container.getId) =>
+        val rpId = containerIdToResourceProfileId(container.getId)
         internalReleaseContainer(container)
-        runningExecutors.remove(executorId)
+        getOrUpdateRunningExecutorForRPId(rpId).remove(executorId)
       case _ => logWarning(s"Attempted to kill unknown executor $executorId!")
     }
   }
@@ -267,8 +395,8 @@ private[yarn] class YarnAllocator(
         "Launching executor count: %d. Cluster resources: %s.")
         .format(
           allocatedContainers.size,
-          runningExecutors.size,
-          numExecutorsStarting.get,
+          getNumExecutorsRunning,
+          getNumExecutorsStarting,
           allocateResponse.getAvailableResources))
 
       handleAllocatedContainers(allocatedContainers.asScala)
@@ -278,8 +406,7 @@ private[yarn] class YarnAllocator(
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
       processCompletedContainers(completedContainers.asScala)
-      logDebug("Finished processing %d completed containers. Current running executor count: %d."
-        .format(completedContainers.size, runningExecutors.size))
+      logDebug("Finished processing %d completed containers.".format(completedContainers.size))
     }
   }
 
@@ -290,97 +417,110 @@ private[yarn] class YarnAllocator(
    * Visible for testing.
    */
   def updateResourceRequests(): Unit = {
-    val pendingAllocate = getPendingAllocate
-    val numPendingAllocate = pendingAllocate.size
-    val missing = targetNumExecutors - numPendingAllocate -
-      numExecutorsStarting.get - runningExecutors.size
-    logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
-      s"pending: $numPendingAllocate, running: ${runningExecutors.size}, " +
-      s"executorsStarting: ${numExecutorsStarting.get}")
 
-    // Split the pending container request into three groups: locality matched list, locality
-    // unmatched list and non-locality list. Take the locality matched container request into
-    // consideration of container placement, treat as allocated containers.
-    // For locality unmatched and locality free container requests, cancel these container
-    // requests, since required locality preference has been changed, recalculating using
-    // container placement strategy.
-    val (localRequests, staleRequests, anyHostRequests) = splitPendingAllocationsByLocality(
-      hostToLocalTaskCounts, pendingAllocate)
+    val pendingAllocatePerResourceProfileId = getPendingAllocate
+    val missingPerProfile = targetNumExecutorsPerResourceProfileId.map { case (rpId, num) =>
+      val starting = getOrUpdateNumExecutorsStartingForRPId(rpId).get
+      val pending = pendingAllocatePerResourceProfileId.getOrElse(rpId, Seq.empty).size
+      val running = getOrUpdateRunningExecutorForRPId(rpId).size()
+      logDebug(s"Updating resource requests for ResourceProfile id: $rpId, target: $num, " +
+        s"pending: $pending, running: $running, executorsStarting: $starting")
+      (rpId, num - pending - running - starting)
+    }.toMap
 
-    if (missing > 0) {
-      if (log.isInfoEnabled()) {
-        var requestContainerMessage = s"Will request $missing executor container(s), each with " +
+    missingPerProfile.foreach { case (rpId, missing) =>
+      // Split the pending container request into three groups: locality matched list, locality
+      // unmatched list and non-locality list. Take the locality matched container request into
+      // consideration of container placement, treat as allocated containers.
+      // For locality unmatched and locality free container requests, cancel these container
+      // requests, since required locality preference has been changed, recalculating using
+      // container placement strategy.
+      val hostToLocalTaskCount =
+        hostToLocalTaskCountPerResourceProfileId.getOrElse(rpId, Map.empty)
+      val pendingAllocate = pendingAllocatePerResourceProfileId.getOrElse(rpId, Seq.empty)
+      val (localRequests, staleRequests, anyHostRequests) = splitPendingAllocationsByLocality(
+        hostToLocalTaskCount, pendingAllocate)
+      val numPendingAllocate = pendingAllocate.size
+      if (missing > 0) {
+        val resource = rpIdToYarnResource(rpId)
+        if (log.isInfoEnabled()) {
+          var requestContainerMessage = s"Will request $missing executor container(s) for " +
+            s" ResourceProfile Id: $rpId, each with " +
             s"${resource.getVirtualCores} core(s) and " +
             s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
-        if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            executorResourceRequests.nonEmpty) {
-          requestContainerMessage ++= s" with custom resources: " + resource.toString
+          if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
+            ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {
+            requestContainerMessage ++= s" with custom resources: " + resource.toString
+          }
+          logInfo(requestContainerMessage)
         }
-        logInfo(requestContainerMessage)
-      }
 
-      // cancel "stale" requests for locations that are no longer needed
-      staleRequests.foreach { stale =>
-        amClient.removeContainerRequest(stale)
-      }
-      val cancelledContainers = staleRequests.size
-      if (cancelledContainers > 0) {
-        logInfo(s"Canceled $cancelledContainers container request(s) (locality no longer needed)")
-      }
-
-      // consider the number of new containers and cancelled stale containers available
-      val availableContainers = missing + cancelledContainers
-
-      // to maximize locality, include requests with no locality preference that can be cancelled
-      val potentialContainers = availableContainers + anyHostRequests.size
-
-      val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
-        potentialContainers, numLocalityAwareTasks, hostToLocalTaskCounts,
-          allocatedHostToContainersMap, localRequests)
-
-      val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
-      containerLocalityPreferences.foreach {
-        case ContainerLocalityPreferences(nodes, racks) if nodes != null =>
-          newLocalityRequests += createContainerRequest(resource, nodes, racks)
-        case _ =>
-      }
-
-      if (availableContainers >= newLocalityRequests.size) {
-        // more containers are available than needed for locality, fill in requests for any host
-        for (i <- 0 until (availableContainers - newLocalityRequests.size)) {
-          newLocalityRequests += createContainerRequest(resource, null, null)
+        // cancel "stale" requests for locations that are no longer needed
+        staleRequests.foreach { stale =>
+          amClient.removeContainerRequest(stale)
         }
-      } else {
-        val numToCancel = newLocalityRequests.size - availableContainers
-        // cancel some requests without locality preferences to schedule more local containers
-        anyHostRequests.slice(0, numToCancel).foreach { nonLocal =>
-          amClient.removeContainerRequest(nonLocal)
+        val cancelledContainers = staleRequests.size
+        if (cancelledContainers > 0) {
+          logInfo(s"Canceled $cancelledContainers container request(s) (locality no longer needed)")
         }
-        if (numToCancel > 0) {
-          logInfo(s"Canceled $numToCancel unlocalized container requests to resubmit with locality")
-        }
-      }
 
-      newLocalityRequests.foreach { request =>
-        amClient.addContainerRequest(request)
-      }
+        // consider the number of new containers and cancelled stale containers available
+        val availableContainers = missing + cancelledContainers
 
-      if (log.isInfoEnabled()) {
-        val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
-        if (anyHost.nonEmpty) {
-          logInfo(s"Submitted ${anyHost.size} unlocalized container requests.")
+        // to maximize locality, include requests with no locality preference that can be cancelled
+        val potentialContainers = availableContainers + anyHostRequests.size
+
+        val allocatedHostToContainer = getOrUpdateAllocatedHostToContainersMapForRPId(rpId)
+        val numLocalityAwareTasks = numLocalityAwareTasksPerResourceProfileId.getOrElse(rpId, 0)
+        val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
+          potentialContainers, numLocalityAwareTasks, hostToLocalTaskCount,
+          allocatedHostToContainer, localRequests, resource, rpIdToResourceProfile(rpId))
+
+        val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
+        containerLocalityPreferences.foreach {
+          case ContainerLocalityPreferences(nodes, racks) if nodes != null =>
+            newLocalityRequests += createContainerRequest(resource, nodes, racks, rpId)
+          case _ =>
         }
-        localized.foreach { request =>
-          logInfo(s"Submitted container request for host ${hostStr(request)}.")
+
+        if (availableContainers >= newLocalityRequests.size) {
+          // more containers are available than needed for locality, fill in requests for any host
+          for (i <- 0 until (availableContainers - newLocalityRequests.size)) {
+            newLocalityRequests += createContainerRequest(resource, null, null, rpId)
+          }
+        } else {
+          val numToCancel = newLocalityRequests.size - availableContainers
+          // cancel some requests without locality preferences to schedule more local containers
+          anyHostRequests.slice(0, numToCancel).foreach { nonLocal =>
+            amClient.removeContainerRequest(nonLocal)
+          }
+          if (numToCancel > 0) {
+            logInfo(s"Canceled $numToCancel unlocalized container requests to " +
+              s"resubmit with locality")
+          }
         }
+
+        newLocalityRequests.foreach { request =>
+          amClient.addContainerRequest(request)
+        }
+
+        if (log.isInfoEnabled()) {
+          val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
+          if (anyHost.nonEmpty) {
+            logInfo(s"Submitted ${anyHost.size} unlocalized container requests.")
+          }
+          localized.foreach { request =>
+            logInfo(s"Submitted container request for host ${hostStr(request)}.")
+          }
+        }
+      } else if (numPendingAllocate > 0 && missing < 0) {
+        val numToCancel = math.min(numPendingAllocate, -missing)
+        logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new " +
+          s"desired total ${getTargetNumExecutorsForRPId(rpId)} executors.")
+        // cancel pending allocate requests by taking locality preference into account
+        val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
+        cancelRequests.foreach(amClient.removeContainerRequest)
       }
-    } else if (numPendingAllocate > 0 && missing < 0) {
-      val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
-        s"total $targetNumExecutors executors.")
-      // cancel pending allocate requests by taking locality preference into account
-      val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
-      cancelRequests.foreach(amClient.removeContainerRequest)
     }
   }
 
@@ -405,8 +545,10 @@ private[yarn] class YarnAllocator(
   private def createContainerRequest(
       resource: Resource,
       nodes: Array[String],
-      racks: Array[String]): ContainerRequest = {
-    new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY, true, labelExpression.orNull)
+      racks: Array[String],
+      resourceProfileId: Int): ContainerRequest = {
+    new ContainerRequest(resource, nodes, racks, getContainerPriority(resourceProfileId),
+      true, labelExpression.orNull)
   }
 
   /**
@@ -499,20 +641,20 @@ private[yarn] class YarnAllocator(
       location: String,
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
+    val rpId = getResourceProfileIdFromPriority(allocatedContainer.getPriority.getPriority())
     // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
     // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
     // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
     // count.
-    val matchingResource = Resource.newInstance(allocatedContainer.getResource.getMemory,
-      resource.getVirtualCores)
 
-    ResourceRequestHelper.setResourceRequests(executorResourceRequests, matchingResource)
+    // this should be exactly what we requested
+    val resourceForRP = rpIdToYarnResource(rpId)
 
     logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
         s"priority: ${allocatedContainer.getPriority}, " +
-        s"location: $location, resource: $matchingResource")
+        s"location: $location, resource: $resourceForRP")
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
-      matchingResource)
+      resourceForRP)
 
     // Match the allocation to a request
     if (!matchingRequests.isEmpty) {
@@ -530,28 +672,37 @@ private[yarn] class YarnAllocator(
    */
   private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
     for (container <- containersToUse) {
+      val rpId = getResourceProfileIdFromPriority(container.getPriority.getPriority())
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
       val executorId = executorIdCounter.toString
-      assert(container.getResource.getMemory >= resource.getMemory)
+      val yarnResourceForRpId = rpIdToYarnResource(rpId)
+      assert(container.getResource.getMemory >= yarnResourceForRpId.getMemory)
       logInfo(s"Launching container $containerId on host $executorHostname " +
-        s"for executor with ID $executorId")
+        s"for executor with ID $executorId for ResourceProfile Id $rpId")
 
       def updateInternalState(): Unit = synchronized {
-        runningExecutors.add(executorId)
-        numExecutorsStarting.decrementAndGet()
+        getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
+        getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
         executorIdToContainer(executorId) = container
         containerIdToExecutorId(container.getId) = executorId
+        containerIdToResourceProfileId(container.getId) = rpId
 
-        val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
+        val localallocatedHostToContainersMap = getOrUpdateAllocatedHostToContainersMapForRPId(rpId)
+        val containerSet = localallocatedHostToContainersMap.getOrElseUpdate(executorHostname,
           new HashSet[ContainerId])
         containerSet += containerId
         allocatedContainerToHostMap.put(containerId, executorHostname)
       }
 
-      if (runningExecutors.size() < targetNumExecutors) {
-        numExecutorsStarting.incrementAndGet()
+      val rp = rpIdToResourceProfile(rpId)
+      val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
+        map(_.amount.toInt).getOrElse(executorMemory)
+      val containerCores = rp.getExecutorCores.getOrElse(defaultExecutorCores)
+      val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size()
+      if (rpRunningExecs < getTargetNumExecutorsForRPId(rpId)) {
+        getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
         if (launchContainers) {
           launcherPool.execute(() => {
             try {
@@ -562,17 +713,17 @@ private[yarn] class YarnAllocator(
                 driverUrl,
                 executorId,
                 executorHostname,
-                executorMemory,
-                executorCores,
+                containerMem,
+                containerCores,
                 appAttemptId.getApplicationId.toString,
                 securityMgr,
                 localResources,
-                ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID // use until fully supported
+                rp.id
               ).run()
               updateInternalState()
             } catch {
               case e: Throwable =>
-                numExecutorsStarting.decrementAndGet()
+                getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
                 if (NonFatal(e)) {
                   logError(s"Failed to launch executor $executorId on container $containerId", e)
                   // Assigned container should be released immediately
@@ -589,8 +740,8 @@ private[yarn] class YarnAllocator(
         }
       } else {
         logInfo(("Skip launching executorRunnable as running executors count: %d " +
-          "reached target executors count: %d.").format(
-          runningExecutors.size, targetNumExecutors))
+          "reached target executors count: %d.").format(rpRunningExecs,
+          getTargetNumExecutorsForRPId(rpId)))
       }
     }
   }
@@ -599,6 +750,8 @@ private[yarn] class YarnAllocator(
   private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
+      val rpId = containerIdToResourceProfileId.getOrElse(containerId,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       val alreadyReleased = releasedContainers.remove(containerId)
       val hostOpt = allocatedContainerToHostMap.get(containerId)
       val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
@@ -606,7 +759,8 @@ private[yarn] class YarnAllocator(
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         containerIdToExecutorId.get(containerId) match {
-          case Some(executorId) => runningExecutors.remove(executorId)
+          case Some(executorId) =>
+            getOrUpdateRunningExecutorForRPId(rpId).remove(executorId)
           case None => logWarning(s"Cannot find executorId for container: ${containerId.toString}")
         }
 
@@ -679,13 +833,13 @@ private[yarn] class YarnAllocator(
 
       for {
         host <- hostOpt
-        containerSet <- allocatedHostToContainersMap.get(host)
+        containerSet <- getOrUpdateAllocatedHostToContainersMapForRPId(rpId).get(host)
       } {
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
-          allocatedHostToContainersMap.remove(host)
+          getOrUpdateAllocatedHostToContainersMapForRPId(rpId).remove(host)
         } else {
-          allocatedHostToContainersMap.update(host, containerSet)
+          getOrUpdateAllocatedHostToContainersMapForRPId(rpId).update(host, containerSet)
         }
 
         allocatedContainerToHostMap.remove(containerId)
@@ -706,6 +860,7 @@ private[yarn] class YarnAllocator(
             // container process.
             releasedExecutorLossReasons.put(eid, exitReason)
         }
+        containerIdToResourceProfileId.remove(containerId)
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor

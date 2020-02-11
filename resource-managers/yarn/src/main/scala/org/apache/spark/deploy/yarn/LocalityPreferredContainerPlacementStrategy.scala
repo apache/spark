@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceProfile
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
@@ -82,7 +82,6 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val sparkConf: SparkConf,
     val yarnConf: Configuration,
-    val resource: Resource,
     resolver: SparkRackResolver) {
 
   /**
@@ -104,11 +103,13 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       numLocalityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest]
+      localityMatchedPendingAllocations: Seq[ContainerRequest],
+      resource: Resource,
+      rp: ResourceProfile
     ): Array[ContainerLocalityPreferences] = {
     val updatedHostToContainerCount = expectedHostToContainerCount(
       numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap,
-        localityMatchedPendingAllocations)
+        localityMatchedPendingAllocations, resource, rp)
     val updatedLocalityAwareContainerNum = updatedHostToContainerCount.values.sum
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
@@ -152,11 +153,14 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   }
 
   /**
-   * Calculate the number of executors need to satisfy the given number of pending tasks.
+   * Calculate the number of executors needed to satisfy the given number of pending tasks.
    */
-  private def numExecutorsPending(numTasksPending: Int): Int = {
-    val coresPerExecutor = resource.getVirtualCores
-    (numTasksPending * sparkConf.get(CPUS_PER_TASK) + coresPerExecutor - 1) / coresPerExecutor
+  private def numExecutorsPending(
+      numTasksPending: Int,
+      resource: Resource,
+      rp: ResourceProfile): Int = {
+    val tasksPerExec = rp.maxTasksPerExecutor(sparkConf)
+    math.ceil(numTasksPending / tasksPerExec.toDouble).toInt
   }
 
   /**
@@ -175,14 +179,16 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest]
+      localityMatchedPendingAllocations: Seq[ContainerRequest],
+      resource: Resource,
+      rp: ResourceProfile
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
     val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)
 
     hostToLocalTaskCount.map { case (host, count) =>
       val expectedCount =
-        count.toDouble * numExecutorsPending(localityAwareTasks) / totalLocalTaskNum
+        count.toDouble * numExecutorsPending(localityAwareTasks, resource, rp) / totalLocalTaskNum
       // Take the locality of pending containers into consideration
       val existedCount = allocatedHostToContainersMap.get(host).map(_.size).getOrElse(0) +
         pendingHostToContainersMap.getOrElse(host, 0.0)
