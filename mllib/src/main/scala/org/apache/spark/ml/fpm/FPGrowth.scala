@@ -283,8 +283,8 @@ class FPGrowthModel private[ml] (
       .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
       .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
     val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
-    val dt = associationRules.schema("antecedent").dataType
 
+    val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
     val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
       if (items != null) {
