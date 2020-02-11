@@ -267,6 +267,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }.flatten
 
     val tempQueries = if (code.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      // Although the loop is heavy, only used for comments test.
       val querys = new ArrayBuffer[String]
       val otherCodes = new ArrayBuffer[String]
       var tempStr = ""

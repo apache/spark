@@ -47,4 +47,4 @@ Now just one deep...
 */
 'deeply nested example' AS sixth;
 --QUERY-DELIMITER-END
--- /* and this is the end of the file */
+/* and this is the end of the file */
