@@ -455,8 +455,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 object RegExpExtract {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
     if (groupCount < groupIndex) {
-      throw new AnalysisException(
-        s"Regex group count is: $groupCount, but the specified group index is $groupIndex")
+      throw new IllegalArgumentException(
+        s"Regex group count is $groupCount, but the specified group index is $groupIndex")
     }
   }
 }
