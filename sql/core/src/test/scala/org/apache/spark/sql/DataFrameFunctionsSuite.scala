@@ -3575,11 +3575,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(nonFoldableError.contains("The 'escape' parameter must be a string literal"))
   }
 
-  test("SPARK-29462: Use null type by default if array have no argument") {
-    val ds = spark.range(1)
-    var expectedSchema = new StructType()
-      .add("x", ArrayType(NullType, containsNull = false), nullable = false)
-    assert(ds.select(array().as("x")).schema == expectedSchema)
+  test("SPARK-29462: Empty array of NullType for array function with no arguments") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (arrayDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_ARRAY_DEFAULT_TO_STRING.key -> arrayDefaultToString.toString) {
+          val schema = spark.range(1).select(array()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[ArrayType])
+          val actualType = schema.head.dataType.asInstanceOf[ArrayType].elementType
+          assert(actualType === expectedType)
+        }
+    }
   }
 }
 
