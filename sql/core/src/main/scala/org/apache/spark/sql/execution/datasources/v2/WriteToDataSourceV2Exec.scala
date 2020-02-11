@@ -119,8 +119,8 @@ case class AtomicCreateTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    override val plan: LogicalPlan,
-    override val query: SparkPlan,
+    plan: LogicalPlan,
+    query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends AtomicTableWriteExec {
@@ -153,8 +153,8 @@ case class ReplaceTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    override val plan: LogicalPlan,
-    override val query: SparkPlan,
+    plan: LogicalPlan,
+    query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends V2TableWriteExec with SupportsV1Write {
@@ -219,8 +219,8 @@ case class AtomicReplaceTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    override val plan: LogicalPlan,
-    override val query: SparkPlan,
+    plan: LogicalPlan,
+    query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends AtomicTableWriteExec {
@@ -253,7 +253,7 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    override val query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV2(newWriteBuilder().buildForBatch())
@@ -274,7 +274,7 @@ case class OverwriteByExpressionExec(
     table: SupportsWrite,
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
-    override val query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]

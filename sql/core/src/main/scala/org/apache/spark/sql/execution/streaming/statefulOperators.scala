@@ -427,10 +427,10 @@ case class StateStoreSaveExec(
 
 /** Physical operator for executing streaming Deduplicate. */
 case class StreamingDeduplicateExec(
-    override val keyExpressions: Seq[Attribute],
+    keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
-    override val eventTimeWatermark: Option[Long] = None)
+    eventTimeWatermark: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */

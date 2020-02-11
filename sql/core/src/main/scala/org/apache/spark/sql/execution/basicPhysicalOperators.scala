@@ -797,7 +797,7 @@ object SubqueryExec {
 /**
  * A wrapper for reused [[BaseSubqueryExec]].
  */
-case class ReusedSubqueryExec(override val child: BaseSubqueryExec)
+case class ReusedSubqueryExec(child: BaseSubqueryExec)
   extends BaseSubqueryExec with LeafExecNode {
 
   override def name: String = child.name

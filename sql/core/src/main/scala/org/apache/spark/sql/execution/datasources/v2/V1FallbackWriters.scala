@@ -37,9 +37,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Rows in the output data set are appended.
  */
 case class AppendDataExecV1(
-    override val table: SupportsWrite,
-    override val writeOptions: CaseInsensitiveStringMap,
-    override val plan: LogicalPlan) extends V1FallbackWriters {
+    table: SupportsWrite,
+    writeOptions: CaseInsensitiveStringMap,
+    plan: LogicalPlan) extends V1FallbackWriters {
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV1(newWriteBuilder().buildForV1Write())
