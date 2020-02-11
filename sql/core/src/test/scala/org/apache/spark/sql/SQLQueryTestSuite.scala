@@ -21,7 +21,7 @@ import java.io.File
 import java.util.{Locale, TimeZone}
 import java.util.regex.Pattern
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -250,7 +250,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   protected def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
+    val (comments, code) = input.split("\n").partition { line =>
+      val newLine = line.trim
+      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
+    }
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -263,36 +266,38 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       }
     }.flatten
 
-    // List of SQL queries to run
-    // Replace bracketed comments with a placeholder
-    var codeStr = (importedCode ++ code).mkString("\n")
-    val m = Pattern.compile("/\\*(\\s|.)*?\\*/").matcher(codeStr)
-    val multiCommentMap = new HashMap[String, String]()
-    var i = 0
-    while(m.find()) {
-      val group = m.group
-      val placeHolder = s"/*$i*/"
-      multiCommentMap(placeHolder) = group
-      codeStr = codeStr.replace(group, placeHolder)
-      i += 1
+    val tempQueries = if (code.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      val querys = new ArrayBuffer[String]
+      val otherCodes = new ArrayBuffer[String]
+      var tempStr = ""
+      var start = false
+      for (c <- code) {
+        if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
+          start = true
+          querys ++= otherCodes.toSeq.mkString("\n").split("(?<=[^\\\\]);")
+          otherCodes.clear()
+        } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
+          start = false
+          if (tempStr.endsWith(";")) {
+            tempStr = tempStr.substring(0, tempStr.length - 1)
+          }
+          querys += s"\n$tempStr"
+          tempStr = ""
+        } else if (start) {
+          tempStr += s"\n$c"
+        } else {
+          otherCodes += c
+        }
+      }
+      querys.toSeq
+    } else {
+      (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);").toSeq
     }
 
-    val tempQueries = codeStr.split("(?<=[^\\\\]);")
-      .map(_.trim).filter(_ != "").toSeq
+    // List of SQL queries to run
+    val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
-
-    // Replace placeholders with original bracketed comments
-    val pattern = Pattern.compile("/\\*[0-9]+\\*/")
-    val queries = tempQueries.map { query =>
-      var newQuery = query
-      val m = pattern.matcher(query)
-      while(m.find()) {
-        val group = m.group
-        newQuery = newQuery.replace(group, multiCommentMap(group))
-      }
-      newQuery
-    }
 
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
     val settings = settingLines.flatMap(_.split(",").map { kv =>
