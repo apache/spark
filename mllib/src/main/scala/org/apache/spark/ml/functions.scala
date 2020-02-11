@@ -55,7 +55,9 @@ object functions {
 
   /**
    * Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
-   *
+   * @param v:
+   * @param dtype:
+   * @return
    * @since 3.0.0
    */
   def vector_to_array(v: Column, dtype: String = "float64"): Column = {

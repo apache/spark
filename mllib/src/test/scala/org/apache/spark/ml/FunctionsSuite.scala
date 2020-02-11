@@ -82,7 +82,7 @@ class FunctionsSuite extends MLTest {
     df_array_float.schema.fields(0).dataType.simpleString == "array<float>"
     df_array_float.schema.fields(1).dataType.simpleString == "array<float>"
 
-    val thrown2 = intercept[SparkException] {
+    val thrown2 = intercept[IllegalArgumentException] {
       df3.select(
         vector_to_array('vec, dtype = "float16"), vector_to_array('oldVec, dtype = "float16"))
     }
