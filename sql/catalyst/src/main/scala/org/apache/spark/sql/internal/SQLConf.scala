@@ -2016,6 +2016,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MAP_DEFAULT_TO_STRING =
+    buildConf("spark.sql.legacy.mapDefaultToStringType.enabled")
+      .internal()
+      .doc("When set to true, it returns an empty map of string type when the `map` " +
+        "function is called without any parameters. Otherwise, it returns an empty " +
+        "map of `NullType`")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()

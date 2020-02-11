@@ -3499,11 +3499,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
-  test("SPARK-21281 use string types by default if map have no argument") {
-    val ds = spark.range(1)
-    var expectedSchema = new StructType()
-      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
-    assert(ds.select(map().as("x")).schema == expectedSchema)
+  test("SPARK-30790: Empty map of <NullType,NullType> for map function with no arguments") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (mapDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_MAP_DEFAULT_TO_STRING.key -> mapDefaultToString.toString) {
+          val schema = spark.range(1).select(map()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[MapType])
+          val actualKeyType = schema.head.dataType.asInstanceOf[MapType].keyType
+          val actualValueType = schema.head.dataType.asInstanceOf[MapType].valueType
+          assert(actualKeyType === expectedType && actualValueType === expectedType)
+        }
+    }
   }
 
   test("SPARK-21281 fails if functions have no argument") {

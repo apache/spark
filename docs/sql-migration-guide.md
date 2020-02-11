@@ -218,6 +218,8 @@ license: |
   
   - Since Spark 3.0, when the `array` function is called without any parameters, it returns an empty array of `NullType`. In Spark version 2.4 and earlier, it returns an empty array of string type. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.arrayDefaultToStringType.enabled` to `true`.
 
+  - Since Spark 3.0, when the `map` function is called without any parameters, it returns an empty map of `NullType`. In Spark version 2.4 and earlier, it returns an empty map of string type. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.mapDefaultToStringType.enabled` to `true`.
+
   - Since Spark 3.0, the interval literal syntax does not allow multiple from-to units anymore. For example, `SELECT INTERVAL '1-1' YEAR TO MONTH '2-2' YEAR TO MONTH'` throws parser exception.
 
   - Since Spark 3.0, when casting interval values to string type, there is no "interval" prefix, e.g. `1 days 2 hours`. In Spark version 2.4 and earlier, the string contains the "interval" prefix like `interval 1 days 2 hours`.
