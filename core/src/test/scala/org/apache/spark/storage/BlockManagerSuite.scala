@@ -624,17 +624,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getRemoteBytes("list1").isEmpty)
   }
 
-  Seq(0, Int.MaxValue - 512).foreach { maxRemoteBlockSizeFetchToMem =>
-    // Trying different values of maxRemoteBlockSizeFetchToMem to test both
-    // non-streaming and streaming flows of Block replication
-    test(s"test for Block replication retry logic with " +
-      s"maxRemoteBlockSizeFetchToMem: ${maxRemoteBlockSizeFetchToMem}") {
+  Seq(false, true).foreach { stream =>
+    test(s"test for Block replication retry logic (stream = $stream)") {
       val storageLevel = StorageLevel(
         useDisk = false, useMemory = true, deserialized = true, replication = 3)
       // Retry replication logic for 2 failures
       conf.set(STORAGE_MAX_REPLICATION_FAILURE, 2)
       // Custom block replication policy which prioritizes BlockManagers as per hostnames
       conf.set(STORAGE_REPLICATION_POLICY, classOf[SortOnHostNameBlockReplicationPolicy].getName)
+      // To use upload block stream flow, set maxRemoteBlockSizeFetchToMem to 0
+      val maxRemoteBlockSizeFetchToMem = if (stream) 0 else Int.MaxValue - 512
       conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
       val bm1 = makeBlockManager(12000, "host-1", master) // BM with sufficient memory
       val bm2 = makeBlockManager(10, "host-2", master) // BM with less memory

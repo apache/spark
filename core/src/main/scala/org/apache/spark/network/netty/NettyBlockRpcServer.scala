@@ -106,11 +106,13 @@ class NettyBlockRpcServer(
         logDebug(s"Receiving replicated block $blockId with level ${level} " +
           s"from ${client.getSocketAddress}")
         val blockStored = blockManager.putBlockData(blockId, data, level, classTag)
-        if (!blockStored) {
-          throw new Exception(s"Upload block for $blockId failed. This " +
-            s"mostly happens when there is not sufficient space available to store the block.")
+        if (blockStored) {
+          responseContext.onSuccess(ByteBuffer.allocate(0))
+        } else {
+          val exception = new Exception(s"Upload block for $blockId failed. This mostly happens " +
+            s"when there is not sufficient space available to store the block.")
+          responseContext.onFailure(exception)
         }
-        responseContext.onSuccess(ByteBuffer.allocate(0))
     }
   }
 
