@@ -723,9 +723,9 @@ object DateTimeUtils {
     val truncated = level match {
       case TRUNC_TO_MILLISECOND => millis
       case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
+        millis - Math.floorMod(millis, MILLIS_PER_SECOND)
       case TRUNC_TO_MINUTE =>
-        millis - millis % MILLIS_PER_MINUTE
+        millis - Math.floorMod(millis, MILLIS_PER_MINUTE)
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
