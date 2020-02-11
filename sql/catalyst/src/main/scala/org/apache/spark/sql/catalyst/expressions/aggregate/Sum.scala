@@ -57,6 +57,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => DoubleType
   }
 
+  private lazy val wrongResultDueToOverflow = false
   private lazy val sumDataType = resultType
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
@@ -73,7 +74,13 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     if (child.nullable) {
       Seq(
         /* sum = */
-        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
+        resultType match {
+          case d: DecimalType => coalesce(
+            CheckOverflow(
+              coalesce(sum, zero) + child.cast(sumDataType), d, wrongResultDueToOverflow),
+            sum)
+          case _ => coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
+        }
       )
     } else {
       Seq(
@@ -86,7 +93,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
       /* sum = */
-      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
+      resultType match {
+        case d: DecimalType => coalesce(
+          CheckOverflow(coalesce(sum.left, zero) + sum.right, d, wrongResultDueToOverflow),
+          sum.left)
+        case _ => coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
+      }
     )
   }
 

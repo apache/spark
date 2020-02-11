@@ -169,18 +169,14 @@ class DataFrameSuite extends QueryTest
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegenEnabled)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (!ansiEnabled) {
-          checkAnswer(structDf, Row(null))
-        } else {
-          val e = intercept[SparkException] {
-            structDf.collect
-          }
-          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        val e = intercept[SparkException] {
+          structDf.collect
         }
+        assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+        assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
       }
     }
   }

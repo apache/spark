@@ -3319,6 +3319,32 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-28067 - Aggregate sum should not return wrong results") {
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        val df = Seq(
+          (BigDecimal("10000000000000000000"), 1),
+          (BigDecimal("10000000000000000000"), 1),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+        val df2 = df.withColumnRenamed("decNum", "decNum2").join(df, "intNum").agg(sum("decNum"))
+        val e = intercept[SparkException] {
+          df2.collect()
+        }
+        assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+        assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+      }
+    }
+  }
+
   test("SPARK-29213: FilterExec should not throw NPE") {
     withTempView("t1", "t2", "t3") {
       sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
