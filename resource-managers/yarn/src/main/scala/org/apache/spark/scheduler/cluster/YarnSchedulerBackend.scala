@@ -130,8 +130,8 @@ private[spark] abstract class YarnSchedulerBackend(
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
       (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
     }
-    RequestExecutors(numLocalityAwareTasksPerResourceProfileId,
-      filteredRPHostToLocalTaskCount, nodeBlacklist, resourceProfileToTotalExecs)
+    RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
+      filteredRPHostToLocalTaskCount, nodeBlacklist)
   }
 
   /**
