@@ -709,20 +709,30 @@ class DataSourceV2SQLSuite
   }
 
   test("qualified column names for v1 tables") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-
-    withTable("t") {
-      sql("CREATE TABLE t USING json AS SELECT 1 AS i")
-      checkAnswer(sql("select default.t.i from spark_catalog.t"), Row(1))
-      checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
-      checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
-
-      // catalog name cannot be used for v1 tables.
-      val ex = intercept[AnalysisException] {
-        sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
+    Seq(true, false).foreach { useV1Table =>
+      val format = if (useV1Table) "json" else v2Format
+      if (useV1Table) {
+        spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      } else {
+        spark.conf.set(
+          V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
       }
-      assert(ex.getMessage.contains("cannot resolve '`spark_catalog.default.t.i`"))
+
+      withTable("t") {
+        sql(s"CREATE TABLE t USING $format AS SELECT 1 AS i")
+        checkAnswer(sql("select i from t"), Row(1))
+        checkAnswer(sql("select t.i from t"), Row(1))
+        checkAnswer(sql("select default.t.i from t"), Row(1))
+        checkAnswer(sql("select default.t.i from spark_catalog.t"), Row(1))
+        checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
+        checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
+
+        // catalog name cannot be used for v1 tables.
+        val ex = intercept[AnalysisException] {
+          sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
+        }
+        assert(ex.getMessage.contains("cannot resolve '`spark_catalog.default.t.i`"))
+      }
     }
   }
 
