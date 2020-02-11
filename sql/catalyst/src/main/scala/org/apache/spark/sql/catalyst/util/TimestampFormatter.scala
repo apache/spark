@@ -240,6 +240,10 @@ object TimestampFormatter {
     getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 
+  def apply(format: String, zoneId: ZoneId, legacyFormat: LegacyDateFormat): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat)
+  }
+
   def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
     getFormatter(Some(format), zoneId)
   }
@@ -250,9 +254,5 @@ object TimestampFormatter {
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
     new FractionTimestampFormatter(zoneId)
-  }
-
-  def withStrongLegacy(format: String, zoneId: ZoneId): TimestampFormatter = {
-    apply(format, zoneId, defaultLocale, SIMPLE_DATE_FORMAT)
   }
 }

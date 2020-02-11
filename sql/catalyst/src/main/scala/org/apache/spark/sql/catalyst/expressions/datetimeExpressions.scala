@@ -23,14 +23,13 @@ import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
-
 import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
@@ -622,13 +621,15 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (right.foldable) {
-      Option(right.eval()).map(format => TimestampFormatter(format.toString, zoneId))
+      Option(right.eval()).map { format =>
+        TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      }
     } else None
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter.withStrongLegacy(format.toString, zoneId)
+      TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
     } else {
       formatter.get
     }
@@ -643,10 +644,14 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
       })
     }.getOrElse {
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""UTF8String.fromString($tf$$.MODULE$$.withStrongLegacy($format.toString(), $zid)
-          .format($timestamp))"""
+        s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
+            |  $format.toString(),
+            |  $zid,
+            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+            |.format($timestamp))""".stripMargin
       })
     }
   }
@@ -758,7 +763,7 @@ abstract class ToTimestamp
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter.withStrongLegacy(constFormat.toString, zoneId)
+      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
     } catch {
       case NonFatal(_) => null
     }
@@ -791,8 +796,8 @@ abstract class ToTimestamp
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter.withStrongLegacy(formatString, zoneId).parse(
-                t.asInstanceOf[UTF8String].toString) / downScaleFactor
+              TimestampFormatter(formatString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+                .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
             }
@@ -832,11 +837,15 @@ abstract class ToTimestamp
       case StringType =>
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+        val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $tf$$.MODULE$$.withStrongLegacy($format.toString(), $zid)
-                .parse($string.toString()) / $downScaleFactor;
+              ${ev.value} = $tf$$.MODULE$$.apply(
+                $format.toString(),
+                $zid,
+                $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+              .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -921,7 +930,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter.withStrongLegacy(constFormat.toString, zoneId)
+      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
     } catch {
       case NonFatal(_) => null
     }
@@ -947,8 +956,9 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(TimestampFormatter.withStrongLegacy(f.toString, zoneId)
-              .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
+            UTF8String.fromString(
+              TimestampFormatter(f.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+                .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
           }
@@ -980,11 +990,13 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     } else {
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($tf$$.MODULE$$.withStrongLegacy($f.toString(), $zid).
-            format($seconds * 1000000L));
+          ${ev.value} = UTF8String.fromString(
+            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+              .format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
         }"""
