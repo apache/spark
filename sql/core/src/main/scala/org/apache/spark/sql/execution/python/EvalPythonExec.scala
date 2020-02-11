@@ -62,8 +62,6 @@ abstract class EvalPythonExec extends UnaryExecNode {
 
   def resultAttrs: Seq[Attribute]
 
-  override def child: SparkPlan
-
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
