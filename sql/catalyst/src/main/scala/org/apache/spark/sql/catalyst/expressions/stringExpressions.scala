@@ -719,7 +719,7 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
+    _FUNC_(trimStr, str) - Remove the leading and trailing `trimStr` characters from `str`.
 
     _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
@@ -750,7 +750,7 @@ object StringTrim {
        SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SL');
+      > SELECT _FUNC_('SL', 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
@@ -847,7 +847,7 @@ object StringTrimLeft {
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
 
-    _FUNC_(str, trimStr) - Removes the leading string contains the characters from the trim string
+    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,7 +858,7 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SparkSQLS', 'Sp');
+      > SELECT _FUNC_('Sp', 'SparkSQLS');
        arkSQLS
   """,
   since = "1.5.0")
@@ -949,7 +949,7 @@ object StringTrimRight {
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(str, trimStr) - Removes the trailing string which contains the characters from the trim string from the `str`
+    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,7 +960,7 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SQLS');
+      > SELECT _FUNC_('SQLS', 'SSparkSQLS');
        SSpark
   """,
   since = "1.5.0")
