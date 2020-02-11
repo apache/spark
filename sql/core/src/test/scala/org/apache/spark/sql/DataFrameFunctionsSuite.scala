@@ -3499,12 +3499,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
-  test("SPARK-21281 use string types by default if array and map have no argument") {
+  test("SPARK-21281 use string types by default if map have no argument") {
     val ds = spark.range(1)
     var expectedSchema = new StructType()
-      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
-    assert(ds.select(array().as("x")).schema == expectedSchema)
-    expectedSchema = new StructType()
       .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
     assert(ds.select(map().as("x")).schema == expectedSchema)
   }
@@ -3576,6 +3573,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("like(str, pattern, escape)").collect()
     }.getMessage
     assert(nonFoldableError.contains("The 'escape' parameter must be a string literal"))
+  }
+
+  test("SPARK-29462: Empty array of NullType for array function with no arguments") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (arrayDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_ARRAY_DEFAULT_TO_STRING.key -> arrayDefaultToString.toString) {
+          val schema = spark.range(1).select(array()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[ArrayType])
+          val actualType = schema.head.dataType.asInstanceOf[ArrayType].elementType
+          assert(actualType === expectedType)
+        }
+    }
   }
 }
 
