@@ -64,19 +64,19 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     >>> import pandas as pd
     >>> from pyspark.sql.functions import pandas_udf
 
+    From Spark 3.0 with Python 3.6+, `Python type hints <https://www.python.org/dev/peps/pep-0484>`_
+    detect the function types as below:
+
+    >>> @pandas_udf(IntegerType())
+    ... def slen(s: pd.Series) -> pd.Series:
+    ...     return s.str.len()
+
     Prior to Spark 3.0, the pandas UDF used `functionType` to decide the execution type as below:
 
     >>> from pyspark.sql.functions import PandasUDFType
     >>> from pyspark.sql.types import IntegerType
     >>> @pandas_udf(IntegerType(), PandasUDFType.SCALAR)
     ... def slen(s):
-    ...     return s.str.len()
-
-    From Spark 3.0 with Python 3.6+, `Python type hints <https://www.python.org/dev/peps/pep-0484>`_
-    detect the function types as below:
-
-    >>> @pandas_udf(IntegerType())
-    ... def slen(s: pd.Series) -> pd.Series:
     ...     return s.str.len()
 
     It is preferred to specify type hints for the pandas UDF instead of specifying pandas UDF
