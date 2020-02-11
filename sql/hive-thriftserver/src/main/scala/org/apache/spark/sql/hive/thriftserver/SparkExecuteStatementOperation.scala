@@ -203,58 +203,60 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
-    if (!runInBackground) {
-      execute()
-    } else {
-      val sparkServiceUGI = Utils.getUGI()
+    sqlContext.sparkSession.withActive {
+      if (!runInBackground) {
+        execute()
+      } else {
+        val sparkServiceUGI = Utils.getUGI()
 
-      // Runnable impl to call runInternal asynchronously,
-      // from a different thread
-      val backgroundOperation = new Runnable() {
+        // Runnable impl to call runInternal asynchronously,
+        // from a different thread
+        val backgroundOperation = new Runnable() {
 
-        override def run(): Unit = {
-          val doAsAction = new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              registerCurrentOperationLog()
-              try {
-                execute()
-              } catch {
-                case e: HiveSQLException =>
-                  setOperationException(e)
-                  log.error("Error running hive query: ", e)
+          override def run(): Unit = {
+            val doAsAction = new PrivilegedExceptionAction[Unit]() {
+              override def run(): Unit = {
+                registerCurrentOperationLog()
+                try {
+                  execute()
+                } catch {
+                  case e: HiveSQLException =>
+                    setOperationException(e)
+                    log.error("Error running hive query: ", e)
+                }
               }
             }
-          }
 
-          try {
-            sparkServiceUGI.doAs(doAsAction)
-          } catch {
-            case e: Exception =>
-              setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName(), e)
+            try {
+              sparkServiceUGI.doAs(doAsAction)
+            } catch {
+              case e: Exception =>
+                setOperationException(new HiveSQLException(e))
+                logError("Error running hive query as user : " +
+                  sparkServiceUGI.getShortUserName(), e)
+            }
           }
         }
-      }
-      try {
-        // This submit blocks if no background threads are available to run this operation
-        val backgroundHandle =
-          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
-        setBackgroundHandle(backgroundHandle)
-      } catch {
-        case rejected: RejectedExecutionException =>
-          logError("Error submitting query in background, query rejected", rejected)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
-          throw new HiveSQLException("The background threadpool cannot accept" +
-            " new task for execution, please retry the operation", rejected)
-        case NonFatal(e) =>
-          logError(s"Error executing query in background", e)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          throw new HiveSQLException(e)
+        try {
+          // This submit blocks if no background threads are available to run this operation
+          val backgroundHandle =
+            parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
+          setBackgroundHandle(backgroundHandle)
+        } catch {
+          case rejected: RejectedExecutionException =>
+            logError("Error submitting query in background, query rejected", rejected)
+            setState(OperationState.ERROR)
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
+            throw new HiveSQLException("The background threadpool cannot accept" +
+              " new task for execution, please retry the operation", rejected)
+          case NonFatal(e) =>
+            logError(s"Error executing query in background", e)
+            setState(OperationState.ERROR)
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, e.getMessage, SparkUtils.exceptionString(e))
+            throw new HiveSQLException(e)
+        }
       }
     }
   }
