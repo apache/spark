@@ -48,12 +48,6 @@ def vector_to_array(col, dtype="float64"):
     >>> df2.schema.fields
     [StructField(vec,ArrayType(FloatType,false),false),
     StructField(oldVec,ArrayType(FloatType,false),false)]
-    >>> df.select(vector_to_array("vec", "float16").alias("vec"),
-    ...           vector_to_array("oldVec", "float16").alias("oldVec")).collect()
-    Traceback (most recent call last):
-        ...
-    pyspark.sql.utils.IllegalArgumentException:
-    Unsupported dtype: float16. Valid values: float64, float32.
     """
     sc = SparkContext._active_spark_context
     return Column(

@@ -86,7 +86,7 @@ class FunctionsSuite extends MLTest {
       df3.select(
         vector_to_array('vec, dtype = "float16"), vector_to_array('oldVec, dtype = "float16"))
     }
-    assert(thrown2.getCause.getMessage.contains(
+    assert(thrown2.getMessage.contains(
       s"Unsupported dtype: float16. Valid values: float64, float32."))
   }
 }
