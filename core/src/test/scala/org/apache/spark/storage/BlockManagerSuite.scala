@@ -627,16 +627,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   Seq(0, Int.MaxValue - 512).foreach { maxRemoteBlockSizeFetchToMem =>
     // Trying different values of maxRemoteBlockSizeFetchToMem to test both
     // non-streaming and streaming flows of Block replication
-    test(s"test for Block replcation retry logic with " +
+    test(s"test for Block replication retry logic with " +
       s"maxRemoteBlockSizeFetchToMem: ${maxRemoteBlockSizeFetchToMem}") {
       val storageLevel = StorageLevel(
         useDisk = false, useMemory = true, deserialized = true, replication = 3)
       // Retry replication logic for 2 failures
-      conf.set("spark.storage.maxReplicationFailures", "2")
+      conf.set(STORAGE_MAX_REPLICATION_FAILURE, 2)
       // Custom block replication policy which prioritizes BlockManagers as per hostnames
-      conf.set("spark.storage.replication.policy",
-        classOf[SortOnHostNameBlockReplicationPolicy].getName)
-      conf.set("spark.network.maxRemoteBlockSizeFetchToMem", maxRemoteBlockSizeFetchToMem.toString)
+      conf.set(STORAGE_REPLICATION_POLICY, classOf[SortOnHostNameBlockReplicationPolicy].getName)
+      conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
       val bm1 = makeBlockManager(12000, "host-1", master) // BM with sufficient memory
       val bm2 = makeBlockManager(10, "host-2", master) // BM with less memory
       val bm3 = makeBlockManager(10, "host-3", master) // BM with less memory
@@ -1849,11 +1848,12 @@ private object BlockManagerSuite {
 // BM-y(host-1), BM-x(host-2), BM-z(host-3)
 class SortOnHostNameBlockReplicationPolicy
   extends BlockReplicationPolicy {
-  override def prioritize(blockManagerId: BlockManagerId,
-                          peers: Seq[BlockManagerId],
-                          peersReplicatedTo: mutable.HashSet[BlockManagerId],
-                          blockId: BlockId,
-                          numReplicas: Int): List[BlockManagerId] = {
+  override def prioritize(
+      blockManagerId: BlockManagerId,
+      peers: Seq[BlockManagerId],
+      peersReplicatedTo: mutable.HashSet[BlockManagerId],
+      blockId: BlockId,
+      numReplicas: Int): List[BlockManagerId] = {
     peers.sortBy(_.host).toList
   }
 }
