@@ -71,7 +71,7 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   @transient
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
-  def formatDate(d: Date): String = fdf.format(d)
+  override def formatDate(d: Date): String = fdf.format(d)
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
