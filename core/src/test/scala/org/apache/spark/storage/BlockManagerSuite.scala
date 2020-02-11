@@ -625,12 +625,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   Seq(0, Int.MaxValue - 512).foreach { maxRemoteBlockSizeFetchToMem =>
+    // Trying different values of maxRemoteBlockSizeFetchToMem to test both
+    // non-streaming and streaming flows of Block replication
     test(s"test for Block replcation retry logic with " +
       s"maxRemoteBlockSizeFetchToMem: ${maxRemoteBlockSizeFetchToMem}") {
       val storageLevel = StorageLevel(
         useDisk = false, useMemory = true, deserialized = true, replication = 3)
-      conf.set("spark.shuffle.io.maxRetries", "0")
+      // Retry replication logic for 2 failures
       conf.set("spark.storage.maxReplicationFailures", "2")
+      // Custom block replication policy which prioritizes BlockManagers as per hostnames
       conf.set("spark.storage.replication.policy",
         classOf[SortOnHostNameBlockReplicationPolicy].getName)
       conf.set("spark.network.maxRemoteBlockSizeFetchToMem", maxRemoteBlockSizeFetchToMem.toString)
@@ -646,10 +649,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val blockId = "list"
       bm1.putIterator(blockId, List(data).iterator, storageLevel, tellMaster = true)
 
-      // bm2, bm3 and bm5 had low memory. So Block should can't be stored by them.
-      // bm6 had sufficient memory but the maxReplicationFailures is set to 2.
+      // Replication will be tried by bm1 in this order: bm2, bm3, bm4, bm5, bm6
+      // bm2, bm3 and bm5 had low memory. So Block can't be stored by them.
+      // bm6 has sufficient memory but the maxReplicationFailures is set to 2.
       // So retry won't happen on bm6 as 3 failure (by trying on bm2, bm3 and bm5) have
-      // already happened by then
+      // already happened by then. So block will be present only on bm1 and bm4
       Seq(bm2, bm3, bm5, bm6).foreach { bm =>
         intercept[BlockNotFoundException] {
           bm.getLocalBlockData(blockId).nioByteBuffer().array()
@@ -1840,6 +1844,9 @@ private object BlockManagerSuite {
 
 }
 
+// BlockReplicationPolicy to prioritize BlockManagers based on hostnames
+// Examples - for BM-x(host-2), BM-y(host-1), BM-z(host-3), it will prioritize them as
+// BM-y(host-1), BM-x(host-2), BM-z(host-3)
 class SortOnHostNameBlockReplicationPolicy
   extends BlockReplicationPolicy {
   override def prioritize(
