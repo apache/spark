@@ -624,6 +624,43 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getRemoteBytes("list1").isEmpty)
   }
 
+  Seq(0, Int.MaxValue - 512).foreach { maxRemoteBlockSizeFetchToMem =>
+    test(s"test for Block replcation retry logic with " +
+      s"maxRemoteBlockSizeFetchToMem: ${maxRemoteBlockSizeFetchToMem}") {
+      val storageLevel = StorageLevel(
+        useDisk = false, useMemory = true, deserialized = true, replication = 3)
+      conf.set("spark.shuffle.io.maxRetries", "0")
+      conf.set("spark.storage.maxReplicationFailures", "2")
+      conf.set("spark.storage.replication.policy",
+        classOf[SortOnHostNameBlockReplicationPolicy].getName)
+      conf.set("spark.network.maxRemoteBlockSizeFetchToMem", maxRemoteBlockSizeFetchToMem.toString)
+      val bm1 = makeBlockManager(12000, "host-1", master) // BM with sufficient memory
+      val bm2 = makeBlockManager(10, "host-2", master) // BM with less memory
+      val bm3 = makeBlockManager(10, "host-3", master) // BM with less memory
+      val bm4 = makeBlockManager(12000, "host-4", master) // BM with sufficient memory
+      val bm5 = makeBlockManager(10, "host-5", master) // BM with less memory
+      val bm6 = makeBlockManager(12000, "host-6", master) // BM with sufficient memory
+
+      val data = (1 to 10).toArray
+      val serializedData = serializer.newInstance().serialize(data).array()
+      val blockId = "list"
+      bm1.putIterator(blockId, List(data).iterator, storageLevel, tellMaster = true)
+
+      // bm2, bm3 and bm5 had low memory. So Block should can't be stored by them.
+      // bm6 had sufficient memory but the maxReplicationFailures is set to 2.
+      // So retry won't happen on bm6 as 3 failure (by trying on bm2, bm3 and bm5) have
+      // already happened by then
+      Seq(bm2, bm3, bm5, bm6).foreach { bm =>
+        intercept[BlockNotFoundException] {
+          bm.getLocalBlockData(blockId).nioByteBuffer().array()
+        }
+      }
+      Seq(bm1, bm4).foreach { bm =>
+        assert(bm.getLocalBlockData(blockId).nioByteBuffer().array() === serializedData)
+      }
+    }
+  }
+
   Seq(
     StorageLevel(useDisk = true, useMemory = false, deserialized = false),
     StorageLevel(useDisk = true, useMemory = false, deserialized = true),
@@ -1801,4 +1838,16 @@ private object BlockManagerSuite {
     }
   }
 
+}
+
+class SortOnHostNameBlockReplicationPolicy
+  extends BlockReplicationPolicy {
+  override def prioritize(
+                           blockManagerId: BlockManagerId,
+                           peers: Seq[BlockManagerId],
+                           peersReplicatedTo: mutable.HashSet[BlockManagerId],
+                           blockId: BlockId,
+                           numReplicas: Int): List[BlockManagerId] = {
+    peers.sortBy(_.host).toList
+  }
 }
