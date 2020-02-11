@@ -669,7 +669,7 @@ private[spark] class BlockManager(
         val blockStored = TempFileBasedBlockStoreUpdater(
           blockId, level, classTag, tmpFile, blockSize).save()
         if (!blockStored) {
-          throw new Exception(s"Failure while trying to store block $blockId.")
+          throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
         }
       }
 

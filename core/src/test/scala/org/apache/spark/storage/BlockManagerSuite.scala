@@ -1849,12 +1849,11 @@ private object BlockManagerSuite {
 // BM-y(host-1), BM-x(host-2), BM-z(host-3)
 class SortOnHostNameBlockReplicationPolicy
   extends BlockReplicationPolicy {
-  override def prioritize(
-                           blockManagerId: BlockManagerId,
-                           peers: Seq[BlockManagerId],
-                           peersReplicatedTo: mutable.HashSet[BlockManagerId],
-                           blockId: BlockId,
-                           numReplicas: Int): List[BlockManagerId] = {
+  override def prioritize(blockManagerId: BlockManagerId,
+                          peers: Seq[BlockManagerId],
+                          peersReplicatedTo: mutable.HashSet[BlockManagerId],
+                          blockId: BlockId,
+                          numReplicas: Int): List[BlockManagerId] = {
     peers.sortBy(_.host).toList
   }
 }
