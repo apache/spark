@@ -295,7 +295,7 @@ private[hive] class SparkExecuteStatementOperation(
           resultList.get.iterator
         }
       }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+      dataTypes = result.schema.fields.map(_.dataType)
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
@@ -360,7 +360,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def withSchedulerPool[T](body: => T): T = sqlContext.sparkSession.withActive {
+  private def withSchedulerPool[T](body: => T): T = {
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
       sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)

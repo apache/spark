@@ -503,7 +503,9 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def schema: StructType = queryExecution.analyzed.schema
+  def schema: StructType = sparkSession.withActive {
+    queryExecution.analyzed.schema
+  }
 
   /**
    * Prints the schema to the console in a nice tree format.
