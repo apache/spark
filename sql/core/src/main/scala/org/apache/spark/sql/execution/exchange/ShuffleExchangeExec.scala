@@ -216,11 +216,6 @@ object ShuffleExchangeExec {
           override def numPartitions: Int = 1
           override def getPartition(key: Any): Int = 0
         }
-      case PassThroughPartitioning(_, _, n) =>
-        new Partitioner {
-          override def numPartitions: Int = n
-          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
-        }
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -240,10 +235,6 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case p: PassThroughPartitioning =>
-        val projection = UnsafeProjection.create(
-          Divide(p.key, Literal(p.base)) :: Nil, outputAttributes)
-        row => projection(row).getInt(0)
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
 

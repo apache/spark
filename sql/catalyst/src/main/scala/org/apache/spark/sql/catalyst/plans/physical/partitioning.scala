@@ -340,12 +340,3 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
     case _ => false
   }
 }
-
-/**
- * A test-only partitioning that just output the "given key / base" as partition id.
- */
-case class PassThroughPartitioning(key: Attribute, base: Int, numPartitions: Int)
-  extends Partitioning {
-  assert(key.dataType == IntegerType)
-  override def satisfies0(required: Distribution): Boolean = true
-}

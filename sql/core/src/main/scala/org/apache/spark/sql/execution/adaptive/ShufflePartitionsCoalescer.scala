@@ -25,9 +25,10 @@ import org.apache.spark.internal.Logging
 object ShufflePartitionsCoalescer extends Logging {
 
   /**
-   * Coalesce the same range of partitions (firstPartitionIndex to lastPartitionIndex, inclusive)
-   * from multiple shuffles. This method assumes that all the shuffles have the same number of
-   * partitions, and the partitions of same index will be read together by one task.
+   * Coalesce the same range of partitions (`firstPartitionIndex`` to `lastPartitionIndex`, the
+   * start is inclusive and the end is exclusive) from multiple shuffles. This method assumes that
+   * all the shuffles have the same number of partitions, and the partitions of same index will be
+   * read together by one task.
    *
    * The strategy used to determine the number of coalesced partitions is described as follows.
    * To determine the number of coalesced partitions, we have a target size for a coalesced

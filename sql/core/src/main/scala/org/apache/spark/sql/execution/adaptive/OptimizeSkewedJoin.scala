@@ -248,12 +248,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val startIndices = ShufflePartitionsCoalescer.coalescePartitions(
         Array(leftStats, rightStats),
         firstPartitionIndex = nonSkewPartitionIndices.head,
-        lastPartitionIndex = nonSkewPartitionIndices.last,
+        // `lastPartitionIndex` is exclusive.
+        lastPartitionIndex = nonSkewPartitionIndices.last + 1,
         advisoryTargetSize = conf.targetPostShuffleInputSize)
       startIndices.indices.map { i =>
         val startIndex = startIndices(i)
         val endIndex = if (i == startIndices.length - 1) {
-          // the `endIndex` is exclusive.
+          // `endIndex` is exclusive.
           nonSkewPartitionIndices.last + 1
         } else {
           startIndices(i + 1)
