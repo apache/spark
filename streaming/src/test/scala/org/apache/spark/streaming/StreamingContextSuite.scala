@@ -984,7 +984,7 @@ object SlowTestReceiver {
 }
 
 /** Streaming application for testing DStream and RDD creation sites */
-package object testPackage extends Assertions {
+object testPackage extends Assertions {
   def test(): Unit = {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
     val ssc = new StreamingContext(conf, Milliseconds(100))

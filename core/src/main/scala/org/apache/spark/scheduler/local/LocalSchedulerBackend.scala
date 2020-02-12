@@ -26,6 +26,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -57,8 +58,10 @@ private[spark] class LocalEndpoint(
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = Utils.localCanonicalHostName()
 
+  // local mode doesn't support extra resources like GPUs right now
   private val executor = new Executor(
-    localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
+    localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true,
+    resources = Map.empty[String, ResourceInformation])
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>

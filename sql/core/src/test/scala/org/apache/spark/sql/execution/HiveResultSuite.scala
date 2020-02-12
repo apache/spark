@@ -17,25 +17,35 @@
 
 package org.apache.spark.sql.execution
 
-import java.sql.{Date, Timestamp}
-
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
   test("date formatting in hive result") {
-    val date = "2018-12-28"
-    val executedPlan = Seq(Date.valueOf(date)).toDS().queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
-    assert(result.head == date)
+    val dates = Seq("2018-12-28", "1582-10-13", "1582-10-14", "1582-10-15")
+    val df = dates.toDF("a").selectExpr("cast(a as date) as b")
+    val executedPlan1 = df.queryExecution.executedPlan
+    val result = HiveResult.hiveResultString(executedPlan1)
+    assert(result == dates)
+    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
+    val result2 = HiveResult.hiveResultString(executedPlan2)
+    assert(result2 == dates.map(x => s"[$x]"))
   }
 
   test("timestamp formatting in hive result") {
-    val timestamp = "2018-12-28 01:02:03"
-    val executedPlan = Seq(Timestamp.valueOf(timestamp)).toDS().queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
-    assert(result.head == timestamp)
+    val timestamps = Seq(
+      "2018-12-28 01:02:03",
+      "1582-10-13 01:02:03",
+      "1582-10-14 01:02:03",
+      "1582-10-15 01:02:03")
+    val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
+    val executedPlan1 = df.queryExecution.executedPlan
+    val result = HiveResult.hiveResultString(executedPlan1)
+    assert(result == timestamps)
+    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
+    val result2 = HiveResult.hiveResultString(executedPlan2)
+    assert(result2 == timestamps.map(x => s"[$x]"))
   }
 
   test("toHiveString correctly handles UDTs") {

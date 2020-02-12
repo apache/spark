@@ -22,7 +22,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types._
 
 
@@ -193,6 +193,8 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
+  val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
+
   // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
@@ -289,34 +291,34 @@ object FunctionRegistry {
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
-    expression[First]("first_value"),
+    expression[First]("first_value", true),
     expression[Kurtosis]("kurtosis"),
     expression[Last]("last"),
-    expression[Last]("last_value"),
+    expression[Last]("last_value", true),
     expression[Max]("max"),
     expression[MaxBy]("max_by"),
-    expression[Average]("mean"),
+    expression[Average]("mean", true),
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
-    expression[ApproximatePercentile]("approx_percentile"),
-    expression[StddevSamp]("std"),
-    expression[StddevSamp]("stddev"),
+    expression[ApproximatePercentile]("approx_percentile", true),
+    expression[StddevSamp]("std", true),
+    expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
-    expression[VarianceSamp]("variance"),
+    expression[VarianceSamp]("variance", true),
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[BoolAnd]("every"),
+    expression[BoolAnd]("every", true),
     expression[BoolAnd]("bool_and"),
-    expression[BoolOr]("any"),
-    expression[BoolOr]("some"),
+    expression[BoolOr]("any", true),
+    expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
 
     // string functions
@@ -420,9 +422,6 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
-    expression[JustifyDays]("justify_days"),
-    expression[JustifyHours]("justify_hours"),
-    expression[JustifyInterval]("justify_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions
@@ -573,7 +572,7 @@ object FunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String)
+  private def expression[T <: Expression](name: String, setAlias: Boolean = false)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
@@ -590,12 +589,12 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -618,12 +617,14 @@ object FunctionRegistry {
           }
           throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
+          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          exp
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }

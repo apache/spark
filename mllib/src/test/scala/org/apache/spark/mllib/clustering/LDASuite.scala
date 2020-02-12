@@ -279,10 +279,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   test("LocalLDAModel logLikelihood") {
     val ldaModel: LocalLDAModel = toyModel
 
-    val docsSingleWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(1)))
+    val docsSingleWord = sc.parallelize(Seq(Vectors.sparse(6, Array(0), Array(1)))
       .zipWithIndex
       .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
-    val docsRepeatedWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(5)))
+    val docsRepeatedWord = sc.parallelize(Seq(Vectors.sparse(6, Array(0), Array(5)))
       .zipWithIndex
       .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
 

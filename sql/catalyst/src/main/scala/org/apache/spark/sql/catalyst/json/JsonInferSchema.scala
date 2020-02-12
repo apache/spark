@@ -57,8 +57,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     // In each RDD partition, perform schema inference on each row and merge afterwards.
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
     val mergedTypesFromPartitions = json.mapPartitions { iter =>
-      val factory = new JsonFactory()
-      options.setJacksonOptions(factory)
+      val factory = options.buildJsonFactory()
       iter.flatMap { row =>
         try {
           Utils.tryWithResource(createParser(factory, row)) { parser =>

@@ -40,8 +40,8 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -635,12 +635,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           k.startsWith(CREATED_SPARK_VERSION)
       }
       val newTableProps = propsFromOldTable ++ tableDefinition.properties + partitionProviderProp
+
+      // // Add old table's owner if we need to restore
+      val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
       val newDef = tableDefinition.copy(
         storage = newStorage,
         schema = oldTableDef.schema,
         partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
-        properties = newTableProps)
+        properties = newTableProps,
+        owner = owner)
 
       client.alterTable(newDef)
     }

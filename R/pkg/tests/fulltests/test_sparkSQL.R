@@ -848,24 +848,31 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  lines <- c("{\"name\":\"안녕하세요\"}",
-             "{\"name\":\"您好\", \"age\":30}",
-             "{\"name\":\"こんにちは\", \"age\":19}",
-             "{\"name\":\"Xin chào\"}")
+  jsonPath <- file.path(
+    Sys.getenv("SPARK_HOME"),
+    "R", "pkg", "tests", "fulltests", "data",
+    "test_utils_utf.json"
+  )
 
-  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(lines, jsonPath)
+  lines <- readLines(jsonPath, encoding = "UTF-8")
+
+  expected <- regmatches(lines, gregexpr('(?<="name": ").*?(?=")', lines, perl = TRUE))
 
   df <- read.df(jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
-  expect_equal(rdf$name[2], markUtf8("您好"))
-  expect_equal(rdf$name[3], markUtf8("こんにちは"))
-  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+  expect_equal(rdf$name[1], expected[[1]])
+  expect_equal(rdf$name[2], expected[[2]])
+  expect_equal(rdf$name[3], expected[[3]])
+  expect_equal(rdf$name[4], expected[[4]])
 
   df1 <- createDataFrame(rdf)
-  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+  expect_equal(
+    collect(
+      where(df1, df1$name == expected[[2]])
+    )$name,
+    expected[[2]]
+  )
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
@@ -1375,6 +1382,7 @@ test_that("column operators", {
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
   c7 <- !c6
+  expect_true(TRUE)
 })
 
 test_that("column functions", {
@@ -1405,6 +1413,8 @@ test_that("column functions", {
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
     date_trunc("quarter", c) + current_date() + current_timestamp()
+  c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
+    overlay(c1, c2, 3, 4)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1800,7 +1810,8 @@ test_that("string operators", {
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }
@@ -1905,20 +1916,10 @@ test_that("date functions on a DataFrame", {
   df2 <- createDataFrame(l2)
   expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
   expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
-  conf <- callJMethod(sparkSession, "conf")
-  isUtcTimestampFuncEnabled <- callJMethod(conf, "get", "spark.sql.legacy.utcTimestampFunc.enabled")
-  callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", "true")
-  tryCatch({
-    # Both from_utc_timestamp and to_utc_timestamp are deprecated as of SPARK-25496
-    expect_equal(suppressWarnings(collect(select(df2, from_utc_timestamp(df2$b, "JST"))))[, 1],
-                 c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
-    expect_equal(suppressWarnings(collect(select(df2, to_utc_timestamp(df2$b, "JST"))))[, 1],
-                 c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
-  },
-  finally = {
-    # Reverting the conf back
-    callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", isUtcTimestampFuncEnabled)
-  })
+  expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
+  expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)

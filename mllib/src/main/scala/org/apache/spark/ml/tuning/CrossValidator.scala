@@ -137,8 +137,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
-      Some(Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null)))
+    val subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
+      Some(Array.fill($(numFolds))(Array.ofDim[Model[_]](epm.length)))
     } else None
 
     // Compute metrics for each model over each split
@@ -411,8 +411,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
       val subModels: Option[Array[Array[Model[_]]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
-          estimatorParamMaps.length)(null))
+        val _subModels = Array.fill(numFolds)(
+          Array.ofDim[Model[_]](estimatorParamMaps.length))
         for (splitIndex <- 0 until numFolds) {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- 0 until estimatorParamMaps.length) {

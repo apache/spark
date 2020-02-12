@@ -224,8 +224,8 @@ private[ml] class LogisticAggregator(
     val localGradientArray = gradientSumArray
     val margin = - {
       var sum = 0.0
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+      features.foreachNonZero { (index, value) =>
+        if (localFeaturesStd(index) != 0.0) {
           sum += localCoefficients(index) * value / localFeaturesStd(index)
         }
       }
@@ -235,8 +235,8 @@ private[ml] class LogisticAggregator(
 
     val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    features.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         localGradientArray(index) += multiplier * value / localFeaturesStd(index)
       }
     }
@@ -269,8 +269,8 @@ private[ml] class LogisticAggregator(
     var maxMargin = Double.NegativeInfinity
 
     val margins = new Array[Double](numClasses)
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    features.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         val stdValue = value / localFeaturesStd(index)
         var j = 0
         while (j < numClasses) {
@@ -313,8 +313,8 @@ private[ml] class LogisticAggregator(
     margins.indices.foreach { i =>
       multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
     }
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    features.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         val stdValue = value / localFeaturesStd(index)
         var j = 0
         while (j < numClasses) {

@@ -57,7 +57,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-28369: honor nullOnOverflow config for ScalaUDF") {
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val udf = ScalaUDF(
         (a: java.math.BigDecimal) => a.multiply(new java.math.BigDecimal(100)),
         DecimalType.SYSTEM_DEFAULT,
@@ -69,7 +69,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       assert(e2.getCause.isInstanceOf[ArithmeticException])
     }
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val udf = ScalaUDF(
         (a: java.math.BigDecimal) => a.multiply(new java.math.BigDecimal(100)),
         DecimalType.SYSTEM_DEFAULT,

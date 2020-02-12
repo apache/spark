@@ -325,7 +325,7 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testCompareLongsAsLittleEndian() {
-    long arrayOffset = 12;
+    long arrayOffset = Platform.LONG_ARRAY_OFFSET + 4;
 
     long[] arr1 = new long[2];
     Platform.putLong(arr1, arrayOffset, 0x0100000000000000L);
@@ -347,7 +347,7 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testCompareLongsAsUnsigned() {
-    long arrayOffset = 12;
+    long arrayOffset = Platform.LONG_ARRAY_OFFSET + 4;
 
     long[] arr1 = new long[2];
     Platform.putLong(arr1, arrayOffset + 4, 0xa000000000000000L);

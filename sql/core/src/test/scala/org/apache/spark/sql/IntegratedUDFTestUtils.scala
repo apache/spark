@@ -105,7 +105,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pandas_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pandas_version;" +
           "require_minimum_pandas_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
@@ -117,7 +117,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pyarrow_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version;" +
           "require_minimum_pyarrow_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!

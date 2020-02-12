@@ -790,6 +790,8 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         Seq(
           "SET foo=bar",
           s"ADD JAR $jarURL",
+          "CREATE TABLE test_udtf(key INT, value STRING) USING hive",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_udtf",
           s"""CREATE TEMPORARY FUNCTION udtf_count2
               |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
            """.stripMargin
@@ -816,6 +818,16 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
 
           assert(rs2.next())
           assert(rs2.getString(1) === "Usage: N/A.")
+
+          val rs3 = statement.executeQuery(
+            "SELECT key, cc FROM test_udtf LATERAL VIEW udtf_count2(value) dd AS cc")
+          assert(rs3.next())
+          assert(rs3.getInt(1) === 165)
+          assert(rs3.getInt(2) === 5)
+
+          assert(rs3.next())
+          assert(rs3.getInt(1) === 165)
+          assert(rs3.getInt(2) === 5)
         } finally {
           statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }

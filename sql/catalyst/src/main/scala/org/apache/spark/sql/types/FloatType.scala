@@ -78,8 +78,12 @@ case object FloatType extends FloatType {
   }
 
   trait FloatAsIfIntegral extends FloatIsConflicted with Integral[Float] {
-    def quot(x: Float, y: Float): Float = (BigDecimal(x) quot BigDecimal(y)).floatValue
-    def rem(x: Float, y: Float): Float = (BigDecimal(x) remainder BigDecimal(y)).floatValue
+    def quot(x: Float, y: Float): Float = {
+      (BigDecimal(x.toDouble) quot BigDecimal(y.toDouble)).floatValue
+    }
+    def rem(x: Float, y: Float): Float = {
+      (BigDecimal(x.toDouble) remainder BigDecimal(y.toDouble)).floatValue
+    }
   }
 
   object FloatAsIfIntegral extends FloatAsIfIntegral {

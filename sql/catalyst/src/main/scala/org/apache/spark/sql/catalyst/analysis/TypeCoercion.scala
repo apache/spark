@@ -59,7 +59,7 @@ object TypeCoercion {
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
-      Division(conf) ::
+      Division ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -243,7 +243,7 @@ object TypeCoercion {
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
    */
-  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+  private[catalyst] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
@@ -662,7 +662,7 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  case class Division(conf: SQLConf)  extends TypeCoercionRule {
+  object Division extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
@@ -673,13 +673,7 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        val preferIntegralDivision = conf.usePostgreSQLDialect
-        (left.dataType, right.dataType) match {
-          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
-            IntegralDivide(left, right)
-          case _ =>
-            Divide(Cast(left, DoubleType), Cast(right, DoubleType))
-        }
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {

@@ -181,6 +181,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
+  override protected def isBlacklisted(executorId: String, hostname: String): Boolean = {
+    podAllocator.isDeleted(executorId)
+  }
+
   private class KubernetesDriverEndpoint extends DriverEndpoint {
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {

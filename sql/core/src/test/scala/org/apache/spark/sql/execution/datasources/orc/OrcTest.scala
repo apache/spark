@@ -119,14 +119,14 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
-          assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
+          assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {
-          assert(pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $pushedFilters")
+          assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for ${o.pushedFilters}")
         }
 
       case _ =>

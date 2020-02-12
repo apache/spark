@@ -355,7 +355,7 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    val hiveDb = toHiveDatabase(database, true)
+    val hiveDb = toHiveDatabase(database, Some(userName))
     client.createDatabase(hiveDb, ignoreIfExists)
   }
 
@@ -374,32 +374,28 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
-    val hiveDb = toHiveDatabase(database, false)
+    val hiveDb = toHiveDatabase(database)
     client.alterDatabase(database.name, hiveDb)
   }
 
-  private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
+  private def toHiveDatabase(
+      database: CatalogDatabase, userName: Option[String] = None): HiveDatabase = {
     val props = database.properties
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
-    props.get(PROP_OWNER_NAME).orElse(if (isCreate) Some(userName) else None).foreach { ownerName =>
+      (props -- Seq(PROP_OWNER)).asJava)
+    props.get(PROP_OWNER).orElse(userName).foreach { ownerName =>
       shim.setDatabaseOwnerName(hiveDb, ownerName)
     }
-    props.get(PROP_OWNER_TYPE).orElse(if (isCreate) Some(PrincipalType.USER.name) else None)
-      .foreach { ownerType =>
-        shim.setDatabaseOwnerType(hiveDb, ownerType)
-      }
     hiveDb
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
       val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
-        Map(PROP_OWNER_NAME -> shim.getDatabaseOwnerName(d),
-          PROP_OWNER_TYPE -> shim.getDatabaseOwnerType(d))
+        Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
       CatalogDatabase(
         name = d.getName,
@@ -1189,9 +1185,10 @@ private[hive] object HiveClientImpl {
    * Note that this statistics could be overridden by Spark's statistics if that's available.
    */
   private def readHiveStats(properties: Map[String, String]): Option[CatalogStatistics] = {
-    val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
-    val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-    val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
+    val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).filter(_.nonEmpty).map(BigInt(_))
+    val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).filter(_.nonEmpty)
+      .map(BigInt(_))
+    val rowCount = properties.get(StatsSetupConst.ROW_COUNT).filter(_.nonEmpty).map(BigInt(_))
     // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
     // relatively cheap if parameters for the table are populated into the metastore.
     // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`

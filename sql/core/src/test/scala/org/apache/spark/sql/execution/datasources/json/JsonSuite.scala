@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -45,7 +45,7 @@ class TestFileFilter extends PathFilter {
   override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
 }
 
-class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
+abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
   import testImplicits._
 
   test("Type promotion") {
@@ -92,7 +92,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
     checkTypePromotion(
       Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.SYSTEM_DEFAULT))
 
-    val doubleNumber: Double = 1.7976931348623157E308d
+    val doubleNumber: Double = 1.7976931348623157d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
 
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber * 1000L)),
@@ -284,7 +284,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         null,
@@ -624,7 +624,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -656,7 +656,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable"),
       Row("92233720368547758070",
       "true",
-      "1.7976931348623157E308",
+      "1.7976931348623157",
       "10",
       "21474836470",
       null,
@@ -768,7 +768,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType(20, 0), true) ::
         StructField("boolean", BooleanType, true) ::
-        StructField("double", DecimalType(17, -292), true) ::
+        StructField("double", DecimalType(17, 16), true) ::
         StructField("integer", LongType, true) ::
         StructField("long", LongType, true) ::
         StructField("null", StringType, true) ::
@@ -782,7 +782,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable"),
       Row(BigDecimal("92233720368547758070"),
         true,
-        BigDecimal("1.7976931348623157E308"),
+        BigDecimal("1.7976931348623157"),
         10,
         21474836470L,
         null,
@@ -875,7 +875,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTableSQL"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         null,
@@ -908,7 +908,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable1"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -925,7 +925,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       sql("select * from jsonTable2"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
-      1.7976931348623157E308,
+      1.7976931348623157,
       10,
       21474836470L,
       null,
@@ -1274,7 +1274,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
         sql("select * from primitiveTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
-        1.7976931348623157E308,
+        1.7976931348623157,
         10,
         21474836470L,
         "this is a simple string.")
@@ -2436,23 +2436,24 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
     }
   }
 
+
+  private def failedOnEmptyString(dataType: DataType): Unit = {
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+    val errMessage = intercept[SparkException] {
+      df.collect()
+    }.getMessage
+    assert(errMessage.contains(
+      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+  }
+
+  private def emptyString(dataType: DataType, expected: Any): Unit = {
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+    checkAnswer(df, Row(expected) :: Nil)
+  }
+
   test("SPARK-25040: empty strings should be disallowed") {
-    def failedOnEmptyString(dataType: DataType): Unit = {
-       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      val errMessage = intercept[SparkException] {
-        df.collect()
-      }.getMessage
-      assert(errMessage.contains(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
-    }
-
-    def emptyString(dataType: DataType, expected: Any): Unit = {
-      val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      checkAnswer(df, Row(expected) :: Nil)
-    }
-
     failedOnEmptyString(BooleanType)
     failedOnEmptyString(ByteType)
     failedOnEmptyString(ShortType)
@@ -2469,6 +2470,36 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
 
     emptyString(StringType, "")
     emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
+  }
+
+  test("SPARK-25040: allowing empty strings when legacy config is enabled") {
+    def emptyStringAsNull(dataType: DataType): Unit = {
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      checkAnswer(df, Row(null) :: Nil)
+    }
+
+    // Legacy mode prior to Spark 3.0.0
+    withSQLConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON.key -> "true") {
+      emptyStringAsNull(BooleanType)
+      emptyStringAsNull(ByteType)
+      emptyStringAsNull(ShortType)
+      emptyStringAsNull(IntegerType)
+      emptyStringAsNull(LongType)
+
+      failedOnEmptyString(FloatType)
+      failedOnEmptyString(DoubleType)
+      failedOnEmptyString(TimestampType)
+      failedOnEmptyString(DateType)
+
+      emptyStringAsNull(DecimalType.SYSTEM_DEFAULT)
+      emptyStringAsNull(ArrayType(IntegerType))
+      emptyStringAsNull(MapType(StringType, IntegerType, true))
+      emptyStringAsNull(StructType(StructField("f1", IntegerType, true) :: Nil))
+
+      emptyString(StringType, "")
+      emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
+    }
   }
 
   test("return partial result for bad records") {
@@ -2526,4 +2557,18 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
       checkAnswer(readBack, timestampsWithFormat)
     }
   }
+}
+
+class JsonV1Suite extends JsonSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "json")
+}
+
+class JsonV2Suite extends JsonSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

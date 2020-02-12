@@ -88,12 +88,8 @@ private[spark] class BasicExecutorFeatureStep(
       // Replace dangerous characters in the remaining string with a safe alternative.
       .replaceAll("[^\\w-]+", "_")
 
-    val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryTotal}Mi")
-      .build()
-    val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(executorCoresRequest)
-      .build()
+    val executorMemoryQuantity = new Quantity(s"${executorMemoryTotal}Mi")
+    val executorCpuQuantity = new Quantity(executorCoresRequest)
 
     val executorResourceQuantities =
       KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
@@ -183,9 +179,7 @@ private[spark] class BasicExecutorFeatureStep(
       .addToArgs("executor")
       .build()
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
-      val executorCpuLimitQuantity = new QuantityBuilder(false)
-        .withAmount(limitCores)
-        .build()
+      val executorCpuLimitQuantity = new Quantity(limitCores)
       new ContainerBuilder(executorContainer)
         .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)

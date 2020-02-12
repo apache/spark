@@ -136,7 +136,7 @@ abstract class WindowExecBase(
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)

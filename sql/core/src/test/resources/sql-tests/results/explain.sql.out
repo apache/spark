@@ -2,48 +2,48 @@
 -- Number of queries: 18
 
 
--- !query 0
+-- !query
 CREATE table  explain_temp1 (key int, val int) USING PARQUET
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE table  explain_temp2 (key int, val int) USING PARQUET
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 CREATE table  explain_temp3 (key int, val int) USING PARQUET
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 SET spark.sql.codegen.wholeStage = true
--- !query 3 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 3 output
+-- !query output
 spark.sql.codegen.wholeStage	true
 
 
--- !query 4
+-- !query
 EXPLAIN FORMATTED
   SELECT key, max(val) 
   FROM   explain_temp1 
   WHERE  key > 0 
   GROUP  BY key 
   ORDER  BY key
--- !query 4 schema
+-- !query schema
 struct<plan:string>
--- !query 4 output
+-- !query output
 == Physical Plan ==
 * Sort (9)
 +- Exchange (8)
@@ -90,16 +90,16 @@ Input: [key#x, max(val)#x]
 Input: [key#x, max(val)#x]
 
 
--- !query 5
+-- !query
 EXPLAIN FORMATTED
   SELECT key, max(val)
   FROM explain_temp1
   WHERE key > 0
   GROUP BY key
   HAVING max(val) > 0
--- !query 5 schema
+-- !query schema
 struct<plan:string>
--- !query 5 output
+-- !query output
 == Physical Plan ==
 * Project (9)
 +- * Filter (8)
@@ -148,14 +148,14 @@ Output    : [key#x, max(val)#x]
 Input     : [key#x, max(val)#x, max(val#x)#x]
 
 
--- !query 6
+-- !query
 EXPLAIN FORMATTED
   SELECT key, val FROM explain_temp1 WHERE key > 0
   UNION 
   SELECT key, val FROM explain_temp1 WHERE key > 0
--- !query 6 schema
+-- !query schema
 struct<plan:string>
--- !query 6 output
+-- !query output
 == Physical Plan ==
 * HashAggregate (12)
 +- Exchange (11)
@@ -219,15 +219,15 @@ Input: [key#x, val#x]
 Input: [key#x, val#x]
 
 
--- !query 7
+-- !query
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a, 
          explain_temp2 b 
   WHERE  a.key = b.key
--- !query 7 schema
+-- !query schema
 struct<plan:string>
--- !query 7 output
+-- !query output
 == Physical Plan ==
 * BroadcastHashJoin Inner BuildRight (10)
 :- * Project (4)
@@ -286,15 +286,15 @@ Right keys: List(key#x)
 Join condition: None
 
 
--- !query 8
+-- !query
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
          LEFT OUTER JOIN explain_temp2 b 
                       ON a.key = b.key
--- !query 8 schema
+-- !query schema
 struct<plan:string>
--- !query 8 output
+-- !query output
 == Physical Plan ==
 * BroadcastHashJoin LeftOuter BuildRight (8)
 :- * ColumnarToRow (2)
@@ -342,7 +342,7 @@ Right keys: List(key#x)
 Join condition: None
 
 
--- !query 9
+-- !query
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
@@ -353,9 +353,9 @@ EXPLAIN FORMATTED
                               WHERE  val > 0) 
                        AND val = 2) 
          AND val > 3
--- !query 9 schema
+-- !query schema
 struct<plan:string>
--- !query 9 output
+-- !query output
 == Physical Plan ==
 * Project (4)
 +- * Filter (3)
@@ -458,7 +458,7 @@ Input: [max#x]
 Input: [max#x]
 
 
--- !query 10
+-- !query
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
@@ -469,9 +469,9 @@ EXPLAIN FORMATTED
          key = (SELECT max(key) 
                 FROM   explain_temp3
                 WHERE  val > 0)
--- !query 10 schema
+-- !query schema
 struct<plan:string>
--- !query 10 output
+-- !query output
 == Physical Plan ==
 * Filter (3)
 +- * ColumnarToRow (2)
@@ -568,13 +568,13 @@ Input: [max#x]
 Input: [max#x]
 
 
--- !query 11
+-- !query
 EXPLAIN FORMATTED
   SELECT (SELECT Avg(key) FROM explain_temp1) + (SELECT Avg(key) FROM explain_temp1)
   FROM explain_temp1
--- !query 11 schema
+-- !query schema
 struct<plan:string>
--- !query 11 output
+-- !query output
 == Physical Plan ==
 * Project (3)
 +- * ColumnarToRow (2)
@@ -625,7 +625,7 @@ Input: [sum#x, count#xL]
 Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
 
--- !query 12
+-- !query
 EXPLAIN FORMATTED
   WITH cte1 AS (
     SELECT *
@@ -633,9 +633,9 @@ EXPLAIN FORMATTED
     WHERE key > 10
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key
--- !query 12 schema
+-- !query schema
 struct<plan:string>
--- !query 12 output
+-- !query output
 == Physical Plan ==
 * BroadcastHashJoin Inner BuildRight (10)
 :- * Project (4)
@@ -694,7 +694,7 @@ Right keys: List(key#x)
 Join condition: None
 
 
--- !query 13
+-- !query
 EXPLAIN FORMATTED
   WITH cte1 AS (
     SELECT key, max(val)
@@ -703,9 +703,9 @@ EXPLAIN FORMATTED
     GROUP BY key
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key
--- !query 13 schema
+-- !query schema
 struct<plan:string>
--- !query 13 output
+-- !query output
 == Physical Plan ==
 * BroadcastHashJoin Inner BuildRight (11)
 :- * HashAggregate (7)
@@ -762,13 +762,13 @@ Right keys: List(key#x)
 Join condition: None
 
 
--- !query 14
+-- !query
 EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
--- !query 14 schema
+-- !query schema
 struct<plan:string>
--- !query 14 output
+-- !query output
 == Physical Plan ==
 Execute CreateViewCommand (1)
    +- CreateViewCommand (2)
@@ -786,25 +786,25 @@ Output: []
 (4) Project
 
 
--- !query 15
+-- !query
 DROP TABLE explain_temp1
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 DROP TABLE explain_temp2
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 DROP TABLE explain_temp3
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 

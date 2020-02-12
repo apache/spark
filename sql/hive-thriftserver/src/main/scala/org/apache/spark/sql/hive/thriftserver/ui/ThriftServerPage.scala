@@ -375,21 +375,7 @@ private[ui] class SqlStatsPagedTable(
       } else {
         errorMessage
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>
-            {errorMessage}
-          </pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = detailsUINode(isMultiline, errorMessage)
     <td>
       {errorSummary}{details}
     </td>

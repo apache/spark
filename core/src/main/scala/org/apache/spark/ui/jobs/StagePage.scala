@@ -288,10 +288,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
         val executorOverhead = serializationTime + deserializationTime
         val executorRunTime = if (taskInfo.duration.isDefined) {
-          totalExecutionTime - executorOverhead - gettingResultTime
+          math.max(totalExecutionTime - executorOverhead - gettingResultTime - schedulerDelay, 0)
         } else {
           metricsOpt.map(_.executorRunTime).getOrElse(
-            totalExecutionTime - executorOverhead - gettingResultTime)
+            math.max(totalExecutionTime - executorOverhead - gettingResultTime - schedulerDelay, 0))
         }
         val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
         val executorComputingTimeProportion =
@@ -721,19 +721,7 @@ private[ui] class TaskPagedTable(
       } else {
         error
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{error}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, error)
     <td>{errorSummary}{details}</td>
   }
 }

@@ -22,6 +22,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.*;
+
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -29,7 +33,6 @@ import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
-import org.junit.*;
 
 import org.apache.spark.sql.test.TestSparkSession;
 
@@ -486,17 +489,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return com.google.common.base.Objects.toStringHelper(this)
-              .add("shortField", shortField)
-              .add("intField", intField)
-              .add("longField", longField)
-              .add("floatField", floatField)
-              .add("doubleField", doubleField)
-              .add("stringField", stringField)
-              .add("booleanField", booleanField)
-              .add("timestampField", timestampField)
-              .add("nullIntField", nullIntField)
-              .toString();
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("shortField", shortField)
+          .append("intField", intField)
+          .append("longField", longField)
+          .append("floatField", floatField)
+          .append("doubleField", doubleField)
+          .append("stringField", stringField)
+          .append("booleanField", booleanField)
+          .append("timestampField", timestampField)
+          .append("nullIntField", nullIntField)
+          .toString();
     }
   }
 
@@ -584,11 +587,12 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return com.google.common.base.Objects.toStringHelper(this)
-        .add("localDateField", localDateField)
-        .add("instantField", instantField)
-        .toString();
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("localDateField", localDateField)
+          .append("instantField", instantField)
+          .toString();
     }
+
   }
 
   private static Row createLocalDateInstantRow(Long index) {

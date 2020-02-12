@@ -171,6 +171,8 @@ object InternalRow {
     case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
     case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case CalendarIntervalType =>
+      (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)

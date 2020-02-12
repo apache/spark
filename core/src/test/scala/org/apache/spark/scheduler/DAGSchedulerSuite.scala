@@ -826,6 +826,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val listener = new SparkListener() {
       override def onJobStart(event: SparkListenerJobStart): Unit = {
         try {
+          // spark.job.description can be implicitly set for 0 partition jobs.
+          // So event.properties and properties can be different. See SPARK-29997.
+          event.properties.remove(SparkContext.SPARK_JOB_DESCRIPTION)
+          properties.remove(SparkContext.SPARK_JOB_DESCRIPTION)
+
           assert(event.properties.equals(properties), "Expected same content of properties, " +
             s"but got properties with different content. props in caller ${properties} /" +
             s" props in event ${event.properties}")

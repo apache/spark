@@ -53,7 +53,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       "PartitionPruning",
       "Extract Python UDFs")
 
-  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
+  protected def fixedPoint =
+    FixedPoint(
+      SQLConf.get.optimizerMaxIterations,
+      maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
    * Defines the default rule batches in the Optimizer.
@@ -128,6 +131,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSubqueryAliases,
       EliminateView,
       ReplaceExpressions,
+      RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabase(catalogManager),
       RewriteDistinctAggregates,
@@ -406,7 +410,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
         // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
         // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the the first mapping (which should be provided by the first child).
+        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -1459,7 +1463,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _), _) => af match {
+      case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
@@ -1473,7 +1477,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 
         case _ => we
       }
-      case ae @ AggregateExpression(af, _, _, _) => af match {
+      case ae @ AggregateExpression(af, _, _, _, _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 

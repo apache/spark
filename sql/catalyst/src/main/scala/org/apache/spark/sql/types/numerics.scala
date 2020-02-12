@@ -121,10 +121,10 @@ object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toFloat
-  private val intLowerBound = Int.MinValue.toFloat
-  private val longUpperBound = Long.MaxValue.toFloat
-  private val longLowerBound = Long.MinValue.toFloat
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Float): Int = {
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
@@ -155,10 +155,10 @@ object DoubleExactNumeric extends DoubleIsFractional {
   private def overflowException(x: Double, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toDouble
-  private val intLowerBound = Int.MinValue.toDouble
-  private val longUpperBound = Long.MaxValue.toDouble
-  private val longLowerBound = Long.MinValue.toDouble
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Double): Int = {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {

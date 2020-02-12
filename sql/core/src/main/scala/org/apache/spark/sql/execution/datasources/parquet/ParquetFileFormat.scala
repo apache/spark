@@ -295,7 +295,7 @@ class ParquetFileFormat
 
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr) {
-          Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+          Some(DateTimeUtils.getZoneId(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
         } else {
           None
         }

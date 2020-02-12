@@ -409,14 +409,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
       relation: LogicalRelation,
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
-    if (relation.relation.needConversion) {
-      val converters = RowEncoder(StructType.fromAttributes(output))
-      rdd.mapPartitions { iterator =>
-        iterator.map(converters.toRow)
-      }
-    } else {
-      rdd.asInstanceOf[RDD[InternalRow]]
-    }
+    DataSourceStrategy.toCatalystRDD(relation.relation, output, rdd)
   }
 
   /**
@@ -429,14 +422,14 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
 object DataSourceStrategy {
   /**
-   * The attribute name of predicate could be different than the one in schema in case of
-   * case insensitive, we should change them to match the one in schema, so we do not need to
-   * worry about case sensitivity anymore.
+   * The attribute name may differ from the one in the schema if the query analyzer
+   * is case insensitive. We should change attribute names to match the ones in the schema,
+   * so we do not need to worry about case sensitivity anymore.
    */
-  protected[sql] def normalizeFilters(
-      filters: Seq[Expression],
+  protected[sql] def normalizeExprs(
+      exprs: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
-    filters.map { e =>
+    exprs.map { e =>
       e transform {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
@@ -623,5 +616,22 @@ object DataSourceStrategy {
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
+  }
+
+  /**
+   * Convert RDD of Row into RDD of InternalRow with objects in catalyst types
+   */
+  private[sql] def toCatalystRDD(
+      relation: BaseRelation,
+      output: Seq[Attribute],
+      rdd: RDD[Row]): RDD[InternalRow] = {
+    if (relation.needConversion) {
+      val converters = RowEncoder(StructType.fromAttributes(output))
+      rdd.mapPartitions { iterator =>
+        iterator.map(converters.toRow)
+      }
+    } else {
+      rdd.asInstanceOf[RDD[InternalRow]]
+    }
   }
 }

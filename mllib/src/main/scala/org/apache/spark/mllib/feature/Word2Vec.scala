@@ -447,9 +447,9 @@ class Word2Vec extends Serializable with Logging {
         iter.map { case (id, vec) =>
           (id, (vec, 1))
         }
-      }.reduceByKey { case ((v1, count1), (v2, count2)) =>
-        blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
-        (v1, count1 + count2)
+      }.reduceByKey { (vc1, vc2) =>
+        blas.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
+        (vc1._1, vc1._2 + vc2._2)
       }.map { case (id, (vec, count)) =>
         blas.sscal(vectorSize, 1.0f / count, vec, 1)
         (id, vec)

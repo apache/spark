@@ -35,6 +35,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -224,16 +225,17 @@ object DataType {
   }
 
   protected[types] def buildFormattedString(
-    dataType: DataType,
-    prefix: String,
-    builder: StringBuilder): Unit = {
+      dataType: DataType,
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
     dataType match {
       case array: ArrayType =>
-        array.buildFormattedString(prefix, builder)
+        array.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case struct: StructType =>
-        struct.buildFormattedString(prefix, builder)
+        struct.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case map: MapType =>
-        map.buildFormattedString(prefix, builder)
+        map.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case _ =>
     }
   }

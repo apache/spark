@@ -165,7 +165,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=1g}"
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" clean package -DskipTests -Dmaven.test.skip=true $@)
+BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -233,7 +233,7 @@ if [ "$MAKE_PIP" == "true" ]; then
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-  python setup.py sdist
+  python3 setup.py sdist
   popd > /dev/null
 else
   echo "Skipping building python distribution package"

@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -596,6 +595,12 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
+  arguments = """
+    Arguments:
+      * timestamp - A date/timestamp or string to be converted to the given format.
+      * fmt - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter` for valid date
+              and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
@@ -654,7 +659,14 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
+  usage = "_FUNC_(timeExp[, format]) - Returns the UNIX timestamp of the given time.",
+  arguments = """
+    Arguments:
+      * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
+                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
@@ -692,7 +704,14 @@ case class ToUnixTimestamp(
  * second parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.",
+  usage = "_FUNC_([timeExp[, format]]) - Returns the UNIX timestamp of current or specified time.",
+  arguments = """
+    Arguments:
+      * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
+                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -866,6 +885,12 @@ abstract class UnixTime extends ToTimestamp {
  */
 @ExpressionDescription(
   usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
+  arguments = """
+    Arguments:
+      * unix_time - UNIX Timestamp to be converted to the provided format.
+      * format - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter`
+                 for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
@@ -1127,18 +1152,10 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
-  since = "1.5.0",
-  deprecated = """
-    Deprecated since 3.0.0. See SPARK-25496.
-  """)
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
-
-  if (!SQLConf.get.utcTimestampFuncEnabled) {
-    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0." +
-      s"Set ${SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key} to true to enable this function.")
-  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
@@ -1159,14 +1176,12 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
            |long ${ev.value} = 0;
          """.stripMargin)
       } else {
-        val tzClass = classOf[TimeZone].getName
+        val tzClass = classOf[ZoneId].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
-        val utcTerm = "tzUTC"
-        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
-          v => s"""$v = $dtu.getTimeZone("UTC");""")
+          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val utcTerm = "java.time.ZoneOffset.UTC"
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
            |${eval.code}
@@ -1341,18 +1356,10 @@ case class MonthsBetween(
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
   """,
-  since = "1.5.0",
-  deprecated = """
-    Deprecated since 3.0.0. See SPARK-25496.
-  """)
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
-
-  if (!SQLConf.get.utcTimestampFuncEnabled) {
-    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0. " +
-      s"Set ${SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key} to true to enable this function.")
-  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
@@ -1373,14 +1380,12 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
            |long ${ev.value} = 0;
          """.stripMargin)
       } else {
-        val tzClass = classOf[TimeZone].getName
+        val tzClass = classOf[ZoneId].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
-        val utcTerm = "tzUTC"
-        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
-          v => s"""$v = $dtu.getTimeZone("UTC");""")
+          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val utcTerm = "java.time.ZoneOffset.UTC"
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
            |${eval.code}
@@ -1407,6 +1412,12 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to
       a date. Returns null with invalid input. By default, it follows casting rules to a date if
       the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * date_str - A string to be parsed to date.
+      * fmt - Date format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
+              date and time format patterns.
   """,
   examples = """
     Examples:
@@ -1446,9 +1457,15 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
-      a timestamp. Returns null with invalid input. By default, it follows casting rules to
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp.
+      * fmt - Timestamp format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
+              date and time format patterns.
   """,
   examples = """
     Examples:

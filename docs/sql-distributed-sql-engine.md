@@ -29,7 +29,7 @@ without the need to write any code.
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 1.2.1. You can test the JDBC server with the beeline script that comes with either Spark or Hive 1.2.1.
+in built-in Hive. You can test the JDBC server with the beeline script that comes with either Spark or compatible Hive.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 

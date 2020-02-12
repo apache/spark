@@ -373,10 +373,10 @@ abstract class HiveComparisonTest
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 

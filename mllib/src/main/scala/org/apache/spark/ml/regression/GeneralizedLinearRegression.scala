@@ -381,12 +381,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       dataset: Dataset[_]): GeneralizedLinearRegressionModel = instrumented { instr =>
     val familyAndLink = FamilyAndLink(this)
 
-    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, offsetCol, predictionCol,
       linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol,
       aggregationDepth)
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {

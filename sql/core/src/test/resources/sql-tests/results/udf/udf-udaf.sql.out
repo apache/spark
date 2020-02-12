@@ -2,69 +2,69 @@
 -- Number of queries: 8
 
 
--- !query 0
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
 (1), (2), (3), (4)
 as t1(int_col1)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE FUNCTION myDoubleAvg AS 'test.org.apache.spark.sql.MyDoubleAvg'
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 SELECT default.myDoubleAvg(udf(int_col1)) as my_avg, udf(default.myDoubleAvg(udf(int_col1))) as my_avg2, udf(default.myDoubleAvg(int_col1)) as my_avg3 from t1
--- !query 2 schema
+-- !query schema
 struct<my_avg:double,my_avg2:double,my_avg3:double>
--- !query 2 output
+-- !query output
 102.5	102.5	102.5
 
 
--- !query 3
+-- !query
 SELECT default.myDoubleAvg(udf(int_col1), udf(3)) as my_avg from t1
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid number of arguments for function default.myDoubleAvg. Expected: 1; Found: 2; line 1 pos 7
 
 
--- !query 4
+-- !query
 CREATE FUNCTION udaf1 AS 'test.non.existent.udaf'
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 SELECT default.udaf1(udf(int_col1)) as udaf1, udf(default.udaf1(udf(int_col1))) as udaf2, udf(default.udaf1(int_col1)) as udaf3 from t1
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Can not load class 'test.non.existent.udaf' when registering the function 'default.udaf1', please make sure it is on the classpath; line 1 pos 94
 
 
--- !query 6
+-- !query
 DROP FUNCTION myDoubleAvg
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 DROP FUNCTION udaf1
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 

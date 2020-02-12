@@ -247,6 +247,16 @@ private[spark] object TestUtils {
       url: URL,
       method: String = "GET",
       headers: Seq[(String, String)] = Nil): Int = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      connection.getResponseCode()
+    }
+  }
+
+  def withHttpConnection[T](
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil)
+      (fn: HttpURLConnection => T): T = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
@@ -271,7 +281,7 @@ private[spark] object TestUtils {
 
     try {
       connection.connect()
-      connection.getResponseCode()
+      fn(connection)
     } finally {
       connection.disconnect()
     }

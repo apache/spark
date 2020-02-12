@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.{Locale, UUID}
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
@@ -36,6 +36,8 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -136,6 +138,22 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  /**
+   * A [[StreamingQueryListener]] for structured streaming ui, it contains all streaming query ui
+   * data to show.
+   */
+  lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
+    sparkContext.ui.flatMap { ui =>
+      if (conf.get(STREAMING_UI_ENABLED)) {
+        val statusListener = new StreamingQueryStatusListener(conf)
+        new StreamingQueryTab(statusListener, ui)
+        Some(statusListener)
+      } else {
+        None
+      }
+    }
   }
 
   /**

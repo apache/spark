@@ -38,7 +38,7 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
-   * @param escapeStr the escape string contains one character.
+   * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {

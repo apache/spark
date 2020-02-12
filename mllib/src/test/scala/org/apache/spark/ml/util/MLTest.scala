@@ -25,6 +25,7 @@ import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext, TestUtils}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.ml.{Model, PredictionModel, Transformer}
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.classification.{ClassificationModel, ProbabilisticClassificationModel}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -88,6 +89,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     val n = Attribute.fromStructField(dataframe.schema(colName)) match {
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
+      case unknown =>
+        throw new IllegalArgumentException(s"Attribute type: ${unknown.getClass.getName}")
     }
     assert(n.isDefined && n.get === numValues,
       s"the number of values obtained from schema should be $numValues, but got $n")
@@ -178,11 +181,29 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
   def testPredictionModelSinglePrediction(model: PredictionModel[Vector, _],
     dataset: Dataset[_]): Unit = {
-
     model.transform(dataset).select(model.getFeaturesCol, model.getPredictionCol)
       .collect().foreach {
       case Row(features: Vector, prediction: Double) =>
         assert(prediction === model.predict(features))
+    }
+  }
+
+  def testClassificationModelSingleRawPrediction(model: ClassificationModel[Vector, _],
+    dataset: Dataset[_]): Unit = {
+    model.transform(dataset).select(model.getFeaturesCol, model.getRawPredictionCol)
+      .collect().foreach {
+      case Row(features: Vector, rawPrediction: Vector) =>
+        assert(rawPrediction === model.predictRaw(features))
+    }
+  }
+
+  def testProbClassificationModelSingleProbPrediction(
+    model: ProbabilisticClassificationModel[Vector, _],
+    dataset: Dataset[_]): Unit = {
+    model.transform(dataset).select(model.getFeaturesCol, model.getProbabilityCol)
+      .collect().foreach {
+      case Row(features: Vector, probPrediction: Vector) =>
+        assert(probPrediction === model.predictProbability(features))
     }
   }
 

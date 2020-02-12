@@ -512,9 +512,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blor = new LogisticRegression().setFamily("binomial")
     val blorModel = blor.fit(smallBinaryDataset)
     testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    testClassificationModelSingleRawPrediction(blorModel, smallBinaryDataset)
+    testProbClassificationModelSingleProbPrediction(blorModel, smallBinaryDataset)
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
     testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
+    testClassificationModelSingleRawPrediction(mlorModel, smallMultinomialDataset)
+    testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {

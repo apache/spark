@@ -49,3 +49,16 @@ DROP VIEW desc_col_temp_view;
 DROP TABLE desc_col_table;
 
 DROP TABLE desc_complex_col_table;
+
+--Test case insensitive
+
+CREATE TABLE customer(CName STRING);
+
+INSERT INTO customer VALUES('Maria');
+
+ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cname;
+
+DESC EXTENDED customer cname;
+
+DROP TABLE customer;
+

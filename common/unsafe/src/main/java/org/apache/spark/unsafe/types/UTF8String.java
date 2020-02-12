@@ -1294,6 +1294,52 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
+  /**
+   * Parses UTF8String(trimmed if needed) to long. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the long value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public long toLongExact() {
+    LongWrapper result = new LongWrapper();
+    if (toLong(result)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  /**
+   * Parses UTF8String(trimmed if needed) to int. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the int value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public int toIntExact() {
+    IntWrapper result = new IntWrapper();
+    if (toInt(result)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public short toShortExact() {
+    int value = this.toIntExact();
+    short result = (short) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public byte toByteExact() {
+    int value = this.toIntExact();
+    byte result = (byte) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
   @Override
   public String toString() {
     return new String(getBytes(), StandardCharsets.UTF_8);

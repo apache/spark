@@ -147,7 +147,8 @@ object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output)
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(
+        filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
         l.resolve(

@@ -71,7 +71,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+      val jobDescription = UIUtils.makeDescription(
+        job.description.getOrElse(lastStageDescription),
+        "",
+        plainText = true).text
 
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
@@ -449,7 +452,11 @@ private[ui] class JobDataSource(
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
-    val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
+    val jobDescription =
+      UIUtils.makeDescription(
+        jobData.description.getOrElse(lastStageDescription),
+        basePath,
+        plainText = false)
 
     val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
@@ -541,12 +548,15 @@ private[ui] class JobPagedTable(
 
   override def headers: Seq[Node] = {
     // Information for each header: title, cssClass, and sortable
-    val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+    val jobHeadersAndCssClasses: Seq[(String, String, Boolean, Option[String])] =
       Seq(
-        (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
-        ("Tasks (for all stages): Succeeded/Total", "", false)
+        (jobIdTitle, "", true, None),
+        ("Description", "", true, None),
+        ("Submitted", "", true, None),
+        ("Duration", "", true, Some("Elapsed time since the job was submitted " +
+          "until execution completion of all its stages.")),
+        ("Stages: Succeeded/Total", "", false, None),
+        ("Tasks (for all stages): Succeeded/Total", "", false, None)
       )
 
     if (!jobHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -554,7 +564,7 @@ private[ui] class JobPagedTable(
     }
 
     val headerRow: Seq[Node] = {
-      jobHeadersAndCssClasses.map { case (header, cssClass, sortable) =>
+      jobHeadersAndCssClasses.map { case (header, cssClass, sortable, tooltip) =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -566,9 +576,17 @@ private[ui] class JobPagedTable(
 
           <th class={cssClass}>
             <a href={headerLink}>
-              {header}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                } else {
+                  <span>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                }
+              }
             </a>
           </th>
         } else {
@@ -581,12 +599,32 @@ private[ui] class JobPagedTable(
 
             <th class={cssClass}>
               <a href={headerLink}>
-                {header}
-              </a>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}
+                    </span>
+                  } else {
+                    <span>
+                      {header}
+                    </span>
+                  }
+                }
+               </a>
             </th>
           } else {
             <th class={cssClass}>
-              {header}
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}
+                  </span>
+                } else {
+                  <span>
+                    {header}
+                  </span>
+                }
+              }
             </th>
           }
         }
@@ -629,11 +667,7 @@ private[ui] class JobPagedTable(
       </td>
       <td>{jobTableRow.formattedDuration}</td>
       <td class="stage-progress-cell">
-        {job.numCompletedStages}/{
-          // A job contains at least 1 stage but if a job has no partitions(tasks),
-          // the stage is not submitted so the total stage should be regarded as 0.
-          if (job.numTasks > 0) job.stageIds.size - job.numSkippedStages else 0
-        }
+        {job.numCompletedStages}/{job.stageIds.size - job.numSkippedStages}
         {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>

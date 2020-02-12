@@ -18,11 +18,13 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
@@ -48,15 +50,15 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs);
+    return Objects.hash(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("localDirs", Arrays.toString(localDirs))
-      .add("subDirsPerLocalDir", subDirsPerLocalDir)
-      .add("shuffleManager", shuffleManager)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("localDirs", Arrays.toString(localDirs))
+      .append("subDirsPerLocalDir", subDirsPerLocalDir)
+      .append("shuffleManager", shuffleManager)
       .toString();
   }
 
@@ -66,7 +68,7 @@ public class ExecutorShuffleInfo implements Encodable {
       ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
       return Arrays.equals(localDirs, o.localDirs)
         && subDirsPerLocalDir == o.subDirsPerLocalDir
-        && Objects.equal(shuffleManager, o.shuffleManager);
+        && Objects.equals(shuffleManager, o.shuffleManager);
     }
     return false;
   }

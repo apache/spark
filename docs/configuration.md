@@ -244,6 +244,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    Comma-separated list of class names implementing
+    org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.
+    This is for advanced users to replace the resource discovery class with a
+    custom implementation. Spark will try each class specified until one of them
+    returns the resource information for that resource. It tries the discovery
+    script last if none of the plugins return information for that resource.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
@@ -844,13 +856,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>
@@ -966,7 +979,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td><code>spark.eventLog.erasureCoding.enabled</code></td>
   <td>false</td>
   <td>
     Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
@@ -1104,6 +1117,18 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.proxyRedirectUri</code></td>
+  <td></td>
+  <td>
+    Where to address redirects when Spark is running behind a proxy. This will make Spark
+    modify redirect responses so they point to the proxy server, instead of the Spark UI's own
+    address. This should be only the address of the server, without any prefix paths for the
+    application; the prefix should be set either by the proxy server itself (by adding the
+    <code>X-Forwarded-Context</code> request header), or by setting the proxy base in the Spark
+    app's configuration.
   </td>
 </tr>
 <tr>
@@ -1611,6 +1636,43 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics (in milliseconds).
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
+    If positive, the polling is done at this interval.
+  </td>
+</tr>
+</table>
+
 ### Networking
 
 <table class="table">
@@ -1748,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold
@@ -2031,6 +2093,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.75</td>
   <td>
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.speculation.task.duration.threshold</code></td>
+  <td>None</td>
+  <td>
+    Task duration after which scheduler would try to speculative run the task. If provided, tasks
+    would be speculatively run if current stage contains less tasks than or equal to the number of
+    slots on a single executor and the task is taking longer time than the threshold. This config
+    helps speculate stage with very few tasks. Regular speculation configs may also apply if the
+    executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
+    runs even though the threshold hasn't been reached. The number of slots is computed based on
+    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>
@@ -2323,47 +2399,15 @@ the driver or executor, or, in the absence of that value, the number of cores av
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
 
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(numRows = 200, truncate = false)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(200, false);
-{% endhighlight %}
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# spark is an existing SparkSession
-spark.sql("SET -v").show(n=200, truncate=False)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session()
-properties <- sql("SET -v")
-showDF(properties, numRows = 200, truncate = FALSE)
-{% endhighlight %}
-
-</div>
-</div>
+        {% include_relative sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 
 ### Spark Streaming
@@ -2398,7 +2442,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Interval at which data received by Spark Streaming receivers is chunked
     into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
-     tuning</a> section in the Spark Streaming programing guide for more details.
+     tuning</a> section in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>
@@ -2409,7 +2453,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for mode details.
+    in the Spark Streaming programming guide for mode details.
   </td>
 </tr>
 <tr>
@@ -2419,7 +2463,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Enable write-ahead logs for receivers. All the input data received through receivers
     will be saved to write-ahead logs that will allow it to be recovered after driver failures.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for more details.
+    in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>

@@ -27,7 +27,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
-import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -36,11 +38,14 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
 
-class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
+class CachedTableSuite extends QueryTest with SQLTestUtils
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -87,10 +92,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     sum
   }
 
+  private def getNumInMemoryTablesInSubquery(plan: SparkPlan): Int = {
+    plan.expressions.flatMap(_.collect {
+      case sub: ExecSubqueryExpression => getNumInMemoryTablesRecursively(sub.plan)
+    }).sum
+  }
+
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
-    plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        getNumInMemoryTablesRecursively(relation.cachedPlan) + 1
+    collect(plan) {
+      case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
+        getNumInMemoryTablesRecursively(relation.cachedPlan) +
+          getNumInMemoryTablesInSubquery(inMemoryTable) + 1
+      case p =>
+        getNumInMemoryTablesInSubquery(p)
     }.sum
   }
 
@@ -464,7 +478,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
    */
   private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
     assert(
-      df.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => e }.size == expected)
+      collect(df.queryExecution.executedPlan) { case e: ShuffleExchangeExec => e }.size == expected)
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
@@ -515,7 +529,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -532,7 +546,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -548,7 +562,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
       verifyNumExchanges(query, 1)
-      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 12)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).
+        outputPartitioning.numPartitions === 12)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
@@ -603,7 +618,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       val query =
         sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
       verifyNumExchanges(query, 1)
-      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
       checkAnswer(
         query,
         df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
@@ -1092,6 +1107,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
           }
         }
       }
+    }
+  }
+
+  test("cache supports for intervals") {
+    withTable("interval_cache") {
+      Seq((1, "1 second"), (2, "2 seconds"), (2, null))
+        .toDF("k", "v").write.saveAsTable("interval_cache")
+      sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
+      assert(spark.catalog.isCached("t1"))
+      checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
+        Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
+      sql("UNCACHE TABLE t1")
+      assert(!spark.catalog.isCached("t1"))
     }
   }
 }

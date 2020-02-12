@@ -58,11 +58,10 @@ class MinHashLSHModel private[ml](
 
   @Since("2.1.0")
   override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
-    require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
-    val elemsList = elems.toSparse.indices.toList
+    require(elems.nonZeroIterator.nonEmpty, "Must have at least 1 non zero entry.")
     val hashValues = randCoefficients.map { case (a, b) =>
-      elemsList.map { elem: Int =>
-        ((1L + elem) * a + b) % MinHashLSH.HASH_PRIME
+      elems.nonZeroIterator.map { case (i, _) =>
+        ((1L + i) * a + b) % MinHashLSH.HASH_PRIME
       }.min.toDouble
     }
     // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
@@ -71,8 +70,8 @@ class MinHashLSHModel private[ml](
 
   @Since("2.1.0")
   override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
-    val xSet = x.toSparse.indices.toSet
-    val ySet = y.toSparse.indices.toSet
+    val xSet = x.nonZeroIterator.map(_._1).toSet
+    val ySet = y.nonZeroIterator.map(_._1).toSet
     val intersectionSize = xSet.intersect(ySet).size.toDouble
     val unionSize = xSet.size + ySet.size - intersectionSize
     assert(unionSize > 0, "The union of two input sets must have at least 1 elements")
