@@ -66,7 +66,7 @@ object WindowFunctionFrame {
 }
 
 /**
- * The offset window frame calculates frames containing LEAD/LAG statements.
+ * The offset window frame calculates frames containing LEAD/LAG/NTH_VALUE statements.
  *
  * @param target to write results to.
  * @param ordinal the ordinal is the starting offset at which the results of the window frame get
@@ -77,14 +77,13 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-class OffsetWindowFunctionFrame(
+abstract class OffsetWindowFunctionFrameBase(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
-  extends WindowFunctionFrame {
+    offset: Int) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
   protected var input: ExternalAppendOnlyUnsafeRowArray = null
@@ -141,6 +140,24 @@ class OffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
+  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+
+  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+}
+
+/**
+ * The offset window frame calculates frames containing LEAD/LAG statements.
+ */
+class OffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+
   override def write(index: Int, current: InternalRow): Unit = {
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
@@ -151,10 +168,6 @@ class OffsetWindowFunctionFrame(
     }
     inputIndex += 1
   }
-
-  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
-
-  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
 }
 
 /**
@@ -169,7 +182,7 @@ class FixedOffsetWindowFunctionFrame(
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
-  extends OffsetWindowFunctionFrame(
+  extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
   var rowOption: Option[UnsafeRow] = None
