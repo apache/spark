@@ -64,7 +64,7 @@ trait ConstraintHelper {
     var inferredConstraints = Set.empty[Expression]
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
-    constraints.foreach {
+    predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
