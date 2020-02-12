@@ -736,8 +736,8 @@ object DateTimeUtils {
           case TRUNC_TO_MINUTE =>
             millis - millis % MILLIS_PER_MINUTE
           case _ => // Try to truncate date levels
-            val dDays = millisToDays(millis, timeZone)
-            daysToMillis(truncDate(dDays, level), timeZone)
+            val dDays = millisToDays(millis, timeZone.toZoneId)
+            daysToMillis(truncDate(dDays, level), timeZone.toZoneId)
         }
         truncated * MICROS_PER_MILLIS
     }
