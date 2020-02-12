@@ -329,4 +329,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
   }
 
+  test("SPARK-30759: cache initialization for literal patterns") {
+    val expr = "A" like Literal.create("a", StringType)
+    expr.eval()
+    val cache = expr.getClass.getSuperclass
+      .getDeclaredFields.filter(_.getName.endsWith("cache")).head
+    cache.setAccessible(true)
+    assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
+  }
 }
