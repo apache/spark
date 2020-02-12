@@ -2007,21 +2007,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ARRAY_DEFAULT_TO_STRING =
-    buildConf("spark.sql.legacy.arrayDefaultToStringType.enabled")
+  val LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE =
+    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType.enabled")
       .internal()
-      .doc("When set to true, it returns an empty array of string type when the `array` " +
-        "function is called without any parameters. Otherwise, it returns an empty " +
-        "array of `NullType`")
-      .booleanConf
-      .createWithDefault(false)
-
-  val LEGACY_MAP_DEFAULT_TO_STRING =
-    buildConf("spark.sql.legacy.mapDefaultToStringType.enabled")
-      .internal()
-      .doc("When set to true, it returns an empty map of string type when the `map` " +
-        "function is called without any parameters. Otherwise, it returns an empty " +
-        "map of `NullType`")
+      .doc("When set to true, it returns an empty array of string type and an empty map with " +
+        "string type as key/value type when `array` and `map` functions are called without any " +
+        "parameters, respectively. Otherwise, it returns an empty array of `NullType` and " +
+        "empty map with `NullType` as key/value type, respectively. ")
       .booleanConf
       .createWithDefault(false)
 
