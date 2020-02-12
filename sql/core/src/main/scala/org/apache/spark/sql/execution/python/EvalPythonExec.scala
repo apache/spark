@@ -59,7 +59,6 @@ import org.apache.spark.util.Utils
  */
 abstract class EvalPythonExec extends UnaryExecNode {
   def udfs: Seq[PythonUDF]
-
   def resultAttrs: Seq[Attribute]
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs

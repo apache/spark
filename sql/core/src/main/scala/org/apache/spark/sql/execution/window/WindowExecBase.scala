@@ -28,9 +28,7 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
 
 abstract class WindowExecBase extends UnaryExecNode {
   def windowExpression: Seq[NamedExpression]
-
   def partitionSpec: Seq[Expression]
-
   def orderSpec: Seq[SortOrder]
 
   /**
