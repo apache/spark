@@ -476,7 +476,7 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
     pattern.matcher(s.toString)
   }
 
-  protected def getGenCodeVals(ctx: CodegenContext, ev: ExprCode) = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNamePattern = classOf[Pattern].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
@@ -489,9 +489,19 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
     } else {
       ""
     }
-
-    (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull)
+    doNullSafeCodeGen(
+      ctx, ev, classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull)
   }
+
+  def doNullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      classNamePattern: String,
+      matcher: String,
+      matchResult: String,
+      termLastRegex: String,
+      termPattern: String,
+      setEvNotNull: String): ExprCode
 }
 
 /**
@@ -501,6 +511,21 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * regexp - a string expression. The regex string should be a Java regular expression.
+
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".
+
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+      * idx - a int expression. The regex maybe contains multiple groups. `idx` represents the
+          index of regex group.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
@@ -529,10 +554,15 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def dataType: DataType = StringType
   override def prettyName: String = "regexp_extract"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
-      getGenCodeVals(ctx, ev)
-
+  override def doNullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      classNamePattern: String,
+      matcher: String,
+      matchResult: String,
+      termLastRegex: String,
+      termPattern: String,
+      setEvNotNull: String): ExprCode = {
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
       if (!$regexp.equals($termLastRegex)) {
@@ -565,6 +595,21 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts all group that matches `regexp`.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * regexp - a string expression. The regex string should be a Java regular expression.
+
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".
+
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+      * idx - a int expression. The regex maybe contains multiple groups. `idx` represents the
+          index of regex group.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
@@ -595,9 +640,15 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def dataType: DataType = ArrayType(StringType)
   override def prettyName: String = "regexp_extract_all"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
-      getGenCodeVals(ctx, ev)
+  override def doNullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      classNamePattern: String,
+      matcher: String,
+      matchResult: String,
+      termLastRegex: String,
+      termPattern: String,
+      setEvNotNull: String): ExprCode = {
     val matchResults = ctx.freshName("matchResults")
     val arrayClass = classOf[GenericArrayData].getName
 
