@@ -160,7 +160,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       // This is used to delay the creation of non-skew partitions so that we can potentially
       // coalesce them like `ReduceNumShufflePartitions` does.
       val nonSkewPartitionIndices = mutable.ArrayBuffer.empty[Int]
-      val skewDesc = mutable.ArrayBuffer.empty[String]
+      val leftSkewDesc = new SkewDesc
+      val rightSkewDesc = new SkewDesc
       for (partitionIndex <- 0 until numPartitions) {
         val leftSize = leftStats.bytesByPartitionId(partitionIndex)
         val isLeftSkew = isSkewed(leftSize, leftMedSize) && canSplitLeftSide(joinType)
@@ -176,17 +177,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
             nonSkewPartitionIndices.clear()
           }
 
-          // Updates the skew partition descriptions.
-          if (isLeftSkew && isRightSkew) {
-            skewDesc += s"both $partitionIndex (${FileUtils.byteCountToDisplaySize(leftSize)}, " +
-              s"${FileUtils.byteCountToDisplaySize(leftSize)})"
-          } else if (isLeftSkew) {
-            skewDesc += s"left $partitionIndex (${FileUtils.byteCountToDisplaySize(leftSize)})"
-          } else if (isRightSkew) {
-            skewDesc += s"right $partitionIndex (${FileUtils.byteCountToDisplaySize(rightSize)})"
-          }
-
           val leftParts = if (isLeftSkew) {
+            leftSkewDesc.addPartitionSize(leftSize)
             createSkewPartitions(
               partitionIndex,
               getMapStartIndices(left, partitionIndex),
@@ -196,6 +188,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           }
 
           val rightParts = if (isRightSkew) {
+            rightSkewDesc.addPartitionSize(rightSize)
             createSkewPartitions(
               partitionIndex,
               getMapStartIndices(right, partitionIndex),
@@ -226,10 +219,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         }
       }
 
-      logDebug(s"number of skewed partitions is ${skewDesc.length}")
-      if (skewDesc.nonEmpty) {
-        val newLeft = SkewJoinShuffleReaderExec(left, leftSidePartitions.toArray, skewDesc)
-        val newRight = SkewJoinShuffleReaderExec(right, rightSidePartitions.toArray, skewDesc)
+      logDebug("number of skewed partitions: " +
+        s"left ${leftSkewDesc.numPartitions}, right ${rightSkewDesc.numPartitions}")
+      if (leftSkewDesc.numPartitions > 0 || rightSkewDesc.numPartitions > 0) {
+        val newLeft = SkewJoinShuffleReaderExec(
+          left, leftSidePartitions.toArray, leftSkewDesc.toString)
+        val newRight = SkewJoinShuffleReaderExec(
+          right, rightSidePartitions.toArray, rightSkewDesc.toString)
         smj.copy(
           left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
       } else {
@@ -317,6 +313,38 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
+private class SkewDesc {
+  private[this] var numSkewedPartitions: Int = 0
+  private[this] var totalSize: Long = 0
+  private[this] var maxSize: Long = 0
+  private[this] var minSize: Long = 0
+
+  def numPartitions: Int = numSkewedPartitions
+
+  def addPartitionSize(size: Long): Unit = {
+    if (numSkewedPartitions == 0) {
+      maxSize = size
+      minSize = size
+    }
+    numSkewedPartitions += 1
+    totalSize += size
+    if (size > maxSize) maxSize = size
+    if (size < minSize) minSize = size
+  }
+
+  override def toString: String = {
+    if (numSkewedPartitions == 0) {
+      "no skewed partition"
+    } else {
+      val maxSizeStr = FileUtils.byteCountToDisplaySize(maxSize)
+      val minSizeStr = FileUtils.byteCountToDisplaySize(minSize)
+      val avgSizeStr = FileUtils.byteCountToDisplaySize(totalSize / numSkewedPartitions)
+      s"$numSkewedPartitions skewed partitions with " +
+        s"size(max=$maxSizeStr, min=$minSizeStr, avg=$avgSizeStr)"
+    }
+  }
+}
+
 /**
  * A wrapper of shuffle query stage, which follows the given partition arrangement.
  *
@@ -328,7 +356,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 case class SkewJoinShuffleReaderExec(
     child: SparkPlan,
     partitionSpecs: Array[ShufflePartitionSpec],
-    skewDesc: Seq[String]) extends UnaryExecNode {
+    skewDesc: String) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -336,7 +364,7 @@ case class SkewJoinShuffleReaderExec(
     UnknownPartitioning(partitionSpecs.length)
   }
 
-  override def stringArgs: Iterator[Any] = Iterator("Skewed Partitions: " + skewDesc.mkString(", "))
+  override def stringArgs: Iterator[Any] = Iterator(skewDesc)
 
   private var cachedShuffleRDD: RDD[InternalRow] = null
 
