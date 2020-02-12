@@ -570,29 +570,27 @@ trait HasDistanceMeasure extends Params {
 trait HasValidationIndicatorCol extends Params {
 
   /**
-   * Param for name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
+   * Param for name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation..
    * @group param
    */
-  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation")
+  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.")
 
   /** @group getParam */
   final def getValidationIndicatorCol: String = $(validationIndicatorCol)
 }
 
 /**
- * Trait for shared param blockSize (default: 1024). This trait may be changed or
+ * Trait for shared param blockSize. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
 trait HasBlockSize extends Params {
 
   /**
-   * Param for block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
+   * Param for block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data..
    * @group expertParam
    */
-  final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data", ParamValidators.gt(0))
-
-  setDefault(blockSize, 1024)
+  final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   final def getBlockSize: Int = $(blockSize)

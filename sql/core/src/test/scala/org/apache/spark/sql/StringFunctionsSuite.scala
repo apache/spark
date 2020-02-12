@@ -96,9 +96,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("string regex_extract_all") {
     val df = Seq(
-      ("100-200,300-400", "(\\d+)-(\\d+)", "300"),
-      ("101-201,301-401", "(\\d+)-(\\d+)", "400"),
-      ("102-202,302-402", "(\\d+)", "400")).toDF("a", "b", "c")
+      ("100-200,300-400", "(\\d+)-(\\d+)"),
+      ("101-201,301-401", "(\\d+)-(\\d+)"),
+      ("102-202,302-402", "(\\d+)")).toDF("a", "b")
 
     checkAnswer(
       df.select(
@@ -115,11 +115,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // See the optimizer rule `ConvertToLocalRelation`
     checkAnswer(
       df.filter("isnotnull(a)").selectExpr(
-        "regexp_extract_all(a, b, 1)",
-        "regexp_extract_all(a, b, 2)"),
-      Row(Seq("100", "300"), Seq("200", "400")) ::
-        Row(Seq("101", "301"), Seq("201", "401")) ::
-        Row(Seq("102", "202", "302", "402"), Seq("", "", "", "")) :: Nil)
+        "regexp_extract_all(a, b, 0)",
+        "regexp_extract_all(a, b, 1)"),
+      Row(Seq("100-200", "300-400"), Seq("100", "300")) ::
+        Row(Seq("101-201", "301-401"), Seq("101", "301")) ::
+        Row(Seq("102", "202", "302", "402"), Seq("102", "202", "302", "402")) :: Nil)
   }
 
   test("non-matching optional group") {

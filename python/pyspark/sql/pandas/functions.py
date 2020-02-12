@@ -43,303 +43,228 @@ class PandasUDFType(object):
 @since(2.3)
 def pandas_udf(f=None, returnType=None, functionType=None):
     """
-    Creates a vectorized user defined function (UDF).
+    Creates a pandas user defined function (a.k.a. vectorized user defined function).
+
+    Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer
+    data and Pandas to work with the data, which allows vectorized operations. A Pandas UDF
+    is defined using the `pandas_udf` as a decorator or to wrap the function, and no
+    additional configuration is required. A Pandas UDF behaves as a regular PySpark function
+    API in general.
 
     :param f: user-defined function. A python function if used as a standalone function
     :param returnType: the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
-                         Default: SCALAR.
+        Default: SCALAR.
 
-    .. seealso:: :meth:`pyspark.sql.DataFrame.mapInPandas`
-    .. seealso:: :meth:`pyspark.sql.GroupedData.applyInPandas`
-    .. seealso:: :meth:`pyspark.sql.PandasCogroupedOps.applyInPandas`
+        .. note:: This parameter exists for compatibility. Using Python type hints is encouraged.
 
-    The function type of the UDF can be one of the following:
+    In order to use this API, customarily the below are imported:
 
-    1. SCALAR
+    >>> import pandas as pd
+    >>> from pyspark.sql.functions import pandas_udf
 
-       A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
-       If the return type is :class:`StructType`, the returned value should be a `pandas.DataFrame`.
+    From Spark 3.0 with Python 3.6+, `Python type hints <https://www.python.org/dev/peps/pep-0484>`_
+    detect the function types as below:
 
-       :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
+    >>> @pandas_udf(IntegerType())
+    ... def slen(s: pd.Series) -> pd.Series:
+    ...     return s.str.len()
 
-       Scalar UDFs can be used with :meth:`pyspark.sql.DataFrame.withColumn` and
-       :meth:`pyspark.sql.DataFrame.select`.
+    Prior to Spark 3.0, the pandas UDF used `functionType` to decide the execution type as below:
 
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> from pyspark.sql.types import IntegerType, StringType
-       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())  # doctest: +SKIP
-       >>> @pandas_udf(StringType())  # doctest: +SKIP
-       ... def to_upper(s):
-       ...     return s.str.upper()
-       ...
-       >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
-       ... def add_one(x):
-       ...     return x + 1
-       ...
-       >>> df = spark.createDataFrame([(1, "John Doe", 21)],
-       ...                            ("id", "name", "age"))  # doctest: +SKIP
-       >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
-       ...     .show()  # doctest: +SKIP
-       +----------+--------------+------------+
-       |slen(name)|to_upper(name)|add_one(age)|
-       +----------+--------------+------------+
-       |         8|      JOHN DOE|          22|
-       +----------+--------------+------------+
-       >>> @pandas_udf("first string, last string")  # doctest: +SKIP
-       ... def split_expand(n):
-       ...     return n.str.split(expand=True)
-       >>> df.select(split_expand("name")).show()  # doctest: +SKIP
-       +------------------+
-       |split_expand(name)|
-       +------------------+
-       |       [John, Doe]|
-       +------------------+
+    >>> from pyspark.sql.functions import PandasUDFType
+    >>> from pyspark.sql.types import IntegerType
+    >>> @pandas_udf(IntegerType(), PandasUDFType.SCALAR)
+    ... def slen(s):
+    ...     return s.str.len()
 
-       .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
-           column, but is the length of an internal batch used for each call to the function.
-           Therefore, this can be used, for example, to ensure the length of each returned
-           `pandas.Series`, and can not be used as the column length.
+    It is preferred to specify type hints for the pandas UDF instead of specifying pandas UDF
+    type via `functionType` which will be deprecated in the future releases.
 
-    2. SCALAR_ITER
+    Note that the type hint should use `pandas.Series` in all cases but there is one variant
+    that `pandas.DataFrame` should be used for its input or output type hint instead when the input
+    or output column is of :class:`pyspark.sql.types.StructType`. The following example shows
+    a Pandas UDF which takes long column, string column and struct column, and outputs a struct
+    column. It requires the function to specify the type hints of `pandas.Series` and
+    `pandas.DataFrame` as below:
 
-       A scalar iterator UDF is semantically the same as the scalar Pandas UDF above except that the
-       wrapped Python function takes an iterator of batches as input instead of a single batch and,
-       instead of returning a single output batch, it yields output batches or explicitly returns an
-       generator or an iterator of output batches.
-       It is useful when the UDF execution requires initializing some state, e.g., loading a machine
-       learning model file to apply inference to every input batch.
+    >>> @pandas_udf("col1 string, col2 long")
+    >>> def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
+    ...     s3['col2'] = s1 + s2.str.len()
+    ...     return s3
+    ...
+    >>> # Create a Spark DataFrame that has three columns including a sturct column.
+    ... df = spark.createDataFrame(
+    ...     [[1, "a string", ("a nested string",)]],
+    ...     "long_col long, string_col string, struct_col struct<col1:string>")
+    >>> df.printSchema()
+    root
+    |-- long_column: long (nullable = true)
+    |-- string_column: string (nullable = true)
+    |-- struct_column: struct (nullable = true)
+    |    |-- col1: string (nullable = true)
+    >>> df.select(func("long_col", "string_col", "struct_col")).printSchema()
+    |-- func(long_col, string_col, struct_col): struct (nullable = true)
+    |    |-- col1: string (nullable = true)
+    |    |-- col2: long (nullable = true)
 
-       .. note:: It is not guaranteed that one invocation of a scalar iterator UDF will process all
-           batches from one partition, although it is currently implemented this way.
-           Your code shall not rely on this behavior because it might change in the future for
-           further optimization, e.g., one invocation processes multiple partitions.
+    In the following sections, it describes the cominations of the supported type hints. For
+    simplicity, `pandas.DataFrame` variant is omitted.
 
-       Scalar iterator UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
-       :meth:`pyspark.sql.DataFrame.select`.
+    * Series to Series
+        `pandas.Series`, ... -> `pandas.Series`
 
-       >>> import pandas as pd  # doctest: +SKIP
-       >>> from pyspark.sql.functions import col, pandas_udf, struct, PandasUDFType
-       >>> pdf = pd.DataFrame([1, 2, 3], columns=["x"])  # doctest: +SKIP
-       >>> df = spark.createDataFrame(pdf)  # doctest: +SKIP
+        The function takes one or more `pandas.Series` and outputs one `pandas.Series`.
+        The output of the function should always be of the same length as the input.
 
-       When the UDF is called with a single column that is not `StructType`, the input to the
-       underlying function is an iterator of `pd.Series`.
+        >>> @pandas_udf("string")
+        ... def to_upper(s: pd.Series) -> pd.Series:
+        ...     return s.str.upper()
+        ...
+        >>> df = spark.createDataFrame([("John Doe",)], ("name",))
+        >>> df.select(to_upper("name")).show()
+        +--------------+
+        |to_upper(name)|
+        +--------------+
+        |      JOHN DOE|
+        +--------------+
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
-       ... def plus_one(batch_iter):
-       ...     for x in batch_iter:
-       ...         yield x + 1
-       ...
-       >>> df.select(plus_one(col("x"))).show()  # doctest: +SKIP
-       +-----------+
-       |plus_one(x)|
-       +-----------+
-       |          2|
-       |          3|
-       |          4|
-       +-----------+
+        >>> @pandas_udf("first string, last string")
+        ... def split_expand(s: pd.Series) -> pd.DataFrame:
+        ...     return s.str.split(expand=True)
+        ...
+        >>> df = spark.createDataFrame([("John Doe",)], ("name",))
+        >>> df.select(split_expand("name")).show()
+        +------------------+
+        |split_expand(name)|
+        +------------------+
+        |       [John, Doe]|
+        +------------------+
 
-       When the UDF is called with more than one columns, the input to the underlying function is an
-       iterator of `pd.Series` tuple.
+        .. note:: The length of the input is not that of the whole input column, but is the
+            length of an internal batch used for each call to the function.
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
-       ... def multiply_two_cols(batch_iter):
-       ...     for a, b in batch_iter:
-       ...         yield a * b
-       ...
-       >>> df.select(multiply_two_cols(col("x"), col("x"))).show()  # doctest: +SKIP
-       +-----------------------+
-       |multiply_two_cols(x, x)|
-       +-----------------------+
-       |                      1|
-       |                      4|
-       |                      9|
-       +-----------------------+
+    * Iterator of Series to Iterator of Series
+        `Iterator[pandas.Series]` -> `Iterator[pandas.Series]`
 
-       When the UDF is called with a single column that is `StructType`, the input to the underlying
-       function is an iterator of `pd.DataFrame`.
+        The function takes an iterator of `pandas.Series` and outputs an iterator of
+        `pandas.Series`. In this case, the created pandas UDF instance requires one input
+        column when this is called as a PySpark column. The output of each series from
+        the function should always be of the same length as the input.
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
-       ... def multiply_two_nested_cols(pdf_iter):
-       ...    for pdf in pdf_iter:
-       ...        yield pdf["a"] * pdf["b"]
-       ...
-       >>> df.select(
-       ...     multiply_two_nested_cols(
-       ...         struct(col("x").alias("a"), col("x").alias("b"))
-       ...     ).alias("y")
-       ... ).show()  # doctest: +SKIP
-       +---+
-       |  y|
-       +---+
-       |  1|
-       |  4|
-       |  9|
-       +---+
+        It is useful when the UDF execution
+        requires initializing some states although internally it works identically as
+        Series to Series case. The pseudocode below illustrates the example.
 
-       In the UDF, you can initialize some states before processing batches, wrap your code with
-       `try ... finally ...` or use context managers to ensure the release of resources at the end
-       or in case of early termination.
+        .. highlight:: python
+        .. code-block:: python
 
-       >>> y_bc = spark.sparkContext.broadcast(1)  # doctest: +SKIP
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
-       ... def plus_y(batch_iter):
-       ...     y = y_bc.value  # initialize some state
-       ...     try:
-       ...         for x in batch_iter:
-       ...             yield x + y
-       ...     finally:
-       ...         pass  # release resources here, if any
-       ...
-       >>> df.select(plus_y(col("x"))).show()  # doctest: +SKIP
-       +---------+
-       |plus_y(x)|
-       +---------+
-       |        2|
-       |        3|
-       |        4|
-       +---------+
+            @pandas_udf("long")
+            def calculate(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                # Do some expensive initialization with a state
+                state = very_expensive_initialization()
+                for x in iterator:
+                    # Use that state for whole iterator.
+                    yield calculate_with_state(x, state)
 
-    3. GROUPED_MAP
+            df.select(calculate("value")).show()
 
-       A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
-       The returnType should be a :class:`StructType` describing the schema of the returned
-       `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
-       the field names in the defined returnType schema if specified as strings, or match the
-       field data types by position if not strings, e.g. integer indices.
-       The length of the returned `pandas.DataFrame` can be arbitrary.
+        >>> from typing import Iterator
+        >>> @pandas_udf("long")
+        ... def plus_one(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
+        ...     for s in iterator:
+        ...         yield s + 1
+        ...
+        >>> df = spark.createDataFrame(pd.DataFrame([1, 2, 3], columns=["v"]))
+        >>> df.select(plus_one(df.v)).show()
+        +-----------+
+        |plus_one(v)|
+        +-----------+
+        |          2|
+        |          3|
+        |          4|
+        +-----------+
 
-       Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
+        .. note:: The length of each series is the length of a batch internally used.
 
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> df = spark.createDataFrame(
-       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))  # doctest: +SKIP
-       >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
-       ... def normalize(pdf):
-       ...     v = pdf.v
-       ...     return pdf.assign(v=(v - v.mean()) / v.std())
-       >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
-       +---+-------------------+
-       | id|                  v|
-       +---+-------------------+
-       |  1|-0.7071067811865475|
-       |  1| 0.7071067811865475|
-       |  2|-0.8320502943378437|
-       |  2|-0.2773500981126146|
-       |  2| 1.1094003924504583|
-       +---+-------------------+
+    * Iterator of Multiple Series to Iterator of Series
+        `Iterator[Tuple[pandas.Series, ...]]` -> `Iterator[pandas.Series]`
 
-       Alternatively, the user can define a function that takes two arguments.
-       In this case, the grouping key(s) will be passed as the first argument and the data will
-       be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
-       data types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in
-       as a `pandas.DataFrame` containing all columns from the original Spark DataFrame.
-       This is useful when the user does not want to hardcode grouping key(s) in the function.
+        The function takes an iterator of a tuple of multiple `pandas.Series` and outputs an
+        iterator of `pandas.Series`. In this case, the created pandas UDF instance requires
+        input columns as many as the series when this is called as a PySpark column.
+        It works identically as Iterator of Series to Iterator of Series case except
+        the parameter difference. The output of each series from the function should always
+        be of the same length as the input.
 
-       >>> import pandas as pd  # doctest: +SKIP
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> df = spark.createDataFrame(
-       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))  # doctest: +SKIP
-       >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
-       ... def mean_udf(key, pdf):
-       ...     # key is a tuple of one numpy.int64, which is the value
-       ...     # of 'id' for the current group
-       ...     return pd.DataFrame([key + (pdf.v.mean(),)])
-       >>> df.groupby('id').apply(mean_udf).show()  # doctest: +SKIP
-       +---+---+
-       | id|  v|
-       +---+---+
-       |  1|1.5|
-       |  2|6.0|
-       +---+---+
-       >>> @pandas_udf(
-       ...    "id long, `ceil(v / 2)` long, v double",
-       ...    PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
-       >>> def sum_udf(key, pdf):
-       ...     # key is a tuple of two numpy.int64s, which is the values
-       ...     # of 'id' and 'ceil(df.v / 2)' for the current group
-       ...     return pd.DataFrame([key + (pdf.v.sum(),)])
-       >>> df.groupby(df.id, ceil(df.v / 2)).apply(sum_udf).show()  # doctest: +SKIP
-       +---+-----------+----+
-       | id|ceil(v / 2)|   v|
-       +---+-----------+----+
-       |  2|          5|10.0|
-       |  1|          1| 3.0|
-       |  2|          3| 5.0|
-       |  2|          2| 3.0|
-       +---+-----------+----+
+        >>> from typing import Iterator, Tuple
+        >>> from pyspark.sql.functions import struct, col
+        >>> @pandas_udf("long")
+        ... def multiply(iterator: Iterator[Tuple[pd.Series, pd.DataFrame]]) -> Iterator[pd.Series]:
+        ...     for s1, df in iterator:
+        ...         yield s1 * df.v
+        ...
+        >>> df = spark.createDataFrame(pd.DataFrame([1, 2, 3], columns=["v"]))
+        >>> df.withColumn('output', multiply(col("v"), struct(col("v")))).show()
+        +---+------+
+        |  v|output|
+        +---+------+
+        |  1|     1|
+        |  2|     4|
+        |  3|     9|
+        +---+------+
 
-       .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-           recommended to explicitly index the columns by name to ensure the positions are correct,
-           or alternatively use an `OrderedDict`.
-           For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-           `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
+        .. note:: The length of each series is the length of a batch internally used.
 
-       .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
+    * Series to Scalar
+        `pandas.Series`, ... -> `Any`
 
-    4. GROUPED_AGG
+        The function takes `pandas.Series` and returns a scalar value. The `returnType`
+        should be a primitive data type, and the returned scalar can be either a python primitive
+        type, e.g., int or float or a numpy data type, e.g., numpy.int64 or numpy.float64.
+        `Any` should ideally be a specific scalar type accordingly.
 
-       A grouped aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
-       The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
-       The returned scalar can be either a python primitive type, e.g., `int` or `float`
-       or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
+        >>> @pandas_udf("double")
+        ... def mean_udf(v: pd.Series) -> float:
+        ...     return v.mean()
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+        >>> df.groupby("id").agg(mean_udf(df['v'])).show()
+        +---+-----------+
+        | id|mean_udf(v)|
+        +---+-----------+
+        |  1|        1.5|
+        |  2|        6.0|
+        +---+-----------+
 
-       :class:`MapType` and :class:`StructType` are currently not supported as output types.
+        This UDF can also be used as window functions as below:
 
-       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg` and
-       :class:`pyspark.sql.Window`
+        >>> from pyspark.sql import Window
+        >>> @pandas_udf("double")
+        ... def mean_udf(v: pd.Series) -> float:
+        ...     return v.mean()
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+        >>> w = Window.partitionBy('id').orderBy('v').rowsBetween(-1, 0)
+        >>> df.withColumn('mean_v', mean_udf("v").over(w)).show()
+        +---+----+------+
+        | id|   v|mean_v|
+        +---+----+------+
+        |  1| 1.0|   1.0|
+        |  1| 2.0|   1.5|
+        |  2| 3.0|   3.0|
+        |  2| 5.0|   4.0|
+        |  2|10.0|   7.5|
+        +---+----+------+
 
-       This example shows using grouped aggregated UDFs with groupby:
-
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> df = spark.createDataFrame(
-       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))
-       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
-       ... def mean_udf(v):
-       ...     return v.mean()
-       >>> df.groupby("id").agg(mean_udf(df['v'])).show()  # doctest: +SKIP
-       +---+-----------+
-       | id|mean_udf(v)|
-       +---+-----------+
-       |  1|        1.5|
-       |  2|        6.0|
-       +---+-----------+
-
-       This example shows using grouped aggregated UDFs as window functions.
-
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-       >>> from pyspark.sql import Window
-       >>> df = spark.createDataFrame(
-       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))
-       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
-       ... def mean_udf(v):
-       ...     return v.mean()
-       >>> w = (Window.partitionBy('id')
-       ...            .orderBy('v')
-       ...            .rowsBetween(-1, 0))
-       >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
-       +---+----+------+
-       | id|   v|mean_v|
-       +---+----+------+
-       |  1| 1.0|   1.0|
-       |  1| 2.0|   1.5|
-       |  2| 3.0|   3.0|
-       |  2| 5.0|   4.0|
-       |  2|10.0|   7.5|
-       +---+----+------+
-
-       .. note:: For performance reasons, the input series to window functions are not copied.
+        .. note:: For performance reasons, the input series to window functions are not copied.
             Therefore, mutating the input series is not allowed and will cause incorrect results.
             For the same reason, users should also not rely on the index of the input series.
 
-       .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
+        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
     .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
@@ -348,10 +273,21 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     .. note:: The user-defined functions do not take keyword arguments on the calling side.
 
     .. note:: The data type of returned `pandas.Series` from the user-defined functions should be
-        matched with defined returnType (see :meth:`types.to_arrow_type` and
+        matched with defined `returnType` (see :meth:`types.to_arrow_type` and
         :meth:`types.from_arrow_type`). When there is mismatch between them, Spark might do
         conversion on returned data. The conversion is not guaranteed to be correct and results
         should be checked for accuracy by users.
+
+    .. note:: Currently,
+        :class:`pyspark.sql.types.MapType`,
+        :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
+        nested :class:`pyspark.sql.types.StructType`
+        are currently not supported as output types.
+
+    .. seealso:: :meth:`pyspark.sql.DataFrame.mapInPandas`
+    .. seealso:: :meth:`pyspark.sql.GroupedData.applyInPandas`
+    .. seealso:: :meth:`pyspark.sql.PandasCogroupedOps.applyInPandas`
+    .. seealso:: :meth:`pyspark.sql.UDFRegistration.register`
     """
 
     # The following table shows most of Pandas data and SQL type conversions in Pandas UDFs that
@@ -480,25 +416,3 @@ def _create_pandas_udf(f, returnType, evalType):
             "or three arguments (key, left, right).")
 
     return _create_udf(f, returnType, evalType)
-
-
-def _test():
-    import doctest
-    from pyspark.sql import SparkSession
-    import pyspark.sql.pandas.functions
-    globs = pyspark.sql.pandas.functions.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.pandas.functions tests")\
-        .getOrCreate()
-    globs['spark'] = spark
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.pandas.functions, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    spark.stop()
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()
