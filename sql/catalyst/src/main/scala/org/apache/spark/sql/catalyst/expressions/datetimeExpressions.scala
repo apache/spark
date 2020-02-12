@@ -868,7 +868,7 @@ abstract class ToTimestamp
               ${ev.isNull} = true;
             } catch (java.time.format.DateTimeParseException e) {
               $tf$$.MODULE$$.checkLegacyFormatter(
-                e, $string.toString(), $format.toString(), $zid)};
+                e, $string.toString(), $format.toString(), $zid);
               ${ev.isNull} = true;
             } catch (java.time.DateTimeException e) {
               ${ev.isNull} = true;
