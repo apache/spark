@@ -21,12 +21,13 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.nio.file.FileSystems
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
-import org.apache.hadoop.fs.permission.{AclEntry, FsPermission}
+import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -500,12 +501,27 @@ case class TruncateTableCommand(
               }
             }
             optAcls.foreach { acls =>
+              val aclEntries = acls.asScala.filter(_.getName != null).asJava
+
+              // If the path doesn't have default ACLs, `setAcl` API will throw an error
+              // as it expects user/group/other permissions must be in ACL entries.
+              // So we need to add tradition user/group/other permission
+              // in the form of ACL.
+              optPermission.map { permission =>
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.USER, permission.getUserAction()))
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.GROUP, permission.getGroupAction()))
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.OTHER, permission.getOtherAction()))
+              }
+
               try {
-                fs.setAcl(path, acls)
+                fs.setAcl(path, aclEntries)
               } catch {
                 case NonFatal(e) =>
                   throw new SecurityException(
-                    s"Failed to set original ACL $acls back to " +
+                    s"Failed to set original ACL $aclEntries back to " +
                       s"the created path: $path. Exception: ${e.getMessage}")
               }
             }
@@ -535,6 +551,16 @@ case class TruncateTableCommand(
       catalog.alterTableStats(tableName, Some(newStats))
     }
     Seq.empty[Row]
+  }
+
+  private def newAclEntry(
+      scope: AclEntryScope,
+      aclType: AclEntryType,
+      permission: FsAction): AclEntry = {
+    new AclEntry.Builder()
+      .setScope(scope)
+      .setType(aclType)
+      .setPermission(permission).build()
   }
 }
 
