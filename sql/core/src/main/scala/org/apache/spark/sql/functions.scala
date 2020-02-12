@@ -2384,8 +2384,9 @@ object functions {
   }
 
   /**
-   * Extract all specific group matched by a Java regex, from the specified string column.
-   * If the regex did not match, or the specified group did not match, an empty array is returned.
+   * Extract all specific groups matched by a Java regex, from the specified string column.
+   * If the regex did not match, return an empty array. if the specified group index exceeds the
+   * group count of regex, an IllegalArgumentException will be throwing.
    *
    * @group string_funcs
    * @since 3.0.0

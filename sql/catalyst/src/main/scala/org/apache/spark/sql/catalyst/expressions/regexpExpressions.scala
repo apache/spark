@@ -442,43 +442,6 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
     }
     pattern.matcher(s.toString)
   }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
-    val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
-    val setEvNotNull = if (nullable) {
-      s"${ev.isNull} = false;"
-    } else {
-      ""
-    }
-    doNullSafeCodeGen(
-      ctx,
-      ev,
-      classNamePattern,
-      classNameRegExpExtractBase,
-      matcher,
-      matchResult,
-      termLastRegex,
-      termPattern,
-      setEvNotNull)
-  }
-
-  def doNullSafeCodeGen(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      classNamePattern: String,
-      classNameRegExpExtractBase: String,
-      matcher: String,
-      matchResult: String,
-      termLastRegex: String,
-      termPattern: String,
-      setEvNotNull: String): ExprCode
 }
 
 /**
@@ -490,8 +453,8 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
   arguments = """
     Arguments:
-      * str - a string expression
-      * regexp - a string expression. The regex string should be a Java regular expression.
+      * str - a string expression of the input string.
+      * regexp - a string expression of the regex string.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
@@ -500,8 +463,8 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
-      * idx - a int expression. The regex maybe contains multiple groups. `idx` represents the
-          index of regex group.
+      * idx - an int expression of the regex group index. The regex maybe contains multiple
+          groups. `idx` indicates which regex group to extract.
   """,
   examples = """
     Examples:
@@ -533,16 +496,20 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def dataType: DataType = StringType
   override def prettyName: String = "regexp_extract"
 
-  override def doNullSafeCodeGen(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      classNamePattern: String,
-      classNameRegExpExtractBase: String,
-      matcher: String,
-      matchResult: String,
-      termLastRegex: String,
-      termPattern: String,
-      setEvNotNull: String): ExprCode = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
+
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
       if (!$regexp.equals($termLastRegex)) {
@@ -570,7 +537,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 }
 
 /**
- * Extract all specific(idx) group identified by a Java regex.
+ * Extract all specific(idx) groups identified by a Java regex.
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
@@ -578,8 +545,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   usage = "_FUNC_(str, regexp[, idx]) - Extracts all group that matches `regexp`.",
   arguments = """
     Arguments:
-      * str - a string expression
-      * regexp - a string expression. The regex string should be a Java regular expression.
+      * str - a string expression of the input string.
+      * regexp - a string expression of the regex string.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
@@ -588,8 +555,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
-      * idx - a int expression. The regex maybe contains multiple groups. `idx` represents the
-          index of regex group.
+      * idx - an int expression of the regex group index. The regex maybe contains multiple
+          groups. `idx` indicates which regex group to extract.
   """,
   examples = """
     Examples:
@@ -623,19 +590,22 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def dataType: DataType = ArrayType(StringType)
   override def prettyName: String = "regexp_extract_all"
 
-  override def doNullSafeCodeGen(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      classNamePattern: String,
-      classNameRegExpExtractBase: String,
-      matcher: String,
-      matchResult: String,
-      termLastRegex: String,
-      termPattern: String,
-      setEvNotNull: String): ExprCode = {
-    val matchResults = ctx.freshName("matchResults")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val arrayClass = classOf[GenericArrayData].getName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
+    val matchResults = ctx.freshName("matchResults")
 
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
          | if (!$regexp.equals($termLastRegex)) {
