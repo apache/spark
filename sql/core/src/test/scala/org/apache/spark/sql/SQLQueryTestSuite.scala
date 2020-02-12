@@ -337,6 +337,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
+    localSparkSession.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
 
     if (configSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs

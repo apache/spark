@@ -23,6 +23,8 @@ import org.apache.spark.sql.connector.read.Scan;
 
 /**
  * A {@link SparkDataStream} for streaming queries with continuous mode.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface ContinuousStream extends SparkDataStream {

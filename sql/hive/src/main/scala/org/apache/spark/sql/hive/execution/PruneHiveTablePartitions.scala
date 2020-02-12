@@ -30,6 +30,14 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 
 /**
+ * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
+ * partitions will be kept in [[HiveTableRelation.prunedPartitions]], and the statistics of
+ * the hive table relation will be updated based on pruned partitions.
+ *
+ * This rule is executed in optimization phase, so the statistics can be updated before physical
+ * planning, which is useful for some spark strategy, eg.
+ * [[org.apache.spark.sql.execution.SparkStrategies.JoinSelection]].
+ *
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)

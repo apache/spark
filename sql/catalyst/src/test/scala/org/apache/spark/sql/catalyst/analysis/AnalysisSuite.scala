@@ -25,9 +25,10 @@ import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
@@ -744,5 +745,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisError(
       CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
       "aggregates with filter predicate are not allowed" :: Nil)
+  }
+
+  test("Analysis exceed max iterations") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
+    val testAnalyzer = new Analyzer(
+      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+    val plan = testRelation2.select(
+      $"a" / Literal(2) as "div1",
+      $"a" / $"b" as "div2",
+      $"a" / $"c" as "div3",
+      $"a" / $"d" as "div4",
+      $"e" / $"e" as "div5")
+
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      testAnalyzer.execute(plan)
+    }.getMessage
+    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
   }
 }

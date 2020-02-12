@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -44,10 +45,18 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
   }
 
+  private val defaultElementType: DataType = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_DEFAULT_TO_STRING)) {
+      StringType
+    } else {
+      NullType
+    }
+  }
+
   override def dataType: ArrayType = {
     ArrayType(
       TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
-        .getOrElse(StringType),
+        .getOrElse(defaultElementType),
       containsNull = children.exists(_.nullable))
   }
 
