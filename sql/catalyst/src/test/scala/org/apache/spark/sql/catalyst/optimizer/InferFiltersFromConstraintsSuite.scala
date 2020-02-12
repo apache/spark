@@ -278,6 +278,17 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
+
+    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        testRelation1.where(IsNotNull('a)).subquery('left),
+        right,
+        Inner,
+        condition)
+    }
   }
 
   test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
