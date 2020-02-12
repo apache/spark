@@ -636,13 +636,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val maxRemoteBlockSizeFetchToMem = if (stream) 0 else Int.MaxValue - 512
       conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
       val bm1 = makeBlockManager(12000, "host-1", master) // BM with sufficient memory
-      val bm2 = makeBlockManager(10, "host-2", master) // BM with less memory
-      val bm3 = makeBlockManager(10, "host-3", master) // BM with less memory
+      val bm2 = makeBlockManager(1, "host-2", master) // BM with less memory
+      val bm3 = makeBlockManager(1, "host-3", master) // BM with less memory
       val bm4 = makeBlockManager(12000, "host-4", master) // BM with sufficient memory
-      val bm5 = makeBlockManager(10, "host-5", master) // BM with less memory
+      val bm5 = makeBlockManager(1, "host-5", master) // BM with less memory
       val bm6 = makeBlockManager(12000, "host-6", master) // BM with sufficient memory
 
-      val data = (1 to 10).toArray
+      val data = (1 to 100).toArray
       val serializedData = serializer.newInstance().serialize(data).array()
       val blockId = "list"
       bm1.putIterator(blockId, List(data).iterator, storageLevel, tellMaster = true)
