@@ -294,12 +294,15 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    testConstraintsAfterJoin(
-      originalLeft,
-      originalRight,
-      left,
-      testRelation2.where(IsNotNull('b) && 'b.attr.cast(IntegerType) === 1).subquery('right),
-      Inner,
-      Some("left.a".attr === "right.b".attr.cast(IntegerType)))
+    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        left,
+        testRelation2.where(IsNotNull('b) && 'b.attr.cast(IntegerType) === 1).subquery('right),
+        Inner,
+        condition)
+    }
   }
 }
