@@ -18,6 +18,10 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
@@ -108,13 +112,19 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               TransportClient client = null;
               try {
                 client = clientFactory.createClient(host, port);
-              } catch (Exception e) {
-                // throw ExternalShuffleServiceLostException exception then we won't retry to connect
-                // un-connected External Shuffle Service.
-                String msg = "The relative remote external shuffle service (host: " + host + "," +
-                  "port: " + port + "), which maintains the block data can't been connected.";
-                logger.info(msg);
-                throw new ExternalShuffleServiceLostException(msg);
+              } catch (InterruptedException e) {
+                throw e;
+              } catch (IOException e) {
+                if (!isHostReachable(host, 3000) || !isHostPortConnectable(host, port)) {
+                  // throw ExternalShuffleServiceLostException exception then we won't retry to connect
+                  // un-connected External Shuffle Service.
+                  String msg = "The relative remote external shuffle service (host: " + host + "," +
+                      "port: " + port + "), which maintains the block data can't been connected.";
+                  logger.info(msg);
+                  throw new ExternalShuffleServiceLostException(msg);
+                } else {
+                  throw e;
+                }
               }
               new OneForOneBlockFetcher(client, appId, execId,
                 blockIds1, listener1, conf, downloadFileManager).start();
@@ -137,6 +147,34 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         listener.onBlockFetchFailure(blockId, e);
       }
     }
+  }
+
+  public static boolean isHostPortConnectable(String host, int port) {
+    Socket socket = new Socket();
+    try {
+      socket.connect(new InetSocketAddress(host, port));
+    } catch (IOException e) {
+      e.printStackTrace();
+      return false;
+    } finally {
+      try {
+        socket.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    return true;
+  }
+
+  public static boolean isHostReachable(String host, Integer timeOut) {
+    try {
+      return InetAddress.getByName(host).isReachable(timeOut);
+    } catch (UnknownHostException e) {
+      e.printStackTrace();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return false;
   }
 
   @Override
