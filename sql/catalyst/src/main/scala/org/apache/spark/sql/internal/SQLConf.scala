@@ -2008,12 +2008,11 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE =
-    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType.enabled")
+    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType")
       .internal()
-      .doc("When set to true, it returns an empty array of string type and an empty map with " +
-        "string type as key/value type when `array` and `map` functions are called without any " +
-        "parameters, respectively. Otherwise, it returns an empty array of `NullType` and " +
-        "empty map with `NullType` as key/value type, respectively. ")
+      .doc("When set to true, Spark returns an empty collection with `StringType` as element " +
+        "type if the `array`/`map` function is called without any parameters. Otherwise, Spark " +
+        "returns an empty collection with `NullType` as element type.")
       .booleanConf
       .createWithDefault(false)
 
