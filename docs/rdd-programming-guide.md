@@ -1620,4 +1620,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).
+[Scala](api/scala/org/apache/spark/), [Java](api/java/), [Python](api/python/) and [R](api/R/).
