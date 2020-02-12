@@ -46,8 +46,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       y: LogicalPlan,
       expectedLeft: LogicalPlan,
       expectedRight: LogicalPlan,
-      joinType: JoinType) = {
-    val condition = Some("x.a".attr === "y.a".attr)
+      joinType: JoinType,
+      condition: Option[Expression] = Some("x.a".attr === "y.a".attr)) = {
     val originalQuery = x.join(y, joinType, condition).analyze
     val correctAnswer = expectedLeft.join(expectedRight, joinType, condition).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -264,10 +264,33 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
 
-  test("SPARK-30768: Constraints should be inferred from inequality attributes") {
+  test("Constraints should be inferred from inequality constraints: basic") {
+    Seq(("left.b".attr < "right.b".attr, 'b < 1, 'b < 1), // a < b && b < c => a < c
+      ("left.b".attr < "right.b".attr, 'b === 1, 'b < 1), // a < b && b = c => a < c
+      ("left.b".attr < "right.b".attr, 'b <= 1, 'b < 1), // a < b && b <= c => a < c
+      ("left.b".attr <= "right.b".attr, 'b <= 1, 'b <= 1), // a <= b && b <= c => a <= c
+      ("left.b".attr <= "right.b".attr, 'b === 1, 'b <= 1), // a <= b && b = c => a <= c
+      ("left.b".attr > "right.b".attr, 'b > 1, 'b > 1), // a > b && b > c => a > c
+      ("left.b".attr > "right.b".attr, 'b === 1, 'b > 1), // a > b && b > c => a > c
+      ("left.b".attr > "right.b".attr, 'b >= 1, 'b > 1), // a > b && b >= c => a > c
+      ("left.b".attr >= "right.b".attr, 'b >= 1, 'b >= 1), // a >= b && b >= c => a >= c
+      ("left.b".attr >= "right.b".attr, 'b === 1, 'b >= 1) // a >= b && b >= c => a >= c
+    ).foreach {
+      case (cond, filter, inferred) =>
+        val originalLeft = testRelation.subquery('left)
+        val originalRight = testRelation.where(filter).subquery('right)
+
+        val left = testRelation.where(IsNotNull('a) && IsNotNull('b) && inferred).subquery('left)
+        val right = testRelation.where(IsNotNull('a) && IsNotNull('b) && filter).subquery('right)
+        val condition = Some("left.a".attr === "right.a".attr && cond)
+        testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+    }
+  }
+
+  test("Constraints should be inferred from inequality attributes: simple case") {
     val condition = Some("x.a".attr > "y.a".attr)
     val optimizedLeft = testRelation.where(IsNotNull('a) && 'a === 1).as("x")
-    val optimizedRight = testRelation.where(Literal(1) > 'a && IsNotNull('a) ).as("y")
+    val optimizedRight = testRelation.where('a < 1 && IsNotNull('a) ).as("y")
     val correct = optimizedLeft.join(optimizedRight, Inner, condition)
 
     Seq(Literal(1) === 'a, 'a === Literal(1)).foreach { filter =>

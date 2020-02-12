@@ -61,19 +61,52 @@ trait ConstraintHelper {
    * additional constraint of the form `b = 5`.
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    val binaryComparisons = constraints.filter {
+      case _: GreaterThan => true
+      case _: GreaterThanOrEqual => true
+      case _: LessThan => true
+      case _: LessThanOrEqual => true
+      case _: EqualTo => true
+      case _ => false
+    }
+
+    val greaterThans = binaryComparisons.map {
+      case LessThan(l, r) => GreaterThan(r, l)
+      case LessThanOrEqual(l, r) => GreaterThanOrEqual(r, l)
+      case other => other
+    }
+
+    val lessThans = binaryComparisons.map {
+      case GreaterThan(l, r) => LessThan(r, l)
+      case GreaterThanOrEqual(l, r) => LessThanOrEqual(r, l)
+      case other => other
+    }
+
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         val candidateConstraints = constraints - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l: Attribute, r : Literal) =>
-        inferredConstraints ++= replaceConstraints(constraints - eq, l, r)
-      case eq @ EqualTo(l : Literal, r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(constraints - eq, r, l)
       case _ => // No inference
     }
-    inferredConstraints -- constraints
+
+    greaterThans.foreach {
+      case gt @ GreaterThan(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
+      case gt @ GreaterThanOrEqual(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
+      case _ => // No inference
+    }
+
+    lessThans.foreach {
+      case lt @ LessThan(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
+      case lt @ LessThanOrEqual(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
+      case _ => // No inference
+    }
+    inferredConstraints -- constraints -- greaterThans -- lessThans
   }
 
   private def replaceConstraints(
@@ -82,6 +115,24 @@ trait ConstraintHelper {
       destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
+
+  private def inferInequalityConstraints(
+      constraints: Set[Expression],
+      source: Expression,
+      destination: Expression,
+      binaryComparison: BinaryComparison): Set[Expression] = constraints.map {
+    case EqualTo(l, r) if l.semanticEquals(source) =>
+      binaryComparison.makeCopy(Array(destination, r))
+    case EqualTo(l, r) if r.semanticEquals(source) =>
+      binaryComparison.makeCopy(Array(destination, l))
+    case gt @ GreaterThan(l, r) if l.semanticEquals(source) =>
+      gt.makeCopy(Array(destination, r))
+    case gt @ LessThan(l, r) if l.semanticEquals(source) =>
+      gt.makeCopy(Array(destination, r))
+    case BinaryComparison(l, r) if l.semanticEquals(source) =>
+      binaryComparison.makeCopy(Array(destination, r))
+    case other => other
+  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
