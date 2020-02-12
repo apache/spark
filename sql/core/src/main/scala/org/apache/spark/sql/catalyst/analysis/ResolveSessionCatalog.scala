@@ -88,7 +88,7 @@ class ResolveSessionCatalog(
               col.position.orNull)
           }
           deleteChanges ++ addChanges
-        case None => Seq()
+        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 

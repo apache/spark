@@ -3033,7 +3033,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         if (colType.NULL != null) {
-          throw new AnalysisException("NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+          throw new AnalysisException(
+            "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
         }
         if (colType.colPosition != null) {
           throw new AnalysisException(
