@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Properties, Timer, TimerTask}
 
@@ -26,6 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
+
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
@@ -64,26 +68,27 @@ class BarrierTaskContext private[spark] (
   private lazy val numTasks = getTaskInfos().size
 
   private def getRequestToSync(
-    requestMethod: RequestMethod.Value,
     numTasks: Int,
     stageId: Int,
     stageAttemptNumber: Int,
     taskAttemptId: Long,
     barrierEpoch: Int,
-    allGatherMessage: Array[Byte]
+    partitionId: Int,
+    requestMethod: RequestMethod.Value,
+    allGatherMessage: String
   ): RequestToSync = {
     if (requestMethod == RequestMethod.BARRIER) {
       return BarrierRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
-        barrierEpoch, requestMethod)
+        barrierEpoch, partitionId, requestMethod)
     }
     AllGatherRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
-      barrierEpoch, requestMethod, allGatherMessage)
+      barrierEpoch, partitionId, requestMethod, allGatherMessage)
   }
 
   private def runBarrier(
     requestMethod: RequestMethod.Value,
-    allGatherMessage: Array[Byte] = Array[Byte]()
-  ): Array[Byte] = {
+    allGatherMessage: String = ""
+  ): String = {
 
     logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
       s"the global sync, current barrier epoch is $barrierEpoch.")
@@ -101,12 +106,12 @@ class BarrierTaskContext private[spark] (
     // Log the update of global sync every 60 seconds.
     timer.schedule(timerTask, 60000, 60000)
 
-    var messagesSerialized: Array[Byte] = Array[Byte]()
+    var json: String = ""
 
     try {
-      val abortableRpcFuture = barrierCoordinator.askAbortable[Array[Byte]](
-        message = getRequestToSync(requestMethod, numTasks, stageId, stageAttemptNumber,
-          taskAttemptId, barrierEpoch, allGatherMessage),
+      val abortableRpcFuture = barrierCoordinator.askAbortable[String](
+        message = getRequestToSync(numTasks, stageId, stageAttemptNumber,
+          taskAttemptId, barrierEpoch, partitionId, requestMethod, allGatherMessage),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
@@ -118,7 +123,7 @@ class BarrierTaskContext private[spark] (
         while (!abortableRpcFuture.toFuture.isCompleted) {
           // wait RPC future for at most 1 second
           try {
-            messagesSerialized = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+            json = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
           } catch {
             case _: TimeoutException | _: InterruptedException =>
               // If `TimeoutException` thrown, waiting RPC future reach 1 second.
@@ -148,7 +153,7 @@ class BarrierTaskContext private[spark] (
       timerTask.cancel()
       timer.purge()
     }
-    messagesSerialized
+    json
   }
 
   /**
@@ -211,12 +216,10 @@ class BarrierTaskContext private[spark] (
   @Experimental
   @Since("3.0.0")
   def allGather(message: String): ArrayBuffer[String] = {
-    val messagesSerialized = runBarrier(RequestMethod.ALL_GATHER, message.getBytes(UTF_8))
-    val ois = new ObjectInputStream(new ByteArrayInputStream(messagesSerialized))
-    val messages = ois.readObject.asInstanceOf[Array[Array[Byte]]]
-    ois.close()
-    ArrayBuffer(messages: _*).map(msg => new String(msg, UTF_8))
-
+    val json = runBarrier(RequestMethod.ALL_GATHER, message)
+    val jsonArray = parse(json)
+    implicit val formats = DefaultFormats
+    ArrayBuffer(jsonArray.extract[Array[String]]: _*)
   }
 
   /**

@@ -243,20 +243,21 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                   sock.setSoTimeout(10000)
                   authHelper.authClient(sock)
                   val input = new DataInputStream(sock.getInputStream())
-                  input.readInt() match {
-                    case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+                  val requestMethod = input.readInt()
+                  requestMethod match {
+                    case requestMethod @ BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
                       // The barrier() function may wait infinitely, socket shall not timeout
                       // before the function finishes.
                       sock.setSoTimeout(0)
-                      barrierAndServe(sock)
-                    case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+                      barrierAndServe(requestMethod, sock)
+                    case requestMethod @ BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
                       // The allGather() function may wait infinitely, socket shall not timeout
                       // before the function finishes.
                       sock.setSoTimeout(0)
                       val length = input.readInt()
                       val message = new Array[Byte](length)
                       input.readFully(message)
-                      allGatherAndServe(sock, message)
+                     barrierAndServe(requestMethod, sock, new String(message, UTF_8))
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -407,43 +408,31 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     /**
-     * Gateway to call BarrierTaskContext.barrier().
+     * Gateway to call BarrierTaskContext methods.
      */
-    def barrierAndServe(sock: Socket): Unit = {
-      require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
-
-      val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-      try {
-        context.asInstanceOf[BarrierTaskContext].barrier()
-        writeUTF(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS, out)
-      } catch {
-        case e: SparkException =>
-          writeUTF(e.getMessage, out)
-      } finally {
-        out.close()
-      }
-    }
-
-    /**
-     * Gateway to call BarrierTaskContext.all_gather(message).
-     */
-    def allGatherAndServe(sock: Socket, message: Array[Byte]): Unit = {
+    def barrierAndServe(requestMethod: Int, sock: Socket, message: String = ""): Unit = {
       require(
         serverSocket.isDefined,
-        "No available ServerSocket to redirect the all_gather() call."
+        "No available ServerSocket to redirect the BarrierTaskContext method call."
       )
-
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        val msgs: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
-          new String(message, UTF_8)
-        )
-        val json: String = compact(render(JArray(
-          msgs.map(
-            (message) => JString(message)
-          ).toList
-        )))
-        writeUTF(json, out)
+        var result: String = ""
+        requestMethod match {
+          case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+            context.asInstanceOf[BarrierTaskContext].barrier()
+            result = BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS
+          case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+            val messages: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+              message
+            )
+            result = compact(render(JArray(
+              messages.map(
+                (message) => JString(message)
+              ).toList
+            )))
+        }
+        writeUTF(result, out)
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)

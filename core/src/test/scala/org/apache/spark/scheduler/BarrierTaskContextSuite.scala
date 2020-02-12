@@ -18,10 +18,10 @@
 package org.apache.spark.scheduler
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
+import scala.util.Sorting.stableSort
 
 import org.apache.spark._
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
@@ -65,14 +65,14 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
-      val message: String = context.partitionId().toString
+      val message = context.partitionId().toString
       val messages = context.allGather(message)
       messages.toList.iterator
     }
-    // Take a list of all the partitionId messages
-    val messages: Array[String] = rdd2.collect().slice(0, 4)
+    // Take a sorted list of all the partitionId messages
+    val messages = stableSort(rdd2.collect().head)
     // All the task partitionIds are shared
-    for((x, i) <- messages.sorted.view.zipWithIndex) assert(x == i.toString)
+    for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
   }
 
   test("support multiple barrier() call within a single task") {

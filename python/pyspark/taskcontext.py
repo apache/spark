@@ -125,7 +125,7 @@ def _load_from_socket(port, auth_secret, function, all_gather_message=None):
         # Make a barrier() function call.
         write_int(function, sockfile)
     elif function == ALL_GATHER_FUNCTION:
-        # Make a allGather() function call.
+        # Make a all_gather() function call.
         write_int(function, sockfile)
         write_with_length(all_gather_message.encode("utf-8"), sockfile)
     else:
@@ -227,7 +227,7 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, str):
             raise ValueError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
-            raise Exception("Not supported to call allGather() before initialize " +
+            raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
             gathered_items = _load_from_socket(
@@ -236,7 +236,7 @@ class BarrierTaskContext(TaskContext):
                 ALL_GATHER_FUNCTION,
                 message,
             )
-            return json.loads(gathered_items)
+            return [e for e in json.loads(gathered_items)]
 
     def getTaskInfos(self):
         """
