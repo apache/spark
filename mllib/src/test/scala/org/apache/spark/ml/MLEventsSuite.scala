@@ -252,6 +252,7 @@ class MLEventsSuite
           case e: LoadInstanceEnd[_]
               if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
+            assert(e.path.endsWith("writableStage"))
           case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineReader)
           case e: LoadInstanceEnd[_] =>

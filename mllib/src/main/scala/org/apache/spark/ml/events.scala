@@ -89,7 +89,7 @@ case class LoadInstanceStart[T](path: String) extends MLEvent {
  * Event fired after `MLReader.load`.
  */
 @Unstable
-case class LoadInstanceEnd[T]() extends MLEvent {
+case class LoadInstanceEnd[T](path: String) extends MLEvent {
   @JsonIgnore var reader: MLReader[T] = _
   @JsonIgnore var instance: T = _
 }
@@ -160,7 +160,7 @@ private[ml] trait MLEvents extends Logging {
     logEvent(startEvent)
     listenerBus.post(startEvent)
     val instance: T = func
-    val endEvent = LoadInstanceEnd[T]()
+    val endEvent = LoadInstanceEnd[T](path)
     endEvent.reader = reader
     endEvent.instance = instance
     logEvent(endEvent)
