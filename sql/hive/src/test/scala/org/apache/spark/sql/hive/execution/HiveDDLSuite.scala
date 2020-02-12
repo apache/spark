@@ -1580,7 +1580,11 @@ class HiveDDLSuite
         "source table/view path should be different from target table path")
     }
 
-    assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
+    if (DDLUtils.isHiveTable(targetTable)) {
+      assert(targetTable.tracksPartitionsInCatalog)
+    } else {
+      assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
+    }
 
     // The source table contents should not been seen in the target table.
     assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
