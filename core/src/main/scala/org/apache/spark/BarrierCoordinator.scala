@@ -164,6 +164,7 @@ private[spark] class BarrierCoordinator(
             s"the current synchronized requestMethod `$requestMethodToSync`"
           ))
         )
+        cleanupBarrierStage(barrierId)
       }
 
       // Require the number of tasks is correctly set from the BarrierTaskContext.
@@ -207,17 +208,12 @@ private[spark] class BarrierCoordinator(
         requesters: ArrayBuffer[RpcCallContext],
         numTasks: Int): Boolean = {
       if (requesters.size == numTasks) {
-        if (requestMethodToSync == RequestMethod.BARRIER) {
-          requesters.foreach(_.reply(""))
-        }
-        else if (requestMethodToSync == RequestMethod.ALL_GATHER) {
-          val jsonArray = JArray(
-            allGatherMessages.map(
-              (msg) => JString(msg)
-            ).toList
-          )
-          val json: String = compact(render(jsonArray))
-          requesters.foreach(_.reply(json))
+        requestMethodToSync match {
+          case RequestMethod.BARRIER =>
+            requesters.foreach(_.reply(""))
+          case RequestMethod.ALL_GATHER =>
+            val json: String = compact(render(allGatherMessages))
+            requesters.foreach(_.reply(json))
         }
         true
       } else {
@@ -251,6 +247,7 @@ private[spark] class BarrierCoordinator(
       states.computeIfAbsent(barrierId,
         (key: ContextBarrierId) => new ContextBarrierState(key, request.numTasks))
       val barrierState = states.get(barrierId)
+
       barrierState.handleRequest(context, request)
   }
 

@@ -244,20 +244,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                   authHelper.authClient(sock)
                   val input = new DataInputStream(sock.getInputStream())
                   val requestMethod = input.readInt()
+                  sock.setSoTimeout(0)
                   requestMethod match {
-                    case requestMethod @ BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+                    case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
                       // The barrier() function may wait infinitely, socket shall not timeout
                       // before the function finishes.
-                      sock.setSoTimeout(0)
                       barrierAndServe(requestMethod, sock)
-                    case requestMethod @ BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+                    case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
                       // The allGather() function may wait infinitely, socket shall not timeout
                       // before the function finishes.
-                      sock.setSoTimeout(0)
                       val length = input.readInt()
                       val message = new Array[Byte](length)
                       input.readFully(message)
-                     barrierAndServe(requestMethod, sock, new String(message, UTF_8))
+                      barrierAndServe(requestMethod, sock, new String(message, UTF_8))
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
