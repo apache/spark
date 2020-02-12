@@ -626,8 +626,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   Seq(false, true).foreach { stream =>
     test(s"test for Block replication retry logic (stream = $stream)") {
-      val storageLevel = StorageLevel(
-        useDisk = false, useMemory = true, deserialized = true, replication = 3)
       // Retry replication logic for 2 failures
       conf.set(STORAGE_MAX_REPLICATION_FAILURE, 2)
       // Custom block replication policy which prioritizes BlockManagers as per hostnames
@@ -635,30 +633,33 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       // To use upload block stream flow, set maxRemoteBlockSizeFetchToMem to 0
       val maxRemoteBlockSizeFetchToMem = if (stream) 0 else Int.MaxValue - 512
       conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
-      val bm1 = makeBlockManager(12000, "host-1", master) // BM with sufficient memory
-      val bm2 = makeBlockManager(1, "host-2", master) // BM with less memory
-      val bm3 = makeBlockManager(1, "host-3", master) // BM with less memory
-      val bm4 = makeBlockManager(12000, "host-4", master) // BM with sufficient memory
-      val bm5 = makeBlockManager(1, "host-5", master) // BM with less memory
-      val bm6 = makeBlockManager(12000, "host-6", master) // BM with sufficient memory
+      val blockManagers = (0 to 6).map(index => makeBlockManager(7800, s"host-$index", master))
+      val data = new Array[Byte](4000)
+      // Put 4000 byte sized RDD Blocks in block manager 1, 2 and 4. So that they
+      // won't have space for another 4000 bytes block.
+      blockManagers(1).putSingle(rdd(0, 1), data, StorageLevel.MEMORY_ONLY)
+      blockManagers(2).putSingle(rdd(0, 2), data, StorageLevel.MEMORY_ONLY)
+      blockManagers(4).putSingle(rdd(0, 3), data, StorageLevel.MEMORY_ONLY)
 
-      val data = (1 to 100).toArray
-      val serializedData = serializer.newInstance().serialize(data).array()
-      val blockId = "list"
-      bm1.putIterator(blockId, List(data).iterator, storageLevel, tellMaster = true)
+      val testBlockId = rdd(0, 4)
+      val storageLevel = StorageLevel(
+        useDisk = false, useMemory = true, deserialized = true, replication = 3)
+      blockManagers(0).putSingle(testBlockId, data, storageLevel, tellMaster = true)
 
-      // Replication will be tried by bm1 in this order: bm2, bm3, bm4, bm5, bm6
-      // bm2, bm3 and bm5 had low memory. So Block can't be stored by them.
-      // bm6 has sufficient memory but the maxReplicationFailures is set to 2.
-      // So retry won't happen on bm6 as 3 failure (by trying on bm2, bm3 and bm5) have
-      // already happened by then. So block will be present only on bm1 and bm4
-      Seq(bm2, bm3, bm5, bm6).foreach { bm =>
-        intercept[BlockNotFoundException] {
-          bm.getLocalBlockData(blockId).nioByteBuffer().array()
-        }
+      // Replication will be tried by bm0 in this order: bm1, bm2, bm3, bm4, bm5
+      // bm1, bm2 and bm4 have limited memory available. So Block can't be stored by them.
+      // bm5 has sufficient memory but the maxReplicationFailures is set to 2.
+      // So retry won't happen on bm5 as 3 failure (by trying on bm1, bm2 and bm4) have
+      // already happened by then. So block will be present only on bm0 and bm3
+      Seq(0, 3).foreach { index =>
+        assert(blockManagers(index).getSingleAndReleaseLock(testBlockId).isDefined,
+          s"block was not found on BM-$index")
       }
-      Seq(bm1, bm4).foreach { bm =>
-        assert(bm.getLocalBlockData(blockId).nioByteBuffer().array() === serializedData)
+
+      Seq(1, 2, 4, 5).foreach { index =>
+        intercept[BlockNotFoundException] {
+          blockManagers(index).getLocalBlockData(testBlockId).nioByteBuffer().array()
+        }
       }
     }
   }
