@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.regex.Pattern
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -337,6 +335,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val cache = expr.getClass.getSuperclass
       .getDeclaredFields.filter(_.getName.endsWith("cache")).head
     cache.setAccessible(true)
-    assert(cache.get(expr).asInstanceOf[Pattern].pattern().contains("a"))
+    assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
   }
 }
