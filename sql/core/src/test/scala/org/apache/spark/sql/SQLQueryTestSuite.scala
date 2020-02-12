@@ -271,23 +271,24 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       }
     }.flatten
 
-    val tempQueries = if (code.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
-      // Although the loop is heavy, only used for comments test.
+    val allCode = importedCode ++ code
+    val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      // Although the loop is heavy, only used for nested comments test.
       val querys = new ArrayBuffer[String]
       val otherCodes = new ArrayBuffer[String]
       var tempStr = ""
       var start = false
-      for (c <- code) {
+      for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
           querys ++= otherCodes.toSeq.mkString("\n").split("(?<=[^\\\\]);")
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
-          if (tempStr.endsWith(";")) {
-            tempStr = tempStr.substring(0, tempStr.length - 1)
-          }
-          querys += s"\n$tempStr"
+//          if (tempStr.endsWith(";")) {
+//            tempStr = tempStr.substring(0, tempStr.length - 1)
+//          }
+          querys += s"\n${tempStr.stripSuffix(";")}"
           tempStr = ""
         } else if (start) {
           tempStr += s"\n$c"
@@ -295,9 +296,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           otherCodes += c
         }
       }
+      if (otherCodes.nonEmpty) {
+        querys ++= otherCodes.toSeq.mkString("\n").split("(?<=[^\\\\]);")
+      }
       querys.toSeq
     } else {
-      (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);").toSeq
+      allCode.mkString("\n").split("(?<=[^\\\\]);").toSeq
     }
 
     // List of SQL queries to run
