@@ -65,7 +65,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolons by default. If the semicolon cannot effectively
- *     separate the SQL queries in the test file, please use --QUERY-DELIMITER-START and
+ *     separate the SQL queries in the test file(e.g. bracketed comments), please use --QUERY-DELIMITER-START and
  *     --QUERY-DELIMITER-END. Lines starting with --QUERY-DELIMITER-START and --QUERY-DELIMITER-END
  *     represent the beginning and end of a query, respectively.
  *  2. Lines starting with -- are treated as comments and ignored.
