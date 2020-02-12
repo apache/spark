@@ -134,6 +134,8 @@ public interface TableCatalog extends CatalogPlugin {
    * Implementations may reject the requested changes. If any change is rejected, none of the
    * changes should be applied to the table.
    * <p>
+   * The requested changes must be applied in the order given.
+   * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this
    * must throw {@link NoSuchTableException}.
    *

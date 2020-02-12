@@ -651,19 +651,6 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: update column type and comment") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
-
-      val table = getTableMetadata(t)
-
-      assert(table.name === fullTableName(t))
-      assert(table.schema === StructType(Seq(StructField("id", LongType).withComment("doc"))))
-    }
-  }
-
   test("AlterTable: update nested column comment") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {

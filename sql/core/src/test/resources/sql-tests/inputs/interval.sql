@@ -222,7 +222,13 @@ select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 
 select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 
 -- interval support for csv and json functions
-SELECT from_csv('1, 1 day', 'a INT, b interval');
-SELECT to_csv(named_struct('a', interval 32 month, 'b', interval 70 minute));
-SELECT from_json('{"a":"1 days"}', 'a interval');
-SELECT to_json(map('a', interval 25 month 100 day 130 minute));
+SELECT
+  from_csv('1, 1 day', 'a INT, b interval'),
+  to_csv(from_csv('1, 1 day', 'a INT, b interval')),
+  to_csv(named_struct('a', interval 32 month, 'b', interval 70 minute)),
+  from_csv(to_csv(named_struct('a', interval 32 month, 'b', interval 70 minute)), 'a interval, b interval');
+SELECT
+  from_json('{"a":"1 days"}', 'a interval'),
+  to_json(from_json('{"a":"1 days"}', 'a interval')),
+  to_json(map('a', interval 25 month 100 day 130 minute)),
+  from_json(to_json(map('a', interval 25 month 100 day 130 minute)), 'a interval');
