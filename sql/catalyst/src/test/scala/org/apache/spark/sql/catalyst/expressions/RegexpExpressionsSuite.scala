@@ -329,7 +329,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
   }
 
-  test("cache initialization for literal patterns") {
+  test("SPARK-30759: cache initialization for literal patterns") {
     val expr = "A" like Literal.create("a", StringType)
     expr.eval()
     val cache = expr.getClass.getSuperclass
