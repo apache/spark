@@ -480,11 +480,11 @@ class DynamicPartitionPruningSuite
    */
   test("filtering ratio policy fallback") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       Given("no stats and selective predicate")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -497,8 +497,7 @@ class DynamicPartitionPruningSuite
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
@@ -527,8 +526,7 @@ class DynamicPartitionPruningSuite
 
       Given("no stats and selective predicate with the size of dim small")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -552,11 +550,11 @@ class DynamicPartitionPruningSuite
    */
   test("filtering ratio policy with stats when the broadcast pruning is disabled") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       Given("disabling the use of stats in the DPP heuristic")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -569,8 +567,7 @@ class DynamicPartitionPruningSuite
 
       Given("filtering ratio with stats disables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -584,8 +581,7 @@ class DynamicPartitionPruningSuite
 
       Given("filtering ratio with stats enables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -605,8 +601,7 @@ class DynamicPartitionPruningSuite
 
       Given("join condition more complex than fact.attr = dim.attr")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
@@ -762,9 +757,9 @@ class DynamicPartitionPruningSuite
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
-          Row(1040, 2, 50, 3) ::
-          Row(1050, 2, 50, 3) ::
-          Row(1060, 2, 50, 3) :: Nil
+        Row(1040, 2, 50, 3) ::
+        Row(1050, 2, 50, 3) ::
+        Row(1060, 2, 50, 3) :: Nil
       )
     }
 
@@ -785,9 +780,9 @@ class DynamicPartitionPruningSuite
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
-          Row(1040, 2, 50, 3) ::
-          Row(1050, 2, 50, 3) ::
-          Row(1060, 2, 50, 3) :: Nil
+        Row(1040, 2, 50, 3) ::
+        Row(1050, 2, 50, 3) ::
+        Row(1060, 2, 50, 3) :: Nil
       )
     }
 
@@ -804,9 +799,9 @@ class DynamicPartitionPruningSuite
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
-          Row(1040, 2, 50, 3) ::
-          Row(1050, 2, 50, 3) ::
-          Row(1060, 2, 50, 3) :: Nil
+        Row(1040, 2, 50, 3) ::
+        Row(1050, 2, 50, 3) ::
+        Row(1060, 2, 50, 3) :: Nil
       )
     }
 
@@ -825,9 +820,9 @@ class DynamicPartitionPruningSuite
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
-          Row(1040, 2, 50, 3) ::
-          Row(1050, 2, 50, 3) ::
-          Row(1060, 2, 50, 3) :: Nil
+        Row(1040, 2, 50, 3) ::
+        Row(1050, 2, 50, 3) ::
+        Row(1060, 2, 50, 3) :: Nil
       )
     }
 
@@ -846,9 +841,9 @@ class DynamicPartitionPruningSuite
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
-          Row(1040, 2, 50, 3) ::
-          Row(1050, 2, 50, 3) ::
-          Row(1060, 2, 50, 3) :: Nil
+        Row(1040, 2, 50, 3) ::
+        Row(1050, 2, 50, 3) ::
+        Row(1060, 2, 50, 3) :: Nil
       )
     }
   }
