@@ -364,7 +364,6 @@ pyspark_sql = Module(
         "pyspark.sql.avro.functions",
         "pyspark.sql.pandas.conversion",
         "pyspark.sql.pandas.map_ops",
-        "pyspark.sql.pandas.functions",
         "pyspark.sql.pandas.group_ops",
         "pyspark.sql.pandas.types",
         "pyspark.sql.pandas.serializers",
