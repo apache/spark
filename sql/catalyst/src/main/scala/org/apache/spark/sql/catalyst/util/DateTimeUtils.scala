@@ -713,8 +713,8 @@ object DateTimeUtils {
     }
   }
 
-  private def truncToUnit(t: SQLTimestamp, tz: TimeZone, unit: ChronoUnit): SQLTimestamp = {
-    val truncated = microsToInstant(t).atZone(tz.toZoneId).truncatedTo(unit)
+  private def truncToUnit(t: SQLTimestamp, zoneId: ZoneId, unit: ChronoUnit): SQLTimestamp = {
+    val truncated = microsToInstant(t).atZone(zoneId).truncatedTo(unit)
     instantToMicros(truncated.toInstant)
   }
 
@@ -722,11 +722,11 @@ object DateTimeUtils {
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
    */
-  def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
+  def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
     level match {
       case TRUNC_TO_MICROSECOND => t
-      case TRUNC_TO_HOUR => truncToUnit(t, timeZone, ChronoUnit.HOURS)
-      case TRUNC_TO_DAY => truncToUnit(t, timeZone, ChronoUnit.DAYS)
+      case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
       case _ =>
         val millis = MICROSECONDS.toMillis(t)
         val truncated = level match {
@@ -736,8 +736,8 @@ object DateTimeUtils {
           case TRUNC_TO_MINUTE =>
             millis - millis % MILLIS_PER_MINUTE
           case _ => // Try to truncate date levels
-            val dDays = millisToDays(millis, timeZone.toZoneId)
-            daysToMillis(truncDate(dDays, level), timeZone.toZoneId)
+            val dDays = millisToDays(millis, zoneId)
+            daysToMillis(truncDate(dDays, level), zoneId)
         }
         truncated * MICROS_PER_MILLIS
     }
