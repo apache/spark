@@ -41,7 +41,6 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     yarnAllocatorSuite.afterEach()
   }
 
-  val resource = yarnAllocatorSuite.containerResource
   val defaultResourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
   test("allocate locality preferred containers with enough resource and no matched existed " +
@@ -57,8 +56,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10),
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
-      resource, rp)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, rp)
 
     assert(localities.map(_.nodes) === Array(
       Array("host3", "host4", "host5"),
@@ -84,8 +82,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
-      resource, rp)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, rp)
 
     assert(localities.map(_.nodes) ===
       Array(null, Array("host2", "host3"), Array("host2", "host3")))
@@ -108,8 +105,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
-      resource, rp)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, rp)
 
     assert(localities.map(_.nodes) === Array(Array("host2", "host3")))
   }
@@ -131,8 +127,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
-      resource, rp)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, rp)
 
     assert(localities.map(_.nodes) === Array(null, null, null))
   }
@@ -148,8 +143,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 0, Map.empty,
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
-      resource, rp)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, rp)
 
     assert(localities.map(_.nodes) === Array(null))
   }
@@ -172,8 +166,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId),
-      pendingAllocationRequests,
-      resource, rp)
+      pendingAllocationRequests, rp)
 
     assert(localities.map(_.nodes) === Array(Array("host3")))
   }

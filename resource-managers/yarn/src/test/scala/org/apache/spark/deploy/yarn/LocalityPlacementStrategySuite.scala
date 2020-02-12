@@ -79,7 +79,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
     strategy.localityOfRequestedContainers(containers.size * 2, totalTasks, hosts,
-      hostToContainerMap, Nil, resource, rp)
+      hostToContainerMap, Nil, rp)
   }
 
 }
