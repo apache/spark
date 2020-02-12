@@ -19,11 +19,39 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL has two options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy`.
-When `spark.sql.ansi.enabled` is set to `true` (`false` by default), Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
+Spark SQL has two options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
-When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules and this setting is a default value.
+When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.sql.ansi.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, Spark tries to conform to the ANSI SQL specification:
+    1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
+    2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.storeAssignmentPolicy</code></td>
+  <td>ANSI</td>
+  <td>
+    When inserting a value into a column with different data type, Spark will perform type coercion.
+    Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy,
+    Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.
+    It disallows certain unreasonable type conversions such as converting string to int or double to boolean.
+    With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.
+    e.g. converting string to int or double to boolean is allowed.
+    It is also the only behavior in Spark 2.x and it is compatible with Hive.
+    With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion,
+    e.g. converting double to int or decimal to double is not allowed.
+  </td>
+</tr>
+</table>
 
 The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled.
 
@@ -54,7 +82,7 @@ SELECT 2147483647 + 1;
 ### Type Conversion
 
 Spark SQL has three kinds of type conversions: explicit casting, type coercion, and store assignment casting.
-When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a number-format exception at runtime for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
+When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
 
 Currently, the ANSI mode affects explicit casting and assignment casting only.
@@ -68,6 +96,10 @@ SELECT CAST('a' AS INT);
 
   java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
+SELECT CAST(2147483648L AS INT);
+
+  java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
 
@@ -76,6 +108,14 @@ SELECT CAST('a' AS INT);
   +--------------+
   |          null|
   +--------------+
+
+SELECT CAST(2147483648L AS INT);
+
+  +-----------------------+
+  |CAST(2147483648 AS INT)|
+  +-----------------------+
+  |            -2147483648|
+  +-----------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
