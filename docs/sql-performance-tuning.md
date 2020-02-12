@@ -79,7 +79,6 @@ that these options will be deprecated in future release as more optimizations ar
       then the partitions with small files will be faster than partitions with bigger files (which is
       scheduled first). This configuration is effective only when using file-based sources such as Parquet,
       JSON and ORC.
-
     </td>
   </tr>
   <tr>
