@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
@@ -784,7 +785,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    val FAIL_REASON = " has to be >= the number of cpus per task"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
@@ -864,9 +865,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
-      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
-      "was specified"))
+    assert(error.contains("No executor resource configs were not specified for the following " +
+      "task configs: gpu"))
   }
 
   test("Test parsing resources executor config < task requirements") {
@@ -880,15 +880,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
-      "has to be >= the requested amount in task resource config: " +
-      "spark.task.resource.gpu.amount = 2"))
+    assert(error.contains("The executor resource: gpu, amount: 1 needs to be >= the task " +
+      "resource request amount of 2.0"))
   }
 
   test("Parse resources executor config not the same multiple numbers of the task requirements") {
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
+    conf.set(RESOURCES_WARNING_TESTING, true)
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
@@ -897,25 +897,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage()
 
     assert(error.contains(
-      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
-        "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
-        "executor to: 1. Please adjust your configuration."))
-  }
-
-  test("Parse resources executor config cpus not limiting resource") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[1, 8, 1024]")
-      .setAppName("test-cluster")
-    conf.set(TASK_GPU_ID.amountConf, "2")
-    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
-
-    var error = intercept[IllegalArgumentException] {
-      sc = new SparkContext(conf)
-    }.getMessage()
-
-    assert(error.contains("The number of slots on an executor has to be " +
-      "limited by the number of cores, otherwise you waste resources and " +
-      "dynamic allocation doesn't work properly"))
+      "The configuration of resource: gpu (exec = 4, task = 2.0/1, runnable tasks = 2) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
   }
 
   test("test resource scheduling under local-cluster mode") {

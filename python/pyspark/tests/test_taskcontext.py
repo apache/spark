@@ -16,6 +16,7 @@
 #
 import os
 import random
+import shutil
 import stat
 import sys
 import tempfile
@@ -277,9 +278,13 @@ class TaskContextTestsWithResources(unittest.TestCase):
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
         self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
         self.tempFile.close()
+        # create temporary directory for Worker resources coordination
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.resources.dir", self.tempdir.name)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
@@ -297,6 +302,7 @@ class TaskContextTestsWithResources(unittest.TestCase):
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
+        shutil.rmtree(self.tempdir.name)
         self.sc.stop()
 
 if __name__ == "__main__":
