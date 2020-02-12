@@ -24,6 +24,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -45,6 +46,8 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
+        .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+
 
       val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
