@@ -541,7 +541,9 @@ case class TruncateTableCommand(
             optAcls.foreach { acls =>
               val aclEntries = acls.asScala.filter(_.getName != null).asJava
 
-              // The ACL API also expects the tradition user/group/other permission
+              // If the path doesn't have default ACLs, `setAcl` API will throw an error
+              // as it expects user/group/other permissions must be in ACL entries.
+              // So we need to add tradition user/group/other permission
               // in the form of ACL.
               optPermission.map { permission =>
                 aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
