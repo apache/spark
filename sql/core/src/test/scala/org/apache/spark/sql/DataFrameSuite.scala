@@ -2337,9 +2337,9 @@ class DataFrameSuite extends QueryTest
     val nonNullable = abs(columnD) === 1 && columnE === 1 && abs(columnD) <= columnE
     val reducedNonNullable = abs(columnD) === 1 && columnE === 1
 
-    val column = rand() < 0 || nullable || nonNullable
-    val partlyReduced = rand() < 0 || nullable || reducedNonNullable
-    val reduced = rand() < 0 || reducedNullable || reducedNonNullable
+    val column = nullable || nonNullable
+    val partlyReduced = nullable || reducedNonNullable
+    val reduced = reducedNullable || reducedNonNullable
 
     val simplifiedNegatedNullable = abs(columnA) =!= 1 || columnB =!= 1 || abs(columnA) > columnB
     val reducedSimplifiedNegatedNullable = abs(columnA) =!= 1 || columnB =!= 1
@@ -2347,9 +2347,9 @@ class DataFrameSuite extends QueryTest
     val reducedSimplifiedNegatedNonNullable = abs(columnD) =!= 1 || columnE =!= 1
 
     val partlyReducedSimplifiedNegated =
-      rand() >= 0 && simplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
+      simplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
     val reducedSimplifiedNegated =
-      rand() >= 0 && reducedSimplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
+      reducedSimplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
 
     testSelect(column, partlyReduced)
     testSelect(new Column(If(column.expr, column.expr, column.expr)),
