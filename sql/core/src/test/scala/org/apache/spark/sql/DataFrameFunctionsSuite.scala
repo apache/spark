@@ -3499,13 +3499,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
-  test("SPARK-21281 use string types by default if map have no argument") {
-    val ds = spark.range(1)
-    var expectedSchema = new StructType()
-      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
-    assert(ds.select(map().as("x")).schema == expectedSchema)
-  }
-
   test("SPARK-21281 fails if functions have no argument") {
     val df = Seq(1).toDF("a")
 
@@ -3563,11 +3556,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-29462: Empty array of NullType for array function with no arguments") {
     Seq((true, StringType), (false, NullType)).foreach {
       case (arrayDefaultToString, expectedType) =>
-        withSQLConf(SQLConf.LEGACY_ARRAY_DEFAULT_TO_STRING.key -> arrayDefaultToString.toString) {
+        withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key ->
+          arrayDefaultToString.toString) {
           val schema = spark.range(1).select(array()).schema
           assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[ArrayType])
           val actualType = schema.head.dataType.asInstanceOf[ArrayType].elementType
           assert(actualType === expectedType)
+        }
+    }
+  }
+
+  test("SPARK-30790: Empty map with NullType as key/value type for map function with no argument") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (mapDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key ->
+          mapDefaultToString.toString) {
+          val schema = spark.range(1).select(map()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[MapType])
+          val actualKeyType = schema.head.dataType.asInstanceOf[MapType].keyType
+          val actualValueType = schema.head.dataType.asInstanceOf[MapType].valueType
+          assert(actualKeyType === expectedType)
+          assert(actualValueType === expectedType)
         }
     }
   }
