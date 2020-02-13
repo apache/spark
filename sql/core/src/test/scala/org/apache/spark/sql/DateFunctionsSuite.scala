@@ -829,7 +829,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("truncate timestamps before the epoch to seconds and minutes") {
+  test("SPARK-30793: truncate timestamps before the epoch to seconds and minutes") {
     def checkTrunc(level: String, expected: String): Unit = {
       val df = Seq("1961-04-12 00:01:02.345")
         .toDF()
