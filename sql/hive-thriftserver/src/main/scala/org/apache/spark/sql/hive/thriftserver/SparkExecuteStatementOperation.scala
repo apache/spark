@@ -180,7 +180,7 @@ private[hive] class SparkExecuteStatementOperation(
           curCol += 1
         }
         val resultRow = row.map {
-          case i: Instant => Timestamp.from(i).toString
+          case i: Instant => Timestamp.from(i)
           case ld: LocalDate => Date.valueOf(ld)
           case other => other
         }.toArray.asInstanceOf[Array[Object]]
