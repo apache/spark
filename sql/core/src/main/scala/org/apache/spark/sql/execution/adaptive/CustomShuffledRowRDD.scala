@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
 sealed trait ShufflePartitionSpec
 
 // A partition that reads data of one reducer.
-case class NormalPartitionSpec(reducerIndex: Int) extends ShufflePartitionSpec
+case class SinglePartitionSpec(reducerIndex: Int) extends ShufflePartitionSpec
 
 // A partition that reads data of multiple reducers, from `startReducerIndex` (inclusive) to
 // `endReducerIndex` (exclusive).
@@ -63,7 +63,7 @@ class CustomShuffledRowRDD(
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     partition.asInstanceOf[CustomShufflePartition].spec match {
-      case NormalPartitionSpec(reducerIndex) =>
+      case SinglePartitionSpec(reducerIndex) =>
         tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
 
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
@@ -82,7 +82,7 @@ class CustomShuffledRowRDD(
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     val reader = split.asInstanceOf[CustomShufflePartition].spec match {
-      case NormalPartitionSpec(reducerIndex) =>
+      case SinglePartitionSpec(reducerIndex) =>
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           reducerIndex,

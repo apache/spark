@@ -154,6 +154,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           |Right side partition size:
           |${getSizeInfo(rightMedSize, rightStats.bytesByPartitionId.max)}
         """.stripMargin)
+      val canSplitLeft = canSplitLeftSide(joinType)
+      val canSplitRight = canSplitRightSide(joinType)
 
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
@@ -164,9 +166,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val rightSkewDesc = new SkewDesc
       for (partitionIndex <- 0 until numPartitions) {
         val leftSize = leftStats.bytesByPartitionId(partitionIndex)
-        val isLeftSkew = isSkewed(leftSize, leftMedSize) && canSplitLeftSide(joinType)
+        val isLeftSkew = isSkewed(leftSize, leftMedSize) && canSplitLeft
         val rightSize = rightStats.bytesByPartitionId(partitionIndex)
-        val isRightSkew = isSkewed(rightSize, rightMedSize) && canSplitRightSide(joinType)
+        val isRightSkew = isSkewed(rightSize, rightMedSize) && canSplitRight
         if (isLeftSkew || isRightSkew) {
           if (nonSkewPartitionIndices.nonEmpty) {
             // As soon as we see a skew, we'll "flush" out unhandled non-skew partitions.
@@ -184,7 +186,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
               getMapStartIndices(left, partitionIndex),
               getNumMappers(left))
           } else {
-            Seq(NormalPartitionSpec(partitionIndex))
+            Seq(SinglePartitionSpec(partitionIndex))
           }
 
           val rightParts = if (isRightSkew) {
@@ -194,7 +196,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
               getMapStartIndices(right, partitionIndex),
               getNumMappers(right))
           } else {
-            Seq(NormalPartitionSpec(partitionIndex))
+            Seq(SinglePartitionSpec(partitionIndex))
           }
 
           for {
@@ -239,7 +241,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       nonSkewPartitionIndices: Seq[Int]): Seq[ShufflePartitionSpec] = {
     assert(nonSkewPartitionIndices.nonEmpty)
     if (nonSkewPartitionIndices.length == 1) {
-      Seq(NormalPartitionSpec(nonSkewPartitionIndices.head))
+      Seq(SinglePartitionSpec(nonSkewPartitionIndices.head))
     } else {
       val startIndices = ShufflePartitionsCoalescer.coalescePartitions(
         Array(leftStats, rightStats),
@@ -255,7 +257,12 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         } else {
           startIndices(i + 1)
         }
-        CoalescedPartitionSpec(startIndex, endIndex)
+        // Do not create `CoalescedPartitionSpec` if only need to read a singe partition.
+        if (startIndex + 1 == endIndex) {
+          SinglePartitionSpec(startIndex)
+        } else {
+          CoalescedPartitionSpec(startIndex, endIndex)
+        }
       }
     }
   }
