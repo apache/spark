@@ -201,7 +201,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
         (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
         (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
-      ).toDF("a", "b", "c", "d", "e")
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
       val query = sql(
@@ -212,6 +212,9 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
+      // In Hive1.2, it does not do well on Decimal conversion. For example, in this case,
+      // it converts a decimal value's type from Decimal(38, 18) to Decimal(1, 0). So we need
+      // do extra cast here for Hive1.2. But in Hive2.3, it still keeps the original Decimal type.
       val decimalToString: Column => Column = if (HiveUtils.isHive23) {
         c => c.cast("string")
       } else {
