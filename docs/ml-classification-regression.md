@@ -1101,6 +1101,15 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 {% include_example python/ml/fm_regressor_example.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API documentation](api/R/spark.fmRegressor.html) for more details.
+
+Note: At the moment SparkR doesn't suport feature scaling.
+
+{% include_example r/ml/fmRegressor.R %}
+</div>
+
 </div>
 
 
