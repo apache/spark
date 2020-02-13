@@ -2742,6 +2742,7 @@ class HiveDDLSuite
       assert(sourceTable.tracksPartitionsInCatalog == targetTable.tracksPartitionsInCatalog)
       assert(targetTable.partitionColumnNames == Seq("ts"))
       sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
+      checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
     }
   }
 }
