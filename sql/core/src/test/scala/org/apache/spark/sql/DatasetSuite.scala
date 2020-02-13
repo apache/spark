@@ -1899,6 +1899,16 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException](spark.range(1).tail(-1))
     e.getMessage.contains("tail expression must be equal to or greater than 0")
   }
+
+  test("SparkSession.active should be the same instance after dataset operations") {
+    val active = SparkSession.getActiveSession.get
+    val clone = active.cloneSession()
+    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+
+    ds.queryExecution.analyzed
+
+    assert(active eq SparkSession.getActiveSession.get)
+  }
 }
 
 object AssertExecutionId {
