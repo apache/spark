@@ -58,8 +58,15 @@ object ExecutorPodsSnapshot extends Logging {
       phase match {
         case "pending" =>
           PodPending(pod)
-        case "running" =>
+        case "running" => {
+          // A pod will be considered running as long as there is at least one running container, so we
+          // need to check if there are any failed containers.
+          if (pod.getSpec.getRestartPolicy.equals("Never")) {
+            if (pod.getStatus.getContainerStatuses.stream.anyMatch(cs => cs.getState.getTerminated != null && cs.getState.getTerminated.getExitCode != 0))
+              PodFailed(pod)
+          }
           PodRunning(pod)
+        }
         case "failed" =>
           PodFailed(pod)
         case "succeeded" =>
