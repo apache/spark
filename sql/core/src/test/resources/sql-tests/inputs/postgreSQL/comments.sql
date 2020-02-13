@@ -11,17 +11,19 @@ SELECT /* embedded single line */ 'embedded' AS `second`;
 SELECT /* both embedded and trailing single line */ 'both' AS third; -- trailing single line
 
 SELECT 'before multi-line' AS fourth;
+--QUERY-DELIMITER-START
 -- [SPARK-28880] ANSI SQL: Bracketed comments
 /* This is an example of SQL which should not execute:
  * select 'multi-line';
  */
 SELECT 'after multi-line' AS fifth;
+--QUERY-DELIMITER-END
 
 -- [SPARK-28880] ANSI SQL: Bracketed comments
 --
 -- Nested comments
 --
-
+--QUERY-DELIMITER-START
 /*
 SELECT 'trailing' as x1; -- inside block comment
 */
@@ -44,5 +46,5 @@ Hoo boy. Still two deep...
 Now just one deep...
 */
 'deeply nested example' AS sixth;
-
+--QUERY-DELIMITER-END
 /* and this is the end of the file */
