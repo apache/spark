@@ -375,7 +375,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
+    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
