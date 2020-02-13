@@ -28,6 +28,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * An abstract class for compactible metadata logs. It will write one log file for each batch.
@@ -177,16 +178,29 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * corresponding `batchId` file. It will delete expired files as well if enabled.
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
-    val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.flatMap { id =>
-      super.get(id).getOrElse {
-        throw new IllegalStateException(
-          s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
-            s"(compactInterval: $compactInterval)")
-      }
-    } ++ logs
+    val (allLogs, loadElapsedMs) = Utils.timeTakenMs {
+      val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
+      validBatches.flatMap { id =>
+        super.get(id).getOrElse {
+          throw new IllegalStateException(
+            s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
+              s"(compactInterval: $compactInterval)")
+        }
+      } ++ logs
+    }
+    logInfo(s"It took $loadElapsedMs ms to load ${allLogs.size} entries " +
+      s"(${SizeEstimator.estimate(allLogs)} bytes in memory) for compact batch $batchId.")
+
+    val compactedLogs = compactLogs(allLogs)
+
     // Return false as there is another writer.
-    super.add(batchId, compactLogs(allLogs).toArray)
+    val (writeSucceed, writeElapsedMs) = Utils.timeTakenMs {
+      super.add(batchId, compactedLogs.toArray)
+    }
+    logInfo(s"It took $writeElapsedMs ms to try to write ${compactedLogs.size} entries" +
+      s" for compact batch $batchId. (result: $writeSucceed)")
+
+    writeSucceed
   }
 
   /**
