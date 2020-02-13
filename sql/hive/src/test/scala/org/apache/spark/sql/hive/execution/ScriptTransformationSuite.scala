@@ -26,10 +26,12 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StringType
@@ -210,11 +212,16 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
+      val castDecimal: Column => Column = if (HiveUtils.isHive23) {
+        c => c.cast("string")
+      } else {
+        c => c.cast("decimal(1, 0)").cast("string")
+      }
       checkAnswer(query, identity, df.select(
         'a.cast("string"),
         'b.cast("string"),
         'c.cast("string"),
-        'd.cast("decimal(1, 0)").cast("string"),
+        castDecimal('d),
         'e.cast("string")).collect())
     }
   }
