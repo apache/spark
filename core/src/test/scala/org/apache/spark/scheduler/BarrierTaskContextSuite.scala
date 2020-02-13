@@ -88,6 +88,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       } else {
         context.allGather(partitionId.toString)
       }
+      Seq(null).iterator
     }
     val error = intercept[SparkException] {
       rdd2.collect()
