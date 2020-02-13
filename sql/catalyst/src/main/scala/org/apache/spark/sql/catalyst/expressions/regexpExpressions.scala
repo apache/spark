@@ -450,7 +450,10 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  usage = """
+    _FUNC_(str, regexp[, idx]) - Extract the first string in the `str` that match the `regexp`
+    expression and corresponding to the regex group index.
+  """,
   arguments = """
     Arguments:
       * str - a string expression of the input string.
@@ -464,7 +467,9 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
       * idx - an int expression of the regex group index. The regex maybe contains multiple
-          groups. `idx` indicates which regex group to extract.
+          groups. `idx` indicates which regex group to extract. The `idx` parameter is the
+          Java regex Matcher group() method index. See docs/api/java/util/regex/Matcher.html
+          for more information on the `idx` or Java regex group() method.
   """,
   examples = """
     Examples:
@@ -542,7 +547,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp[, idx]) - Extracts all group that matches `regexp`.",
+  usage = """
+    _FUNC_(str, regexp[, idx]) - Extract all strings in the `str` that match the `regexp`
+    expression and corresponding to the regex group index.
+  """,
   arguments = """
     Arguments:
       * str - a string expression of the input string.
@@ -556,7 +564,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
       * idx - an int expression of the regex group index. The regex may contains multiple
-          groups. `idx` indicates which regex group to extract.
+          groups. `idx` indicates which regex group to extract. The `idx` parameter is the
+          Java regex Matcher group() method index. See docs/api/java/util/regex/Matcher.html
+          for more information on the `idx` or Java regex group() method.
   """,
   examples = """
     Examples:
