@@ -42,7 +42,7 @@ The schema of the `image` column is:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`ImageDataSource`](api/scala/index.html#org.apache.spark.ml.source.image.ImageDataSource)
+[`ImageDataSource`](api/scala/org/apache/spark/ml/source/image/ImageDataSource.html)
 implements a Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight scala %}
@@ -133,7 +133,7 @@ The schemas of the columns are:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`LibSVMDataSource`](api/scala/index.html#org.apache.spark.ml.source.libsvm.LibSVMDataSource)
+[`LibSVMDataSource`](api/scala/org/apache/spark/ml/source/libsvm/LibSVMDataSource.html)
 implements a Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
 
 {% highlight scala %}
