@@ -213,25 +213,34 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
-    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
-    val e = intercept[AnalysisException] {
-      df.explode($"*") { case Row(prefix: String, csv: String) =>
-        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-      }.queryExecution.assertAnalyzed()
+  test("SPARK-28067 - Aggregate sum should not return wrong results for decimal overflow") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+        val df = Seq(
+          (BigDecimal("10000000000000000000"), 1),
+          (BigDecimal("10000000000000000000"), 1),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2),
+          (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+        val df2 = df.withColumnRenamed("decNum", "decNum2").join(df, "intNum").agg(sum("decNum"))
+        if (!ansiEnabled) {
+          checkAnswer(df2, Row(null))
+        } else {
+          val e = intercept[SparkException] {
+            df2.collect()
+          }
+          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        }
+      }
     }
-    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
-
-    checkAnswer(
-      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
-        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-      },
-      Row("1", "1,2", "1:1") ::
-        Row("1", "1,2", "1:2") ::
-        Row("2", "4", "2:4") ::
-        Row("3", "7,8,9", "3:7") ::
-        Row("3", "7,8,9", "3:8") ::
-        Row("3", "7,8,9", "3:9") :: Nil)
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
