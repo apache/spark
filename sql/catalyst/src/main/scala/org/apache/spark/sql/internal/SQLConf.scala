@@ -368,7 +368,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
         "the number of post-shuffle partitions based on map output statistics.")
       .booleanConf
