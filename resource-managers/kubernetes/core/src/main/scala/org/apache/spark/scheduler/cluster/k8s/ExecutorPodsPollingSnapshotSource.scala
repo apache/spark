@@ -40,8 +40,10 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+    val pollRunnable = new PollRunnable(applicationId)
+    pollRunnable.run() // Poll once immediately to prevent a race with the executor allocator
     pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+      pollRunnable, pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
   def stop(): Unit = {

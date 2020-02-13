@@ -1128,14 +1128,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.restartPolicy</code></td>
   <td>Never</td>
   <td>
-    Restart policy of the driver pod.
+    Restart policy of the driver pod. Possible values are <code>Never</code>, <code>OnFailure</code>, and <code>Always</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.restartPolicy</code></td>
-  <td>Always</td>
+  <td>Never</td>
   <td>
-    Restart policy of the executor pods.
+    Restart policy of the executor pods. Possible values are <code>Never</code>, <code>OnFailure</code>, and <code>Always</code>.
+
+    Changing this option is not recommended unless the application is expected
+    to run indefinitely (e.g. a streaming application), as executors will continue
+    to run after the driver pod has terminated.
   </td>
 </tr>
 </table>
@@ -1202,8 +1206,7 @@ See the below table for the full list of pod specifications that will be overwri
   <td>restartPolicy</td>
   <td>Value of <code>spark.kubernetes.driver.restartPolicy</code> or <code>spark.kubernetes.executor.restartPolicy</code></td>
   <td>
-    Spark will override <code>restartPolicy</code> with the configured values if specified,
-    otherwise defaulting to "Never" for the driver and "Always" for the executors.
+    Spark will override <code>restartPolicy</code> with the configured values if specified, otherwise defaulting to "Never".
   </td>
 </tr>
 <tr>
