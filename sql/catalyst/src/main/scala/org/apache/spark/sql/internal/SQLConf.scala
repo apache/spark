@@ -2142,7 +2142,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_PROPERTY_NON_RESERVED =
-    buildConf("spark.sql.legacy.property.nonReserved")
+    buildConf("spark.sql.legacy.property.nonReserved.enabled")
       .internal()
       .doc("When true, all database and table properties are not reserved and available for " +
         "create/alter syntaxes. But please be aware that the reserved properties will be " +
