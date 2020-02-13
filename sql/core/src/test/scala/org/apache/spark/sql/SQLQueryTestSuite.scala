@@ -253,6 +253,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** Run a test case. */
   protected def runTest(testCase: TestCase): Unit = {
+    def splitWithSemicolon(seq: Seq[String]) = {
+      seq.mkString("\n").split("(?<=[^\\\\]);")
+    }
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = input.split("\n").partition { line =>
@@ -281,13 +284,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
-          querys ++= otherCodes.toSeq.mkString("\n").split("(?<=[^\\\\]);")
+          querys ++= splitWithSemicolon(otherCodes.toSeq)
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
-//          if (tempStr.endsWith(";")) {
-//            tempStr = tempStr.substring(0, tempStr.length - 1)
-//          }
           querys += s"\n${tempStr.stripSuffix(";")}"
           tempStr = ""
         } else if (start) {
@@ -297,11 +297,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         }
       }
       if (otherCodes.nonEmpty) {
-        querys ++= otherCodes.toSeq.mkString("\n").split("(?<=[^\\\\]);")
+        querys ++= splitWithSemicolon(otherCodes.toSeq)
       }
       querys.toSeq
     } else {
-      allCode.mkString("\n").split("(?<=[^\\\\]);").toSeq
+      splitWithSemicolon(allCode).toSeq
     }
 
     // List of SQL queries to run
