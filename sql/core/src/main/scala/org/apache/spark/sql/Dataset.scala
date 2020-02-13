@@ -3310,6 +3310,33 @@ class Dataset[T] private[sql](
     files.toSet.toArray
   }
 
+  /**
+   * Returns true when the query plan of the given Dataset will return the same results as this
+   * Dataset.
+   *
+   * Since its likely undecidable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * This function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.
+   *
+   * @since 3.0.0
+   */
+  @DeveloperApi
+  def sameSemantics(other: Dataset[T]): Boolean = {
+    queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
+  }
+
+  /**
+   * Returns a `hashCode` for the calculation performed by the query plan of this Dataset. Unlike
+   * the standard `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   */
+  @DeveloperApi
+  def semanticHash: Int = queryExecution.analyzed.semanticHash()
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
