@@ -48,6 +48,7 @@ public class Catalogs {
    * @return an initialized CatalogPlugin
    * @throws CatalogNotFoundException if the plugin class cannot be found
    * @throws SparkException if the plugin class cannot be instantiated
+   * @since 3.0.0
    */
   public static CatalogPlugin load(String name, SQLConf conf)
       throws CatalogNotFoundException, SparkException {
@@ -109,6 +110,7 @@ public class Catalogs {
    * @param name a catalog name
    * @param conf a SQLConf
    * @return a case insensitive string map of options starting with spark.sql.catalog.(name).
+   * @since 3.0.0
    */
   private static CaseInsensitiveStringMap catalogOptions(String name, SQLConf conf) {
     Map<String, String> allConfs = mapAsJavaMapConverter(conf.getAllConfs()).asJava();

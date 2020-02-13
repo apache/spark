@@ -834,6 +834,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/dynamicpruning")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))

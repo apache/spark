@@ -488,6 +488,8 @@ object DataType {
 
 /**
  * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
+ *
+ * @since 3.0.0
  */
 class DataTypeJsonSerializer extends JsonSerializer[DataType] {
   private val delegate = new JValueSerializer
@@ -501,6 +503,8 @@ class DataTypeJsonSerializer extends JsonSerializer[DataType] {
 
 /**
  * Jackson deserializer for [[DataType]]. Internally this delegates to json4s based deserialization.
+ *
+ * @since 3.0.0
  */
 class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
   private val delegate = new JValueDeserializer(classOf[Any])
