@@ -284,9 +284,7 @@ final class UnboundedWindowFunctionFrame(
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(index: Int, current: InternalRow): Unit = {
-    // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
-    // for each row.
-    if (processor != null) {
+    if (processor != null && (index == 0)) {
       processor.evaluate(target)
     }
   }
