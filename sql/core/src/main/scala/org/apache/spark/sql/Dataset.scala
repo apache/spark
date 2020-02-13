@@ -3325,7 +3325,6 @@ class Dataset[T] private[sql](
    *
    * @since 3.0.0
    */
-  @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
     queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
   }
@@ -3334,7 +3333,6 @@ class Dataset[T] private[sql](
    * Returns a `hashCode` for the calculation performed by the query plan of this Dataset. Unlike
    * the standard `hashCode`, an attempt has been made to eliminate cosmetic differences.
    */
-  @DeveloperApi
   def semanticHash: Int = queryExecution.analyzed.semanticHash()
 
   ////////////////////////////////////////////////////////////////////////////
