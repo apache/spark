@@ -26,7 +26,7 @@ SELECT '*', 'selected content' AS third;
 /* This is the first example of nested bracketed comment.
 /* I am a nested bracketed comment.*/
 */
-SELECT 'selected content' AS four;
+SELECT 'selected content' AS fourth;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case two
@@ -34,7 +34,7 @@ SELECT 'selected content' AS four;
 /* I am a nested bracketed comment.
  */
  */
-SELECT 'selected content' AS five;
+SELECT 'selected content' AS fifth;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 -- nested bracketed comment case three
@@ -44,24 +44,24 @@ SELECT 'selected content' AS five;
    * I am a nested bracketed comment.
    */
  */
-SELECT 'selected content' AS six;
+SELECT 'selected content' AS sixth;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
--- nested bracketed comment case four
+-- nested bracketed comment case fourth
 /* 
- * This is the four example of nested bracketed comment.
+ * This is the fourth example of nested bracketed comment.
 SELECT /* I am a nested bracketed comment.*/ * FROM testData;
  */
-SELECT 'selected content' AS seven;
+SELECT 'selected content' AS seventh;
 
 -- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
--- nested bracketed comment case five
+-- nested bracketed comment case fifth
 SELECT /*
- * This is the five example of nested bracketed comment.
+ * This is the fifth example of nested bracketed comment.
 /* I am a second level of nested bracketed comment.
 /* I am a third level of nested bracketed comment.
 Other information of third level.
-SELECT 'ommented out content' AS eight;
+SELECT 'ommented out content' AS eighth;
 */
 Other information of second level.
 */

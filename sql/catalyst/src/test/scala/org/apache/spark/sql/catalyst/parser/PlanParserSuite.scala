@@ -82,7 +82,7 @@ class PlanParserSuite extends AnalysisTest {
       """.stripMargin, plan)
   }
 
-  test("nexted bracketed comment case one") {
+  test("nested bracketed comment case one") {
     val plan = table("a").select(star())
     assertEqual(
       """
@@ -93,7 +93,7 @@ class PlanParserSuite extends AnalysisTest {
       """.stripMargin, plan)
   }
 
-  test("nexted bracketed comment case two") {
+  test("nested bracketed comment case two") {
     val plan = table("a").select(star())
     assertEqual(
       """

@@ -102,9 +102,9 @@ SELECT '*', 'selected content' AS third
 /* This is the first example of nested bracketed comment.
 /* I am a nested bracketed comment.*/
 */
-SELECT 'selected content' AS four
+SELECT 'selected content' AS fourth
 -- !query schema
-struct<four:string>
+struct<fourth:string>
 -- !query output
 selected content
 
@@ -114,9 +114,9 @@ selected content
 /* I am a nested bracketed comment.
  */
  */
-SELECT 'selected content' AS five
+SELECT 'selected content' AS fifth
 -- !query schema
-struct<five:string>
+struct<fifth:string>
 -- !query output
 selected content
 
@@ -128,16 +128,16 @@ selected content
    * I am a nested bracketed comment.
    */
  */
-SELECT 'selected content' AS six
+SELECT 'selected content' AS sixth
 -- !query schema
-struct<six:string>
+struct<sixth:string>
 -- !query output
 selected content
 
 
 -- !query
 /* 
- * This is the four example of nested bracketed comment.
+ * This is the fourth example of nested bracketed comment.
 SELECT /* I am a nested bracketed comment.*/ * FROM testData
 -- !query schema
 struct<>
@@ -149,13 +149,13 @@ mismatched input '/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR'
 == SQL ==
 /* 
 ^^^
- * This is the four example of nested bracketed comment.
+ * This is the fourth example of nested bracketed comment.
 SELECT /* I am a nested bracketed comment.*/ * FROM testData
 
 
 -- !query
 */
-SELECT 'selected content' AS seven
+SELECT 'selected content' AS seventh
 -- !query schema
 struct<>
 -- !query output
@@ -166,16 +166,16 @@ extraneous input '*/' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR
 == SQL ==
 */
 ^^^
-SELECT 'selected content' AS seven
+SELECT 'selected content' AS seventh
 
 
 -- !query
 SELECT /*
- * This is the five example of nested bracketed comment.
+ * This is the fifth example of nested bracketed comment.
 /* I am a second level of nested bracketed comment.
 /* I am a third level of nested bracketed comment.
 Other information of third level.
-SELECT 'ommented out content' AS eight
+SELECT 'ommented out content' AS eighth
 -- !query schema
 struct<>
 -- !query output
@@ -186,11 +186,11 @@ no viable alternative at input 'SELECT /'(line 1, pos 7)
 == SQL ==
 SELECT /*
 -------^^^
- * This is the five example of nested bracketed comment.
+ * This is the fifth example of nested bracketed comment.
 /* I am a second level of nested bracketed comment.
 /* I am a third level of nested bracketed comment.
 Other information of third level.
-SELECT 'ommented out content' AS eight
+SELECT 'ommented out content' AS eighth
 
 
 -- !query
