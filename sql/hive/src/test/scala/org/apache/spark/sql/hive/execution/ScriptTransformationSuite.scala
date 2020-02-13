@@ -212,7 +212,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
-      val castDecimal: Column => Column = if (HiveUtils.isHive23) {
+      val decimalToString: Column => Column = if (HiveUtils.isHive23) {
         c => c.cast("string")
       } else {
         c => c.cast("decimal(1, 0)").cast("string")
@@ -221,7 +221,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
         'a.cast("string"),
         'b.cast("string"),
         'c.cast("string"),
-        castDecimal('d),
+        decimalToString('d),
         'e.cast("string")).collect())
     }
   }
