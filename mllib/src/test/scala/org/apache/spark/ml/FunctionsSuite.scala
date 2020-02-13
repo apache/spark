@@ -77,7 +77,8 @@ class FunctionsSuite extends MLTest {
     assert(result3 === expected3)
 
     // Check data types are correct
-    dfArrayFloat.schema.simpleString == "struct<UDF(vec):array<float>,UDF(oldVec):array<float>>"
+    assert(dfArrayFloat.schema.simpleString ===
+      "struct<UDF(vec):array<float>,UDF(oldVec):array<float>>")
 
     val thrown2 = intercept[IllegalArgumentException] {
       df3.select(
