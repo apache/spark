@@ -292,7 +292,7 @@ private class FakeSchedulerBackend(
     clusterManagerEndpoint.ask[Boolean](
       RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
         rpHostToLocalTaskCount, Set.empty))
-  }
+}
 
   protected override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](KillExecutors(executorIds))

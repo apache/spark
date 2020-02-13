@@ -868,7 +868,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
             with QuietTest(self.sc):
                 with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1,
-                                    "spark.sql.pandas.udf.buffer.size": 4}):
+                                    "spark.sql.execution.pandas.udf.buffer.size": 4}):
                     self.spark.range(10).repartition(1) \
                         .select(test_close(col("id"))).limit(2).collect()
                     # wait here because python udf worker will take some time to detect

@@ -169,20 +169,18 @@ private[ui] class SparkPlanGraphNode(
       metric.name + ": " + value
     }
 
-    // If there are metrics, display each entry in a separate line.
-    // Note: whitespace between two "\n"s is to create an empty line between the name of
-    // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-    builder ++= "\n \n"
-
     if (values.nonEmpty) {
+      // If there are metrics, display each entry in a separate line.
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      builder ++= "\n \n"
       builder ++= values.mkString("\n")
+      s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
     } else {
-      // A certain level of height is needed for a rect as a node in a sub-graph
-      // to avoid layout collapse for sub-graphs.
-      builder ++= " "
+      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
+      // so that there won't be gaps between an edge and a small node.
+      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
     }
-
-    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
