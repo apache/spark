@@ -156,10 +156,10 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
-  private[spark] def getRegisteredNames(source: Source): mutable.Set[String] = {
+  private[spark] def getRegisteredNames(source: Source): Seq[String] = {
     val sourceNamePrefix = buildRegistryName(source)
-    val metricNames = source.metricRegistry.getMetrics.keySet()
-    metricNames.asScala.map(k => MetricRegistry.name(sourceNamePrefix, k))
+    val metricNames = source.metricRegistry.getMetrics.keySet
+    metricNames.asScala.map(k => MetricRegistry.name(sourceNamePrefix, k)).toSeq
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] =
