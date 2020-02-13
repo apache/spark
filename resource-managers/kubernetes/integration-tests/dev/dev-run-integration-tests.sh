@@ -130,27 +130,27 @@ then
   properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
 fi
 
-if [ -n $NAMESPACE ];
+if [ -n "$NAMESPACE" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.namespace=$NAMESPACE )
 fi
 
-if [ -n $SERVICE_ACCOUNT ];
+if [ -n "$SERVICE_ACCOUNT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.serviceAccountName=$SERVICE_ACCOUNT )
 fi
 
-if [ -n $CONTEXT ];
+if [ -n "$CONTEXT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.kubeConfigContext=$CONTEXT )
 fi
 
-if [ -n $SPARK_MASTER ];
+if [ -n "$SPARK_MASTER" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.master=$SPARK_MASTER )
 fi
 
-if [ -n $EXCLUDE_TAGS ];
+if [ -n "$EXCLUDE_TAGS" ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi
