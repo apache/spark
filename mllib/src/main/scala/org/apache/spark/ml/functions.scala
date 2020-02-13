@@ -33,8 +33,8 @@ object functions {
       case v: OldVector => v.toArray
       case v => throw new IllegalArgumentException(
         "function vector_to_array requires a non-null input argument and input type must be " +
-          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-          s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
     }
   }.asNonNullable()
 
@@ -48,8 +48,8 @@ object functions {
       case v: OldVector => v.toArray.map(_.toFloat)
       case v => throw new IllegalArgumentException(
         "function vector_to_array requires a non-null input argument and input type must be " +
-          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-          s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
     }
   }.asNonNullable()
 
