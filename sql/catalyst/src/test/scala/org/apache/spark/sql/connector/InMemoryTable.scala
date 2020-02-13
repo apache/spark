@@ -59,16 +59,7 @@ class InMemoryTable(
 
   def rows: Seq[InternalRow] = dataMap.values.flatMap(_.rows).toSeq
 
-  private val partRefs: Array[NamedReference] = partitioning.flatMap(_.references)
-
-  private val partFieldNames: Seq[String] = partRefs.map { ref =>
-    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
-      case Some(_) => ref.describe()
-      case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
-    }
-  }
-
-    private val partCols: Array[Array[String]] = partRefs.map { ref =>
+  private val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
     schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
@@ -76,21 +67,21 @@ class InMemoryTable(
   }
 
   private def getKey(row: InternalRow): Seq[Any] = {
-    def extractor(fieldNames: Array[String], schema: StructType, values: Seq[Any]): Any = {
+    def extractor(fieldNames: Array[String], schema: StructType, row: InternalRow): Any = {
       val index = schema.fieldIndex(fieldNames(0))
-      val value = values(index)
+      val value = row.toSeq(schema).apply(index)
       if (fieldNames.length > 1) {
         (value, schema(index).dataType) match {
-          case (value: InternalRow, nestedSchema: StructType) =>
-            extractor(fieldNames.slice(1, fieldNames.length),
-              nestedSchema, value.toSeq(nestedSchema))
-          case _ => throw new IllegalArgumentException(s"does not exist.")
+          case (row: InternalRow, nestedSchema: StructType) =>
+            extractor(fieldNames.slice(1, fieldNames.length), nestedSchema, row)
+          case (_, dataType) =>
+            throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
         }
       } else {
         value
       }
     }
-    partCols.map(filedNames => extractor(filedNames, schema, row.toSeq(schema)))
+    partCols.map(filedNames => extractor(filedNames, schema, row))
   }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
@@ -175,8 +166,10 @@ class InMemoryTable(
   }
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+      val deleteKeys = InMemoryTable.filtersToKeys(
+        dataMap.keys, partCols.map(_.toSeq.quoted), filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
@@ -190,7 +183,8 @@ class InMemoryTable(
   }
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
-    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
   }
 }
 
