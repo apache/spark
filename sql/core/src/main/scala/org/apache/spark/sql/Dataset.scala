@@ -541,7 +541,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 3.0.0
    */
-  def explain(mode: String): Unit = {
+  def explain(mode: String): Unit = sparkSession.withActive {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
