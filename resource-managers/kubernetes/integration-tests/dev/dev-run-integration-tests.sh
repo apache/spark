@@ -23,6 +23,7 @@ DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
 IMAGE_TAG="N/A"
+JAVA_IMAGE_TAG=
 BASE_IMAGE_NAME=
 JVM_IMAGE_NAME=
 PYTHON_IMAGE_NAME=
@@ -50,6 +51,10 @@ while (( "$#" )); do
       ;;
     --image-tag)
       IMAGE_TAG="$2"
+      shift
+      ;;
+    --java-image-tag)
+      JAVA_IMAGE_TAG="$2"
       shift
       ;;
     --deploy-mode)
@@ -119,6 +124,11 @@ properties=(
   -Dspark.kubernetes.test.deployMode=$DEPLOY_MODE \
   -Dtest.include.tags=$INCLUDE_TAGS
 )
+
+if [ -n "$JAVA_IMAGE_TAG" ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
+fi
 
 if [ -n $NAMESPACE ];
 then
