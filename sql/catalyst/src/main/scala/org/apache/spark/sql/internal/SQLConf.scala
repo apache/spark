@@ -1629,7 +1629,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
-    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion.enabled")
       .internal()
       .doc("When true, Arrow will perform safe type conversion when converting " +
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
