@@ -394,6 +394,7 @@ object FunctionRegistry {
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
+    expression[DateFormatTzClass]("date_format_tz"),
     expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day", true),
     expression[DayOfYear]("dayofyear"),

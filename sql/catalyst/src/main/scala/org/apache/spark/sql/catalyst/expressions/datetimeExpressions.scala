@@ -680,6 +680,69 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override protected def isParsing: Boolean = false
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp, fmt, tz) - Converts `timestamp` to a value of string in the format specified by the date format `fmt` and time zone `tz`.",
+  arguments = """
+    Arguments:
+      * timestamp - A date/timestamp or string to be converted to the given format.
+      * fmt - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter` for valid date
+              and time format patterns.
+      * timeZone - The time zone to format the timestamp for.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-04-08', 'y', 'Europe/Berlin');
+       2016
+  """,
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class DateFormatTzClass(timestamp: Expression, format: Expression, tz: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def children: Seq[Expression] = timestamp :: format :: tz :: Nil
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType, StringType)
+
+  @transient private lazy val timeZoneId: Option[String] = Option(tz.eval()).map(_.toString)
+  @transient private lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
+
+  @transient private lazy val formatter: Option[TimestampFormatter] = {
+    if (format.foldable && tz.foldable) {
+      Option(format.eval()).map(format => TimestampFormatter(format.toString, zoneId))
+    } else None
+  }
+
+  override protected def nullSafeEval(timestamp: Any, format: Any, timeZone: Any): Any = {
+    val tf = if (formatter.isEmpty) {
+      TimestampFormatter(format.toString, zoneId)
+    } else {
+      formatter.get
+    }
+    UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    formatter.map { tf =>
+      val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
+      defineCodeGen(ctx, ev, (timestamp, _, _) => {
+        s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
+      })
+    }.getOrElse {
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      defineCodeGen(ctx, ev, (timestamp, format, _) => {
+        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid)
+          .format($timestamp))"""
+      })
+    }
+  }
+
+  override def prettyName: String = "date_format_tz"
+}
+
 /**
  * Converts time string with given pattern.
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.

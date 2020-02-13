@@ -137,6 +137,10 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           run(N, "format date", s"date_format($dateExpr, 'MMM yyyy')")
         }
         runBenchmark("Formatting timestamps") {
+          val timeExpr = "cast(id as timestamp)"
+          val tz = "Europe/Berlin"
+          run(N, "format date", s"date_format($timeExpr, 'yyyy-MM-dd HH:mm:ss')")
+          run(N, "format date tz", s"date_format_tz($timeExpr, 'yyyy-MM-dd HH:mm:ss ZZZZZ', '$tz')")
           run(N, "from_unixtime", "from_unixtime(id, 'yyyy-MM-dd HH:mm:ss.SSSSSS')")
         }
         runBenchmark("Convert timestamps") {

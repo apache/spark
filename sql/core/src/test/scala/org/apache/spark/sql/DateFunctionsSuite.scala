@@ -113,6 +113,20 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("date format with timezone") {
+    val df = Seq(ts).toDF("a")
+
+    checkAnswer(
+      df.select(date_format_tz($"a", "yyyy-MM-dd HH:mm:ss ZZZZZ", "Europe/Berlin")),
+      Row("2013-04-08 22:10:15 +02:00")
+    )
+
+    checkAnswer(
+      df.selectExpr("date_format_tz(a, 'yyyy-MM-dd HH:mm:ss ZZZZZ', 'Europe/Berlin')"),
+      Row("2013-04-08 22:10:15 +02:00")
+    )
+  }
+
   test("year") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
