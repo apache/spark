@@ -1959,7 +1959,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED =
-    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal.enabled")
+    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
       .internal()
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
