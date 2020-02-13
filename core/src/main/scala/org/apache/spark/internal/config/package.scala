@@ -38,7 +38,7 @@ package object config {
   private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
   private[spark] val SPARK_RESOURCES_COORDINATE =
-    ConfigBuilder("spark.resources.coordinate.enable")
+    ConfigBuilder("spark.resources.coordinateResourcesInStandalone")
       .doc("Whether to coordinate resources automatically among workers/drivers(client only) " +
         "in Standalone. If false, the user is responsible for configuring different resources " +
         "for workers/drivers that run on the same host.")
