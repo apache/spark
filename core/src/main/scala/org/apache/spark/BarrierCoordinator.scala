@@ -124,7 +124,7 @@ private[spark] class BarrierCoordinator(
           requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
             s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
             s"$timeoutInSecs second(s).")))
-          cleanupBarrierStage(barrierId) 
+          cleanupBarrierStage(barrierId)
         }
       }
     }
