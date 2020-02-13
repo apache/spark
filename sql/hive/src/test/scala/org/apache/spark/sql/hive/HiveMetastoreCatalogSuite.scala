@@ -62,7 +62,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       spark.sql("create view vw1 as select 1 as id")
       val plan = spark.sql("select id from vw1").queryExecution.analyzed
       val aliases = plan.collect {
-        case x @ SubqueryAlias(AliasIdentifier("vw1", Some("default")), _) => x
+        case x @ SubqueryAlias(AliasIdentifier("vw1", Seq("default")), _) => x
       }
       assert(aliases.size == 1)
     }
