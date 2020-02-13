@@ -2641,4 +2641,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
     assert(idTuples.length == idTuples.toSet.size)
   }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val e = intercept[AnalysisException] {
+      sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
+  }
 }
