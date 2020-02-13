@@ -204,7 +204,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
 
     val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
-    subqueriesAll(plan).foreach { s =>
+    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
       assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
     }
   }
