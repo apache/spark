@@ -124,6 +124,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
+
+    // regexp_extract
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -131,6 +133,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
+    )
+
+    // regexp_extract_all
+    checkAnswer(
+      df.select(regexp_extract_all($"s", "(foo)", 1)),
+      Row(Seq())
+    )
+    checkAnswer(
+      df.select(regexp_extract_all($"s", "(a+)(b)?(c)", 2)),
+      Row(Seq(""))
     )
   }
 

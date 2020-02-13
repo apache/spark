@@ -555,7 +555,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
-      * idx - an int expression of the regex group index. The regex maybe contains multiple
+      * idx - an int expression of the regex group index. The regex may contains multiple
           groups. `idx` indicates which regex group to extract.
   """,
   examples = """
@@ -571,7 +571,6 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     val m = getLastMatcher(s, p)
     val matchResults = new ArrayBuffer[UTF8String]()
-    val mr: MatchResult = m.toMatchResult
     while(m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
