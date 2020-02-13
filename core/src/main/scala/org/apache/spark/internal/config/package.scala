@@ -1119,7 +1119,7 @@ package object config {
       .doc("The max number of executors for which the local dirs are stored. This size is " +
         "both applied for the driver and both for the executors side to avoid having an " +
         "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
-        "persisted RDD blocks or shuffle blocks (when `spark.shuffle.readHostLocalDisk.enabled` " +
+        s"persisted RDD blocks or shuffle blocks (when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` " +
         "is set) from the same host.")
       .intConf
       .createWithDefault(1000)
@@ -1160,7 +1160,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
-    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+    ConfigBuilder("spark.shuffle.readHostLocalDisk")
       .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
         "blocks requested from those block managers which are running on the same host are read " +
         "from the disk directly instead of being fetched as remote blocks over the network.")
