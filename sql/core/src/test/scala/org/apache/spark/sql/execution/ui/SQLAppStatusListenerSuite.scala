@@ -508,7 +508,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(spark, dummyQueryExecution) {
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
       physicalPlan.execute().collect()
     }
 
