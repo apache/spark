@@ -79,10 +79,10 @@ class BarrierTaskContext private[spark] (
   ): RequestToSync = {
     requestMethod match {
       case RequestMethod.BARRIER =>
-        return BarrierRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+        BarrierRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch, partitionId, requestMethod)
       case RequestMethod.ALL_GATHER =>
-        return AllGatherRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+        AllGatherRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch, partitionId, requestMethod, allGatherMessage)
     }
   }
