@@ -63,67 +63,64 @@ object SQLExecution {
    */
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
-    sparkSession.withActive {
-      val sc = sparkSession.sparkContext
-      val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
-      val executionId = SQLExecution.nextExecutionId
-      sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
-      executionIdToQueryExecution.put(executionId, queryExecution)
-      try {
-        // sparkContext.getCallSite() would first try to pick up any call site that was previously
-        // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
-        // streaming queries would give us call site like "run at <unknown>:0"
-        val callSite = sc.getCallSite()
+    val sc = sparkSession.sparkContext
+    val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
+    val executionId = SQLExecution.nextExecutionId
+    sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    executionIdToQueryExecution.put(executionId, queryExecution)
+    try {
+      // sparkContext.getCallSite() would first try to pick up any call site that was previously
+      // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
+      // streaming queries would give us call site like "run at <unknown>:0"
+      val callSite = sc.getCallSite()
 
-        val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
+      val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-        val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
-          .filter(_ => truncateLength > 0)
-          .map { sqlStr =>
-            val redactedStr = Utils
-              .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
-            redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
-          }.getOrElse(callSite.shortForm)
+      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+        .filter(_ => truncateLength > 0)
+        .map { sqlStr =>
+          val redactedStr = Utils
+            .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
+          redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
+        }.getOrElse(callSite.shortForm)
 
-        withSQLConfPropagated(sparkSession) {
-          var ex: Option[Throwable] = None
-          val startTime = System.nanoTime()
-          try {
-            sc.listenerBus.post(SparkListenerSQLExecutionStart(
-              executionId = executionId,
-              description = desc,
-              details = callSite.longForm,
-              physicalPlanDescription = queryExecution.toString,
-              // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
-              // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-              sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
-              time = System.currentTimeMillis()))
-            body
-          } catch {
-            case e: Throwable =>
-              ex = Some(e)
-              throw e
-          } finally {
-            val endTime = System.nanoTime()
-            val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
-            // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
-            // `name`
-            // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
-            // can specify the execution name in more places in the future, so that
-            // `QueryExecutionListener` can track more cases.
-            event.executionName = name
-            event.duration = endTime - startTime
-            event.qe = queryExecution
-            event.executionFailure = ex
-            sc.listenerBus.post(event)
-          }
+      withSQLConfPropagated(sparkSession) {
+        var ex: Option[Throwable] = None
+        val startTime = System.nanoTime()
+        try {
+          sc.listenerBus.post(SparkListenerSQLExecutionStart(
+            executionId = executionId,
+            description = desc,
+            details = callSite.longForm,
+            physicalPlanDescription = queryExecution.toString,
+            // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
+            // will be caught and reported in the `SparkListenerSQLExecutionEnd`
+            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            time = System.currentTimeMillis()))
+          body
+        } catch {
+          case e: Throwable =>
+            ex = Some(e)
+            throw e
+        } finally {
+          val endTime = System.nanoTime()
+          val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
+          // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the `name`
+          // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
+          // can specify the execution name in more places in the future, so that
+          // `QueryExecutionListener` can track more cases.
+          event.executionName = name
+          event.duration = endTime - startTime
+          event.qe = queryExecution
+          event.executionFailure = ex
+          sc.listenerBus.post(event)
         }
-      } finally {
-        executionIdToQueryExecution.remove(executionId)
-        sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
       }
+    } finally {
+      executionIdToQueryExecution.remove(executionId)
+      sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
     }
   }
 

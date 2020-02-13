@@ -726,7 +726,7 @@ class SparkSession private(
    * Execute a block of code with the this session set as the active session, and restore the
    * previous session on completion.
    */
-  def withActive[T](block: => T): T = {
+  private[sql] def withActive[T](block: => T): T = {
     // Use the active session thread local directly to make sure we get the session that is actually
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
