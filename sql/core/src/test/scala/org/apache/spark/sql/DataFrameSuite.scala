@@ -213,7 +213,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-28067 - Aggregate sum should not return wrong results for decimal overflow") {
+  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val df = Seq(
