@@ -1119,8 +1119,8 @@ package object config {
       .doc("The max number of executors for which the local dirs are stored. This size is " +
         "both applied for the driver and both for the executors side to avoid having an " +
         "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
-        s"persisted RDD blocks or shuffle blocks (when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` " +
-        "is set) from the same host.")
+        s"persisted RDD blocks or shuffle blocks " +
+        s"(when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` is set) from the same host.")
       .intConf
       .createWithDefault(1000)
 
