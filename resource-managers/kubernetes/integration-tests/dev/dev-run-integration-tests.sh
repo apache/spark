@@ -125,7 +125,7 @@ properties=(
   -Dtest.include.tags=$INCLUDE_TAGS
 )
 
-if [ -n $JAVA_IMAGE_TAG ];
+if [ -n "$JAVA_IMAGE_TAG" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
 fi
