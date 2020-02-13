@@ -46,7 +46,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   private val defaultElementType: DataType = {
-    if (SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_DEFAULT_TO_STRING)) {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE)) {
       StringType
     } else {
       NullType
@@ -145,6 +145,14 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
 
+  private val defaultElementType: DataType = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE)) {
+      StringType
+    } else {
+      NullType
+    }
+  }
+
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -167,9 +175,9 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override lazy val dataType: MapType = {
     MapType(
       keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
-        .getOrElse(StringType),
+        .getOrElse(defaultElementType),
       valueType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
-        .getOrElse(StringType),
+        .getOrElse(defaultElementType),
       valueContainsNull = values.exists(_.nullable))
   }
 

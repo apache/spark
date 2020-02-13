@@ -29,12 +29,11 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  */
 class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Serializable {
   assert(!keyType.existsRecursively(_.isInstanceOf[MapType]), "key of map cannot be/contain map")
-  assert(keyType != NullType, "map key cannot be null type.")
 
   private lazy val keyToIndex = keyType match {
     // Binary type data is `byte[]`, which can't use `==` to check equality.
-    case _: AtomicType | _: CalendarIntervalType if !keyType.isInstanceOf[BinaryType] =>
-      new java.util.HashMap[Any, Int]()
+    case _: AtomicType | _: CalendarIntervalType | _: NullType
+      if !keyType.isInstanceOf[BinaryType] => new java.util.HashMap[Any, Int]()
     case _ =>
       // for complex types, use interpreted ordering to be able to compare unsafe data with safe
       // data, e.g. UnsafeRow vs GenericInternalRow.
