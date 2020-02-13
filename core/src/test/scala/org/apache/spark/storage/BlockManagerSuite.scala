@@ -634,17 +634,20 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val maxRemoteBlockSizeFetchToMem = if (stream) 0 else Int.MaxValue - 512
       conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
       val blockManagers = (0 to 6).map(index => makeBlockManager(7800, s"host-$index", master))
-      val data = new Array[Byte](4000)
+      val a1 = new Array[Byte](4000)
+      val a2 = new Array[Byte](4000)
+      val a3 = new Array[Byte](4000)
       // Put 4000 byte sized RDD Blocks in block manager 1, 2 and 4. So that they
       // won't have space for another 4000 bytes block.
-      blockManagers(1).putSingle(rdd(0, 1), data, StorageLevel.MEMORY_ONLY)
-      blockManagers(2).putSingle(rdd(0, 2), data, StorageLevel.MEMORY_ONLY)
-      blockManagers(4).putSingle(rdd(0, 3), data, StorageLevel.MEMORY_ONLY)
+      blockManagers(1).putSingle(rdd(0, 1), a1, StorageLevel.MEMORY_ONLY)
+      blockManagers(2).putSingle(rdd(0, 2), a2, StorageLevel.MEMORY_ONLY)
+      blockManagers(4).putSingle(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
 
       val testBlockId = rdd(0, 4)
+      val testData = new Array[Byte](4000)
       val storageLevel = StorageLevel(
         useDisk = false, useMemory = true, deserialized = true, replication = 3)
-      blockManagers(0).putSingle(testBlockId, data, storageLevel, tellMaster = true)
+      blockManagers(0).putSingle(testBlockId, testData, storageLevel, tellMaster = true)
 
       // Replication will be tried by bm0 in this order: bm1, bm2, bm3, bm4, bm5
       // bm1, bm2 and bm4 have limited memory available. So Block can't be stored by them.
