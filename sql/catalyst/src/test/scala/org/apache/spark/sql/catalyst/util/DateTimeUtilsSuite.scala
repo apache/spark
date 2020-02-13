@@ -86,9 +86,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
+    def format(d: Date): String = {
+      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
+        .format(d.getTime * MICROS_PER_MILLIS)
+    }
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
-      assert(d2.toString === d1.toString)
+      assert(format(d2) === format(d1))
     }
 
     val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -413,22 +417,22 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("monthsBetween") {
     val date1 = date(1997, 2, 28, 10, 30, 0)
     var date2 = date(1996, 10, 30)
-    assert(monthsBetween(date1, date2, true, TimeZoneUTC) === 3.94959677)
-    assert(monthsBetween(date1, date2, false, TimeZoneUTC) === 3.9495967741935485)
+    assert(monthsBetween(date1, date2, true, ZoneOffset.UTC) === 3.94959677)
+    assert(monthsBetween(date1, date2, false, ZoneOffset.UTC) === 3.9495967741935485)
     Seq(true, false).foreach { roundOff =>
       date2 = date(2000, 2, 28)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === -36)
       date2 = date(2000, 2, 29)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === -36)
       date2 = date(1996, 3, 31)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === 11)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === 11)
     }
 
     val date3 = date(2000, 2, 28, 16, tz = TimeZonePST)
     val date4 = date(1997, 2, 28, 16, tz = TimeZonePST)
-    assert(monthsBetween(date3, date4, true, TimeZonePST) === 36.0)
-    assert(monthsBetween(date3, date4, true, TimeZoneGMT) === 35.90322581)
-    assert(monthsBetween(date3, date4, false, TimeZoneGMT) === 35.903225806451616)
+    assert(monthsBetween(date3, date4, true, TimeZonePST.toZoneId) === 36.0)
+    assert(monthsBetween(date3, date4, true, ZoneOffset.UTC) === 35.90322581)
+    assert(monthsBetween(date3, date4, false, ZoneOffset.UTC) === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
@@ -571,15 +575,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("daysToMillis and millisToDays") {
     val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, tz = TimeZonePST))
-    assert(millisToDays(input, TimeZonePST) === 16800)
-    assert(millisToDays(input, TimeZoneGMT) === 16801)
-    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, TimeZoneGMT) == -1)
+    assert(millisToDays(input, TimeZonePST.toZoneId) === 16800)
+    assert(millisToDays(input, ZoneOffset.UTC) === 16801)
+    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, ZoneOffset.UTC) == -1)
 
     var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZonePST))
-    assert(daysToMillis(16800, TimeZonePST) === expected)
+    assert(daysToMillis(16800, TimeZonePST.toZoneId) === expected)
 
     expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZoneGMT))
-    assert(daysToMillis(16800, TimeZoneGMT) === expected)
+    assert(daysToMillis(16800, ZoneOffset.UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
@@ -594,7 +598,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
         if (!skipped.contains(d)) {
-          assert(millisToDays(daysToMillis(d, tz), tz) === d,
+          assert(millisToDays(daysToMillis(d, tz.toZoneId), tz.toZoneId) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }
       }
