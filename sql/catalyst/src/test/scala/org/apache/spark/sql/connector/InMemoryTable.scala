@@ -73,7 +73,7 @@ class InMemoryTable(
       if (fieldNames.length > 1) {
         (value, schema(index).dataType) match {
           case (row: InternalRow, nestedSchema: StructType) =>
-            extractor(fieldNames.slice(1, fieldNames.length), nestedSchema, row)
+            extractor(fieldNames.drop(1), nestedSchema, row)
           case (_, dataType) =>
             throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
         }
