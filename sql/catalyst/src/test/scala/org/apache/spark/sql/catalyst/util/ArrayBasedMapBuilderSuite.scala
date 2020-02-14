@@ -52,7 +52,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("remove duplicated keys with last wins policy") {
-    withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
       val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
       builder.put(1, 1)
       builder.put(2, 2)
@@ -64,7 +64,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("binary type key") {
-    withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
       val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
       builder.put(Array(1.toByte), 1)
       builder.put(Array(2.toByte), 2)
@@ -80,7 +80,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("struct type key") {
-    withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
       val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
       builder.put(InternalRow(1), 1)
       builder.put(InternalRow(2), 2)
@@ -99,7 +99,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("array type key") {
-    withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
       val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
       builder.put(new GenericArrayData(Seq(1, 1)), 1)
       builder.put(new GenericArrayData(Seq(2, 2)), 2)

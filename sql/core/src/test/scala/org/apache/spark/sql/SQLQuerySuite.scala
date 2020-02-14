@@ -188,7 +188,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkExampleSyntax(example)
           example.split("  > ").toList.foreach(_ match {
             case exampleRe(sql, output) =>
-              withSQLConf(SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key -> "true") {
+              withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
                 val df = clonedSpark.sql(sql)
                 val actual = unindentAndTrim(
                   hiveResultString(df.queryExecution.executedPlan).mkString("\n"))

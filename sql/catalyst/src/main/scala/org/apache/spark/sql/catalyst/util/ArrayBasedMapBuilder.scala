@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY
+import org.apache.spark.sql.internal.SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
@@ -50,8 +50,8 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
 
-  private val deduplicateWithLastWinsPolicy =
-    SQLConf.get.getConf(DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY)
+  private val allowDuplicatedMapKey =
+    SQLConf.get.getConf(LEGACY_ALLOW_DUPLICATED_MAP_KEY)
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
@@ -68,9 +68,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       keys.append(key)
       values.append(value)
     } else {
-      if (!deduplicateWithLastWinsPolicy) {
+      if (!allowDuplicatedMapKey) {
         throw new RuntimeException(s"Duplicate map key $key was founded, please set " +
-          s"${DEDUPLICATE_MAP_KEY_WITH_LAST_WINS_POLICY.key} to true to remove it with " +
+          s"${LEGACY_ALLOW_DUPLICATED_MAP_KEY.key} to true to remove it with " +
           "last wins policy.")
       }
       // Overwrite the previous value, as the policy is last wins.
