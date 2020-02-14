@@ -698,7 +698,7 @@ abstract class RankLike extends AggregateWindowFunction {
     Arguments:
       * children - this is to base the rank on; a change in the value of one the children will
           trigger a change in rank. This is an internal parameter and will be assigned by the
-          Analyser. 
+          Analyser.
   """,
   since = "2.0.0")
 case class Rank(children: Seq[Expression]) extends RankLike {
