@@ -1431,7 +1431,7 @@ private[spark] class DAGScheduler(
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
-                    cancelRunningIndependentStages(job)
+                    cancelRunningIndependentStages(job, s"Job ${job.jobId} is finished.")
                     cleanupStateForJobAndIndependentStages(job)
                     try {
                       // killAllTaskAttempts will fail if a SchedulerBackend does not implement
@@ -1977,9 +1977,7 @@ private[spark] class DAGScheduler(
   }
 
   /** Cancel all independent, running stages that are only used by this job. */
-  private def cancelRunningIndependentStages(
-      job: ActiveJob,
-      reason: Option[String] = None): Boolean = {
+  private def cancelRunningIndependentStages(job: ActiveJob, reason: String): Boolean = {
     var ableToCancelStages = true
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
@@ -1995,12 +1993,12 @@ private[spark] class DAGScheduler(
         if (!stageIdToStage.contains(stageId)) {
           logError(s"Missing Stage for stage with id $stageId")
         } else {
-          // This is the only job that uses this stage, so fail the stage if it is running.
+          // This stage is only used by the job, so finish the stage if it is running.
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
-              markStageAsFinished(stage, reason)
+              markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>
                 logWarning(s"Could not cancel tasks for stage $stageId", e)
@@ -2018,7 +2016,7 @@ private[spark] class DAGScheduler(
       job: ActiveJob,
       failureReason: String,
       exception: Option[Throwable] = None): Unit = {
-    if (cancelRunningIndependentStages(job, Some(failureReason))) {
+    if (cancelRunningIndependentStages(job, failureReason)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
