@@ -258,7 +258,8 @@ abstract class HashExpression[E] extends Expression {
     } else if (children.forall(child => hasMapType(child.dataType)) &&
       !SQLConf.get.getConf(SQLConf.LEGACY_USE_HASH_ON_MAPTYPE)) {
       TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName cannot contain elements of MapType")
+        s"input to function $prettyName cannot contain elements of MapType. To restore previous " +
+          s"behavior set spark.sql.legacy.useHashOnMapType to true.")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
