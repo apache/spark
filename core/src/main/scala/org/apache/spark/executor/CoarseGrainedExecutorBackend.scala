@@ -73,11 +73,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   private var _resources = Map.empty[String, ResourceInformation]
 
   /**
-   * Map each taskId to the information about the resource allocated to it, Please refer to
-   * [[ResourceInformation]] for specifics.
+   * Map each taskId to a tuple of cpus and the information about the resource allocated to it.
+   * Please refer to [[ResourceInformation]] for specifics.
    * Exposed for testing only.
    */
-  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+  private[executor] val taskResources =
+    new mutable.HashMap[Long, (Int, Map[String, ResourceInformation])]
+
 
   override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
@@ -162,7 +164,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        taskResources(taskDesc.taskId) = taskDesc.resources
+        taskResources(taskDesc.taskId) = (taskDesc.cpus, taskDesc.resources)
         executor.launchTask(this, taskDesc)
       }
 
@@ -209,8 +211,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
-    val msg = StatusUpdate(executorId, taskId, state, data, resources)
+    val (taskCpus, resources) =
+      taskResources.getOrElse(taskId, (1, Map.empty[String, ResourceInformation]))
+    val msg = StatusUpdate(executorId, taskId, state, data, taskCpus, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
     }

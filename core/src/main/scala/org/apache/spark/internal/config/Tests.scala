@@ -62,4 +62,9 @@ private[spark] object Tests {
       .booleanConf
       .createWithDefault(false)
 
+  val TASKSET_MANAGER_SPECULATION_TESTING =
+    ConfigBuilder("spark.testing.taskSetManagerSpeculation")
+      .booleanConf
+      .createWithDefault(false)
+
 }

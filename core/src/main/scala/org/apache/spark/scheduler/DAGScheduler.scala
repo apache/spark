@@ -37,7 +37,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
@@ -385,15 +385,23 @@ private[spark] class DAGScheduler(
   def createShuffleMapStage[K, V, C](
       shuffleDep: ShuffleDependency[K, V, C], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
+
+    // something we may consider later is do we want to track the merged profile
+    // so we don't recreate it if the user runs the same operation multiple times
+    val resourceProfile = mergeResourceProfilesForStage(rdd)
+    // this ResourceProfile could be different if it was merged so we have to add it to
+    // our ResourceProfileManager
+    sc.resourceProfileManager.addResourceProfile(resourceProfile)
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd)
+    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
+
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ShuffleMapStage(
       id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      resourceProfile.id)
 
     stageIdToStage(id) = stage
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
@@ -433,12 +441,31 @@ private[spark] class DAGScheduler(
    * the check fails consecutively beyond a configured number for a job, then fail current job
    * submission.
    */
-  private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
+  private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
     val numPartitions = rdd.getNumPartitions
-    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
+    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
     if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
       throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
+  }
+
+  private[scheduler] def mergeResourceProfilesForStage(rdd: RDD[_]): ResourceProfile = {
+    val stageResourceProfiles = getResourceProfilesForRDDsInStage(rdd)
+    logDebug("rdd profiles: " + stageResourceProfiles)
+    val resourceProfile = if (stageResourceProfiles.size > 1) {
+      // add option later to actually merge profiles - SPARK-29153
+      throw new IllegalArgumentException("Multiple ResourceProfile's specified in the RDDs for " +
+          "this stage, either resolve the conflict ResourceProfile's yourself or enable " +
+          "spark.scheduler.resourceProfile.mergeConflicts and understand how Spark handles " +
+          "the conflicts.")
+    } else {
+      if (stageResourceProfiles.size == 1) {
+        stageResourceProfiles.head
+      } else {
+        sc.resourceProfileManager.defaultResourceProfile
+      }
+    }
+    resourceProfile
   }
 
   /**
@@ -450,13 +477,22 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    // something we may consider later is do we want to track the merged profile
+    // so we don't recreate it if the user runs the same operation multiple times
+    val resourceProfile = mergeResourceProfilesForStage(rdd)
+    // this ResourceProfile could be different if it was merged so we have to add it to
+    // our ResourceProfileManager.
+    sc.resourceProfileManager.addResourceProfile(resourceProfile)
+
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd)
+    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
+
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    logInfo("creating result stage with profile: " + resourceProfile)
+    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
+      callSite, resourceProfile.id)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -527,6 +563,28 @@ private[spark] class DAGScheduler(
       }
     }
     parents
+  }
+
+  private[scheduler] def getResourceProfilesForRDDsInStage(
+      rdd: RDD[_]): HashSet[ResourceProfile] = {
+    val resourceProfiles = new HashSet[ResourceProfile]
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
+    while (waitingForVisit.nonEmpty) {
+      val toVisit = waitingForVisit.remove(0)
+      if (!visited(toVisit)) {
+        visited += toVisit
+        Option(toVisit.getResourceProfile).foreach(resourceProfiles += _)
+        toVisit.dependencies.foreach {
+          case _: ShuffleDependency[_, _, _] =>
+            // Not within the same stage with current rdd, do nothing.
+          case dependency =>
+            waitingForVisit.prepend(dependency.rdd)
+        }
+      }
+    }
+    resourceProfiles
   }
 
   /**
@@ -1228,7 +1286,8 @@ private[spark] class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
+              stage.resourceProfileId)
           }
 
         case stage: ResultStage =>
@@ -1239,7 +1298,7 @@ private[spark] class DAGScheduler(
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
-              stage.rdd.isBarrier())
+              stage.rdd.isBarrier(), stage.resourceProfileId)
           }
       }
     } catch {
@@ -1253,7 +1312,8 @@ private[spark] class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties))
+        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
+        stage.resourceProfileId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

@@ -83,17 +83,21 @@ private[spark] class TaskSetManager(
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
-  // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
-  // number of slots on a single executor, would the task manager speculative run the tasks if
-  // their duration is longer than the given threshold. In this way, we wouldn't speculate too
   // aggressively but still handle basic cases.
   // SPARK-30417: #cores per executor might not be set in spark conf for standalone mode, then
   // the value of the conf would 1 by default. However, the executor would use all the cores on
   // the worker. Therefore, CPUS_PER_TASK is okay to be greater than 1 without setting #cores.
-  // To handle this case, we assume the minimum number of slots is 1.
   // TODO: use the actual number of slots for standalone mode.
-  val speculationTasksLessEqToSlots =
-    numTasks <= Math.max(conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK, 1)
+  val speculationTasksLessEqToSlots = {
+    val rpId = taskSet.resourceProfileId
+    val resourceProfile = sched.sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val slots = if (!resourceProfile.isCoresLimitKnown) {
+      1
+    } else {
+      resourceProfile.maxTasksPerExecutor(conf)
+    }
+    numTasks <= slots
+  }
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -229,8 +233,6 @@ private[spark] class TaskSetManager(
       index: Int,
       resolveRacks: Boolean = true,
       speculatable: Boolean = false): Unit = {
-    // A zombie TaskSetManager may reach here while handling failed task.
-    if (isZombie) return
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
       loc match {
@@ -394,7 +396,8 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, Seq[String]] = Map.empty)
+      taskCpus: Int,
+      taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -457,18 +460,8 @@ private[spark] class TaskSetManager(
         // val timeTaken = clock.getTime() - startTime
         val taskName = s"task ${info.id} in stage ${taskSet.id}"
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
-          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
-
-        val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
-          val rName = taskReq.resourceName
-          val count = taskReq.amount
-          val rAddresses = availableResources.getOrElse(rName, Seq.empty)
-          assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
-            s"${rAddresses.size} available.")
-          // We'll drop the allocated addresses later inside TaskSchedulerImpl.
-          val allocatedAddresses = rAddresses.take(count)
-          (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
-        }.toMap
+          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
+          s"cpus: $taskCpus, taskResourceAssignments ${taskResourceAssignments}")
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
@@ -478,10 +471,11 @@ private[spark] class TaskSetManager(
           taskName,
           index,
           task.partitionId,
+          taskCpus,
           addedFiles,
           addedJars,
           task.localProperties,
-          extraResources,
+          taskResourceAssignments,
           serializedTask)
       }
     } else {
@@ -1084,8 +1078,6 @@ private[spark] class TaskSetManager(
   }
 
   def recomputeLocality(): Unit = {
-    // A zombie TaskSetManager may reach here while executorLost happens
-    if (isZombie) return
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
