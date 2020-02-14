@@ -2106,13 +2106,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+  object LegacyBehaviorPolicy extends Enumeration {
+    val EXCEPTION, LEGACY, NEW_BEHAVIOR = Value
+  }
+
+  val LEGACY_CTE_PRECEDENCE_POLICY = buildConf("spark.sql.legacy.ctePrecedencePolicy")
     .internal()
-    .doc("When true, outer CTE definitions takes precedence over inner definitions. If set to " +
-      "false, inner CTE definitions take precedence. The default value is empty, " +
+    .doc("When LEGACY, outer CTE definitions takes precedence over inner definitions. If set to " +
+      "NEW_BEHAVIOR, inner CTE definitions take precedence. The default value is EXCEPTION, " +
       "AnalysisException is thrown while name conflict is detected in nested CTE.")
-    .booleanConf
-    .createOptional
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
