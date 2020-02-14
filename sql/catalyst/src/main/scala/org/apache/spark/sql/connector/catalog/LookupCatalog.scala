@@ -95,9 +95,9 @@ private[sql] trait LookupCatalog extends Logging {
    * Catalog name takes precedence over identifier, but for a single-part name, identifier takes
    * precedence over catalog name.
    *
-   * Note that, this pattern is used to look up catalog objects like table, function, permanent
-   * view, etc. If you need to look up temp views, please do it separately before calling this
-   * pattern.
+   * Note that, this pattern is used to look up permanent catalog objects like table, view,
+   * function, etc. If you need to look up temp objects like temp view, please do it separately
+   * before calling this pattern, as temp objects don't belong to any catalog.
    */
   object CatalogAndIdentifier {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper

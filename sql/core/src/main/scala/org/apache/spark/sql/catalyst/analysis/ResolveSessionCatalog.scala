@@ -535,7 +535,7 @@ class ResolveSessionCatalog(
       if (isTemp) {
         // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
         val database = if (nameParts.length > 2) {
-          throw new AnalysisException(s"${nameParts.quoted} is not a valid function name.")
+          throw new AnalysisException(s"Unsupported function name '${nameParts.quoted}'")
         } else if (nameParts.length == 2) {
           Some(nameParts.head)
         } else {
@@ -566,20 +566,24 @@ class ResolveSessionCatalog(
     }
 
     nameParts match {
-      case SessionCatalogAndTable(_, funcName) => funcName match {
-        case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
-        case Seq(fn) =>
-          val database = if (nameParts.head == CatalogManager.SESSION_CATALOG_NAME) {
+      case SessionCatalogAndIdentifier(_, ident) =>
+        if (nameParts.length == 1) {
+          // If there is only one name part, it means the current catalog is the session catalog.
+          // Here we don't fill the default database, to keep the error message unchanged for
+          // v1 commands.
+          FunctionIdentifier(nameParts.head, None)
+        } else {
+          ident.namespace match {
             // For name parts like `spark_catalog.t`, we need to fill in the default database so
             // that the caller side won't treat it as a temp function.
-            Some(catalogManager.v1SessionCatalog.getCurrentDatabase)
-          } else {
-            None
+            case Array() if nameParts.head == CatalogManager.SESSION_CATALOG_NAME =>
+              FunctionIdentifier(
+                ident.name, Some(catalogManager.v1SessionCatalog.getCurrentDatabase))
+            case Array(db) => FunctionIdentifier(ident.name, Some(db))
+            case _ =>
+              throw new AnalysisException(s"Unsupported function name '$ident'")
           }
-          FunctionIdentifier(fn, database)
-        case _ =>
-          throw new AnalysisException(s"Unsupported function name '${funcName.quoted}'")
-      }
+        }
 
       case _ => throw new AnalysisException(s"$sql is only supported in v1 catalog")
     }
