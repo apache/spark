@@ -172,7 +172,13 @@ object StaticSQLConf {
 
   val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
     buildStaticConf("spark.sql.defaultUrlStreamHandlerFactory.enabled")
-      .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
+      .doc(
+        "When true, register Hadoop's FsUrlStreamHandlerFactory to support " +
+        "ADD JAR against HDFS locations. " +
+        "It should be disabled when a different stream protocol handler should be registered " +
+        "to support a particular protocol type, or if Hadoop's FsUrlStreamHandlerFactory " +
+        "conflicts with other protocol types such as `http` or `https`. See also SPARK-25694 " +
+        "and HADOOP-14598.")
       .internal()
       .booleanConf
       .createWithDefault(true)

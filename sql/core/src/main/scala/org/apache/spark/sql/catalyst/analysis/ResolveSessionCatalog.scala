@@ -69,6 +69,29 @@ class ResolveSessionCatalog(
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
+    case AlterTableReplaceColumnsStatement(
+        nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
+      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
+        case Some(_: V1Table) =>
+          throw new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
+        case Some(table) =>
+          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
+          val deleteChanges = table.schema.fieldNames.map { name =>
+            TableChange.deleteColumn(Array(name))
+          }
+          val addChanges = cols.map { col =>
+            TableChange.addColumn(
+              col.name.toArray,
+              col.dataType,
+              col.nullable,
+              col.comment.orNull,
+              col.position.orNull)
+          }
+          deleteChanges ++ addChanges
+        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
+      }
+      createAlterTable(nameParts, catalog, tbl, changes)
+
     case a @ AlterTableAlterColumnStatement(
          nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
       loadTable(catalog, tbl.asIdentifier).collect {
@@ -76,10 +99,6 @@ class ResolveSessionCatalog(
           if (a.column.length > 1) {
             throw new AnalysisException(
               "ALTER COLUMN with qualified column is only supported with v2 tables.")
-          }
-          if (a.dataType.isEmpty) {
-            throw new AnalysisException(
-              "ALTER COLUMN with v1 tables must specify new data type.")
           }
           if (a.nullable.isDefined) {
             throw new AnalysisException(
@@ -92,17 +111,27 @@ class ResolveSessionCatalog(
           val builder = new MetadataBuilder
           // Add comment to metadata
           a.comment.map(c => builder.putString("comment", c))
+          val colName = a.column(0)
+          val dataType = a.dataType.getOrElse {
+            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+              .map(_._2.dataType)
+              .getOrElse {
+                throw new AnalysisException(
+                  s"ALTER COLUMN cannot find column ${quote(colName)} in v1 table. " +
+                    s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
+              }
+          }
           // Add Hive type string to metadata.
-          val cleanedDataType = HiveStringType.replaceCharType(a.dataType.get)
-          if (a.dataType.get != cleanedDataType) {
-            builder.putString(HIVE_TYPE_STRING, a.dataType.get.catalogString)
+          val cleanedDataType = HiveStringType.replaceCharType(dataType)
+          if (dataType != cleanedDataType) {
+            builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
           }
           val newColumn = StructField(
-            a.column(0),
+            colName,
             cleanedDataType,
             nullable = true,
             builder.build())
-          AlterTableChangeColumnCommand(tbl.asTableIdentifier, a.column(0), newColumn)
+          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
       }.getOrElse {
         val colName = a.column.toArray
         val typeChange = a.dataType.map { newDataType =>

@@ -62,9 +62,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -177,9 +177,19 @@ object SQLExecution {
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
     Future {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
       sc.setLocalProperties(localProps)
-      body
+      val res = body
+      // reset active session and local props.
+      sc.setLocalProperties(originalLocalProps)
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
     }(exec)
   }
 }

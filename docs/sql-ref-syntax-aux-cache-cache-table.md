@@ -20,7 +20,8 @@ license: |
 ---
 
 ### Description
-`CACHE TABLE` statement caches contents of a table or output of a query with the given storage level. This reduces scanning of the original files in future queries.
+`CACHE TABLE` statement caches contents of a table or output of a query with the given storage level. If a query is cached, then a temp view will be created for this query.
+This reduces scanning of the original files in future queries. 
 
 ### Syntax
 {% highlight sql %}

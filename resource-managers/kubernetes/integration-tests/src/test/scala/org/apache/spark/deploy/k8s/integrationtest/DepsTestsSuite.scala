@@ -59,7 +59,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).asJava
 
     new ContainerBuilder()
-      .withImage("ceph/daemon:latest")
+      .withImage("ceph/daemon:v4.0.3-stable-4.0-nautilus-centos-7-x86_64")
       .withImagePullPolicy("Always")
       .withName(cName)
       .withPorts(new ContainerPortBuilder()

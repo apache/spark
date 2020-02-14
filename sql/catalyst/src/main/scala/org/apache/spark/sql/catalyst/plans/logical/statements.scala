@@ -156,6 +156,10 @@ case class AlterTableAddColumnsStatement(
     tableName: Seq[String],
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
+case class AlterTableReplaceColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
 /**
  * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
  */
