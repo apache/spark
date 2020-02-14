@@ -274,13 +274,25 @@ object QueryExecution {
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */
-  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] =
+  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
+
+    val sparkSessionWithAdaptiveExecutionOff =
+    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      val session = sparkSession.cloneSession()
+      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      session
+    } else {
+      sparkSession
+    }
+
     Seq(
       // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
       // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
       InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession)),
-      PlanDynamicPruningFilters(sparkSession),
-      PlanSubqueries(sparkSession),
+      // If the following rules apply, it means the main query is not AQE-ed, so we make sure the
+      // subqueries are not AQE-ed either.
+      PlanDynamicPruningFilters(sparkSessionWithAdaptiveExecutionOff),
+      PlanSubqueries(sparkSessionWithAdaptiveExecutionOff),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
@@ -288,6 +300,7 @@ object QueryExecution {
       ReuseExchange(sparkSession.sessionState.conf),
       ReuseSubquery(sparkSession.sessionState.conf)
     )
+  }
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
