@@ -617,7 +617,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       HoursTransform(FieldReference(Array("ts", "modified")))))
   }
 
-  test("SPARK-30289 Create a: partitioned by bucket(4, ts.timezone)") {
+  test("SPARK-30289 Create: partitioned by bucket(4, ts.timezone)") {
     spark.table("source")
       .withColumn("ts", struct(
         lit("2019-06-01 10:00:00.000000").cast("timestamp") as "created",
