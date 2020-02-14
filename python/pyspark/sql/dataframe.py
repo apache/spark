@@ -2163,6 +2163,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.sameSemantics(df)
         True
         """
+        if not isinstance(other, DataFrame):
+            raise ValueError("other parameter should be of DataFrame; however, got %s" % type(other))
         return self._jdf.sameSemantics(other._jdf)
 
     @since(3.1)
