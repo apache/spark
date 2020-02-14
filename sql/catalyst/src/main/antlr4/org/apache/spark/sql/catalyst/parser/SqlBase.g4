@@ -1805,16 +1805,16 @@ BRACKETED_EMPTY_COMMENT
 //   Ⅰ. '/*' is used to match the beginning of a bracketed comment.
 //   Ⅱ. ~[+] is used to avoid conflicts with hints.
 //   Ⅲ. The left part is a bit difficult to understand, so let's focus on it.
-//      The left part is composed of three parts, non-backslash part, backslash part, non-asterisk part.
-//        1. The non-backslash part is used to match substrings that do not contain a backslash in the comment.
-//        2. The backslash part is used to match substrings containing backslashes in comments. This part must avoid
-//           asterisks before and after the backslash, otherwise it will conflict with the beginning and end of the
+//      The left part is composed of three parts, non-slash part, slash part, non-asterisk part.
+//        1. The non-slash part is used to match substrings that do not contain a slash in the comment.
+//        2. The slash part is used to match substrings containing slashes in comments. This part must avoid
+//           asterisks before and after the slash, otherwise it will conflict with the beginning and end of the
 //           bracketed comment.
 //        3. The non-asterisk part. An asterisk is not allowed in this section, otherwise it will conflict with the
 //           beginning of the nested bracketed comment or the end of the current bracketed comment.
-//  IV. The sub-comment of the current bracketed comment, also known as a nested bracketed comment.
-//   V. The right part has the same effect as the left part, except that the matching direction is exactly the opposite.
-//  VI. '*/' is used to match the end of a bracketed comment.
+//  Ⅳ. The sub-comment of the current bracketed comment, also known as a nested bracketed comment.
+//  Ⅴ. The right part has the same effect as the left part, except that the matching direction is exactly the opposite.
+//  Ⅵ. '*/' is used to match the end of a bracketed comment.
 BRACKETED_COMMENT
     : '/*' ~[+] ~'/'*? ( ~'*' '/' ~'*' )*? ~'*'+ BRACKETED_COMMENT? ~'*'+ ( ~'*' '/' ~'*' )*? ~'/'*? '*/' -> channel(HIDDEN)
     ;
