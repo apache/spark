@@ -395,7 +395,6 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
-
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -455,9 +454,8 @@ private[spark] class DAGScheduler(
     val resourceProfile = if (stageResourceProfiles.size > 1) {
       // add option later to actually merge profiles - SPARK-29153
       throw new IllegalArgumentException("Multiple ResourceProfile's specified in the RDDs for " +
-          "this stage, either resolve the conflict ResourceProfile's yourself or enable " +
-          "spark.scheduler.resourceProfile.mergeConflicts and understand how Spark handles " +
-          "the conflicts.")
+        "this stage, please resolve the conflicting ResourceProfile's as Spark doesn't" +
+        "currently support merging them.")
     } else {
       if (stageResourceProfiles.size == 1) {
         stageResourceProfiles.head

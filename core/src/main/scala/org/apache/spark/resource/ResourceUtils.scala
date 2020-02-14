@@ -24,8 +24,8 @@ import scala.util.control.NonFatal
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
