@@ -2159,8 +2159,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Return true when the query plan of the given :class:`DataFrame` will return the same
         results as this :class:`DataFrame`.
 
-        >>> df = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
-        >>> df.sameSemantics(df)
+        >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
+        >>> df3 = spark.createDataFrame([(0, 2),(4, 5)], ["col1", "col2"])
+        >>> df4 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df1.sameSemantics(df2)
+        False
+        >>> df1.sameSemantics(df3)
+        False
+        >>> df1.sameSemantics(df4)
         True
         """
         if not isinstance(other, DataFrame):
@@ -2172,9 +2179,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         Returns a `hashCode` for the calculation performed by the query plan of this Dataset.
 
-        >>> df = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
-        >>> df.semanticHash()
-        ...
+        >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
+        >>> df3 = spark.createDataFrame([(0, 2),(4, 5)], ["col1", "col2"])
+        >>> df4 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df1.semanticHash() == df2.semanticHash()
+        False
+        >>> df1.semanticHash() == df3.semanticHash()
+        False
+        >>> df1.semanticHash() == df4.semanticHash()
+        True
         """
         return self._jdf.semanticHash()
 

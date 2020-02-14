@@ -1908,8 +1908,9 @@ class DatasetSuite extends QueryTest
     ds.queryExecution.analyzed
 
     assert(active eq SparkSession.getActiveSession.get)
+  }
 
-  test("sameSemantics and semanticHash work") {
+  test("SPARK-30791: sameSemantics and semanticHash work") {
     val df1 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
     val df2 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
     val df3 = Seq((0, 2), (4, 5)).toDF("col1", "col2")
