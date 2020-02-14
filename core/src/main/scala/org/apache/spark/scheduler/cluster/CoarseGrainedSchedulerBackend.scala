@@ -538,10 +538,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private def numExistingExecutors: Int = synchronized { executorDataMap.size }
 
-  private def numExistingExecutorsForRpId(id: Int): Int = synchronized {
-    executorDataMap.filter { case (exec, info) => info.resourceProfileId == id }.size
-  }
-
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }

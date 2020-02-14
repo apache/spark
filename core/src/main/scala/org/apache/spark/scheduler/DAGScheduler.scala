@@ -481,11 +481,9 @@ private[spark] class DAGScheduler(
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager.
     sc.resourceProfileManager.addResourceProfile(resourceProfile)
-
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
-
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     logInfo("creating result stage with profile: " + resourceProfile)
@@ -1284,8 +1282,7 @@ private[spark] class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
-              stage.resourceProfileId)
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
 
         case stage: ResultStage =>
@@ -1296,7 +1293,7 @@ private[spark] class DAGScheduler(
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
-              stage.rdd.isBarrier(), stage.resourceProfileId)
+              stage.rdd.isBarrier())
           }
       }
     } catch {
