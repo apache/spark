@@ -1800,6 +1800,21 @@ BRACKETED_EMPTY_COMMENT
     : '/**/' -> channel(HIDDEN)
     ;
 
+// The bracketed comment consists of six main parts, from left to right are:
+// "/*", ~[+], left part, nested bracketed comment, right part, "*/".
+//   Ⅰ. '/*' is used to match the beginning of a bracketed comment.
+//   Ⅱ. ~[+] is used to avoid conflicts with hints.
+//   Ⅲ. The left part is a bit difficult to understand, so let's focus on it.
+//      The left part is composed of three parts, non-backslash part, backslash part, non-asterisk part.
+//        1. The non-backslash part is used to match substrings that do not contain a backslash in the comment.
+//        2. The backslash part is used to match substrings containing backslashes in comments. This part must avoid
+//           asterisks before and after the backslash, otherwise it will conflict with the beginning and end of the
+//           bracketed comment.
+//        3. The non-asterisk part. An asterisk is not allowed in this section, otherwise it will conflict with the
+//           beginning of the nested bracketed comment or the end of the current bracketed comment.
+//  IV. The sub-comment of the current bracketed comment, also known as a nested bracketed comment.
+//   V. The right part has the same effect as the left part, except that the matching direction is exactly the opposite.
+//  VI. '*/' is used to match the end of a bracketed comment.
 BRACKETED_COMMENT
     : '/*' ~[+] ~'/'*? ( ~'*' '/' ~'*' )*? ~'*'+ BRACKETED_COMMENT? ~'*'+ ( ~'*' '/' ~'*' )*? ~'/'*? '*/' -> channel(HIDDEN)
     ;
