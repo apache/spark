@@ -2575,7 +2575,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
             val readback = spark.read
               .option("mode", mode)
-              .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+              .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
               .schema("c0 string, c1 struct<c2:integer,c3:timestamp>")
               .json(path.getAbsolutePath)
               .where($"c1.c2" === 2 && $"c0".startsWith("def"))
@@ -2605,7 +2605,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         val schema = "i INTEGER, t TIMESTAMP"
         val readback = spark.read
           .schema(schema)
-          .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
           .json(path.getAbsolutePath)
         // readback:
         // +----+-------------------+
