@@ -1816,7 +1816,7 @@ BRACKETED_EMPTY_COMMENT
 //   5. The right part has the same effect as the left part, except that the matching direction is exactly the opposite.
 //   6. '*/' is used to match the end of a bracketed comment.
 BRACKETED_COMMENT
-    : '/*' ~[+] ~'/'*? ( ~'*' '/' ~'*' )*? ~'*'+ BRACKETED_COMMENT? ~'*'+ ( ~'*' '/' ~'*' )*? ~'/'*? '*/' -> channel(HIDDEN)
+    : '/*' ~[+] ( ~'/' | ~'*' '/' ~'*' )*?  ~'*'+ BRACKETED_COMMENT? ~'*'+ ( ~'/' | ~'*' '/' ~'*' )*? '*/' -> channel(HIDDEN)
     ;
 
 WS
