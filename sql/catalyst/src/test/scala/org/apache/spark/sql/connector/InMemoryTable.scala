@@ -81,7 +81,7 @@ class InMemoryTable(
         value
       }
     }
-    partCols.map(filedNames => extractor(filedNames, schema, row))
+    partCols.map(fieldNames => extractor(fieldNames, schema, row))
   }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
