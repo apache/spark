@@ -206,7 +206,7 @@ object Summarizer extends Logging {
   }
 
   /** Get regression feature and label summarizers for provided data. */
-  private[spark] def getRegressionSummarizers(
+  private[ml] def getRegressionSummarizers(
       instances: RDD[Instance],
       aggregationDepth: Int = 2): (SummarizerBuffer, SummarizerBuffer) = {
     instances.treeAggregate(
@@ -223,7 +223,7 @@ object Summarizer extends Logging {
   }
 
   /** Get classification feature and label summarizers for provided data. */
-  private[spark] def getClassificationSummarizers(
+  private[ml] def getClassificationSummarizers(
       instances: RDD[Instance],
       aggregationDepth: Int = 2): (SummarizerBuffer, MultiClassSummarizer) = {
     instances.treeAggregate(
