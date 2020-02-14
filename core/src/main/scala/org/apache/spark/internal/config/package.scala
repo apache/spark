@@ -159,7 +159,7 @@ package object config {
     .createWithDefaultString("100k")
 
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
+    ConfigBuilder("spark.eventLog.logStageExecutorMetrics")
       .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
         "to the event log.")
       .booleanConf

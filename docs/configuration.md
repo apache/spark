@@ -1641,7 +1641,7 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
   <td>false</td>
   <td>
     Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
