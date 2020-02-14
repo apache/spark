@@ -276,9 +276,9 @@ class StreamingQueryManager(object):
 
 class DataStreamReader(OptionUtils):
     """
-    Interface used to load a streaming :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
-    to access this.
+    Interface used to load a streaming :class:`DataFrame <pyspark.sql.DataFrame>` from external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
     .. note:: Evolving.
 
@@ -686,8 +686,9 @@ class DataStreamReader(OptionUtils):
 
 class DataStreamWriter(object):
     """
-    Interface used to write a streaming :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
+    Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
     .. note:: Evolving.
