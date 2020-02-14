@@ -48,7 +48,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -616,7 +616,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4
