@@ -11,17 +11,17 @@ SELECT /* embedded single line */ 'embedded' AS `second`;
 SELECT /* both embedded and trailing single line */ 'both' AS third; -- trailing single line
 
 SELECT 'before multi-line' AS fourth;
--- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
+--QUERY-DELIMITER-START
 /* This is an example of SQL which should not execute:
  * select 'multi-line';
  */
 SELECT 'after multi-line' AS fifth;
+--QUERY-DELIMITER-END
 
--- [SPARK-30758] Spark SQL can't display bracketed comments well in generated golden files
 --
 -- Nested comments
 --
-
+--QUERY-DELIMITER-START
 /*
 SELECT 'trailing' as x1; -- inside block comment
 */
@@ -44,5 +44,6 @@ Hoo boy. Still two deep...
 Now just one deep...
 */
 'deeply nested example' AS sixth;
-
-/* and this is the end of the file */
+--QUERY-DELIMITER-END
+-- [SPARK-30824] Support submit sql content only contains comments.
+-- /* and this is the end of the file */
