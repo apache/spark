@@ -23,6 +23,7 @@ DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
 IMAGE_TAG="N/A"
+JAVA_IMAGE_TAG=
 BASE_IMAGE_NAME=
 JVM_IMAGE_NAME=
 PYTHON_IMAGE_NAME=
@@ -50,6 +51,10 @@ while (( "$#" )); do
       ;;
     --image-tag)
       IMAGE_TAG="$2"
+      shift
+      ;;
+    --java-image-tag)
+      JAVA_IMAGE_TAG="$2"
       shift
       ;;
     --deploy-mode)
@@ -120,27 +125,32 @@ properties=(
   -Dtest.include.tags=$INCLUDE_TAGS
 )
 
-if [ -n $NAMESPACE ];
+if [ -n "$JAVA_IMAGE_TAG" ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
+fi
+
+if [ -n "$NAMESPACE" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.namespace=$NAMESPACE )
 fi
 
-if [ -n $SERVICE_ACCOUNT ];
+if [ -n "$SERVICE_ACCOUNT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.serviceAccountName=$SERVICE_ACCOUNT )
 fi
 
-if [ -n $CONTEXT ];
+if [ -n "$CONTEXT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.kubeConfigContext=$CONTEXT )
 fi
 
-if [ -n $SPARK_MASTER ];
+if [ -n "$SPARK_MASTER" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.master=$SPARK_MASTER )
 fi
 
-if [ -n $EXCLUDE_TAGS ];
+if [ -n "$EXCLUDE_TAGS" ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi

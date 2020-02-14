@@ -2,6 +2,8 @@
 
 REM Command file for Sphinx documentation
 
+set PYTHONPATH=..;..\lib\py4j-0.10.8.1-src.zip
+
 
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
