@@ -3055,8 +3055,7 @@ class Analyzer(
                 val (normalizedName, sf) = target.get
                 sf.dataType match {
                   case struct: StructType =>
-                    val parentName = normalizedName :+ sf.name
-                    Some(addColumn(struct, parent.quoted, parentName))
+                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
                   case other =>
                     Some(add)
                 }
