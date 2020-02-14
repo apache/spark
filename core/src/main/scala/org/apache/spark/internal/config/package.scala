@@ -198,7 +198,8 @@ package object config {
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
-      .doc("The max size of event log file to be rolled over.")
+      .doc(s"Precondition: ${EVENT_LOG_ENABLE_ROLLING.key}. " +
+        "The max size of event log file to be rolled over.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
