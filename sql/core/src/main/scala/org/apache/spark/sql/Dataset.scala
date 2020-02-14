@@ -3311,18 +3311,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns true when the query plan of the given Dataset will return the same results as this
-   * Dataset.
+   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and
+   * therefore return same results.
    *
-   * Since its likely undecidable to generally determine if two given plans will produce the same
-   * results, it is okay for this function to return false, even if the results are actually
-   * the same.  Such behavior will not affect correctness, only the application of performance
-   * enhancements like caching.  However, it is not acceptable to return true if the results could
-   * possibly be different.
-   *
-   * This function performs a modified version of equality that is tolerant of cosmetic
-   * differences like attribute naming and or expression id differences.
-   *
+   * @note The equality comparison here is simplified by tolerating the cosmetic differences
+   *       such as attribute names.
+   * @note This API can compare both [[Dataset]]s very fast but can still return `false` on
+   *       the [[Dataset]] that return the same results, for instance, from different plans. Such
+   *       false negative semantic can be useful when caching as an example.
    * @since 3.1.0
    */
   @DeveloperApi
@@ -3331,9 +3327,10 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a `hashCode` for the calculation performed by the query plan of this Dataset. Unlike
-   * the standard `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
    *
+   * @note Unlike the standard `hashCode`, the hash is calculated against the query plan
+   *       simplified by tolerating the cosmetic differences such as attribute names.
    * @since 3.1.0
    */
   @DeveloperApi

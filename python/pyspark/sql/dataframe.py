@@ -2156,8 +2156,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @since(3.1)
     def sameSemantics(self, other):
         """
-        Return true when the query plan of the given :class:`DataFrame` will return the same
-        results as this :class:`DataFrame`.
+        Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
+        therefore return same results.
+
+        .. note:: The equality comparison here is simplified by tolerating the cosmetic differences
+            such as attribute names.
+
+        .. note::This API can compare both :class:`DataFrame`\\s very fast but can still return
+            `False` on the :class:`DataFrame` that return the same results, for instance, from
+            different plans. Such false negative semantic can be useful when caching as an example.
 
         >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
         >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
@@ -2180,7 +2187,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @since(3.1)
     def semanticHash(self):
         """
-        Returns a `hashCode` for the calculation performed by the query plan of this Dataset.
+        Returns a hash code of the logical query plan against this :class:`DataFrame`.
+
+        .. note:: Unlike the standard hash code, the hash is calculated against the query plan
+            simplified by tolerating the cosmetic differences such as attribute names.
 
         >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
         >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
