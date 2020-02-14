@@ -390,6 +390,22 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val queryTable = insert.query
+    val targetTable = insert.table
+    val resolver = conf.resolver
+    val queryCols = queryTable.schema.map(_.name)
+    val tableCols = targetTable.schema.map(_.name)
+
+    // As we are inserting into an existing table, we should respect the existing schema and
+    // adjust the column order of the given dataframe according to it, or throw exception
+    // if the column names do not match.
+    queryCols.map { col =>
+      targetTable.resolve(Seq(col), resolver).getOrElse {
+        val inputColumns = tableCols.mkString(", ")
+        throw new AnalysisException(
+          s"cannot resolve '$col' given input columns: [$inputColumns]")
+      }
+    }
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(

@@ -1379,6 +1379,25 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("insert into checks that the columns name of the query match the target table") {
+
+    val df = Seq((7, 9), (5, 57)).toDF("id", "p1")
+    val df1 = Seq(7, 8).toDF("p2")
+    val df2 = Seq((9, 8)).toDF("id", "p2")
+    df.write.mode("overwrite").saveAsTable("table")
+
+    val e1 = intercept[AnalysisException] {
+      df1.write.mode("overwrite").insertInto("table")
+    }
+    assert(e1.getMessage.contains("cannot resolve 'p2' given input columns: [id, p1];"))
+
+    val e2 = intercept[AnalysisException] {
+      df2.write.mode("overwrite").insertInto("table")
+    }
+    assert(e2.getMessage.contains("cannot resolve 'p2' given input columns: [id, p1];"))
+
+  }
+
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
     val df = testData.select(rand(33))
     assert(df.showString(5) == df.showString(5))
