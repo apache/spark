@@ -2153,21 +2153,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                               "should have been DataFrame." % type(result)
         return result
 
-    @since(3.0)
+    @since(3.1)
     def sameSemantics(self, other):
         """
         Return true when the query plan of the given :class:`DataFrame` will return the same
         results as this :class:`DataFrame`.
-        """
-        return self._jdf.sameSemantics(other)
 
-    @since(3.0)
+        >>> df = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df.sameSemantics(df)
+        True
+        """
+        return self._jdf.sameSemantics(other._jdf)
+
+    @since(3.1)
     def semanticHash(self):
         """
+        Returns a `hashCode` for the calculation performed by the query plan of this Dataset.
 
-        :return:
+        >>> df = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df.semanticHash()
+        ...
         """
-        return self._jdf.semanticHash(None)
+        return self._jdf.semanticHash()
 
     where = copy_func(
         filter,
