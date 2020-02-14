@@ -2100,7 +2100,7 @@ object SQLConf {
       .stringConf
       .createOptional
 
-  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast.enabled")
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
