@@ -713,32 +713,34 @@ object DateTimeUtils {
     }
   }
 
+  private def truncToUnit(t: SQLTimestamp, zoneId: ZoneId, unit: ChronoUnit): SQLTimestamp = {
+    val truncated = microsToInstant(t).atZone(zoneId).truncatedTo(unit)
+    instantToMicros(truncated.toInstant)
+  }
+
   /**
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
    */
-  def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    if (level == TRUNC_TO_MICROSECOND) return t
-    var millis = MICROSECONDS.toMillis(t)
-    val truncated = level match {
-      case TRUNC_TO_MILLISECOND => millis
-      case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
-      case TRUNC_TO_MINUTE =>
-        millis - millis % MILLIS_PER_MINUTE
-      case TRUNC_TO_HOUR =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_HOUR - offset
-      case TRUNC_TO_DAY =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_DAY - offset
-      case _ => // Try to truncate date levels
-        val dDays = millisToDays(millis, timeZone.toZoneId)
-        daysToMillis(truncDate(dDays, level), timeZone.toZoneId)
+  def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
+    level match {
+      case TRUNC_TO_MICROSECOND => t
+      case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
+      case _ =>
+        val millis = MICROSECONDS.toMillis(t)
+        val truncated = level match {
+          case TRUNC_TO_MILLISECOND => millis
+          case TRUNC_TO_SECOND =>
+            millis - millis % MILLIS_PER_SECOND
+          case TRUNC_TO_MINUTE =>
+            millis - millis % MILLIS_PER_MINUTE
+          case _ => // Try to truncate date levels
+            val dDays = millisToDays(millis, zoneId)
+            daysToMillis(truncDate(dDays, level), zoneId)
+        }
+        truncated * MICROS_PER_MILLIS
     }
-    truncated * MICROS_PER_MILLIS
   }
 
   /**
