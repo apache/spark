@@ -338,6 +338,12 @@ different than a Pandas timestamp. It is recommended to use Pandas time series f
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
 
+### Recommended Pandas and PyArrow Versions
+
+For usage with pyspark.sql, the supported versions of Pandas is 0.24.2 and PyArrow is 0.15.1. Higher
+versions may be used, however, compatibility and data correctness can not be guaranteed and should
+be verified by the user.
+
 ### Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
 
 Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
