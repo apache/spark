@@ -624,49 +624,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getRemoteBytes("list1").isEmpty)
   }
 
-  Seq(false, true).foreach { stream =>
-    test(s"test for Block replication retry logic (stream = $stream)") {
-      // Retry replication logic for 2 failures
-      conf.set(STORAGE_MAX_REPLICATION_FAILURE, 2)
-      // Custom block replication policy which prioritizes BlockManagers as per hostnames
-      conf.set(STORAGE_REPLICATION_POLICY, classOf[SortOnHostNameBlockReplicationPolicy].getName)
-      // To use upload block stream flow, set maxRemoteBlockSizeFetchToMem to 0
-      val maxRemoteBlockSizeFetchToMem = if (stream) 0 else Int.MaxValue - 512
-      conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, maxRemoteBlockSizeFetchToMem.toLong)
-      val blockManagers = (0 to 6).map(index => makeBlockManager(7800, s"host-$index", master))
-      val a1 = new Array[Byte](4000)
-      val a2 = new Array[Byte](4000)
-      val a3 = new Array[Byte](4000)
-      // Put 4000 byte sized RDD Blocks in block manager 1, 2 and 4. So that they
-      // won't have space for another 4000 bytes block.
-      blockManagers(1).putSingle(rdd(0, 1), a1, StorageLevel.MEMORY_ONLY)
-      blockManagers(2).putSingle(rdd(0, 2), a2, StorageLevel.MEMORY_ONLY)
-      blockManagers(4).putSingle(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
-
-      val testBlockId = rdd(0, 4)
-      val testData = new Array[Byte](4000)
-      val storageLevel = StorageLevel(
-        useDisk = false, useMemory = true, deserialized = true, replication = 3)
-      blockManagers(0).putSingle(testBlockId, testData, storageLevel, tellMaster = true)
-
-      // Replication will be tried by bm0 in this order: bm1, bm2, bm3, bm4, bm5
-      // bm1, bm2 and bm4 have limited memory available. So Block can't be stored by them.
-      // bm5 has sufficient memory but the maxReplicationFailures is set to 2.
-      // So retry won't happen on bm5 as 3 failure (by trying on bm1, bm2 and bm4) have
-      // already happened by then. So block will be present only on bm0 and bm3
-      Seq(0, 3).foreach { index =>
-        assert(blockManagers(index).getSingleAndReleaseLock(testBlockId).isDefined,
-          s"block was not found on BM-$index")
-      }
-
-      Seq(1, 2, 4, 5).foreach { index =>
-        intercept[BlockNotFoundException] {
-          blockManagers(index).getLocalBlockData(testBlockId).nioByteBuffer().array()
-        }
-      }
-    }
-  }
-
   Seq(
     StorageLevel(useDisk = true, useMemory = false, deserialized = false),
     StorageLevel(useDisk = true, useMemory = false, deserialized = true),
@@ -1844,19 +1801,4 @@ private object BlockManagerSuite {
     }
   }
 
-}
-
-// BlockReplicationPolicy to prioritize BlockManagers based on hostnames
-// Examples - for BM-x(host-2), BM-y(host-1), BM-z(host-3), it will prioritize them as
-// BM-y(host-1), BM-x(host-2), BM-z(host-3)
-class SortOnHostNameBlockReplicationPolicy
-  extends BlockReplicationPolicy {
-  override def prioritize(
-      blockManagerId: BlockManagerId,
-      peers: Seq[BlockManagerId],
-      peersReplicatedTo: mutable.HashSet[BlockManagerId],
-      blockId: BlockId,
-      numReplicas: Int): List[BlockManagerId] = {
-    peers.sortBy(_.host).toList
-  }
 }
