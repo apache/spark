@@ -2169,9 +2169,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         False
         >>> df1.sameSemantics(df4)
         True
+        >>> df1.sameSemantics(df1)
+        True
         """
         if not isinstance(other, DataFrame):
-            raise ValueError("other parameter should be of DataFrame; however, got %s" % type(other))
+            raise ValueError("other parameter should be of DataFrame; however, got %s"
+                             % type(other))
         return self._jdf.sameSemantics(other._jdf)
 
     @since(3.1)
@@ -2188,6 +2191,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df1.semanticHash() == df3.semanticHash()
         False
         >>> df1.semanticHash() == df4.semanticHash()
+        True
+        >>> df1.semanticHash() == df1.semanticHash()
         True
         """
         return self._jdf.semanticHash()
