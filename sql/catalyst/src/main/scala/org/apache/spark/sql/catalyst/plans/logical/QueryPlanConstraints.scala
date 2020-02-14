@@ -61,6 +61,34 @@ trait ConstraintHelper {
    * additional constraint of the form `b = 5`.
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferred = inferEqualityConstraints(constraints)
+    var newInferred = Set.empty[Expression]
+    do {
+      newInferred = inferInequalityConstraints(constraints ++ inferred)
+      inferred ++= newInferred
+    } while (newInferred.nonEmpty)
+    inferred
+  }
+
+  def inferEqualityConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferredConstraints = Set.empty[Expression]
+    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
+    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
+    predicates.foreach {
+      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+        val candidateConstraints = predicates - eq
+        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+      case _ => // No inference
+    }
+    inferredConstraints -- predicates
+  }
+
+  def inferInequalityConstraints(constraints: Set[Expression]): Set[Expression] = {
     val binaryComparisons = constraints.filter {
       case _: GreaterThan => true
       case _: GreaterThanOrEqual => true
@@ -83,19 +111,6 @@ trait ConstraintHelper {
     }
 
     var inferredConstraints = Set.empty[Expression]
-    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
-    predicates.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
-      case _ => // No inference
-    }
 
     greaterThans.foreach {
       case gt @ GreaterThan(l: Attribute, r: Attribute) =>
