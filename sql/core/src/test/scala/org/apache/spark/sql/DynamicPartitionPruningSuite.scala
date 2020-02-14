@@ -22,7 +22,7 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
  */
-class DynamicPartitionPruningSuite
+abstract class DynamicPartitionPruningSuiteBase
     extends QueryTest
     with SharedSparkSession
     with GivenWhenThen
@@ -43,8 +43,13 @@ class DynamicPartitionPruningSuite
 
   import testImplicits._
 
+  val adaptiveExecutionOn: Boolean
+
   override def beforeAll(): Unit = {
     super.beforeAll()
+
+    spark.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, adaptiveExecutionOn)
+    spark.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY, true)
 
     val factData = Seq[(Int, Int, Int, Int)](
       (1000, 1, 1, 10),
@@ -153,6 +158,8 @@ class DynamicPartitionPruningSuite
       sql("DROP TABLE IF EXISTS fact_stats")
       sql("DROP TABLE IF EXISTS dim_stats")
     } finally {
+      spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
+      spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)
       super.afterAll()
     }
   }
@@ -194,6 +201,11 @@ class DynamicPartitionPruningSuite
         case _ =>
           fail(s"Invalid child node found in\n$s")
       }
+    }
+
+    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
+    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
+      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
     }
   }
 
@@ -1173,8 +1185,7 @@ class DynamicPartitionPruningSuite
   }
 
   test("join key with multiple references on the filtering plan") {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
         spark.range(100).select(
@@ -1269,4 +1280,12 @@ class DynamicPartitionPruningSuite
       )
     }
   }
+}
+
+class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
+  override val adaptiveExecutionOn: Boolean = false
+}
+
+class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase {
+  override val adaptiveExecutionOn: Boolean = true
 }
