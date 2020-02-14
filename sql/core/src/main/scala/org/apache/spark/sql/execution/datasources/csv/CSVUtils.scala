@@ -32,11 +32,13 @@ object CSVUtils {
     // Note that this was separately made by SPARK-18362. Logically, this should be the same
     // with the one below, `filterCommentAndEmpty` but execution path is different. One of them
     // might have to be removed in the near future if possible.
-    val nonEmptyLines = lines.filter(length(trim(col(lines.schema.fieldNames.head))) > 0)
+    import lines.sqlContext.implicits._
+    val aliased = lines.toDF("value")
+    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
     if (options.isCommentSet) {
-      nonEmptyLines.filter(!col(lines.schema.fieldNames.head).startsWith(options.comment.toString))
+      nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
     } else {
-      nonEmptyLines
+      nonEmptyLines.as[String]
     }
   }
 
