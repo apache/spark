@@ -2971,7 +2971,7 @@ trait ArraySetLike {
   protected def genGetValue(array: String, i: String): String =
     CodeGenerator.getValue(array, et, i)
 
-  @transient private lazy val tuple = {
+  @transient protected lazy val (hsPostFix, hsTypeName) = {
     val ptName = CodeGenerator.primitiveTypeName(et)
     et match {
       // we cast byte/short to int when writing to the hash set.
@@ -2981,8 +2981,6 @@ trait ArraySetLike {
       case DoubleType => ("$mcD$sp", ptName)
     }
   }
-  @transient protected lazy val hsPostFix = tuple._1
-  @transient protected lazy val hsTypeName = tuple._2
 
   // we cast byte/short to int when writing to the hash set.
   @transient protected lazy val hsValueCast = et match {
