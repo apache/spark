@@ -474,6 +474,7 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             val colsToDelete = mutable.Set.empty[Seq[String]]
+            val colsToAdd = mutable.Set.empty[Seq[String]]
 
             alter.changes.foreach {
               case add: AddColumn =>
@@ -483,8 +484,16 @@ trait CheckAnalysis extends PredicateHelper {
                   checkColumnNotExists("add", add.fieldNames(), table.schema)
                 }
                 val parent = findParentStruct("add", add.fieldNames())
-                positionArgumentExists(add.position(), parent)
+                add.position match {
+                  case after: After =>
+                    // Handle the case where column position is referencing new columns being added.
+                    if (!colsToAdd.contains(add.fieldNames().init :+ after.column)) {
+                      positionArgumentExists(add.position(), parent)
+                    }
+                  case _ =>
+                }
                 TypeUtils.failWithIntervalType(add.dataType())
+                colsToAdd += add.fieldNames()
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
