@@ -1391,7 +1391,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("case insensitivity of StringStartsWith attribute") {
+  test("SPARK-30826: case insensitivity of StringStartsWith attribute") {
     import testImplicits._
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTable("t1") {
