@@ -2153,6 +2153,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                               "should have been DataFrame." % type(result)
         return result
 
+    @since(3.0)
+    def sameSemantics(self, other):
+        """
+        Return true when the query plan of the given :class:`DataFrame` will return the same
+        results as this :class:`DataFrame`.
+        """
+        return self._jdf.sameSemantics(other)
+
+    @since(3.0)
+    def semanticHash(self):
+        """
+
+        :return:
+        """
+        return self._jdf.semanticHash(None)
+
     where = copy_func(
         filter,
         sinceversion=1.3,
