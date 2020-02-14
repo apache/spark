@@ -3323,8 +3323,9 @@ class Dataset[T] private[sql](
    * This function performs a modified version of equality that is tolerant of cosmetic
    * differences like attribute naming and or expression id differences.
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
+  @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
     queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
   }
@@ -3332,8 +3333,13 @@ class Dataset[T] private[sql](
   /**
    * Returns a `hashCode` for the calculation performed by the query plan of this Dataset. Unlike
    * the standard `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   *
+   * @since 3.1.0
    */
-  def semanticHash: Int = queryExecution.analyzed.semanticHash()
+  @DeveloperApi
+  def semanticHash(): Int = {
+    queryExecution.analyzed.semanticHash()
+  }
 
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
