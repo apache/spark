@@ -523,6 +523,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Naive Bayes
 
+* Factorization Machines (FM) Classifier
+
 #### Regression
 
 * Accelerated Failure Time (AFT) Survival Model
@@ -703,6 +705,24 @@ naiveBayesModel <- spark.naiveBayes(titanicDF, Survived ~ Class + Sex + Age)
 summary(naiveBayesModel)
 naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
 head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
+```
+
+#### Factorization Machines Classifier
+
+Factorization Machines for classification problems.
+
+For background and details about the implementation of factorization machines,
+refer to the [Factorization Machines section](https://spark.apache.org/docs/latest/ml-classification-regression.html#factorization-machines).
+
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+
+model <- spark.fmClassifier(training, Survived ~ Age + Sex)
+summary(model)
+
+predictions <- predict(model, training)
+head(select(predictions, predictions$prediction))
 ```
 
 #### Accelerated Failure Time Survival Model
