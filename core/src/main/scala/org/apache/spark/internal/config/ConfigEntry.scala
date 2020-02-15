@@ -30,7 +30,7 @@ qualified Java class name. Each prefix behaves like a namespace. We should only 
 a namespace if it's meaningful and can be shared by multiple configs. For example,
 `buffer.inMemoryThreshold` is preferred over `buffer.in.memory.threshold`.
 
-The followings are some best practices of naming configs for some common cases:
+The followings are best practices of naming configs for some common cases:
 1. When adding configs for a big feature, it's better to create an umbrella config that
    can turn the feature on/off, with a name like `featureName.enabled`. The other configs
    of this feature should be put under the `featureName` namespace. For example:
