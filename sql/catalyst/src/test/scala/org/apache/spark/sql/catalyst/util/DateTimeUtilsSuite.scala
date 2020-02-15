@@ -296,6 +296,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     input = date(2015, 12, 8, 2, 7, 9, 0, TimeZonePST)
     assert(getHours(input, TimeZonePST) === 2)
     assert(getHours(input, TimeZoneGMT) === 10)
+    input = date(10, 1, 1, 0, 0, 0, 0, TimeZonePST)
+    assert(getHours(input, TimeZonePST) === 0)
   }
 
   test("minutes") {
@@ -307,6 +309,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(getMinutes(input, TimeZonePST) === 7)
     assert(getMinutes(input, TimeZoneGMT) === 7)
     assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 37)
+    input = date(10, 1, 1, 0, 0, 0, 0, TimeZonePST)
+    assert(getMinutes(input, TimeZonePST) === 0)
   }
 
   test("seconds") {
@@ -316,6 +320,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     input = date(2015, 3, 8, 2, 7, 9, 0, TimeZonePST)
     assert(getSeconds(input, TimeZonePST) === 9)
     assert(getSeconds(input, TimeZoneGMT) === 9)
+    input = date(10, 1, 1, 0, 0, 0, 0, TimeZonePST)
+    assert(getSeconds(input, TimeZonePST) === 0)
   }
 
   test("hours / minutes / seconds") {
