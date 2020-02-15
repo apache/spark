@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{SparseVector, Vector}
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
@@ -27,7 +27,6 @@ import org.apache.spark.sql.functions.udf
 @Since("3.0.0")
 object functions {
 // scalastyle:on
-
   private val vectorToArrayUdf = udf { vec: Any =>
     vec match {
       case v: Vector => v.toArray
@@ -39,10 +38,37 @@ object functions {
     }
   }.asNonNullable()
 
+  private val vectorToArrayFloatUdf = udf { vec: Any =>
+    vec match {
+      case v: SparseVector =>
+        val data = new Array[Float](v.size)
+        v.foreachActive { (index, value) => data(index) = value.toFloat }
+        data
+      case v: Vector => v.toArray.map(_.toFloat)
+      case v: OldVector => v.toArray.map(_.toFloat)
+      case v => throw new IllegalArgumentException(
+        "function vector_to_array requires a non-null input argument and input type must be " +
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
+    }
+  }.asNonNullable()
+
   /**
    * Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
-   *
+   * @param v: the column of MLlib sparse/dense vectors
+   * @param dtype: the desired underlying data type in the returned array
+   * @return an array&lt;float&gt; if dtype is float32, or array&lt;double&gt; if dtype is float64
    * @since 3.0.0
    */
-  def vector_to_array(v: Column): Column = vectorToArrayUdf(v)
+  def vector_to_array(v: Column, dtype: String = "float64"): Column = {
+    if (dtype == "float64") {
+      vectorToArrayUdf(v)
+    } else if (dtype == "float32") {
+      vectorToArrayFloatUdf(v)
+    } else {
+      throw new IllegalArgumentException(
+        s"Unsupported dtype: $dtype. Valid values: float64, float32."
+      )
+    }
+  }
 }

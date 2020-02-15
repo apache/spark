@@ -31,7 +31,7 @@ import org.apache.spark.annotation.Evolving
  * requirements between stages.
  */
 @Evolving
-class ResourceProfileBuilder() {
+private[spark] class ResourceProfileBuilder() {
 
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()

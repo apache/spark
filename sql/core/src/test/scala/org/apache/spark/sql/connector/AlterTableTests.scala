@@ -651,19 +651,6 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: update column type and comment") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
-
-      val table = getTableMetadata(t)
-
-      assert(table.name === fullTableName(t))
-      assert(table.schema === StructType(Seq(StructField("id", LongType).withComment("doc"))))
-    }
-  }
-
   test("AlterTable: update nested column comment") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -1071,6 +1058,21 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(updated.name === fullTableName(t))
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
+    }
+  }
+
+  test("AlterTable: replace columns") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 int, col2 int COMMENT 'c2') USING $v2Format")
+      sql(s"ALTER TABLE $t REPLACE COLUMNS (col2 string, col3 int COMMENT 'c3')")
+
+      val table = getTableMetadata(t)
+
+      assert(table.name === fullTableName(t))
+      assert(table.schema === StructType(Seq(
+        StructField("col2", StringType),
+        StructField("col3", IntegerType).withComment("c3"))))
     }
   }
 }

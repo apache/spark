@@ -223,6 +223,11 @@ object Block {
   implicit def blocksToBlock(blocks: Seq[Block]): Block = blocks.reduceLeft(_ + _)
 
   implicit class BlockHelper(val sc: StringContext) extends AnyVal {
+    /**
+     * A string interpolator that retains references to the `JavaCode` inputs, and behaves like
+     * the Scala builtin StringContext.s() interpolator otherwise, i.e. it will treat escapes in
+     * the code parts, and will not treat escapes in the input arguments.
+     */
     def code(args: Any*): Block = {
       sc.checkLengths(args)
       if (sc.parts.length == 0) {
@@ -250,7 +255,7 @@ object Block {
     val inputs = args.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
 
-    buf.append(strings.next)
+    buf.append(StringContext.treatEscapes(strings.next))
     while (strings.hasNext) {
       val input = inputs.next
       input match {
@@ -262,7 +267,7 @@ object Block {
         case _ =>
           buf.append(input)
       }
-      buf.append(strings.next)
+      buf.append(StringContext.treatEscapes(strings.next))
     }
     codeParts += buf.toString
 
@@ -286,10 +291,10 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
-    buf.append(StringContext.treatEscapes(strings.next))
+    buf.append(strings.next)
     while (strings.hasNext) {
       buf.append(inputs.next)
-      buf.append(StringContext.treatEscapes(strings.next))
+      buf.append(strings.next)
     }
     buf.toString
   }

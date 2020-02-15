@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -58,11 +59,13 @@ class JacksonParser(
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
