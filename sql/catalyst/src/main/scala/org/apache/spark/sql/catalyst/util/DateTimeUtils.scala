@@ -420,16 +420,15 @@ object DateTimeUtils {
     microsec + toYearZero * MICROS_PER_DAY
   }
 
-  private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
-    val zoneOffsetUs = MILLISECONDS.toMicros(timeZone.getOffset(MICROSECONDS.toMillis(microsec)))
-    absoluteMicroSecond(microsec) + zoneOffsetUs
+  private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): LocalDateTime = {
+    microsToInstant(microsec).atZone(timeZone.toZoneId).toLocalDateTime
   }
 
   /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
   def getHours(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toHours(localTimestamp(microsec, timeZone)) % 24).toInt
+    localTimestamp(microsec, timeZone).getHour
   }
 
   /**
@@ -437,7 +436,7 @@ object DateTimeUtils {
    * microseconds.
    */
   def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toMinutes(localTimestamp(microsec, timeZone)) % 60).toInt
+    localTimestamp(microsec, timeZone).getMinute
   }
 
   /**
@@ -445,15 +444,14 @@ object DateTimeUtils {
    * microseconds.
    */
   def getSeconds(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toSeconds(localTimestamp(microsec, timeZone)) % 60).toInt
+    localTimestamp(microsec, timeZone).getSecond
   }
 
   /**
    * Returns the seconds part and its fractional part with microseconds.
    */
   def getSecondsWithFraction(microsec: SQLTimestamp, timeZone: TimeZone): Decimal = {
-    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLIS)
-    Decimal(secFrac, 8, 6)
+    Decimal(getMicroseconds(microsec, timeZone), 8, 6)
   }
 
   /**
@@ -469,7 +467,8 @@ object DateTimeUtils {
    * is expressed in microseconds since the epoch.
    */
   def getMicroseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
-    Math.floorMod(localTimestamp(timestamp, timeZone), MICROS_PER_SECOND * 60).toInt
+    val lt = localTimestamp(timestamp, timeZone)
+    (lt.getLong(ChronoField.MICRO_OF_SECOND) + lt.getSecond * MICROS_PER_SECOND).toInt
   }
 
   /**
