@@ -22,20 +22,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{ExplainUtils, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
-trait HashJoin {
-  self: SparkPlan =>
-
+trait HashJoin extends BaseJoinExec {
   def leftKeys: Seq[Expression]
   def rightKeys: Seq[Expression]
-  def joinType: JoinType
   def buildSide: BuildSide
-  def condition: Option[Expression]
-  def left: SparkPlan
-  def right: SparkPlan
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
