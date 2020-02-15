@@ -560,16 +560,6 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   testHash(
     new StructType()
-      .add("mapOfIntAndString", MapType(IntegerType, StringType))
-      .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
-      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
-      .add("mapOfArray", MapType(arrayOfString, arrayOfString))
-      .add("mapOfStringAndStruct", MapType(StringType, structOfString))
-      .add("mapOfStructAndString", MapType(structOfString, StringType))
-      .add("mapOfStruct", MapType(structOfString, structOfString)))
-
-  testHash(
-    new StructType()
       .add("structOfString", structOfString)
       .add("structOfStructOfString", new StructType().add("struct", structOfString))
       .add("structOfArray", new StructType().add("array", arrayOfString))
