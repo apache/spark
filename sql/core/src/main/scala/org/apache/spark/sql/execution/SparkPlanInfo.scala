@@ -34,8 +34,7 @@ class SparkPlanInfo(
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
     val metadata: Map[String, String],
-    val metrics: Seq[SQLMetricInfo],
-    val relation: Seq[SparkPlanInfo] = Seq()) {
+    val metrics: Seq[SQLMetricInfo]) {
 
   override def hashCode(): Int = {
     // hashCode of simpleString should be good enough to distinguish the plans from each other
@@ -58,6 +57,7 @@ private[execution] object SparkPlanInfo {
       case ReusedSubqueryExec(child) => child :: Nil
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
+      case inMemTab: InMemoryTableScanExec => inMemTab.relation.cachedPlan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
@@ -69,18 +69,11 @@ private[execution] object SparkPlanInfo {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case _ => Map[String, String]()
     }
-
-    val relation = plan match {
-      case inMemTab: InMemoryTableScanExec => Seq(fromSparkPlan(inMemTab.relation.cachedPlan))
-      case _ => Seq()
-    }
-
     new SparkPlanInfo(
       plan.nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
       metadata,
-      metrics,
-      relation)
+      metrics)
   }
 }
