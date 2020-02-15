@@ -47,12 +47,6 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  // number of days between 1.1.1970 and 1.1.2001
-  final val to2001 = -11323
-
-  // this is year -17999, calculation: 50 * daysIn400Year
-  final val YearZero = -17999
-  final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
@@ -411,13 +405,6 @@ object DateTimeUtils {
     } catch {
       case NonFatal(_) => None
     }
-  }
-
-  /**
-   * Returns the microseconds since year zero (-17999) from microseconds since epoch.
-   */
-  private def absoluteMicroSecond(microsec: SQLTimestamp): SQLTimestamp = {
-    microsec + toYearZero * MICROS_PER_DAY
   }
 
   private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): LocalDateTime = {
