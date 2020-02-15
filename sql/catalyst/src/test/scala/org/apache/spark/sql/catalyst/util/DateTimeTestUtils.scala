@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
@@ -52,8 +52,8 @@ object DateTimeTestUtils {
     }
   }
 
-  def localDateTimeToMicros(localDateTime: LocalDateTime, tz: TimeZone): Long = {
-    val instant = localDateTime.atZone(tz.toZoneId).toInstant
+  def localDateTimeToMicros(localDateTime: LocalDateTime, zoneId: ZoneId): Long = {
+    val instant = localDateTime.atZone(zoneId).toInstant
     DateTimeUtils.instantToMicros(instant)
   }
 
@@ -66,10 +66,10 @@ object DateTimeTestUtils {
       minute: Byte = 0,
       sec: Byte = 0,
       micros: Int = 0,
-      tz: TimeZone = TimeZoneUTC): Long = {
+      zid: ZoneId = ZoneOffset.UTC): Long = {
     val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
     val localDateTime = LocalDateTime.of(year, month, day, hour, minute, sec, nanos)
-    localDateTimeToMicros(localDateTime, tz)
+    localDateTimeToMicros(localDateTime, zid)
   }
 
   // Returns number of days since epoch for the given date
@@ -90,11 +90,11 @@ object DateTimeTestUtils {
       minute: Byte = 0,
       sec: Byte = 0,
       micros: Int = 0,
-      tz: TimeZone = TimeZoneUTC): Long = {
+      zid: ZoneId = ZoneOffset.UTC): Long = {
     val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
-    val localDate = LocalDate.now(tz.toZoneId)
+    val localDate = LocalDate.now(zid)
     val localTime = LocalTime.of(hour, minute, sec, nanos)
     val localDateTime = LocalDateTime.of(localDate, localTime)
-    localDateTimeToMicros(localDateTime, tz)
+    localDateTimeToMicros(localDateTime, zid)
   }
 }
