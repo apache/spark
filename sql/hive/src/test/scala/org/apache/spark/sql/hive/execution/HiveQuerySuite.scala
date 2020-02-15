@@ -1224,15 +1224,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
-
-  test("SPARK-30755: The SerDe interface removed since Hive 2.3(HIVE-15167)") {
-    assume(HiveUtils.isHive23)
-    sql(s"ADD JAR ${HiveTestJars.getHiveHcatalogCoreJar("1.2.1").toURI}")
-    val e = intercept[ClassNotFoundException] {
-      sql("CREATE TABLE t1(a string) ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'")
-    }
-    assert(e.getMessage.contains("The SerDe interface removed since Hive 2.3"))
-  }
 }
 
 // for SPARK-2180 test
