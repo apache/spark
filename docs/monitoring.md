@@ -166,16 +166,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.kerberos.principal</td>
     <td>(none)</td>
     <td>
-      Precondition: <code>spark.history.kerberos.enabled=true</code><br/><br/>
-      Kerberos principal name for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies kerberos principal name for the History Server.
     </td>
   </tr>
   <tr>
     <td>spark.history.kerberos.keytab</td>
     <td>(none)</td>
     <td>
-      Precondition: <code>spark.history.kerberos.enabled=true</code><br/><br/>
-      Location of the kerberos keytab file for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies location of the kerberos keytab file for the History Server.
     </td>
   </tr>
   <tr>
@@ -189,8 +187,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.cleaner.interval</td>
     <td>1d</td>
     <td>
-      Precondition: <code>spark.history.fs.cleaner.enabled=true</code><br/><br/>
-      How often the filesystem job history cleaner checks for files to delete.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies how often the filesystem job history cleaner checks for files to delete.
       Files are deleted if at least one of two conditions holds.
       First, they're deleted if they're older than <code>spark.history.fs.cleaner.maxAge</code>.
       They are also deleted if the number of files is more than
@@ -202,16 +199,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.cleaner.maxAge</td>
     <td>7d</td>
     <td>
-      Precondition: <code>spark.history.fs.cleaner.enabled=true</code><br/><br/>
-      Job history files older than this will be deleted when the filesystem history cleaner runs.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, job history files older than this will be deleted when the filesystem history cleaner runs.
     </td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.maxNum</td>
     <td>Int.MaxValue</td>
     <td>
-      Precondition: <code>spark.history.fs.cleaner.enabled=true</code><br/><br/>
-      The maximum number of files in the event log directory.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies the maximum number of files in the event log directory.
       Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
       This should be smaller than the underlying file system limit like
       `dfs.namenode.fs-limits.max-directory-items` in HDFS.
@@ -245,8 +240,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.driverlog.cleaner.interval</td>
     <td><code>spark.history.fs.cleaner.interval</code></td>
     <td>
-      Precondition: <code>spark.history.fs.driverlog.cleaner.enabled=true</code><br/><br/>
-      How often the filesystem driver log cleaner checks for files to delete.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, specifies how often the filesystem driver log cleaner checks for files to delete.
       Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
     </td>
   </tr>
@@ -254,8 +248,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.driverlog.cleaner.maxAge</td>
     <td><code>spark.history.fs.cleaner.maxAge</code></td>
     <td>
-      Precondition: <code>spark.history.fs.driverlog.cleaner.enabled=true</code><br/><br/>
-      Driver log files older than this will be deleted when the driver log cleaner runs.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, driver log files older than this will be deleted when the driver log cleaner runs.
     </td>
   </tr>
   <tr>
