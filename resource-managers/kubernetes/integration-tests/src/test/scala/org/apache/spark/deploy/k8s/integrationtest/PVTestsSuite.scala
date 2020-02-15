@@ -168,7 +168,7 @@ private[spark] object PVTestsSuite {
   val STORAGE_NAME = "test-local-storage-2"
   val PV_NAME = "test-local-pv"
   val PVC_NAME = "test-local-pvc"
-  val CONTAINER_MOUNT_PATH = "/opt/spark/pv-tests"
+  val CONTAINER_MOUNT_PATH = "/opt/spark/pv-tests-mount-point"
   // Directly mounting /tmp fails on OSX so make a sub-dir
   val host_temp_dir = {
     val dir = SparkUtils.createDirectory(System.getProperty("java.io.tmpdir"))
