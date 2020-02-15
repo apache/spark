@@ -21,8 +21,6 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
-
 /**
  * Helper functions for testing date and time functionality.
  */
