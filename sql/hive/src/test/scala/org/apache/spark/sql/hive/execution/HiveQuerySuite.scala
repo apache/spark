@@ -1225,15 +1225,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  test("SPARK-30755: Support Hive 1.2.1's Serde after making built-in Hive to 2.3") {
-    withTable("t1") {
-      spark.sql("CREATE TABLE t1(val string) " +
-        s"ROW FORMAT SERDE '${classOf[DummyHiveSerde].getName}'")
-      spark.sql("INSERT INTO t1 values ('val')")
-      assertResult(Array(Row("val"))) {
-        spark.table("t1").collect()
-      }
+  test("SPARK-30755: The SerDe interface removed since Hive 2.3(HIVE-15167)") {
+    assume(HiveUtils.isHive23)
+    sql(s"ADD JAR ${HiveTestJars.getHiveHcatalogCoreJar("1.2.1").toURI}")
+    val e = intercept[ClassNotFoundException] {
+      sql("CREATE TABLE t1(a string) ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'")
     }
+    assert(e.getMessage.contains("The SerDe interface removed since Hive 2.3"))
   }
 }
 
