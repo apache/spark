@@ -2199,7 +2199,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         True
         >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
             df3.withColumn("col1", df3.id + 2).semanticHash()
-        True
+        False
         >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
             df4.withColumn("col0", df4.id * 2).semanticHash()
         True
