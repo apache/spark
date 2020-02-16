@@ -2166,17 +2166,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             `False` on the :class:`DataFrame` that return the same results, for instance, from
             different plans. Such false negative semantic can be useful when caching as an example.
 
-        >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
-        >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
-        >>> df3 = spark.createDataFrame([(0, 2),(4, 5)], ["col1", "col2"])
-        >>> df4 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df1 = spark.range(100).withColumn("col1", df1.id * 2)
+        >>> df2 = spark.range(100).withColumn("col1", df1.id * 2)
+        >>> df3 = spark.range(100).withColumn("col1", df1.id + 2)
+        >>> df4 = spark.range(100).withColumn("col0", df1.id * 2)
         >>> df1.sameSemantics(df2)
-        False
+        True
         >>> df1.sameSemantics(df3)
         False
         >>> df1.sameSemantics(df4)
-        True
-        >>> df1.sameSemantics(df1)
         True
         """
         if not isinstance(other, DataFrame):
@@ -2192,17 +2190,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. note:: Unlike the standard hash code, the hash is calculated against the query plan
             simplified by tolerating the cosmetic differences such as attribute names.
 
-        >>> df1 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
-        >>> df2 = spark.createDataFrame([(1, 2),(4, 5)], ["col0", "col2"])
-        >>> df3 = spark.createDataFrame([(0, 2),(4, 5)], ["col1", "col2"])
-        >>> df4 = spark.createDataFrame([(1, 2),(4, 5)], ["col1", "col2"])
+        >>> df1 = spark.range(100).withColumn("col1", df1.id * 2)
+        >>> df2 = spark.range(100).withColumn("col1", df1.id * 2)
+        >>> df3 = spark.range(100).withColumn("col1", df1.id + 2)
+        >>> df4 = spark.range(100).withColumn("col0", df1.id * 2)
         >>> df1.semanticHash() == df2.semanticHash()
-        False
+        True
         >>> df1.semanticHash() == df3.semanticHash()
         False
         >>> df1.semanticHash() == df4.semanticHash()
-        True
-        >>> df1.semanticHash() == df1.semanticHash()
         True
         """
         return self._jdf.semanticHash()
