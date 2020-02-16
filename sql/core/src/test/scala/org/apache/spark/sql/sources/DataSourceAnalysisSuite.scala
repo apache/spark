@@ -22,9 +22,10 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -52,7 +53,12 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
   Seq(true, false).foreach { caseSensitive =>
     val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     def cast(e: Expression, dt: DataType): Expression = {
-      Cast(e, dt, Option(conf.sessionLocalTimeZone))
+      conf.storeAssignmentPolicy match {
+        case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
+          AnsiCast(e, dt, Option(conf.sessionLocalTimeZone))
+        case _ =>
+          Cast(e, dt, Option(conf.sessionLocalTimeZone))
+      }
     }
     val rule = DataSourceAnalysis(conf)
     test(
@@ -63,7 +69,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> None, "c" -> None),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
     }
 
@@ -74,7 +81,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int),
           providedPartitions = Map("b" -> Some("1"), "c" -> None),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
     }
 
@@ -85,7 +93,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
 
       // Missing partitioning columns.
@@ -94,7 +103,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int, 'g.int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
 
       // Wrong partitioning columns.
@@ -103,7 +113,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1"), "d" -> None),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
     }
 
@@ -114,7 +125,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
 
       // Wrong partitioning columns.
@@ -123,7 +135,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int),
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
 
       if (caseSensitive) {
@@ -133,7 +146,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
             sourceAttributes = Seq('e.int, 'f.int),
             providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
             targetAttributes = targetAttributes,
-            targetPartitionSchema = targetPartitionSchema)
+            targetPartitionSchema = targetPartitionSchema,
+            conf)
         }
       }
     }
@@ -147,7 +161,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> None, "c" -> Some("3")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
       }
     }
 
@@ -160,7 +175,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
         checkProjectList(actual, expected)
       }
 
@@ -172,7 +188,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3")),
           targetAttributes = targetAttributes,
-          targetPartitionSchema = targetPartitionSchema)
+          targetPartitionSchema = targetPartitionSchema,
+          conf)
         checkProjectList(actual, expected)
       }
 
@@ -184,7 +201,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = Seq('a.int, 'd.int, 'b.int),
-          targetPartitionSchema = new StructType().add("b", IntegerType))
+          targetPartitionSchema = new StructType().add("b", IntegerType),
+          conf)
         checkProjectList(actual, expected)
       }
     }
@@ -200,7 +218,8 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
         sourceAttributes = nonPartitionedAttributes ++ dynamicPartitionAttributes,
         providedPartitions = Map("b" -> Some("1"), "c" -> None),
         targetAttributes = targetAttributes,
-        targetPartitionSchema = targetPartitionSchema)
+        targetPartitionSchema = targetPartitionSchema,
+        conf)
       checkProjectList(actual, expected)
     }
   }

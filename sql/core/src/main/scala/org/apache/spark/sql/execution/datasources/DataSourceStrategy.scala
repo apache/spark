@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -59,7 +60,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       sourceAttributes: Seq[Attribute],
       providedPartitions: Map[String, Option[String]],
       targetAttributes: Seq[Attribute],
-      targetPartitionSchema: StructType): Seq[NamedExpression] = {
+      targetPartitionSchema: StructType,
+      conf: SQLConf): Seq[NamedExpression] = {
 
     assert(providedPartitions.exists(_._2.isDefined))
 
@@ -104,7 +106,13 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
+        conf.storeAssignmentPolicy match {
+          case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
+            Some(Alias(AnsiCast(Literal(partValue), field.dataType,
+              Option(conf.sessionLocalTimeZone)), field.name)())
+          case _ =>
+            Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
+        }
       } else {
         throw new AnalysisException(
           s"Partition column ${field.name} have multiple values specified, " +
@@ -176,7 +184,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
           sourceAttributes = query.output,
           providedPartitions = parts,
           targetAttributes = l.output,
-          targetPartitionSchema = t.partitionSchema)
+          targetPartitionSchema = t.partitionSchema,
+          conf)
         Project(projectList, query)
       } else {
         query

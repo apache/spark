@@ -753,6 +753,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(a int, b string) using parquet partitioned by (a)")
+        val errorMsg = intercept[NumberFormatException] {
+          sql("insert into t partition(a='ansi') values('ansi')")
+        }.getMessage
+        assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
