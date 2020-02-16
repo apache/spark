@@ -252,7 +252,7 @@ class ContinuousExecution(
 
       updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
-        SQLExecution.withNewExecutionId(sparkSessionForQuery, lastExecution) {
+        SQLExecution.withNewExecutionId(lastExecution) {
           lastExecution.executedPlan.execute()
         }
       }

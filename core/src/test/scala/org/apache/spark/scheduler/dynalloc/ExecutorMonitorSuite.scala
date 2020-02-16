@@ -28,6 +28,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -255,25 +256,28 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   test("track executors pending for removal") {
     knownExecs ++= Set("1", "2", "3")
 
+    val execInfoRp1 = new ExecutorInfo("host1", 1, Map.empty,
+      Map.empty, Map.empty, 1)
+
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
-    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", execInfo))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", execInfoRp1))
     clock.setTime(idleDeadline)
-    assert(monitor.timedOutExecutors().toSet === Set("1", "2", "3"))
+    assert(monitor.timedOutExecutors().toSet === Set(("1", 0), ("2", 0), ("3", 1)))
     assert(monitor.pendingRemovalCount === 0)
 
     // Notify that only a subset of executors was killed, to mimic the case where the scheduler
     // refuses to kill an executor that is busy for whatever reason the monitor hasn't detected yet.
     monitor.executorsKilled(Seq("1"))
-    assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
+    assert(monitor.timedOutExecutors().toSet === Set(("2", 0), ("3", 1)))
     assert(monitor.pendingRemovalCount === 1)
 
     // Check the timed out executors again so that we're sure they're still timed out when no
     // events happen. This ensures that the monitor doesn't lose track of them.
-    assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
+    assert(monitor.timedOutExecutors().toSet === Set(("2", 0), ("3", 1)))
 
     monitor.onTaskStart(SparkListenerTaskStart(1, 1, taskInfo("2", 1)))
-    assert(monitor.timedOutExecutors().toSet === Set("3"))
+    assert(monitor.timedOutExecutors().toSet === Set(("3", 1)))
 
     monitor.executorsKilled(Seq("3"))
     assert(monitor.pendingRemovalCount === 2)
@@ -282,7 +286,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors().isEmpty)
     clock.advance(idleDeadline)
-    assert(monitor.timedOutExecutors().toSet === Set("2"))
+    assert(monitor.timedOutExecutors().toSet === Set(("2", 0)))
   }
 
   test("shuffle block tracking") {
@@ -435,7 +439,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
   private def stageInfo(id: Int, shuffleId: Int = -1): StageInfo = {
     new StageInfo(id, 0, s"stage$id", 1, Nil, Nil, "",
-      shuffleDepId = if (shuffleId >= 0) Some(shuffleId) else None)
+      shuffleDepId = if (shuffleId >= 0) Some(shuffleId) else None,
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   private def taskInfo(
