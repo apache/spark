@@ -317,17 +317,38 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("Constraints should be inferred from inequality constraints: basic") {
-    Seq(("left.b".attr < "right.b".attr, 'b < 1, 'b < 1), // a < b && b < c => a < c
-      ("left.b".attr < "right.b".attr, 'b === 1, 'b < 1), // a < b && b = c => a < c
-      ("left.b".attr < "right.b".attr, 'b <= 1, 'b < 1), // a < b && b <= c => a < c
-      ("left.b".attr <= "right.b".attr, 'b <= 1, 'b <= 1), // a <= b && b <= c => a <= c
-      ("left.b".attr <= "right.b".attr, 'b === 1, 'b <= 1), // a <= b && b = c => a <= c
-      ("left.b".attr > "right.b".attr, 'b > 1, 'b > 1), // a > b && b > c => a > c
-      ("left.b".attr > "right.b".attr, 'b === 1, 'b > 1), // a > b && b > c => a > c
-      ("left.b".attr > "right.b".attr, 'b >= 1, 'b > 1), // a > b && b >= c => a > c
-      ("left.b".attr >= "right.b".attr, 'b >= 1, 'b >= 1), // a >= b && b >= c => a >= c
-      ("left.b".attr >= "right.b".attr, 'b === 1, 'b >= 1) // a >= b && b >= c => a >= c
+  test("Constraints inferred from inequality constraints: basic") {
+    Seq(('a < 'b && 'b < 3, 'a < 'b && 'b < 3 && 'a < 3), // a < b && b < 3 => a < 3
+      ('a < 'b && 'b <= 3, 'a < 'b && 'b <= 3 && 'a < 3), // a < b && b <= 3 => a < 3
+      ('a < 'b && 'b === 3, 'a < 'b && 'b === 3 && 'a < 3), // a < b && b = 3 => a < 3
+      ('a <= 'b && 'b < 3, 'a <= 'b && 'b < 3 && 'a < 3), // a <= b && b < 3 => a < 3
+      ('a <= 'b && 'b <= 3, 'a <= 'b && 'b <= 3 && 'a <= 3), // a <= b && b <= 3 => a <= 3
+      ('a <= 'b && 'b === 3, 'a <= 'b && 'b === 3 && 'a <= 3), // a <= b && b = 3 => a <= 3
+      ('a > 'b && 'b > 3, 'a > 'b && 'b > 3 && 'a > 3), // a > b && b > 3 => a > 3
+      ('a > 'b && 'b >= 3, 'a > 'b && 'b >= 3 && 'a > 3), // a > b && b >= 3 => a > 3
+      ('a > 'b && 'b === 3, 'a > 'b && 'b === 3 && 'a > 3), // a > b && b = 3 => a > 3
+      ('a >= 'b && 'b > 3, 'a >= 'b && 'b > 3 && 'a > 3), // a >= b && b > 3 => a > 3
+      ('a >= 'b && 'b >= 3, 'a >= 'b && 'b >= 3 && 'a >= 3), // a >= b && b >= 3 => a >= 3
+      ('a >= 'b && 'b === 3, 'a >= 'b && 'b === 3 && 'a >= 3) // a >= b && b = 3 => a >= 3
+    ).foreach {
+      case (filter, inferred) =>
+        val original = testRelation.where(filter)
+        val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && inferred)
+        comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+    }
+  }
+
+  test("Constraints inferred from inequality constraints: join") {
+    Seq(("left.b".attr < "right.b".attr, 'b < 1, 'b < 1),
+      ("left.b".attr < "right.b".attr, 'b === 1, 'b < 1),
+      ("left.b".attr < "right.b".attr, 'b <= 1, 'b < 1),
+      ("left.b".attr <= "right.b".attr, 'b <= 1, 'b <= 1),
+      ("left.b".attr <= "right.b".attr, 'b === 1, 'b <= 1),
+      ("left.b".attr > "right.b".attr, 'b > 1, 'b > 1),
+      ("left.b".attr > "right.b".attr, 'b === 1, 'b > 1),
+      ("left.b".attr > "right.b".attr, 'b >= 1, 'b > 1),
+      ("left.b".attr >= "right.b".attr, 'b >= 1, 'b >= 1),
+      ("left.b".attr >= "right.b".attr, 'b === 1, 'b >= 1)
     ).foreach {
       case (cond, filter, inferred) =>
         val originalLeft = testRelation.subquery('left)
@@ -340,7 +361,33 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("Constraints should be inferred from inequality attributes: simple case") {
+  test("Constraints inferred from inequality constraints with cast") {
+    Seq(('a < 'b && 'b < 3L, 'a.cast(LongType) < 'b && 'b < 3L && 'a.cast(LongType) < 3L),
+      ('a < 'b && 'b <= 3L, 'a.cast(LongType) < 'b && 'b <= 3L && 'a.cast(LongType) < 3L),
+      ('a < 'b && 'b === 3L, 'a.cast(LongType) < 'b && 'b === 3L && 'a.cast(LongType) < 3L),
+      ('a <= 'b && 'b < 3L, 'a.cast(LongType) <= 'b && 'b < 3L && 'a.cast(LongType) < 3L),
+      ('a <= 'b && 'b <= 3L, 'a.cast(LongType) <= 'b && 'b <= 3L && 'a.cast(LongType) <= 3L),
+      ('a <= 'b && 'b === 3L, 'a.cast(LongType) <= 'b && 'b === 3L && 'a.cast(LongType) <= 3L),
+      ('a < 'b && 'b < 3, 'a.cast(LongType) < 'b && 'b < Literal(3).cast(LongType)
+        && 'a.cast(LongType) < Literal(3).cast(LongType)),
+      ('a > 'b && 'b > 3L, 'a.cast(LongType) > 'b && 'b > 3L && 'a.cast(LongType) > 3L),
+      ('a > 'b && 'b >= 3L, 'a.cast(LongType) > 'b && 'b >= 3L && 'a.cast(LongType) > 3L),
+      ('a > 'b && 'b === 3L, 'a.cast(LongType) > 'b && 'b === 3L && 'a.cast(LongType) > 3L),
+      ('a >= 'b && 'b > 3L, 'a.cast(LongType) >= 'b && 'b > 3L && 'a.cast(LongType) > 3L),
+      ('a >= 'b && 'b >= 3L, 'a.cast(LongType) >= 'b && 'b >= 3L && 'a.cast(LongType) >= 3L),
+      ('a >= 'b && 'b === 3L, 'a.cast(LongType) >= 'b && 'b === 3L && 'a.cast(LongType) >= 3L),
+      ('a > 'b && 'b > 3, 'a.cast(LongType) > 'b && 'b > Literal(3).cast(LongType)
+        && 'a.cast(LongType) > Literal(3).cast(LongType))
+    ).foreach {
+      case (filter, inferred) =>
+        val testRelation = LocalRelation('a.int, 'b.long)
+        val original = testRelation.where(filter)
+        val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && inferred)
+        comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+    }
+  }
+
+  test("Constraints inferred from inequality attributes: case1") {
     val condition = Some("x.a".attr > "y.a".attr)
     val optimizedLeft = testRelation.where(IsNotNull('a) && 'a === 1).as("x")
     val optimizedRight = testRelation.where('a < 1 && IsNotNull('a) ).as("y")
@@ -350,5 +397,28 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       val original = testRelation.where(filter).as("x").join(testRelation.as("y"), Inner, condition)
       comparePlans(Optimize.execute(original.analyze), correct.analyze)
     }
+  }
+
+  test("Constraints inferred from inequality attributes: case2") {
+    val original = testRelation.where('a < 'b && 'b < 'c && 'c < 5)
+    val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)
+      && 'a < 'b && 'b < 'c && 'a < 5 && 'b < 5 && 'c < 5 && 'c > 'a)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
+
+  test("Constraints inferred from inequality attributes: case3") {
+    val left = testRelation.where('b >= 3 && 'b <= 13).as("x")
+    val right = testRelation.as("y")
+
+    val optimizedLeft = testRelation.where(IsNotNull('a) && IsNotNull('b)
+      && 'b >= 3 && 'b <= 13).as("x")
+    val optimizedRight = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)
+      && 'b < 'c && 'c > 3 && 'b <= 13).as("y")
+
+    val condition = Some("x.a".attr === "y.a".attr
+      && "x.b".attr >= "y.b".attr && "x.b".attr < "y.c".attr)
+    val original = left.join(right, Inner, condition)
+    val optimized = optimizedLeft.join(optimizedRight, Inner, condition)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
   }
 }

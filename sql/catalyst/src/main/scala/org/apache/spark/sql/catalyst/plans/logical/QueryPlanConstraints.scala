@@ -56,20 +56,23 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 trait ConstraintHelper {
 
   /**
+   * Infers an additional set of constraints from a given set of constraints.
+   */
+  def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferred = inferEqualityConstraints(constraints)
+    var lastInequalityInferred = Set.empty[Expression]
+    do {
+      lastInequalityInferred = inferInequalityConstraints(constraints ++ inferred)
+      inferred ++= lastInequalityInferred
+    } while (lastInequalityInferred.nonEmpty)
+    inferred
+  }
+
+  /**
    * Infers an additional set of constraints from a given set of equality constraints.
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
-  def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    var inferred = inferEqualityConstraints(constraints)
-    var newInferred = Set.empty[Expression]
-    do {
-      newInferred = inferInequalityConstraints(constraints ++ inferred)
-      inferred ++= newInferred
-    } while (newInferred.nonEmpty)
-    inferred
-  }
-
   def inferEqualityConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
@@ -85,9 +88,14 @@ trait ConstraintHelper {
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
-    inferredConstraints -- predicates
+    inferredConstraints -- constraints
   }
 
+  /**
+   * Infers an additional set of constraints from a given set of inequality constraints.
+   * For e.g., if an operator has constraints of the form (`a > b`, `b > 5`), this returns an
+   * additional constraint of the form `a > 5`.
+   */
   def inferInequalityConstraints(constraints: Set[Expression]): Set[Expression] = {
     val binaryComparisons = constraints.filter {
       case _: GreaterThan => true
@@ -117,6 +125,10 @@ trait ConstraintHelper {
         inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
       case gt @ GreaterThanOrEqual(l: Attribute, r: Attribute) =>
         inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
+      case gt @ GreaterThan(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
+      case gt @ GreaterThanOrEqual(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(greaterThans - gt, r, l, gt)
       case _ => // No inference
     }
 
@@ -124,6 +136,10 @@ trait ConstraintHelper {
       case lt @ LessThan(l: Attribute, r: Attribute) =>
         inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
       case lt @ LessThanOrEqual(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
+      case lt @ LessThan(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
+      case lt @ LessThanOrEqual(l @ Cast(_: Attribute, _, _), r: Attribute) =>
         inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
       case _ => // No inference
     }
