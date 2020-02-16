@@ -93,14 +93,14 @@ class JobGeneratorSuite extends TestSuiteBase {
       }
 
       // Wait for new blocks to be received
-      def waitForNewReceivedBlocks() {
+      def waitForNewReceivedBlocks(): Unit = {
         eventually(testTimeout) {
           assert(receiverTracker.hasUnallocatedBlocks)
         }
       }
 
       // Wait for received blocks to be allocated to a batch
-      def waitForBlocksToBeAllocatedToBatch(batchTime: Long) {
+      def waitForBlocksToBeAllocatedToBatch(batchTime: Long): Unit = {
         eventually(testTimeout) {
           assert(getBlocksOfBatch(batchTime).nonEmpty)
         }

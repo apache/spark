@@ -27,14 +27,14 @@ interchangeable.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} DATABASE [EXTENDED] db_name
+{ DESC | DESCRIBE } DATABASE [ EXTENDED ] db_name
 {% endhighlight %}
 
 ### Parameters
 <dl>
   <dt><code><em>db_name</em></code></dt>
   <dd>
-    Specifies a name of an existing database or an existing schema in the syetem. If the name does not exist, an
+    Specifies a name of an existing database or an existing schema in the system. If the name does not exist, an
     exception is thrown.
   </dd>
 </dl>

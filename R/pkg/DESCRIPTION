@@ -22,7 +22,8 @@ Suggests:
     rmarkdown,
     testthat,
     e1071,
-    survival
+    survival,
+    arrow
 Collate:
     'schema.R'
     'generics.R'
@@ -61,3 +62,4 @@ Collate:
 RoxygenNote: 5.0.1
 VignetteBuilder: knitr
 NeedsCompilation: no
+Encoding: UTF-8

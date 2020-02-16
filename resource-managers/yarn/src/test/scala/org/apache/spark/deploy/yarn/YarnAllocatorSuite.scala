@@ -69,7 +69,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var containerNum = 0
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
@@ -77,7 +77,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     clock = new ManualClock()
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       rmClient.stop()
     } finally {

@@ -85,7 +85,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.KMeans) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/KMeans.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/KMeansExample.scala %}
 </div>
@@ -123,7 +123,7 @@ and generates a `LDAModel` as the base model. Expert users may cast a `LDAModel`
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.LDA) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/LDA.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/LDAExample.scala %}
 </div>
@@ -166,7 +166,7 @@ Bisecting K-means can often be much faster than regular K-means, but it will gen
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.BisectingKMeans) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/BisectingKMeans.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/BisectingKMeansExample.scala %}
 </div>
@@ -255,7 +255,7 @@ model.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.GaussianMixture) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/GaussianMixture.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GaussianMixtureExample.scala %}
 </div>
@@ -302,7 +302,7 @@ using truncated power iteration on a normalized pair-wise similarity matrix of t
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.PowerIterationClustering) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/PowerIterationClustering.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/PowerIterationClusteringExample.scala %}
 </div>

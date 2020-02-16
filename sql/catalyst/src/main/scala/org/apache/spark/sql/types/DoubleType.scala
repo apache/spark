@@ -18,11 +18,10 @@
 package org.apache.spark.sql.types
 
 import scala.math.{Fractional, Numeric}
-import scala.math.Numeric.DoubleAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
+import scala.util.Try
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.util.Utils
 
 /**
  * The data type representing `Double` values. Please use the singleton `DataTypes.DoubleType`.
@@ -39,8 +38,8 @@ class DoubleType private() extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering =
-    (x: Double, y: Double) => Utils.nanSafeCompareDoubles(x, y)
-  private[sql] val asIntegral = DoubleAsIfIntegral
+    (x: Double, y: Double) => java.lang.Double.compare(x, y)
+  private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 
   override private[sql] def exactNumeric = DoubleExactNumeric
 
@@ -56,4 +55,34 @@ class DoubleType private() extends FractionalType {
  * @since 1.3.0
  */
 @Stable
-case object DoubleType extends DoubleType
+case object DoubleType extends DoubleType {
+
+  // Traits below copied from Scala 2.12; not present in 2.13
+  // TODO: SPARK-30011 revisit once Scala 2.12 support is dropped
+  trait DoubleIsConflicted extends Numeric[Double] {
+    def plus(x: Double, y: Double): Double = x + y
+    def minus(x: Double, y: Double): Double = x - y
+    def times(x: Double, y: Double): Double = x * y
+    def negate(x: Double): Double = -x
+    def fromInt(x: Int): Double = x.toDouble
+    def toInt(x: Double): Int = x.toInt
+    def toLong(x: Double): Long = x.toLong
+    def toFloat(x: Double): Float = x.toFloat
+    def toDouble(x: Double): Double = x
+    // logic in Numeric base trait mishandles abs(-0.0)
+    override def abs(x: Double): Double = math.abs(x)
+    // Added from Scala 2.13; don't override to work in 2.12
+    def parseString(str: String): Option[Double] =
+      Try(java.lang.Double.parseDouble(str)).toOption
+
+  }
+
+  trait DoubleAsIfIntegral extends DoubleIsConflicted with Integral[Double] {
+    def quot(x: Double, y: Double): Double = (BigDecimal(x) quot BigDecimal(y)).doubleValue
+    def rem(x: Double, y: Double): Double = (BigDecimal(x) remainder BigDecimal(y)).doubleValue
+  }
+
+  object DoubleAsIfIntegral extends DoubleAsIfIntegral {
+    override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
+  }
+}

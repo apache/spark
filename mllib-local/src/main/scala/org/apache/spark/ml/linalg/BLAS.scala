@@ -302,7 +302,7 @@ private[spark] object BLAS extends Serializable {
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
    */
-  def syr(alpha: Double, x: Vector, A: DenseMatrix) {
+  def syr(alpha: Double, x: Vector, A: DenseMatrix): Unit = {
     val mA = A.numRows
     val nA = A.numCols
     require(mA == nA, s"A is not a square matrix (and hence is not symmetric). A: $mA x $nA")
@@ -316,7 +316,7 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix): Unit = {
     val nA = A.numRows
     val mA = A.numCols
 
@@ -334,7 +334,7 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix): Unit = {
     val mA = A.numCols
     val xIndices = x.indices
     val xValues = x.values

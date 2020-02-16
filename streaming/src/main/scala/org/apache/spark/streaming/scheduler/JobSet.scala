@@ -39,11 +39,11 @@ case class JobSet(
   jobs.zipWithIndex.foreach { case (job, i) => job.setOutputOpId(i) }
   incompleteJobs ++= jobs
 
-  def handleJobStart(job: Job) {
+  def handleJobStart(job: Job): Unit = {
     if (processingStartTime < 0) processingStartTime = System.currentTimeMillis()
   }
 
-  def handleJobCompletion(job: Job) {
+  def handleJobCompletion(job: Job): Unit = {
     incompleteJobs -= job
     if (hasCompleted) processingEndTime = System.currentTimeMillis()
   }

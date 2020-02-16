@@ -115,7 +115,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
   @volatile private var _cancelled: Boolean = false
 
-  override def cancel() {
+  override def cancel(): Unit = {
     _cancelled = true
     jobWaiter.cancel()
   }
@@ -132,7 +132,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     value.get.get
   }
 
-  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext) {
+  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit = {
     jobWaiter.completionFuture onComplete {_ => func(value.get)}
   }
 

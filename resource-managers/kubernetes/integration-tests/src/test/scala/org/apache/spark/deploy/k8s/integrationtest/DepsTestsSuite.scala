@@ -54,16 +54,12 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).toArray
 
     val resources = Map(
-      "cpu" -> new QuantityBuilder()
-        .withAmount("1")
-        .build(),
-      "memory" -> new QuantityBuilder()
-        .withAmount("512M")
-        .build()
+      "cpu" -> new Quantity("1"),
+      "memory" -> new Quantity("512M")
     ).asJava
 
     new ContainerBuilder()
-      .withImage("ceph/daemon:latest")
+      .withImage("ceph/daemon:v4.0.3-stable-4.0-nautilus-centos-7-x86_64")
       .withImagePullPolicy("Always")
       .withName(cName)
       .withPorts(new ContainerPortBuilder()
@@ -224,9 +220,20 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def getServiceUrl(serviceName: String): String = {
+    val fuzzyUrlMatcher = """^(.*?)([a-zA-Z]+://.*?)(\s*)$""".r
     Eventually.eventually(TIMEOUT, INTERVAL) {
       // ns is always available either random or provided by the user
-      Minikube.minikubeServiceAction(serviceName, "-n", kubernetesTestComponents.namespace, "--url")
+      val rawUrl = Minikube.minikubeServiceAction(
+        serviceName, "-n", kubernetesTestComponents.namespace, "--url")
+      val url = rawUrl match {
+        case fuzzyUrlMatcher(junk, url, extra) =>
+          logDebug(s"Service url matched junk ${junk} - url ${url} - extra ${extra}")
+          url
+        case _ =>
+          logWarning(s"Response from minikube ${rawUrl} did not match URL regex")
+          rawUrl
+      }
+      url
     }
   }
 }

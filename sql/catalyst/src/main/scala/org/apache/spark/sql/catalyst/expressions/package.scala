@@ -23,7 +23,6 @@ import com.google.common.collect.Maps
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -153,13 +152,19 @@ package object expressions  {
       unique(grouped)
     }
 
-    /** Perform attribute resolution given a name and a resolver. */
-    def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+    /** Returns true if all qualifiers in `attrs` have 2 or less parts. */
+    @transient private val hasTwoOrLessQualifierParts: Boolean =
+      attrs.forall(_.qualifier.length <= 2)
+
+    /** Match attributes for the case where all qualifiers in `attrs` have 2 or less parts. */
+    private def matchWithTwoOrLessQualifierParts(
+        nameParts: Seq[String],
+        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
       // Collect matching attributes given a name and a lookup.
       def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
-        candidates.toSeq.flatMap(_.collect {
+        candidates.getOrElse(Nil).collect {
           case a if resolver(a.name, name) => a.withName(name)
-        })
+        }
       }
 
       // Find matches for the given name assuming that the 1st two parts are qualifier
@@ -204,12 +209,78 @@ package object expressions  {
 
       // If none of attributes match database.table.column pattern or
       // `table.column` pattern, we try to resolve it as a column.
-      val (candidates, nestedFields) = matches match {
+      matches match {
         case (Seq(), _) =>
           val name = nameParts.head
           val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
           (attributes, nameParts.tail)
         case _ => matches
+      }
+    }
+
+    /**
+     * Match attributes for the case where at least one qualifier in `attrs` has more than 2 parts.
+     */
+    private def matchWithThreeOrMoreQualifierParts(
+        nameParts: Seq[String],
+        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
+      // Returns true if the `short` qualifier is a subset of the last elements of
+      // `long` qualifier. For example, Seq("a", "b") is a subset of Seq("a", "a", "b"),
+      // but not a subset of Seq("a", "b", "b").
+      def matchQualifier(short: Seq[String], long: Seq[String]): Boolean = {
+        (long.length >= short.length) &&
+          long.takeRight(short.length)
+            .zip(short)
+            .forall(x => resolver(x._1, x._2))
+      }
+
+      // Collect attributes that match the given name and qualifier.
+      // A match occurs if
+      //   1) the given name matches the attribute's name according to the resolver.
+      //   2) the given qualifier is a subset of the attribute's qualifier.
+      def collectMatches(
+          name: String,
+          qualifier: Seq[String],
+          candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
+        candidates.getOrElse(Nil).collect {
+          case a if resolver(name, a.name) && matchQualifier(qualifier, a.qualifier) =>
+            a.withName(name)
+        }
+      }
+
+      // Iterate each string in `nameParts` in a reverse order and try to match the attributes
+      // considering the current string as the attribute name. For example, if `nameParts` is
+      // Seq("a", "b", "c"), the match will be performed in the following order:
+      // 1) name = "c", qualifier = Seq("a", "b")
+      // 2) name = "b", qualifier = Seq("a")
+      // 3) name = "a", qualifier = Seq()
+      // Note that the match is performed in the reverse order in order to match the longest
+      // qualifier as possible. If a match is found, the remaining portion of `nameParts`
+      // is also returned as nested fields.
+      var candidates: Seq[Attribute] = Nil
+      var nestedFields: Seq[String] = Nil
+      var i = nameParts.length - 1
+      while (i >= 0 && candidates.isEmpty) {
+        val name = nameParts(i)
+        candidates = collectMatches(
+          name,
+          nameParts.take(i),
+          direct.get(name.toLowerCase(Locale.ROOT)))
+        if (candidates.nonEmpty) {
+          nestedFields = nameParts.takeRight(nameParts.length - i - 1)
+        }
+        i -= 1
+      }
+
+      (candidates, nestedFields)
+    }
+
+    /** Perform attribute resolution given a name and a resolver. */
+    def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+      val (candidates, nestedFields) = if (hasTwoOrLessQualifierParts) {
+        matchWithTwoOrLessQualifierParts(nameParts, resolver)
+      } else {
+        matchWithThreeOrMoreQualifierParts(nameParts, resolver)
       }
 
       def name = UnresolvedAttribute(nameParts).name

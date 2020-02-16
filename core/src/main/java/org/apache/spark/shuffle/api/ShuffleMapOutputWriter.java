@@ -39,7 +39,7 @@ public interface ShuffleMapOutputWriter {
    * for the same partition within any given map task. The partition identifier will be in the
    * range of precisely 0 (inclusive) to numPartitions (exclusive), where numPartitions was
    * provided upon the creation of this map output writer via
-   * {@link ShuffleExecutorComponents#createMapOutputWriter(int, int, long, int)}.
+   * {@link ShuffleExecutorComponents#createMapOutputWriter(int, long, int)}.
    * <p>
    * Calls to this method will be invoked with monotonically increasing reducePartitionIds; each
    * call to this method will be called with a reducePartitionId that is strictly greater than

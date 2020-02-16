@@ -28,7 +28,7 @@ clause is optional and supported only for compatibility with other systems.
 
 ### Syntax
 {% highlight sql %}
-SHOW [ function_kind ] FUNCTIONS ([LIKE] function_name | regex_pattern)
+SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
 {% endhighlight %}
 
 ### Parameters

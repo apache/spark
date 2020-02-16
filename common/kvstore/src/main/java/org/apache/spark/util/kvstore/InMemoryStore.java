@@ -252,7 +252,7 @@ public class InMemoryStore implements KVStore {
 
         return (value) -> set.contains(indexValueForEntity(getter, value));
       } else {
-        HashSet<Comparable> set = new HashSet<>(values.size());
+        HashSet<Comparable<?>> set = new HashSet<>(values.size());
         for (Object key : values) {
           set.add(asKey(key));
         }

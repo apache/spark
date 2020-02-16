@@ -24,7 +24,7 @@ license: |
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -34,7 +34,7 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+[SparkConf](api/scala/org/apache/spark/SparkConf.html) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application with two threads as follows:
@@ -230,7 +230,7 @@ of the most common options to set are:
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses. For a client-submitted driver in Standalone, discovery
     script must assign different resource addresses to this driver comparing to workers' and
-    other dirvers' when <code>spark.resources.coordinate.enable</code> is off.
+    other drivers' when <code>spark.resources.coordinate.enable</code> is off.
   </td>
 </tr>
 <tr>
@@ -241,6 +241,18 @@ of the most common options to set are:
     only supported on Kubernetes and is actually both the vendor and domain following
     the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
     this config would be set to nvidia.com or amd.com)
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    Comma-separated list of class names implementing
+    org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.
+    This is for advanced users to replace the resource discovery class with a
+    custom implementation. Spark will try each class specified until one of them
+    returns the resource information for that resource. It tries the discovery
+    script last if none of the plugins return information for that resource.
   </td>
 </tr>
 <tr>
@@ -409,6 +421,16 @@ of the most common options to set are:
     The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
     use the default layout.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow driver logs to use erasure coding.  On HDFS, erasure coded files will not
+    update as quickly as regular replicated files, so they make take longer to reflect changes
+    written by the application. Note that even if this is true, Spark will still not force the
+    file to use erasure coding, it will simply use file system defaults.
   </td>
 </tr>
 </table>
@@ -834,13 +856,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>
@@ -866,7 +889,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.service.index.cache.size</code></td>
   <td>100m</td>
   <td>
-    Cache entries limited to the specified memory footprint in bytes.
+    Cache entries limited to the specified memory footprint, in bytes unless otherwise specified.
   </td>
 </tr>
 <tr>
@@ -956,7 +979,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td><code>spark.eventLog.erasureCoding.enabled</code></td>
   <td>false</td>
   <td>
     Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
@@ -996,6 +1019,21 @@ Apart from these, the following properties are also available, and may be useful
   <td>100k</td>
   <td>
     Buffer size to use when writing to output streams, in KiB unless otherwise specified.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.rolling.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether rolling over event log files is enabled. If set to true, it cuts down each event
+    log file to the configured size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.rolling.maxFileSize</code></td>
+  <td>128m</td>
+  <td>
+    The max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>
@@ -1079,6 +1117,18 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.proxyRedirectUri</code></td>
+  <td></td>
+  <td>
+    Where to address redirects when Spark is running behind a proxy. This will make Spark
+    modify redirect responses so they point to the proxy server, instead of the Spark UI's own
+    address. This should be only the address of the server, without any prefix paths for the
+    application; the prefix should be set either by the proxy server itself (by adding the
+    <code>X-Forwarded-Context</code> request header), or by setting the proxy base in the Spark
+    app's configuration.
   </td>
 </tr>
 <tr>
@@ -1207,16 +1257,18 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.lz4.blockSize</code></td>
   <td>32k</td>
   <td>
-    Block size in bytes used in LZ4 compression, in the case when LZ4 compression codec
+    Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.snappy.blockSize</code></td>
   <td>32k</td>
   <td>
-    Block size in bytes used in Snappy compression, in the case when Snappy compression codec
-    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+    Block size in Snappy compression, in the case when Snappy compression codec is used. 
+    Lowering this block size will also lower shuffle memory usage when Snappy is used.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>
@@ -1274,7 +1326,7 @@ Apart from these, the following properties are also available, and may be useful
     property is useful if you need to register your classes in a custom way, e.g. to specify a custom
     field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
     set to classes that extend
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <a href="api/scala/org/apache/spark/serializer/KryoRegistrator.html">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -1327,7 +1379,7 @@ Apart from these, the following properties are also available, and may be useful
     but is quite slow, so we recommend <a href="tuning.html">using
     <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
     when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <a href="api/scala/org/apache/spark/serializer/Serializer.html">
     <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
@@ -1384,7 +1436,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory in bytes which can be used for off-heap allocation.
+    The absolute amount of memory which can be used for off-heap allocation, in bytes unless otherwise specified.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption 
     must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
@@ -1568,9 +1620,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.storage.memoryMapThreshold</code></td>
   <td>2m</td>
   <td>
-    Size in bytes of a block above which Spark memory maps when reading a block from disk.
-    This prevents Spark from memory mapping very small blocks. In general, memory
-    mapping has high overhead for blocks close to or below the page size of the operating system.
+    Size of a block above which Spark memory maps when reading a block from disk. Default unit is bytes,
+    unless specified otherwise. This prevents Spark from memory mapping very small blocks. In general, 
+    memory mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
 <tr>
@@ -1580,6 +1632,43 @@ Apart from these, the following properties are also available, and may be useful
     The file output committer algorithm version, valid algorithm version number: 1 or 2.
     Version 2 may have better performance, but version 1 may handle failures better in certain situations,
     as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+  </td>
+</tr>
+</table>
+
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics (in milliseconds).
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
+    If positive, the polling is done at this interval.
   </td>
 </tr>
 </table>
@@ -1721,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold
@@ -1825,9 +1914,56 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>10000</td>
   <td>
-    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
-    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
-    driver using more memory.
+    The default capacity for event queues. Spark will try to initialize an event queue 
+    using capacity specified by `spark.scheduler.listenerbus.eventqueue.queueName.capacity` 
+    first. If it's not configured, Spark will use the default capacity specified by this 
+    config. Note that capacity must be greater than 0. Consider increasing value (e.g. 20000) 
+    if listener events are dropped. Increasing this value may result in the driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.shared.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for shared event queue in Spark listener bus, which hold events for external listener(s)
+    that register to the listener bus. Consider increasing value, if the listener events corresponding
+    to shared queue are dropped. Increasing this value may result in the driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.appStatus.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for appStatus event queue, which hold events for internal application status listeners.
+    Consider increasing value, if the listener events corresponding to appStatus queue are dropped.
+    Increasing this value may result in the driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.executorManagement.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for executorManagement event queue in Spark listener bus, which hold events for internal
+    executor management listeners. Consider increasing value if the listener events corresponding to
+    executorManagement queue are dropped. Increasing this value may result in the driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.eventLog.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for eventLog queue in Spark listener bus, which hold events for Event logging listeners
+    that write events to eventLogs. Consider increasing value if the listener events corresponding to eventLog queue
+    are dropped. Increasing this value may result in the driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.streams.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for streams queue in Spark listener bus, which hold events for internal streaming listener.
+    Consider increasing value if the listener events corresponding to streams queue are dropped. Increasing
+    this value may result in the driver using more memory.
   </td>
 </tr>
 <tr>
@@ -1960,6 +2096,20 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.speculation.task.duration.threshold</code></td>
+  <td>None</td>
+  <td>
+    Task duration after which scheduler would try to speculative run the task. If provided, tasks
+    would be speculatively run if current stage contains less tasks than or equal to the number of
+    slots on a single executor and the task is taking longer time than the threshold. This config
+    helps speculate stage with very few tasks. Regular speculation configs may also apply if the
+    executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
+    runs even though the threshold hasn't been reached. The number of slots is computed based on
+    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
+    Default unit is bytes, unless otherwise specified.
+  </td>
+</tr>
+<tr>
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
@@ -1970,9 +2120,15 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.resource.{resourceName}.amount</code></td>
   <td>1</td>
   <td>
-    Amount of a particular resource type to allocate for each task. If this is specified
-    you must also provide the executor config <code>spark.executor.resource.{resourceName}.amount</code>
-    and any corresponding discovery configs so that your executors are created with that resource type.
+    Amount of a particular resource type to allocate for each task, note that this can be a double.
+    If this is specified you must also provide the executor config 
+    <code>spark.executor.resource.{resourceName}.amount</code> and any corresponding discovery configs 
+    so that your executors are created with that resource type. In addition to whole amounts, 
+    a fractional amount (for example, 0.25, which means 1/4th of a resource) may be specified. 
+    Fractional amounts must be less than or equal to 0.5, or in other words, the minimum amount of
+    resource sharing is 2 tasks per resource. Additionally, fractional amounts are floored 
+    in order to assign resource slots (e.g. a 0.2222 configuration, or 1/0.2222 slots will become 
+    4 tasks/resource, not 5).
   </td>
 </tr>
 <tr>
@@ -2243,47 +2399,15 @@ the driver or executor, or, in the absence of that value, the number of cores av
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
 
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(numRows = 200, truncate = false)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(200, false);
-{% endhighlight %}
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# spark is an existing SparkSession
-spark.sql("SET -v").show(n=200, truncate=False)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session()
-properties <- sql("SET -v")
-showDF(properties, numRows = 200, truncate = FALSE)
-{% endhighlight %}
-
-</div>
-</div>
+        {% include_relative sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 
 ### Spark Streaming
@@ -2318,7 +2442,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Interval at which data received by Spark Streaming receivers is chunked
     into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
-     tuning</a> section in the Spark Streaming programing guide for more details.
+     tuning</a> section in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>
@@ -2329,7 +2453,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for mode details.
+    in the Spark Streaming programming guide for mode details.
   </td>
 </tr>
 <tr>
@@ -2339,7 +2463,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Enable write-ahead logs for receivers. All the input data received through receivers
     will be saved to write-ahead logs that will allow it to be recovered after driver failures.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
-    in the Spark Streaming programing guide for more details.
+    in the Spark Streaming programming guide for more details.
   </td>
 </tr>
 <tr>
@@ -2596,11 +2720,14 @@ You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive
 Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
 files are set cluster-wide, and cannot safely be changed by the application.
 
-The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`, and use
+spark hive properties in the form of `spark.hive.*`.
+For example, adding configuration "spark.hadoop.abc.def=xyz" represents adding hadoop property "abc.def=xyz",
+and adding configuration "spark.hive.abc=xyz" represents adding hive property "hive.abc=xyz".
 They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
-instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop/spark hive properties.
 
 {% highlight scala %}
 val conf = new SparkConf().set("spark.hadoop.abc.def", "xyz")
@@ -2614,6 +2741,19 @@ Also, you can modify or add configurations at runtime:
   --master local[4] \  
   --conf spark.eventLog.enabled=false \ 
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
-  --conf spark.hadoop.abc.def=xyz \ 
+  --conf spark.hadoop.abc.def=xyz \
+  --conf spark.hive.abc=xyz
   myApp.jar
 {% endhighlight %}
+
+# Custom Resource Scheduling and Configuration Overview
+
+GPUs and other accelerators have been widely used for accelerating special workloads, e.g.,
+deep learning and signal processing. Spark now supports requesting and scheduling generic resources, such as GPUs, with a few caveats. The current implementation requires that the resource have addresses that can be allocated by the scheduler. It requires your cluster manager to support and be properly configured with the resources.
+
+There are configurations available to request resources for the driver: <code>spark.driver.resource.{resourceName}.amount</code>, request resources for the executor(s): <code>spark.executor.resource.{resourceName}.amount</code> and specify the requirements for each task: <code>spark.task.resource.{resourceName}.amount</code>. The <code>spark.driver.resource.{resourceName}.discoveryScript</code> config is required on YARN, Kubernetes and a client side Driver on Spark Standalone. <code>spark.executor.resource.{resourceName}.discoveryScript</code> config is required for YARN and Kubernetes. Kubernetes also requires <code>spark.driver.resource.{resourceName}.vendor</code> and/or <code>spark.executor.resource.{resourceName}.vendor</code>. See the config descriptions above for more information on each.
+
+Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
+
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinate.enable</code>).
+

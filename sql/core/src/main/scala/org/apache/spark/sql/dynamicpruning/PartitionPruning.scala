@@ -86,7 +86,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       hasBenefit: Boolean): LogicalPlan = {
-    val reuseEnabled = SQLConf.get.dynamicPartitionPruningReuseBroadcast
+    val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     if (hasBenefit || reuseEnabled) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
@@ -96,7 +96,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           filteringPlan,
           joinKeys,
           index,
-          !hasBenefit),
+          !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -159,7 +159,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case Not(expr) => isLikelySelective(expr)
     case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
     case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case Like(_, _) => true
+    case Like(_, _, _) => true
     case _: BinaryComparison => true
     case _: In | _: InSet => true
     case _: StringPredicate => true
@@ -252,7 +252,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // Do not rewrite subqueries.
-    case _: Subquery => plan
+    case s: Subquery if s.correlated => plan
     case _ if !SQLConf.get.dynamicPartitionPruningEnabled => plan
     case _ => prune(plan)
   }

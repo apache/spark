@@ -853,7 +853,7 @@ public class JavaDatasetSuite implements Serializable {
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
       nestedSmallBean.setF(smallBean);
 
-      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+      Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
     // Shouldn't throw runtime exception when parent object (`ClassData`) is null
@@ -864,7 +864,7 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
-      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+      Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
     nullabilityCheck.expect(RuntimeException.class);
@@ -1384,7 +1384,7 @@ public class JavaDatasetSuite implements Serializable {
             new BeanWithEnum(MyEnum.B, "flower boulevard"));
     Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
     Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
-    Assert.assertEquals(ds.collectAsList(), data);
+    Assert.assertEquals(data, ds.collectAsList());
   }
 
   public static class EmptyBean implements Serializable {}
@@ -1394,8 +1394,8 @@ public class JavaDatasetSuite implements Serializable {
     EmptyBean bean = new EmptyBean();
     List<EmptyBean> data = Arrays.asList(bean);
     Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
-    Assert.assertEquals(df.schema().length(), 0);
-    Assert.assertEquals(df.collectAsList().size(), 1);
+    Assert.assertEquals(0, df.schema().length());
+    Assert.assertEquals(1, df.collectAsList().size());
   }
 
   public class CircularReference1Bean implements Serializable {

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: Resource Management
+displayTitle: Resource Management
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+* [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+* [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+* [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+* [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)

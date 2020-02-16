@@ -81,7 +81,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
    * Unpersist intermediate RDDs used in the computation.
    */
   @Since("1.0.0")
-  def unpersist() {
+  def unpersist(): Unit = {
     cumulativeCounts.unpersist()
   }
 

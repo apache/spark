@@ -106,4 +106,14 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
   }
+
+  test("test like escape syntax") {
+    val originalQuery1 = testRelation.where('a.like("abc#%", '#'))
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    comparePlans(optimized1, originalQuery1.analyze)
+
+    val originalQuery2 = testRelation.where('a.like("abc#%abc", '#'))
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    comparePlans(optimized2, originalQuery2.analyze)
+  }
 }

@@ -32,6 +32,7 @@ class NoopSuite extends SharedSparkSession {
       }
       .write
       .format("noop")
+      .mode("append")
       .save()
     assert(accum.value == numElems)
   }
@@ -54,7 +55,7 @@ class NoopSuite extends SharedSparkSession {
           accum.add(1)
           x
         }
-        .write.format("noop").save()
+        .write.mode("append").format("noop").save()
       assert(accum.value == numElems)
     }
   }

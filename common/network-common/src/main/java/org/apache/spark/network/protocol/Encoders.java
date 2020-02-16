@@ -112,4 +112,27 @@ public class Encoders {
       return ints;
     }
   }
+
+  /** Long integer arrays are encoded with their length followed by long integers. */
+  public static class LongArrays {
+    public static int encodedLength(long[] longs) {
+      return 4 + 8 * longs.length;
+    }
+
+    public static void encode(ByteBuf buf, long[] longs) {
+      buf.writeInt(longs.length);
+      for (long i : longs) {
+        buf.writeLong(i);
+      }
+    }
+
+    public static long[] decode(ByteBuf buf) {
+      int numLongs = buf.readInt();
+      long[] longs = new long[numLongs];
+      for (int i = 0; i < longs.length; i ++) {
+        longs[i] = buf.readLong();
+      }
+      return longs;
+    }
+  }
 }

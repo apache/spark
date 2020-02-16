@@ -54,6 +54,10 @@ class TaskContext(object):
         return cls._taskContext
 
     @classmethod
+    def _setTaskContext(cls, taskContext):
+        cls._taskContext = taskContext
+
+    @classmethod
     def get(cls):
         """
         Return the currently active TaskContext. This can be called inside of
@@ -162,7 +166,10 @@ class BarrierTaskContext(TaskContext):
         running tasks.
 
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
+            An Exception will raise if it is not in a barrier stage.
         """
+        if not isinstance(cls._taskContext, BarrierTaskContext):
+            raise Exception('It is not in a barrier stage')
         return cls._taskContext
 
     @classmethod

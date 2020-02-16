@@ -72,7 +72,7 @@ class LocalSparkCluster(
     masters
   }
 
-  def stop() {
+  def stop(): Unit = {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
     workerRpcEnvs.foreach(_.shutdown())

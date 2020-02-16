@@ -75,6 +75,7 @@ class PythonEvalType(object):
     SQL_WINDOW_AGG_PANDAS_UDF = 203
     SQL_SCALAR_PANDAS_ITER_UDF = 204
     SQL_MAP_PANDAS_ITER_UDF = 205
+    SQL_COGROUPED_MAP_PANDAS_UDF = 206
 
 
 def portable_hash(x):
@@ -2436,17 +2437,23 @@ class RDD(object):
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
 
-    def toLocalIterator(self):
+    def toLocalIterator(self, prefetchPartitions=False):
         """
         Return an iterator that contains all of the elements in this RDD.
         The iterator will consume as much memory as the largest partition in this RDD.
+        With prefetch it may consume up to the memory of the 2 largest partitions.
+
+        :param prefetchPartitions: If Spark should pre-fetch the next partition
+                                   before it is needed.
 
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         with SCCallSiteSync(self.context) as css:
-            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
+                self._jrdd.rdd(),
+                prefetchPartitions)
         return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
 
     def barrier(self):
@@ -2527,6 +2534,20 @@ class RDDBarrier(object):
         def func(s, iterator):
             return f(iterator)
         return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+        .. note:: Experimental
+
+        Returns a new RDD by applying a function to each partition of the wrapped RDD, while
+        tracking the index of the original partition. And all tasks are launched together
+        in a barrier stage.
+        The interface is the same as :func:`RDD.mapPartitionsWithIndex`.
+        Please see the API doc there.
+
+        .. versionadded:: 3.0.0
+        """
+        return PipelinedRDD(self.rdd, f, preservesPartitioning, isFromBarrier=True)
 
 
 class PipelinedRDD(RDD):

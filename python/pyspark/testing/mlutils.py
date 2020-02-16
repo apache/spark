@@ -62,7 +62,7 @@ def check_params(test_self, py_stage, check_params_exist=True):
                 continue  # Random seeds between Spark and PySpark are different
             java_default = _java2py(test_self.sc,
                                     java_stage.clear(java_param).getOrDefault(java_param))
-            py_stage._clear(p)
+            py_stage.clear(p)
             py_default = py_stage.getOrDefault(p)
             # equality test for NaN is always False
             if isinstance(java_default, float) and np.isnan(java_default):

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -46,7 +47,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -343,7 +343,12 @@ case class DataSource(
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
         if (baseRelation.schema != schema) {
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+          throw new AnalysisException(
+            "The user-specified schema doesn't match the actual schema: " +
+            s"user-specified: ${schema.toDDL}, actual: ${baseRelation.schema.toDDL}. If " +
+            "you're using DataFrameReader.schema API or creating a table, please do not " +
+            "specify the schema. Or if you're scanning an existed table, please drop " +
+            "it and re-create it.")
         }
         baseRelation
 
@@ -378,8 +383,6 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val globbedPaths =
-          checkAndGlobPathIfNecessary(checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
         val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
@@ -391,6 +394,8 @@ case class DataSource(
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
           (index, catalogTable.get.dataSchema, catalogTable.get.partitionSchema)
         } else {
+          val globbedPaths = checkAndGlobPathIfNecessary(
+            checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
           val index = createInMemoryFileIndex(globbedPaths)
           val (resultDataSchema, resultPartitionSchema) =
             getOrInferFileFormatSchema(format, () => index)

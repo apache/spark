@@ -51,7 +51,7 @@ private[hive] object HiveShim {
   /*
    * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
-  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
+  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]): Unit = {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
     val result: StringBuilder = new StringBuilder(old)
     var first: Boolean = old.isEmpty
@@ -70,7 +70,7 @@ private[hive] object HiveShim {
   /*
    * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null
    */
-  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
+  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]): Unit = {
     if (ids != null) {
       ColumnProjectionUtils.appendReadColumns(conf, ids.asJava)
     }
@@ -201,7 +201,7 @@ private[hive] object HiveShim {
       }
     }
 
-    def writeExternal(out: java.io.ObjectOutput) {
+    def writeExternal(out: java.io.ObjectOutput): Unit = {
       // output the function name
       out.writeUTF(functionClassName)
 
@@ -220,7 +220,7 @@ private[hive] object HiveShim {
       }
     }
 
-    def readExternal(in: java.io.ObjectInput) {
+    def readExternal(in: java.io.ObjectInput): Unit = {
       // read the function name
       functionClassName = in.readUTF()
 
@@ -279,25 +279,25 @@ private[hive] object HiveShim {
     var compressType: String = _
     var destTableId: Int = _
 
-    def setCompressed(compressed: Boolean) {
+    def setCompressed(compressed: Boolean): Unit = {
       this.compressed = compressed
     }
 
     def getDirName(): String = dir
 
-    def setDestTableId(destTableId: Int) {
+    def setDestTableId(destTableId: Int): Unit = {
       this.destTableId = destTableId
     }
 
-    def setTableInfo(tableInfo: TableDesc) {
+    def setTableInfo(tableInfo: TableDesc): Unit = {
       this.tableInfo = tableInfo
     }
 
-    def setCompressCodec(intermediateCompressorCodec: String) {
+    def setCompressCodec(intermediateCompressorCodec: String): Unit = {
       compressCodec = intermediateCompressorCodec
     }
 
-    def setCompressType(intermediateCompressType: String) {
+    def setCompressType(intermediateCompressType: String): Unit = {
       compressType = intermediateCompressType
     }
   }

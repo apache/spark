@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -181,13 +182,16 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private var schedulerDriver: SchedulerDriver = _
 
+  private val defaultProfile = sc.resourceProfileManager.defaultResourceProfile
+
+
   def newMesosTaskId(): String = {
     val id = nextMesosTaskId
     nextMesosTaskId += 1
     id.toString
   }
 
-  override def start() {
+  override def start(): Unit = {
     super.start()
 
     if (sc.deployMode == "client") {
@@ -322,12 +326,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
+  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID): Unit = {}
 
   override def registered(
       driver: org.apache.mesos.SchedulerDriver,
       frameworkId: FrameworkID,
-      masterInfo: MasterInfo) {
+      masterInfo: MasterInfo): Unit = {
 
     this.appId = frameworkId.getValue
     this.mesosExternalShuffleClient.foreach(_.init(appId))
@@ -341,11 +345,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     totalCoreCount.get >= maxCoresOption.getOrElse(0) * minRegisteredRatio
   }
 
-  override def disconnected(d: org.apache.mesos.SchedulerDriver) {
+  override def disconnected(d: org.apache.mesos.SchedulerDriver): Unit = {
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
   }
 
-  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo) {
+  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo): Unit = {
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
@@ -353,7 +357,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
    */
-  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]) {
+  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]): Unit = {
     stateLock.synchronized {
       if (stopCalled) {
         logDebug("Ignoring offers during shutdown")
@@ -595,13 +599,16 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
+    val hostToLocalTaskCount =
+      rpHostToLocalTaskCount.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Map.empty)
     if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
       return true
     }
 
     // Check the locality information
     val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
-    val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+    val allDesiredHosts = hostToLocalTaskCount.map { case (k, v) => k }.toSet
+
     // Try to match locality for hosts which do not have executors yet, to potentially
     // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
@@ -613,7 +620,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     return true
   }
 
-  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
+  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus): Unit = {
     val taskId = status.getTaskId.getValue
     val slaveId = status.getSlaveId.getValue
     val state = mesosToTaskState(status.getState)
@@ -675,12 +682,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def error(d: org.apache.mesos.SchedulerDriver, message: String) {
+  override def error(d: org.apache.mesos.SchedulerDriver, message: String): Unit = {
     logError(s"Mesos error: $message")
     scheduler.error(message)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     stopSchedulerBackend()
     launcherBackend.setState(SparkAppHandle.State.FINISHED)
     launcherBackend.close()
@@ -722,7 +729,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
 
   /**
    * Called when a slave is lost or a Mesos task finished. Updates local view on
@@ -759,11 +766,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       super.applicationId
     }
 
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future.successful {
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]
+  ): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
-    logInfo("Capping the total amount of executors to " + requestedTotal)
-    executorLimitOption = Some(requestedTotal)
+    val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProfile, 0)
+    logInfo("Capping the total amount of executors to " + numExecs)
+    executorLimitOption = Some(numExecs)
     // Update the locality wait start time to continue trying for locality.
     localityWaitStartTimeNs = System.nanoTime()
     true

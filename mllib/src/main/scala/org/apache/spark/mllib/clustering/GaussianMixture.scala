@@ -234,6 +234,7 @@ class GaussianMixture private (
       iter += 1
       compute.destroy()
     }
+    breezeData.unpersist()
 
     new GaussianMixtureModel(weights, gaussians)
   }
@@ -271,7 +272,10 @@ class GaussianMixture private (
   private def initCovariance(x: IndexedSeq[BV[Double]]): BreezeMatrix[Double] = {
     val mu = vectorMean(x)
     val ss = BDV.zeros[Double](x(0).length)
-    x.foreach(xi => ss += (xi - mu) ^:^ 2.0)
+    x.foreach { xi =>
+      val d: BV[Double] = xi - mu
+      ss += d ^:^ 2.0
+    }
     diag(ss / x.length.toDouble)
   }
 }

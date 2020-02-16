@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
@@ -57,11 +59,17 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     createTestSecret()
     sparkAppConf
       .set(s"spark.kubernetes.driver.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.driver.secretKeyRef.USERNAME", s"$ENV_SECRET_NAME:username")
-      .set(s"spark.kubernetes.driver.secretKeyRef.PASSWORD", s"$ENV_SECRET_NAME:password")
+      .set(
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_1_CAP}",
+        s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_1}")
+      .set(
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_2_CAP}",
+        s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_2}")
       .set(s"spark.kubernetes.executor.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secretKeyRef.USERNAME", s"$ENV_SECRET_NAME:username")
-      .set(s"spark.kubernetes.executor.secretKeyRef.PASSWORD", s"$ENV_SECRET_NAME:password")
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_1_CAP}",
+        s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_1")
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_2_CAP}",
+        s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_2")
     try {
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
@@ -81,19 +89,30 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def checkSecrets(pod: Pod): Unit = {
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      implicit val podName: String = pod.getMetadata.getName
-      implicit val components: KubernetesTestComponents = kubernetesTestComponents
+    logDebug(s"Checking secrets for ${pod}")
+    // Wait for the pod to become ready & have secrets provisioned
+    implicit val podName: String = pod.getMetadata.getName
+    implicit val components: KubernetesTestComponents = kubernetesTestComponents
+    val env = Eventually.eventually(TIMEOUT, INTERVAL) {
+      logDebug(s"Checking env of ${pod.getMetadata().getName()} ....")
       val env = Utils.executeCommand("env")
-      assert(env.toString.contains(ENV_SECRET_VALUE_1))
-      assert(env.toString.contains(ENV_SECRET_VALUE_2))
-      val fileUsernameContents = Utils
-        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
-      val filePasswordContents = Utils
-        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
-      assert(fileUsernameContents.toString.trim.equals(ENV_SECRET_VALUE_1))
-      assert(filePasswordContents.toString.trim.equals(ENV_SECRET_VALUE_2))
+      assert(!env.isEmpty)
+      env
     }
+    env.toString should include (s"${ENV_SECRET_KEY_1_CAP}=$ENV_SECRET_VALUE_1")
+    env.toString should include (s"${ENV_SECRET_KEY_2_CAP}=$ENV_SECRET_VALUE_2")
+
+    // Make sure our secret files are mounted correctly
+    val files = Utils.executeCommand("ls", s"$SECRET_MOUNT_PATH")
+    files should include (ENV_SECRET_KEY_1)
+    files should include (ENV_SECRET_KEY_2)
+    // Validate the contents
+    val fileUsernameContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
+    fileUsernameContents.toString.trim should equal(ENV_SECRET_VALUE_1)
+    val filePasswordContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
+    filePasswordContents.toString.trim should equal(ENV_SECRET_VALUE_2)
   }
 }
 
@@ -102,6 +121,8 @@ private[spark] object SecretsTestsSuite {
   val SECRET_MOUNT_PATH = "/etc/secret"
   val ENV_SECRET_KEY_1 = "username"
   val ENV_SECRET_KEY_2 = "password"
+  val ENV_SECRET_KEY_1_CAP = ENV_SECRET_KEY_1.toUpperCase(Locale.ROOT)
+  val ENV_SECRET_KEY_2_CAP = ENV_SECRET_KEY_2.toUpperCase(Locale.ROOT)
   val ENV_SECRET_VALUE_1 = "secretusername"
   val ENV_SECRET_VALUE_2 = "secretpassword"
 }

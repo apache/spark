@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: Auxiliary Statements
+displayTitle: Auxiliary Statements
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +19,11 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+Besides the major SQL statements such as Data Definition Statements, Data Manipulation Statements and Data Retrieval Statements, Spark SQL also supports the following Auxiliary Statements:
+
+- [ANALYZE](sql-ref-syntax-aux-analyze.html)
+- [CACHE](sql-ref-syntax-aux-cache.html)
+- [DESCRIBE](sql-ref-syntax-aux-describe.html)
+- [SHOW](sql-ref-syntax-aux-show.html)
+- [CONFIGURATION MANAGEMENT](sql-ref-syntax-aux-conf-mgmt.html)
+- [RESOURCE MANAGEMENT](sql-ref-syntax-aux-resource-mgmt.html)

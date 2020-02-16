@@ -18,9 +18,12 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{Closeable, File, PrintWriter}
 import java.nio.file.{Files, Path}
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
+import io.fabric8.kubernetes.client.dsl.ExecListener
+import okhttp3.Response
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
@@ -45,20 +48,49 @@ object Utils extends Logging {
       implicit podName: String,
       kubernetesTestComponents: KubernetesTestComponents): String = {
     val out = new ByteArrayOutputStream()
-    val watch = kubernetesTestComponents
+    val pod = kubernetesTestComponents
       .kubernetesClient
       .pods()
       .withName(podName)
+    // Avoid timing issues by looking for open/close
+    class ReadyListener extends ExecListener {
+      val openLatch: CountDownLatch = new CountDownLatch(1)
+      val closeLatch: CountDownLatch = new CountDownLatch(1)
+
+      override def onOpen(response: Response) {
+        openLatch.countDown()
+      }
+
+      override def onClose(a: Int, b: String) {
+        closeLatch.countDown()
+      }
+
+      override def onFailure(e: Throwable, r: Response) {
+      }
+
+      def waitForInputStreamToConnect(): Unit = {
+        openLatch.await()
+      }
+
+      def waitForClose(): Unit = {
+        closeLatch.await()
+      }
+    }
+    val listener = new ReadyListener()
+    val watch = pod
       .readingInput(System.in)
       .writingOutput(out)
       .writingError(System.err)
       .withTTY()
+      .usingListener(listener)
       .exec(cmd.toArray: _*)
-    // wait to get some result back
-    Thread.sleep(1000)
+    // under load sometimes the stdout isn't connected by the time we try to read from it.
+    listener.waitForInputStreamToConnect()
+    listener.waitForClose()
     watch.close()
     out.flush()
-    out.toString()
+    val result = out.toString()
+    result
   }
 
   def createTempFile(contents: String, hostPath: String): String = {

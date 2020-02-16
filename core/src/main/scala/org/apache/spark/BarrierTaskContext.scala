@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.util.{Properties, Timer, TimerTask}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
@@ -210,6 +211,10 @@ class BarrierTaskContext private[spark] (
   }
 
   override def resources(): Map[String, ResourceInformation] = taskContext.resources()
+
+  override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
+    resources().asJava
+  }
 
   override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()
 

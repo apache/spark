@@ -73,7 +73,8 @@ This page displays the details of a specific job identified by its job ID.
 </p>
 
 * DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
-
+* An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
+ 
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
@@ -124,6 +125,8 @@ The stage detail page begins with information like total time across all tasks, 
 </p>
 
 There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
+Nodes are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
+Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
@@ -336,7 +339,7 @@ scala> spark.sql("select name,sum(count) from global_temp.df group by name").sho
 </p>
 
 Now the above three dataframe/SQL operators are shown in the list. If we click the
-'show at \<console\>: 24' link of the last query, we will see the DAG of the job.
+'show at \<console\>: 24' link of the last query, we will see the DAG and details of the query execution.
 
 <p style="text-align: center;">
   <img src="img/webui-sql-dag.png"
@@ -346,10 +349,12 @@ Now the above three dataframe/SQL operators are shown in the list. If we click t
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-We can see that details information of each stage. The first block 'WholeStageCodegen'  
-compile multiple operator ('LocalTableScan' and 'HashAggregate') together into a single Java
-function to improve performance, and metrics like number of rows and spill size are listed in
-the block. The second block 'Exchange' shows the metrics on the shuffle exchange, including
+The query details page displays information about the query execution time, its duration,
+the list of associated jobs, and the query execution DAG.
+The first block 'WholeStageCodegen (1)' compiles multiple operators ('LocalTableScan' and 'HashAggregate') together into a single Java
+function to improve performance, and metrics like number of rows and spill size are listed in the block.
+The annotation '(1)' in the block name is the code generation id.
+The second block 'Exchange' shows the metrics on the shuffle exchange, including
 number of written shuffle records, total data size, etc.
 
 
@@ -362,10 +367,88 @@ number of written shuffle records, total data size, etc.
 </p>
 Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
 illustrate how Spark parses, analyzes, optimizes and performs the query.
+Steps in the physical plan subject to whole stage code generation optimization, are prefixed by a star followed by
+the code generation id, for example: '*(1) LocalTableScan'
 
+### SQL metrics
+
+The metrics of SQL operators are shown in the block of physical operators. The SQL metrics can be useful
+when we want to dive into the execution details of each operator. For example, "number of output rows"
+can answer how many rows are output after a Filter operator, "shuffle bytes written total" in an Exchange
+operator shows the number of bytes written by a shuffle.
+
+Here is the list of SQL metrics:
+
+<table class="table">
+<tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr>
+<tr><td> <code>number of output rows</code> </td><td> the number of output rows of the operator </td><td> Aggregate operators, Join operators, Sample, Range, Scan operators, Filter, etc.</td></tr>
+<tr><td> <code>data size</code> </td><td> the size of broadcast/shuffled/collected data of the operator </td><td> BroadcastExchange, ShuffleExchange, Subquery </td></tr>
+<tr><td> <code>time to collect</code> </td><td> the time spent on collecting data </td><td> BroadcastExchange, Subquery </td></tr>
+<tr><td> <code>scan time</code> </td><td> the time spent on scanning data </td><td> ColumnarBatchScan, FileSourceScan </td></tr>
+<tr><td> <code>metadata time</code> </td><td> the time spent on getting metadata like number of partitions, number of files </td><td> FileSourceScan </td></tr>
+<tr><td> <code>shuffle bytes written</code> </td><td> the number of bytes written </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>shuffle records written</code> </td><td> the number of records written </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>shuffle write time</code> </td><td> the time spent on shuffle writing </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>remote blocks read</code> </td><td> the number of blocks read remotely </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange</td></tr>
+<tr><td> <code>remote bytes read</code> </td><td> the number of bytes read remotely </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>remote bytes read to disk</code> </td><td> the number of bytes read from remote to local disk </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>local blocks read</code> </td><td> the number of blocks read locally </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>local bytes read</code> </td><td> the number of bytes read locally </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>fetch wait time</code> </td><td> the time spent on fetching data (local and remote)</td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>records read</code> </td><td> the number of read records </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>sort time</code> </td><td> the time spent on sorting </td><td> Sort </td></tr>
+<tr><td> <code>peak memory</code> </td><td> the peak memory usage in the operator </td><td> Sort, HashAggregate </td></tr>
+<tr><td> <code>spill size</code> </td><td> number of bytes spilled to disk from memory in the operator </td><td> Sort, HashAggregate </td></tr>
+<tr><td> <code>time in aggregation build</code> </td><td> the time spent on aggregation </td><td> HashAggregate, ObjectHashAggregate </td></tr>
+<tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
+<tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
+<tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
+
+</table>
 
 ## Streaming Tab
 The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
 scheduling delay and processing time for each micro-batch in the data stream, which can be useful
 for troubleshooting the streaming application.
 
+## JDBC/ODBC Server Tab
+We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and submitted SQL operations.
+
+The first section of the page displays general information about the JDBC/ODBC server: start time and uptime.
+
+<p style="text-align: center;">
+  <img src="img/JDBCServer1.png" width="40%" title="JDBC/ODBC Header" alt="JDBC/ODBC Header">
+</p>
+
+The second section contains information about active and finished sessions.
+* **User** and **IP** of the connection.
+* **Session id** link to access to session info.
+* **Start time**, **finish time** and **duration** of the session.
+* **Total execute** is the number of operations submitted in this session.
+
+<p style="text-align: center;">
+  <img src="img/JDBCServer2.png" title="JDBC/ODBC sessions" alt="JDBC/ODBC sessions">
+</p>
+
+The third section has the SQL statistics of the submitted operations.
+* **User** that submit the operation.
+* **Job id** link to [jobs tab](web-ui.html#jobs-tab).
+* **Group id** of the query that group all jobs together. An application can cancel all running jobs using this group id.
+* **Start time** of the operation.
+* **Finish time** of the execution, before fetching the results.
+* **Close time** of the operation after fetching the results.
+* **Execution time** is the difference between finish time and start time.
+* **Duration time** is the difference between close time and start time.
+* **Statement** is the operation being executed.
+* **State** of the process.
+	* _Started_, first state, when the process begins.
+	* _Compiled_, execution plan generated.
+	* _Failed_, final state when the execution failed or finished with error.
+	* _Canceled_, final state when the execution is canceled.
+	* _Finished_ processing and waiting to fetch results.
+	* _Closed_, final state when client closed the statement.
+* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the SQL statement.
+
+<p style="text-align: center;">
+  <img src="img/JDBCServer3.png" title="JDBC/ODBC SQL Statistics" alt="JDBC/ODBC SQL Statistics">
+</p>

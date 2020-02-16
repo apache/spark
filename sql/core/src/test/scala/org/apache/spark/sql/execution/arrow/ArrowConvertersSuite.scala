@@ -1210,15 +1210,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   testQuietly("unsupported types") {
     def runUnsupported(block: => Unit): Unit = {
-      val msg = intercept[SparkException] {
+      val msg = intercept[UnsupportedOperationException] {
         block
       }
-      assert(msg.getMessage.contains("Unsupported data type"))
-      assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
+      assert(msg.getMessage.contains("is not supported"))
     }
 
-    runUnsupported { mapData.toDF().toArrowBatchRdd.collect() }
-    runUnsupported { complexData.toArrowBatchRdd.collect() }
+    runUnsupported { calenderIntervalData.toDF().toArrowBatchRdd.collect() }
   }
 
   test("test Arrow Validator") {
