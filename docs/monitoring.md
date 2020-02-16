@@ -95,25 +95,29 @@ The history server can be configured as follows:
   </tr>
 </table>
 
-### Applying compaction of old event log files
+### Applying compaction on rolling event log files
 
-A long-running streaming application can bring a huge single event log file which may cost a lot to maintain and
+A long-running application (e.g. streaming) can bring a huge single event log file which may cost a lot to maintain and
 also requires a bunch of resource to replay per each update in Spark History Server.
 
 Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.rolling.maxFileSize</code> would
-let you have multiple event log files instead of single huge event log file which may help some scenarios on its own,
+let you have rolling event log files instead of single huge event log file which may help some scenarios on its own,
 but it still doesn't help you reducing the overall size of logs.
 
 Spark History Server can apply 'compaction' on the rolling event log files to reduce the overall size of
 logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
 Spark History Server.
 
-When the compaction happens, History Server lists all the available event log files, and considers the event log files older than
-retained log files as a target of compaction. For example, if the application A has 5 event log files and
-<code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, first 3 log files will be selected to be compacted.
+Details will be described below, but please note in prior that 'compaction' is LOSSY operation.
+'Compaction' will discard some events which will be no longer seen on UI - you may want to check which events will be discarded
+before enabling the option.
 
-Once it selects the files, it analyzes these files to figure out which events can be excluded, and rewrites these files
-into one compact file with discarding some events. Once rewriting is done, original log files will be deleted.
+When the compaction happens, the History Server lists all the available event log files for the application, and considers
+the event log files having less index than the file with smallest index which will be retained as target of compaction.
+For example, if the application A has 5 event log files and <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, then first 3 log files will be selected to be compacted.
+
+Once it selects the target, it analyzes them to figure out which events can be excluded, and rewrites them
+into one compact file with discarding events which are decided to exclude.
 
 The compaction tries to exclude the events which point to the outdated things like jobs, and so on. As of now, below describes
 the candidates of events to be excluded:
@@ -122,16 +126,17 @@ the candidates of events to be excluded:
 * Events for the executor which is terminated
 * Events for the SQL execution which is finished, and related job/stage/tasks events
 
-but the details can be changed afterwards.
+Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
+the original log files, but it will not affect the operation of the History Server.
 
 Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
-would be reduced during compaction. For streaming query (including Structured Streaming) we normally expect compaction
+would be reduced during compaction. For streaming query we normally expect compaction
 will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
 in many cases for batch query.
 
-Please also note that this is a new feature introduced in Spark 3.0, and may not be completely stable. In some circumstance,
+Please also note that this is a new feature introduced in Spark 3.0, and may not be completely stable. Under some circumstances,
 the compaction may exclude more events than you expect, leading some UI issues on History Server for the application.
-Use with caution.
+Use it with caution.
 
 ### Spark History Server Configuration Options
 
