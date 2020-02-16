@@ -77,7 +77,7 @@ private[spark] abstract class ConfigEntry[T] (
 
   override def toString: String = {
     s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, " +
-      s"public=$isPublic, version = $version)"
+      s"public=$isPublic, version=$version)"
   }
 }
 

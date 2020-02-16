@@ -25,7 +25,7 @@ from mkdocs.structure.pages import markdown
 from pyspark.java_gateway import launch_gateway
 
 SQLConfEntry = namedtuple(
-    "SQLConfEntry", ["name", "default", "description"])
+    "SQLConfEntry", ["name", "default", "description", "version"])
 
 
 def get_public_sql_configs(jvm):
