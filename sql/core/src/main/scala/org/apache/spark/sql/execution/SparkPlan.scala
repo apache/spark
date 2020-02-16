@@ -514,11 +514,15 @@ trait LeafExecNode extends SparkPlan {
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
-     """.stripMargin
+    val result = s"""
+         |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+         |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       """.stripMargin
+    if (argumentString != null && !argumentString.isEmpty) {
+      s"""${result} |Arguments: $argumentString\n""".stripMargin
+    } else {
+      s"${result}"
+    }
   }
 }
 
@@ -535,11 +539,15 @@ trait UnaryExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Input", child.output)}
-       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
-     """.stripMargin
+    val result = s"""
+         |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+         |${ExplainUtils.generateFieldString("Input", child.output)}
+       """.stripMargin
+    if (argumentString != null && !argumentString.isEmpty) {
+      s"""${result} |Arguments: $argumentString\n""".stripMargin
+    } else {
+      s"${result}"
+    }
   }
 }
 
@@ -550,11 +558,15 @@ trait BinaryExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Left output", left.output)}
-       |${ExplainUtils.generateFieldString("Right output", right.output)}
-       |${ExplainUtils.generateFieldString("Arguments", argumentString)}
-     """.stripMargin
+    val result = s"""
+         |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+         |${ExplainUtils.generateFieldString("Left output", left.output)}
+         |${ExplainUtils.generateFieldString("Right output", right.output)}
+       """.stripMargin
+    if (argumentString != null && !argumentString.isEmpty) {
+      s"""${result} |Arguments: $argumentString\n""".stripMargin
+    } else {
+      s"${result}"
+    }
   }
 }
