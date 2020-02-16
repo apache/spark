@@ -575,11 +575,11 @@ private[hive] class TestHiveSparkSession(
 
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
-    logicalPlan: LogicalPlan)
-  extends QueryExecution(sparkSession, logicalPlan) with Logging {
+    val df: DataFrame)
+  extends QueryExecution(sparkSession, df.queryExecution.logical) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) {
-    this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
+    this(sparkSession, sparkSession.sql(sql))
   }
 
   def this(sql: String) {
@@ -642,7 +642,9 @@ private[sql] class TestHiveSessionStateBuilder(
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
   override def createQueryExecution: (LogicalPlan) => QueryExecution = { plan =>
-    new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
+    new TestHiveQueryExecution(
+      session.asInstanceOf[TestHiveSparkSession],
+      Dataset.ofRows(session, plan))
   }
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)

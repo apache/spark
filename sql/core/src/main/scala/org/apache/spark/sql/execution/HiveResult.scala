@@ -21,9 +21,10 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -36,27 +37,40 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(_: DescribeCommandBase) =>
-      // If it is a describe command for a Hive table, we want to have the output format
-      // be similar with Hive.
-      executedPlan.executeCollectPublic().map {
-        case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType,
-            Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s))
-            .mkString("\t")
-      }
-    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-      command.executeCollect().map(_.getString(1))
-    case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = executedPlan.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e)))
-        .map(_.mkString("\t"))
+  def hiveResultString[T](ds: Dataset[T]): Seq[String] = {
+    val executedPlan = ds.queryExecution.executedPlan
+    executedPlan match {
+      case ExecutedCommandExec(_: DescribeCommandBase) =>
+        // If it is a describe command for a Hive table, we want to have the output format
+        // be similar with Hive.
+        executedPlan.executeCollectPublic().map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
+      // SHOW TABLES in Hive only output table names,
+      // while ours output database, table name, isTemp.
+      case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+        command.executeCollect().map(_.getString(1))
+      case _ =>
+        val java8TimeConf = SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)
+        try {
+          SQLConf.get.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+          val result: Seq[Seq[Any]] = ds.filter(lit(true))
+            .queryExecution
+            .executedPlan
+            .executeCollectPublic().map(_.toSeq).toSeq
+          // We need the types so we can output struct field names
+          val types = executedPlan.output.map(_.dataType)
+          // Reformat to match hive tab delimited output.
+          result.map(_.zip(types).map(e => toHiveString(e)))
+            .map(_.mkString("\t"))
+        } finally {
+          SQLConf.get.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, java8TimeConf)
+        }
+    }
   }
 
   private lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)

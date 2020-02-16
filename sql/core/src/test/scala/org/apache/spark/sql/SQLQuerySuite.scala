@@ -190,7 +190,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
               val actual = unindentAndTrim(
-                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+                hiveResultString(df).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>

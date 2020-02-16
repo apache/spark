@@ -347,7 +347,7 @@ abstract class HiveComparisonTest
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
           def getResult(): Seq[String] = {
             SQLExecution.withNewExecutionId(
-              query.sparkSession, query)(hiveResultString(query.executedPlan))
+              query.sparkSession, query)(hiveResultString(query.df))
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
