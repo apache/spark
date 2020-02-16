@@ -24,7 +24,7 @@ license: |
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -34,7 +34,7 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+[SparkConf](api/scala/org/apache/spark/SparkConf.html) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application with two threads as follows:
@@ -1326,7 +1326,7 @@ Apart from these, the following properties are also available, and may be useful
     property is useful if you need to register your classes in a custom way, e.g. to specify a custom
     field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
     set to classes that extend
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <a href="api/scala/org/apache/spark/serializer/KryoRegistrator.html">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -1379,7 +1379,7 @@ Apart from these, the following properties are also available, and may be useful
     but is quite slow, so we recommend <a href="tuning.html">using
     <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
     when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <a href="api/scala/org/apache/spark/serializer/Serializer.html">
     <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
