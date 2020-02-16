@@ -16,7 +16,7 @@
 #
 
 # To run this example use
-# ./bin/spark-submit examples/src/main/r/ml/decisionTree.R
+# ./bin/spark-submit examples/src/main/r/ml/fmClassifier.R
 
 # Load SparkR library into your R session
 library(SparkR)
@@ -33,6 +33,13 @@ test <- df
 # Fit a FM classification model
 model <- spark.fmClassifier(df, label ~ features)
 
+# Model summary
+summary(model)
+
 # Prediction
 predictions <- predict(model, test)
+head(predictions)
+
 # $example off:classification$
+
+sparkR.session.stop()

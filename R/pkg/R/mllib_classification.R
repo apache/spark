@@ -656,7 +656,6 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
             write_internal(object, path, overwrite)
           })
 
-
 #' Factorization Machines Classification Model
 #'
 #' \code{spark.fmClassifier} fits a factorization classification model against a SparkDataFrame.
@@ -716,7 +715,7 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-#' @note spark.fmClassifier since 3.0.0
+#' @note spark.fmClassifier since 3.1.0
 setMethod("spark.fmClassifier", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, factorSize = 8, fitLinear = TRUE, regParam = 0.0,
                    miniBatchFraction = 1.0, initStd = 0.01, maxIter = 100, stepSize=1.0,

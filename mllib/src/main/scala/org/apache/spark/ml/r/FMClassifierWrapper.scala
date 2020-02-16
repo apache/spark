@@ -105,11 +105,13 @@ private[r] object FMClassifierWrapper
     // assemble and fit the pipeline
     val fmc = new FMClassifier()
       .setFactorSize(factorSize)
+      .setFitIntercept(fitIntercept)
       .setFitLinear(fitLinear)
       .setRegParam(regParam)
       .setMiniBatchFraction(miniBatchFraction)
       .setInitStd(initStd)
       .setMaxIter(maxIter)
+      .setStepSize(stepSize)
       .setTol(tol)
       .setSolver(solver)
       .setFitIntercept(fitIntercept)
@@ -117,7 +119,7 @@ private[r] object FMClassifierWrapper
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
 
-    if (seed != null) {
+    if (seed != null && seed.length > 0) {
       fmc.setSeed(seed.toLong)
     }
 
