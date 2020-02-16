@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -594,160 +594,84 @@ class AdaptiveQueryExecSuite
           .range(0, 1000, 1, 10)
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
-        val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
-        val innerSmj = findTopLevelSortMergeJoin(innerPlan)
-        assert(innerSmj.size == 1)
         // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
-        val innerSmjAfter = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        assert(innerSmjAfter.size == 1)
+        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        assert(innerSmj.size == 1 && !innerSmj.head.isSkewJoin)
       }
     }
   }
 
+  // TODO: we need a way to customize data distribution after shuffle, to improve test coverage
+  //       of this case.
   test("SPARK-29544: adaptive skew join with different join types") {
-    Seq("false", "true").foreach { reducePostShufflePartitionsEnabled =>
-      withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
-        SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> reducePostShufflePartitionsEnabled,
-        SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
-        withTempView("skewData1", "skewData2") {
-          spark
-            .range(0, 1000, 1, 10)
-            .selectExpr("id % 2 as key1", "id as value1")
-            .createOrReplaceTempView("skewData1")
-          spark
-            .range(0, 1000, 1, 10)
-            .selectExpr("id % 1 as key2", "id as value2")
-            .createOrReplaceTempView("skewData2")
-          // skewed inner join optimization
-          val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-            "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-          val innerSmj = findTopLevelSortMergeJoin(innerPlan)
-          assert(innerSmj.size == 1)
-          // left stats: [3496, 0, 0, 0, 4014]
-          // right stats:[6292, 0, 0, 0, 0]
-          // the partition 0 in both left and right side are all skewed.
-          // And divide into 5 splits both in left and right (the max splits number).
-          // So there are 5 x 5 smjs for partition 0.
-          // Partition 4 in left side is skewed and is divided into 5 splits.
-          // The right side of partition 4 is not skewed.
-          // So there are 5 smjs for partition 4.
-          // So total (25 + 5 + 1) smjs.
-          // Union
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //             .
-          //             .
-          //             .
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 2 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
 
-          val innerSmjAfter = findTopLevelSortMergeJoin(innerAdaptivePlan)
-          assert(innerSmjAfter.size == 31)
-
-          // skewed left outer join optimization
-          val (leftPlan, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
-            "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
-          val leftSmj = findTopLevelSortMergeJoin(leftPlan)
-          assert(leftSmj.size == 1)
-          // left stats: [3496, 0, 0, 0, 4014]
-          // right stats:[6292, 0, 0, 0, 0]
-          // The partition 0 in both left and right are all skewed.
-          // The partition 4 in left side is skewed.
-          // But for left outer join, we don't split the right partition even skewed.
-          // So the partition 0 in left side is divided into 5 splits(the max split number).
-          // the partition 4 in left side is divided into 5 splits(the max split number).
-          // So total (5 + 5 + 1) smjs.
-          // Union
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //             .
-          //             .
-          //             .
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-
-          val leftSmjAfter = findTopLevelSortMergeJoin(leftAdaptivePlan)
-          assert(leftSmjAfter.size == 11)
-
-          // skewed right outer join optimization
-          val (rightPlan, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
-            "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
-          val rightSmj = findTopLevelSortMergeJoin(rightPlan)
-          assert(rightSmj.size == 1)
-          // left stats: [3496, 0, 0, 0, 4014]
-          // right stats:[6292, 0, 0, 0, 0]
-          // The partition 0 in both left and right side are all skewed.
-          // And the partition 4 in left side is skewed.
-          // But for right outer join, we don't split the left partition even skewed.
-          // And divide right side into 5 splits(the max split number)
-          // So total 6 smjs.
-          // Union
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- CoalescedShuffleReader
-          //       +- ShuffleQueryStage
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //             .
-          //             .
-          //             .
-          // +- SortMergeJoin
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-          //   +- Sort
-          //     +- SkewedShuffleReader
-          //       +- ShuffleQueryStage
-
-          val rightSmjAfter = findTopLevelSortMergeJoin(rightAdaptivePlan)
-          assert(rightSmjAfter.size == 6)
+        def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
+          assert(joins.size == 1 && joins.head.isSkewJoin)
+          assert(joins.head.left.collect {
+            case r: SkewJoinShuffleReaderExec => r
+          }.head.partitionSpecs.length == expectedNumPartitions)
+          assert(joins.head.right.collect {
+            case r: SkewJoinShuffleReaderExec => r
+          }.head.partitionSpecs.length == expectedNumPartitions)
         }
+
+        // skewed inner join optimization
+        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, and divide into 5 splits, so
+        //              5 x 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // So total (25 + 1 + 5) partitions.
+        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        checkSkewJoin(innerSmj, 25 + 1 + 5)
+
+        // skewed left outer join optimization
+        val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, but left join can't split right side,
+        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // So total (5 + 1 + 5) partitions.
+        val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
+        checkSkewJoin(leftSmj, 5 + 1 + 5)
+
+        // skewed right outer join optimization
+        val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, but right join can't split left side,
+        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, but right join can't split left side, so just
+        //              1 partition.
+        // So total (5 + 1 + 1) partitions.
+        val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
+        checkSkewJoin(rightSmj, 5 + 1 + 1)
       }
     }
   }
@@ -780,4 +704,29 @@ class AdaptiveQueryExecSuite
       )
     }
   }
+
+  test("force apply AQE") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
+      assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
+
+  test("SPARK-30719: do not log warning if intentionally skip AQE") {
+    val testAppender = new LogAppender("aqe logging warning test when skip")
+    withLogAppender(testAppender) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
+        assert(!plan.isInstanceOf[AdaptiveSparkPlanExec])
+      }
+    }
+    assert(!testAppender.loggingEvents
+      .exists(msg => msg.getRenderedMessage.contains(
+        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
+        s" enabled but is not supported for")))
+  }
 }
+

@@ -165,6 +165,22 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Distinct window functions are not supported" :: Nil)
 
   errorTest(
+    "window aggregate function with filter predicate",
+    testRelation2.select(
+      WindowExpression(
+        AggregateExpression(
+          Count(UnresolvedAttribute("b")),
+          Complete,
+          isDistinct = false,
+          filter = Some(UnresolvedAttribute("b") > 1)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    "window aggregate function with filter predicate is not supported" :: Nil
+  )
+
+  errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
     "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
@@ -191,12 +207,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
 
   errorTest(
-    "DISTINCT and FILTER cannot be used in aggregate functions at the same time",
+    "DISTINCT aggregate function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE c > 1) FROM TaBlE2"),
     "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
 
   errorTest(
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
+    "non-deterministic filter predicate in aggregate functions",
     CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 

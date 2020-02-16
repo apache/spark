@@ -646,17 +646,18 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: update column type, comment and position") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c " +
-        "TYPE bigint COMMENT 'new comment' AFTER d"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(LongType),
-        None,
-        Some("new comment"),
-        Some(after("d"))))
+  test("alter table: mutiple property changes are not allowed") {
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment'")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT AFTER d")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment' AFTER d")}
   }
 
   test("alter table: SET/DROP NOT NULL") {
@@ -698,7 +699,7 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("alter table: hive style") {
+  test("alter table: hive style change column") {
     val sql1 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT"
     val sql2 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT COMMENT 'new_comment'"
     val sql3 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT AFTER other_col"
@@ -739,6 +740,52 @@ class DDLParserSuite extends AnalysisTest {
 
     // ALTER COLUMN for a partition is not supported.
     intercept("ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT")
+  }
+
+  test("alter table: hive style replace columns") {
+    val sql1 = "ALTER TABLE table_name REPLACE COLUMNS (x string)"
+    val sql2 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1')"
+    val sql3 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1', y int)"
+    val sql4 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1', y int COMMENT 'y1')"
+
+    comparePlans(
+      parsePlan(sql1),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(QualifiedColType(Seq("x"), StringType, true, None, None))))
+
+    comparePlans(
+      parsePlan(sql2),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(QualifiedColType(Seq("x"), StringType, true, Some("x1"), None))))
+
+    comparePlans(
+      parsePlan(sql3),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(
+          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
+          QualifiedColType(Seq("y"), IntegerType, true, None, None)
+        )))
+
+    comparePlans(
+      parsePlan(sql4),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(
+          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
+          QualifiedColType(Seq("y"), IntegerType, true, Some("y1"), None)
+        )))
+
+    intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
+      "Operation not allowed: ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (x string NOT NULL)",
+      "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)",
+      "Column position is not supported in Hive-style REPLACE COLUMNS")
   }
 
   test("alter table/view: rename table/view") {
