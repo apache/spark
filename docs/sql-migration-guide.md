@@ -737,11 +737,11 @@ and writing data out (`DataFrame.write`),
 and deprecated the old APIs (e.g., `SQLContext.parquetFile`, `SQLContext.jsonFile`).
 
 See the API docs for `SQLContext.read` (
-  <a href="api/scala/index.html#org.apache.spark.sql.SQLContext@read:DataFrameReader">Scala</a>,
+  <a href="api/scala/org/apache/spark/sql/SQLContext.html#read:DataFrameReader">Scala</a>,
   <a href="api/java/org/apache/spark/sql/SQLContext.html#read()">Java</a>,
   <a href="api/python/pyspark.sql.html#pyspark.sql.SQLContext.read">Python</a>
 ) and `DataFrame.write` (
-  <a href="api/scala/index.html#org.apache.spark.sql.DataFrame@write:DataFrameWriter">Scala</a>,
+  <a href="api/scala/org/apache/spark/sql/DataFrame.html#write:DataFrameWriter">Scala</a>,
   <a href="api/java/org/apache/spark/sql/Dataset.html#write()">Java</a>,
   <a href="api/python/pyspark.sql.html#pyspark.sql.DataFrame.write">Python</a>
 ) more information.
