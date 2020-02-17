@@ -60,8 +60,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       sourceAttributes: Seq[Attribute],
       providedPartitions: Map[String, Option[String]],
       targetAttributes: Seq[Attribute],
-      targetPartitionSchema: StructType,
-      conf: SQLConf): Seq[NamedExpression] = {
+      targetPartitionSchema: StructType): Seq[NamedExpression] = {
 
     assert(providedPartitions.exists(_._2.isDefined))
 
@@ -184,8 +183,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
           sourceAttributes = query.output,
           providedPartitions = parts,
           targetAttributes = l.output,
-          targetPartitionSchema = t.partitionSchema,
-          conf)
+          targetPartitionSchema = t.partitionSchema)
         Project(projectList, query)
       } else {
         query
