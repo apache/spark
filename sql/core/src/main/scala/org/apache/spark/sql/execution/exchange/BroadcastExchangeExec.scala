@@ -73,8 +73,8 @@ case class BroadcastExchangeExec(
 
   @transient
   private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
-    val task = SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
-      sqlContext.sparkSession) {
+    SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
+      sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
       try {
         // Setup a job group here so later it may get cancelled by groupId if necessary.
         sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
@@ -142,7 +142,6 @@ case class BroadcastExchangeExec(
           throw e
       }
     }
-    BroadcastExchangeExec.executionContext.submit[broadcast.Broadcast[Any]](task)
   }
 
   override protected def doPrepare(): Unit = {
