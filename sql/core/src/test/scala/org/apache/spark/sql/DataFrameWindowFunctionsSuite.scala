@@ -21,8 +21,9 @@ import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -31,7 +32,9 @@ import org.apache.spark.sql.types._
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameWindowFunctionsSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper{
 
   import testImplicits._
 
@@ -412,6 +415,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
         Row("b", 2, 4, 8)))
   }
 
+  test("window function with aggregator") {
+    val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
+      def zero: Long = 0L
+      def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
+      def merge(b1: Long, b2: Long): Long = b1 + b2
+      def finish(r: Long): Long = r
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    })
+
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        agg($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
+  }
+
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
       .toDF("key", "value")
@@ -680,7 +719,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
           .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
 
         val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
-        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+        val actualNumExchanges = stripAQEPlan(select.queryExecution.executedPlan).collect {
           case e: Exchange => e
         }.length
         assert(actualNumExchanges == expectedNumExchanges)

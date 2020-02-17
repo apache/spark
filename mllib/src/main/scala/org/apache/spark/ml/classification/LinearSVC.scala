@@ -32,7 +32,7 @@ import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{Dataset, Row}
@@ -170,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),

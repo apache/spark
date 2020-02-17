@@ -183,7 +183,7 @@ class WorkerReuseTest(PySparkTestCase):
 class WorkerMemoryTest(PySparkTestCase):
 
     def test_memory_limit(self):
-        self.sc._conf.set("spark.executor.pyspark.memory", "1m")
+        self.sc._conf.set("spark.executor.pyspark.memory", "2g")
         rdd = self.sc.parallelize(xrange(1), 1)
 
         def getrlimit():
@@ -194,8 +194,8 @@ class WorkerMemoryTest(PySparkTestCase):
         self.assertTrue(len(actual) == 1)
         self.assertTrue(len(actual[0]) == 2)
         [(soft_limit, hard_limit)] = actual
-        self.assertEqual(soft_limit, 1024 * 1024)
-        self.assertEqual(hard_limit, 1024 * 1024)
+        self.assertEqual(soft_limit, 2 * 1024 * 1024 * 1024)
+        self.assertEqual(hard_limit, 2 * 1024 * 1024 * 1024)
 
 
 if __name__ == "__main__":

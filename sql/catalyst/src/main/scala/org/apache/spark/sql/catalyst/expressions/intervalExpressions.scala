@@ -125,34 +125,22 @@ abstract class IntervalNumOperation(
   override def nullable: Boolean = true
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    try {
-      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    } catch {
-      case _: java.lang.ArithmeticException => null
-    }
+    operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (interval, num) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"""
-        try {
-          ${ev.value} = $iu.$operationName($interval, $num);
-        } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (interval, num) => s"$iu.$operationName($interval, $num)")
   }
 
-  override def prettyName: String = operationName + "_interval"
+  override def prettyName: String = operationName.stripSuffix("Exact") + "_interval"
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiply, "multiply")
+  extends IntervalNumOperation(interval, num, multiplyExact, "multiplyExact")
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divide, "divide")
+  extends IntervalNumOperation(interval, num, divideExact, "divideExact")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(

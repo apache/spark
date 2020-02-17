@@ -2,243 +2,243 @@
 -- Number of queries: 35
 
 
--- !query 0
+-- !query
 CREATE TABLE CASE_TBL (
   i integer,
   f double
 ) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE TABLE CASE2_TBL (
   i integer,
   j integer
 ) USING parquet
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO CASE_TBL VALUES (1, 10.1)
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO CASE_TBL VALUES (2, 20.2)
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO CASE_TBL VALUES (3, -30.3)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO CASE_TBL VALUES (4, NULL)
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 INSERT INTO CASE2_TBL VALUES (1, -1)
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 INSERT INTO CASE2_TBL VALUES (2, -2)
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 INSERT INTO CASE2_TBL VALUES (3, -3)
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 INSERT INTO CASE2_TBL VALUES (2, -4)
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 INSERT INTO CASE2_TBL VALUES (1, NULL)
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 INSERT INTO CASE2_TBL VALUES (NULL, -6)
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 
 
 
--- !query 12
+-- !query
 SELECT '3' AS `One`,
   CASE
     WHEN 1 < 2 THEN 3
   END AS `Simple WHEN`
--- !query 12 schema
+-- !query schema
 struct<One:string,Simple WHEN:int>
--- !query 12 output
+-- !query output
 3	3
 
 
--- !query 13
+-- !query
 SELECT '<NULL>' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
   END AS `Simple default`
--- !query 13 schema
+-- !query schema
 struct<One:string,Simple default:int>
--- !query 13 output
+-- !query output
 <NULL>	NULL
 
 
--- !query 14
+-- !query
 SELECT '3' AS `One`,
   CASE
     WHEN 1 < 2 THEN 3
     ELSE 4
   END AS `Simple ELSE`
--- !query 14 schema
+-- !query schema
 struct<One:string,Simple ELSE:int>
--- !query 14 output
+-- !query output
 3	3
 
 
--- !query 15
+-- !query
 SELECT '4' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
     ELSE 4
   END AS `ELSE default`
--- !query 15 schema
+-- !query schema
 struct<One:string,ELSE default:int>
--- !query 15 output
+-- !query output
 4	4
 
 
--- !query 16
+-- !query
 SELECT '6' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
     WHEN 4 < 5 THEN 6
     ELSE 7
   END AS `Two WHEN with default`
--- !query 16 schema
+-- !query schema
 struct<One:string,Two WHEN with default:int>
--- !query 16 output
+-- !query output
 6	6
 
 
--- !query 17
+-- !query
 SELECT '7' AS `None`,
   CASE WHEN rand() < 0 THEN 1
   END AS `NULL on no matches`
--- !query 17 schema
+-- !query schema
 struct<None:string,NULL on no matches:int>
--- !query 17 output
+-- !query output
 7	NULL
 
 
--- !query 18
+-- !query
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
--- !query 18 schema
+-- !query schema
 struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
--- !query 18 output
+-- !query output
 1.0
 
 
--- !query 19
+-- !query
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
--- !query 19 schema
+-- !query schema
 struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
--- !query 19 output
+-- !query output
 1.0
 
 
--- !query 20
+-- !query
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
--- !query 20 schema
+-- !query schema
 struct<CASE WHEN (i > 100) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) ELSE CAST(0 AS DOUBLE) END:double>
--- !query 20 output
+-- !query output
 0.0
 0.0
 0.0
 0.0
 
 
--- !query 21
+-- !query
 SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END
--- !query 21 schema
+-- !query schema
 struct<CASE WHEN (a = a) THEN 1 ELSE 2 END:int>
--- !query 21 output
+-- !query output
 1
 
 
--- !query 22
+-- !query
 SELECT '' AS `Five`,
   CASE
     WHEN i >= 3 THEN i
   END AS `>= 3 or Null`
   FROM CASE_TBL
--- !query 22 schema
+-- !query schema
 struct<Five:string,>= 3 or Null:int>
--- !query 22 output
+-- !query output
 	3
 	4
 	NULL
 	NULL
 
 
--- !query 23
+-- !query
 SELECT '' AS `Five`,
   CASE WHEN i >= 3 THEN (i + i)
        ELSE i
   END AS `Simplest Math`
   FROM CASE_TBL
--- !query 23 schema
+-- !query schema
 struct<Five:string,Simplest Math:int>
--- !query 23 output
+-- !query output
 	1
 	2
 	6
 	8
 
 
--- !query 24
+-- !query
 SELECT '' AS `Five`, i AS `Value`,
   CASE WHEN (i < 0) THEN 'small'
        WHEN (i = 0) THEN 'zero'
@@ -247,16 +247,16 @@ SELECT '' AS `Five`, i AS `Value`,
        ELSE 'big'
   END AS `Category`
   FROM CASE_TBL
--- !query 24 schema
+-- !query schema
 struct<Five:string,Value:int,Category:string>
--- !query 24 output
+-- !query output
 	1	one
 	2	two
 	3	big
 	4	big
 
 
--- !query 25
+-- !query
 SELECT '' AS `Five`,
   CASE WHEN ((i < 0) or (i < 0)) THEN 'small'
        WHEN ((i = 0) or (i = 0)) THEN 'zero'
@@ -265,37 +265,37 @@ SELECT '' AS `Five`,
        ELSE 'big'
   END AS `Category`
   FROM CASE_TBL
--- !query 25 schema
+-- !query schema
 struct<Five:string,Category:string>
--- !query 25 output
+-- !query output
 	big
 	big
 	one
 	two
 
 
--- !query 26
+-- !query
 SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4
--- !query 26 schema
+-- !query schema
 struct<i:int,f:double>
--- !query 26 output
+-- !query output
 4	NULL
 
 
--- !query 27
+-- !query
 SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2
--- !query 27 schema
+-- !query schema
 struct<i:int,f:double>
--- !query 27 output
+-- !query output
 
 
 
--- !query 28
+-- !query
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b
--- !query 28 schema
+-- !query schema
 struct<coalesce(f, CAST(i AS DOUBLE), CAST(j AS DOUBLE)):double>
--- !query 28 output
+-- !query output
 -30.3
 -30.3
 -30.3
@@ -322,24 +322,24 @@ struct<coalesce(f, CAST(i AS DOUBLE), CAST(j AS DOUBLE)):double>
 3.0
 
 
--- !query 29
+-- !query
 SELECT *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(a.f, b.i, b.j) = 2
--- !query 29 schema
+-- !query schema
 struct<i:int,f:double,i:int,j:int>
--- !query 29 output
+-- !query output
 4	NULL	2	-2
 4	NULL	2	-4
 
 
--- !query 30
+-- !query
 SELECT '' AS Five, NULLIF(a.i,b.i) AS `NULLIF(a.i,b.i)`,
   NULLIF(b.i, 4) AS `NULLIF(b.i,4)`
   FROM CASE_TBL a, CASE2_TBL b
--- !query 30 schema
+-- !query schema
 struct<Five:string,NULLIF(a.i,b.i):int,NULLIF(b.i,4):int>
--- !query 30 output
+-- !query output
 	1	2
 	1	2
 	1	3
@@ -366,18 +366,18 @@ struct<Five:string,NULLIF(a.i,b.i):int,NULLIF(b.i,4):int>
 	NULL	3
 
 
--- !query 31
+-- !query
 SELECT '' AS `Two`, *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(f,b.i) = 2
--- !query 31 schema
+-- !query schema
 struct<Two:string,i:int,f:double,i:int,j:int>
--- !query 31 output
+-- !query output
 	4	NULL	2	-2
 	4	NULL	2	-4
 
 
--- !query 32
+-- !query
 SELECT CASE
   (CASE vol('bar')
     WHEN 'foo' THEN 'it was foo!'
@@ -387,23 +387,23 @@ SELECT CASE
   WHEN 'it was foo!' THEN 'foo recognized'
   WHEN 'it was bar!' THEN 'bar recognized'
   ELSE 'unrecognized' END
--- !query 32 schema
+-- !query schema
 struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
--- !query 32 output
+-- !query output
 bar recognized
 
 
--- !query 33
+-- !query
 DROP TABLE CASE_TBL
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 
 
 
--- !query 34
+-- !query
 DROP TABLE CASE2_TBL
--- !query 34 schema
+-- !query schema
 struct<>
--- !query 34 output
+-- !query output
 

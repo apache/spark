@@ -96,7 +96,7 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_registration_return_type_not_none(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, "Invalid returnType"):
+            with self.assertRaisesRegexp(TypeError, "Invalid return type"):
                 self.spark.catalog.registerFunction(
                     "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType())
 

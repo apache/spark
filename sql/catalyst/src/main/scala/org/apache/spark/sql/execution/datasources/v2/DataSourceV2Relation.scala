@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
@@ -32,12 +32,17 @@ import org.apache.spark.util.Utils
  * A logical plan representing a data source v2 table.
  *
  * @param table   The table that this relation represents.
+ * @param output the output attributes of this relation.
+ * @param catalog catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier the identifier for the table. None if no identifier is defined.
  * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
  *                and [[WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
@@ -137,12 +142,20 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier],
+      options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, options)
+    DataSourceV2Relation(table, output, catalog, identifier, options)
   }
 
-  def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier]): DataSourceV2Relation =
+    create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

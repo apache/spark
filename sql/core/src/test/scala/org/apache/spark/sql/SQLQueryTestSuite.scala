@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.util.{Locale, TimeZone}
+import java.util.regex.Pattern
 
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -62,7 +64,12 @@ import org.apache.spark.tags.ExtendedSQLTest
  * }}}
  *
  * The format for input files is simple:
- *  1. A list of SQL queries separated by semicolon.
+ *  1. A list of SQL queries separated by semicolons by default. If the semicolon cannot effectively
+ *     separate the SQL queries in the test file(e.g. bracketed comments), please use
+ *     --QUERY-DELIMITER-START and --QUERY-DELIMITER-END. Lines starting with
+ *     --QUERY-DELIMITER-START and --QUERY-DELIMITER-END represent the beginning and end of a query,
+ *     respectively. Code that is not surrounded by lines that begin with --QUERY-DELIMITER-START
+ *     and --QUERY-DELIMITER-END is still separated by semicolons.
  *  2. Lines starting with -- are treated as comments and ignored.
  *  3. Lines starting with --SET are used to specify the configs when running this testing file. You
  *     can set multiple configs in one --SET, using comma to separate them. Or you can use multiple
@@ -87,16 +94,16 @@ import org.apache.spark.tags.ExtendedSQLTest
  * {{{
  *   -- some header information
  *
- *   -- !query 0
+ *   -- !query
  *   select 1, -1
- *   -- !query 0 schema
+ *   -- !query schema
  *   struct<...schema...>
- *   -- !query 0 output
+ *   -- !query output
  *   ... data row 1 ...
  *   ... data row 2 ...
  *   ...
  *
- *   -- !query 1
+ *   -- !query
  *   ...
  * }}}
  *
@@ -159,13 +166,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** A single SQL query's output. */
   protected case class QueryOutput(sql: String, schema: String, output: String) {
-    def toString(queryIndex: Int): String = {
+    override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      s"-- !query $queryIndex\n" +
+      s"-- !query\n" +
         sql + "\n" +
-        s"-- !query $queryIndex schema\n" +
+        s"-- !query schema\n" +
         schema + "\n" +
-        s"-- !query $queryIndex output\n" +
+        s"-- !query output\n" +
         output
     }
   }
@@ -246,9 +253,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** Run a test case. */
   protected def runTest(testCase: TestCase): Unit = {
+    def splitWithSemicolon(seq: Seq[String]) = {
+      seq.mkString("\n").split("(?<=[^\\\\]);")
+    }
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
+    val (comments, code) = input.split("\n").partition { line =>
+      val newLine = line.trim
+      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
+    }
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -261,10 +274,38 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       }
     }.flatten
 
+    val allCode = importedCode ++ code
+    val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      // Although the loop is heavy, only used for bracketed comments test.
+      val querys = new ArrayBuffer[String]
+      val otherCodes = new ArrayBuffer[String]
+      var tempStr = ""
+      var start = false
+      for (c <- allCode) {
+        if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
+          start = true
+          querys ++= splitWithSemicolon(otherCodes.toSeq)
+          otherCodes.clear()
+        } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
+          start = false
+          querys += s"\n${tempStr.stripSuffix(";")}"
+          tempStr = ""
+        } else if (start) {
+          tempStr += s"\n$c"
+        } else {
+          otherCodes += c
+        }
+      }
+      if (otherCodes.nonEmpty) {
+        querys ++= splitWithSemicolon(otherCodes.toSeq)
+      }
+      querys.toSeq
+    } else {
+      splitWithSemicolon(allCode).toSeq
+    }
+
     // List of SQL queries to run
-    // note: this is not a robust way to split queries using semicolon, but works for now.
-    val queries = (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);")
-      .map(_.trim).filter(_ != "").toSeq
+    val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
@@ -337,6 +378,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
+    localSparkSession.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
 
     if (configSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs
@@ -360,7 +402,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val goldenOutput = {
         s"-- Automatically generated by ${getClass.getSimpleName}\n" +
         s"-- Number of queries: ${outputs.size}\n\n\n" +
-        outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
+        outputs.zipWithIndex.map{case (qr, i) => qr.toString}.mkString("\n\n\n") + "\n"
       }
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
@@ -391,7 +433,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       // Read back the golden file.
       val expectedOutputs: Seq[QueryOutput] = {
         val goldenOutput = fileToString(new File(testCase.resultFile))
-        val segments = goldenOutput.split("-- !query.+\n")
+        val segments = goldenOutput.split("-- !query.*\n")
 
         // each query has 3 segments, plus the header
         assert(segments.size == outputs.size * 3 + 1,
@@ -419,9 +461,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           s"Schema did not match for query #$i\n${expected.sql}: $output") {
           output.schema
         }
-        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-          output.output
-        }
+        assertResult(expected.output, s"Result did not match" +
+          s" for query #$i\n${expected.sql}") { output.output }
       }
     }
   }
@@ -461,7 +502,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
-          | _: DescribeTableStatement
+          | _: DescribeRelation
           | _: DescribeColumnStatement => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
@@ -470,7 +511,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-    val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+    val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
       hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
     }
 

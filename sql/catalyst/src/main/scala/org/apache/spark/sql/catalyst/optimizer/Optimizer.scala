@@ -53,7 +53,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       "PartitionPruning",
       "Extract Python UDFs")
 
-  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
+  protected def fixedPoint =
+    FixedPoint(
+      SQLConf.get.optimizerMaxIterations,
+      maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
    * Defines the default rule batches in the Optimizer.
@@ -128,6 +131,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSubqueryAliases,
       EliminateView,
       ReplaceExpressions,
+      RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabase(catalogManager),
       RewriteDistinctAggregates,

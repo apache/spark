@@ -139,8 +139,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    // overlapping maps should remove duplicated map keys w.r.t. last win policy.
-    checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      // overlapping maps should remove duplicated map keys w.r.t. last win policy.
+      checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    }
 
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
@@ -272,8 +274,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai1), create_map(1 -> null, 2 -> 20, 3 -> null))
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
@@ -294,8 +298,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as1), create_map("a" -> null, "b" -> "bb", "c" -> null))
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),
@@ -733,7 +739,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negate(stringToInterval("interval 12 hours")))),
+      Literal(negateExact(stringToInterval("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -742,7 +748,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
       Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
-      Literal(negate(stringToInterval("interval 12 hours")))),
+      Literal(negateExact(stringToInterval("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -760,7 +766,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negate(stringToInterval("interval 1 month")))),
+      Literal(negateExact(stringToInterval("interval 1 month")))),
       Seq(
         Timestamp.valueOf("2018-03-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
@@ -769,7 +775,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-03-03 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negate(stringToInterval("interval 1 month 1 day")))),
+      Literal(negateExact(stringToInterval("interval 1 month 1 day")))),
       Seq(
         Timestamp.valueOf("2018-03-03 00:00:00"),
         Timestamp.valueOf("2018-02-02 00:00:00"),
@@ -815,7 +821,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
       Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
-      Literal(negate(fromYearMonthString("1-5")))),
+      Literal(negateExact(fromYearMonthString("1-5")))),
       Seq(
         Timestamp.valueOf("2022-04-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
@@ -907,7 +913,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         new Sequence(
           Literal(Date.valueOf("1970-01-01")),
           Literal(Date.valueOf("1970-02-01")),
-          Literal(negate(stringToInterval("interval 1 month")))),
+          Literal(negateExact(stringToInterval("interval 1 month")))),
         EmptyRow,
         s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
     }

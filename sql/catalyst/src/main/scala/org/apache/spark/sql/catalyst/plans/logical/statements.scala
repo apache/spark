@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.ViewType
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -145,6 +145,7 @@ case class ReplaceTableAsSelectStatement(
 case class QualifiedColType(
     name: Seq[String],
     dataType: DataType,
+    nullable: Boolean,
     comment: Option[String],
     position: Option[ColumnPosition])
 
@@ -155,6 +156,10 @@ case class AlterTableAddColumnsStatement(
     tableName: Seq[String],
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
+case class AlterTableReplaceColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
 /**
  * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
  */
@@ -162,6 +167,7 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
+    nullable: Option[Boolean],
     comment: Option[String],
     position: Option[ColumnPosition]) extends ParsedStatement
 
@@ -291,21 +297,6 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name statement, as parsed from SQL.
- */
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
-
-/**
- * A DESCRIBE NAMESPACE statement, as parsed from SQL.
- */
-case class DescribeNamespaceStatement(
-    namespace: Seq[String],
-    extended: Boolean) extends ParsedStatement
-
-/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
@@ -344,12 +335,6 @@ case class InsertIntoStatement(
 }
 
 /**
- * A SHOW TABLES statement, as parsed from SQL.
- */
-case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
-
-/**
  * A SHOW TABLE EXTENDED statement, as parsed from SQL.
  */
 case class ShowTableStatement(
@@ -365,34 +350,6 @@ case class CreateNamespaceStatement(
     namespace: Seq[String],
     ifNotExists: Boolean,
     properties: Map[String, String]) extends ParsedStatement
-
-/**
- * A DROP NAMESPACE statement, as parsed from SQL.
- */
-case class DropNamespaceStatement(
-    namespace: Seq[String],
-    ifExists: Boolean,
-    cascade: Boolean) extends ParsedStatement
-
-/**
- * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
- */
-case class AlterNamespaceSetPropertiesStatement(
-    namespace: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
- */
-case class AlterNamespaceSetLocationStatement(
-    namespace: Seq[String],
-    location: String) extends ParsedStatement
-
-/**
- * A SHOW NAMESPACES statement, as parsed from SQL.
- */
-case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
 
 /**
  * A USE statement, as parsed from SQL.
@@ -436,7 +393,9 @@ case class LoadDataStatement(
 /**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
  */
-case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+case class ShowCreateTableStatement(
+    tableName: Seq[String],
+    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL
@@ -486,13 +445,6 @@ case class ShowColumnsStatement(
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
 
 /**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
- */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
-
-/**
  * A DESCRIBE FUNCTION statement, as parsed from SQL
  */
 case class DescribeFunctionStatement(
@@ -515,3 +467,14 @@ case class DropFunctionStatement(
     functionName: Seq[String],
     ifExists: Boolean,
     isTemp: Boolean) extends ParsedStatement
+
+/**
+ *  CREATE FUNCTION statement, as parsed from SQL
+ */
+case class CreateFunctionStatement(
+    functionName: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    isTemp: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends ParsedStatement

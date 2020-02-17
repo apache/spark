@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -51,7 +52,9 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSparkSession {
+class DatasetSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -1880,7 +1883,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(df3, DoubleData(1, "onetwo"))
 
     // Assert that no extra shuffle introduced by cogroup.
-    val exchanges = df3.queryExecution.executedPlan.collect {
+    val exchanges = collect(df3.queryExecution.executedPlan) {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
@@ -1895,6 +1898,16 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("tail should not accept minus value") {
     val e = intercept[AnalysisException](spark.range(1).tail(-1))
     e.getMessage.contains("tail expression must be equal to or greater than 0")
+  }
+
+  test("SparkSession.active should be the same instance after dataset operations") {
+    val active = SparkSession.getActiveSession.get
+    val clone = active.cloneSession()
+    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+
+    ds.queryExecution.analyzed
+
+    assert(active eq SparkSession.getActiveSession.get)
   }
 }
 

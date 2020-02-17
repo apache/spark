@@ -21,8 +21,8 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * Represents a table which is staged for being committed to the metastore.
@@ -32,10 +32,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@link StagingTableCatalog#stageCreate(Identifier, StructType, Transform[], Map)} or
  * {@link StagingTableCatalog#stageReplace(Identifier, StructType, Transform[], Map)} to prepare the
  * table for being written to. This table should usually implement {@link SupportsWrite}. A new
- * writer will be constructed via {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)},
- * and the write will be committed. The job concludes with a call to {@link #commitStagedChanges()},
- * at which point implementations are expected to commit the table's metadata into the metastore
- * along with the data that was written by the writes from the write builder this table created.
+ * writer will be constructed via {@link SupportsWrite#newWriteBuilder(LogicalWriteInfo)}, and the
+ * write will be committed. The job concludes with a call to {@link #commitStagedChanges()}, at
+ * which point implementations are expected to commit the table's metadata into the metastore along
+ * with the data that was written by the writes from the write builder this table created.
  */
 @Experimental
 public interface StagedTable extends Table {

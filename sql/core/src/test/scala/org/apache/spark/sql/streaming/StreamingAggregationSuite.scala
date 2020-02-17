@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable
 
@@ -397,15 +397,16 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
+    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(($"value" * SECONDS_PER_DAY).cast("timestamp").as("value"))
+        .select(to_utc_timestamp(from_unixtime('value * SECONDS_PER_DAY), tz))
+        .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
-        .where($"value".cast("date") >= date_sub(current_timestamp().cast("date"), 10))
-        .select(
-          ($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
+        .where($"value".cast("date") >= date_sub(current_date(), 10))
+        .select(($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
       StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys

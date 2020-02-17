@@ -2,19 +2,19 @@
 -- Number of queries: 12
 
 
--- !query 0
+-- !query
 CREATE TABLE table_with_comment (a STRING, b INT, c STRING, d STRING) USING parquet COMMENT 'added'
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 DESC FORMATTED table_with_comment
--- !query 1 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 1 output
+-- !query output
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -32,19 +32,19 @@ Comment             	added
 Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
--- !query 2
+-- !query
 ALTER TABLE table_with_comment SET TBLPROPERTIES("comment"= "modified comment", "type"= "parquet")
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 DESC FORMATTED table_with_comment
--- !query 3 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 3 output
+-- !query output
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -63,27 +63,27 @@ Table Properties    	[type=parquet]
 Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
--- !query 4
+-- !query
 DROP TABLE table_with_comment
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 CREATE TABLE table_comment (a STRING, b INT) USING parquet
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 DESC FORMATTED table_comment
--- !query 6 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 6 output
+-- !query output
 a                   	string              	                    
 b                   	int                 	                    
                     	                    	                    
@@ -98,19 +98,19 @@ Provider            	parquet
 Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
--- !query 7
+-- !query
 ALTER TABLE table_comment SET TBLPROPERTIES(comment = "added comment")
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 DESC formatted table_comment
--- !query 8 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 8 output
+-- !query output
 a                   	string              	                    
 b                   	int                 	                    
                     	                    	                    
@@ -126,19 +126,19 @@ Comment             	added comment
 Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
--- !query 9
+-- !query
 ALTER TABLE table_comment UNSET TBLPROPERTIES IF EXISTS ('comment')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 DESC FORMATTED table_comment
--- !query 10 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 10 output
+-- !query output
 a                   	string              	                    
 b                   	int                 	                    
                     	                    	                    
@@ -153,9 +153,9 @@ Provider            	parquet
 Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
--- !query 11
+-- !query
 DROP TABLE table_comment
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 

@@ -39,7 +39,9 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     def computeChiSquareTest(): Double = {
       val n = 10000
       // Trigger a sort
-      val data = spark.range(0, n, 1, 10).sort($"id".desc)
+      // Range has range partitioning in its output now. To have a range shuffle, we
+      // need to run a repartition first.
+      val data = spark.range(0, n, 1, 1).repartition(10).sort($"id".desc)
         .selectExpr("SPARK_PARTITION_ID() pid", "id").as[(Int, Long)].collect()
 
       // Compute histogram for the number of records per partition post sort
@@ -51,14 +53,18 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
         dist)
     }
 
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+    // When enable AQE, the post partition number is changed.
+    // And the ChiSquareTest result is also need updated. So disable AQE.
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // The default chi-sq value should be low
-      assert(computeChiSquareTest() < 10)
+      assert(computeChiSquareTest() < 100)
 
       withSQLConf(SQLConf.RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION.key -> "1") {
         // If we only sample one point, the range boundaries will be pretty bad and the
         // chi-sq value would be very high.
-        assert(computeChiSquareTest() > 100)
+        assert(computeChiSquareTest() > 300)
       }
     }
   }

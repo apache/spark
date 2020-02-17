@@ -24,7 +24,7 @@ license: |
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -34,7 +34,7 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+[SparkConf](api/scala/org/apache/spark/SparkConf.html) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application with two threads as follows:
@@ -241,6 +241,18 @@ of the most common options to set are:
     only supported on Kubernetes and is actually both the vendor and domain following
     the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
     this config would be set to nvidia.com or amd.com)
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.discovery.plugin</code></td>
+  <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
+  <td>
+    Comma-separated list of class names implementing
+    org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application.
+    This is for advanced users to replace the resource discovery class with a
+    custom implementation. Spark will try each class specified until one of them
+    returns the resource information for that resource. It tries the discovery
+    script last if none of the plugins return information for that resource.
   </td>
 </tr>
 <tr>
@@ -844,13 +856,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
-  <td>64</td>
+  <td>-1</td>
   <td>
     Length of the accept queue for the shuffle service. For large applications, this value may
     need to be increased, so that incoming connections are not dropped if the service cannot keep
     up with a large number of connections arriving in a short period of time. This needs to
     be configured wherever the shuffle service itself is running, which may be outside of the
-    application (see <code>spark.shuffle.service.enabled</code> option below).
+    application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
+    will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
 </tr>
 <tr>
@@ -1020,7 +1033,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.rolling.maxFileSize</code></td>
   <td>128m</td>
   <td>
-    The max size of event log file before it's rolled over.
+    When <code>spark.eventLog.rolling.enabled=true</code>, specifies the max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>
@@ -1313,7 +1326,7 @@ Apart from these, the following properties are also available, and may be useful
     property is useful if you need to register your classes in a custom way, e.g. to specify a custom
     field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
     set to classes that extend
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <a href="api/scala/org/apache/spark/serializer/KryoRegistrator.html">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -1366,7 +1379,7 @@ Apart from these, the following properties are also available, and may be useful
     but is quite slow, so we recommend <a href="tuning.html">using
     <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
     when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <a href="api/scala/org/apache/spark/serializer/Serializer.html">
     <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
@@ -1623,6 +1636,43 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Executor Metrics
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
+    <br />
+    <em>Note:</em> The metrics are polled (collected) and sent in the executor heartbeat,
+    and this is always done; this configuration is only to determine if aggregated metric peaks
+    are written to the event log.
+  </td>
+</tr>
+  <td><code>spark.executor.processTreeMetrics.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to collect process tree metrics (from the /proc filesystem) when collecting
+    executor metrics.
+    <br />
+    <em>Note:</em> The process tree metrics are collected only if the /proc filesystem
+    exists.
+  </td>
+<tr>
+  <td><code>spark.executor.metrics.pollingInterval</code></td>
+  <td>0</td>
+  <td>
+    How often to collect executor metrics (in milliseconds).
+    <br />
+    If 0, the polling is done on executor heartbeats (thus at the heartbeat interval,
+    specified by <code>spark.executor.heartbeatInterval</code>).
+    If positive, the polling is done at this interval.
+  </td>
+</tr>
+</table>
+
 ### Networking
 
 <table class="table">
@@ -1760,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold
@@ -2054,7 +2104,8 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached.
+    runs even though the threshold hasn't been reached. The number of slots is computed based on
+    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
     Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
@@ -2348,47 +2399,15 @@ the driver or executor, or, in the absence of that value, the number of cores av
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
 
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(numRows = 200, truncate = false)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(200, false);
-{% endhighlight %}
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# spark is an existing SparkSession
-spark.sql("SET -v").show(n=200, truncate=False)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session()
-properties <- sql("SET -v")
-showDF(properties, numRows = 200, truncate = FALSE)
-{% endhighlight %}
-
-</div>
-</div>
+        {% include_relative sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 
 ### Spark Streaming

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import java.{util => ju}
+import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
@@ -24,6 +26,7 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -116,6 +119,59 @@ private[spark] object UIUtils extends Logging {
         logError("Error converting time to string", e)
         // if there is some error, return blank string
         ""
+    }
+  }
+
+  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
+  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
+  }
+
+  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+  }
+
+  /**
+   * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
+   * format `batchTime` without milliseconds.
+   *
+   * @param batchTime the batch time to be formatted
+   * @param batchInterval the batch interval
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
+   * @param timezone only for test
+   */
+  def formatBatchTime(
+      batchTime: Long,
+      batchInterval: Long,
+      showYYYYMMSS: Boolean = true,
+      timezone: TimeZone = null): String = {
+    val oldTimezones =
+      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
+    if (timezone != null) {
+      batchTimeFormat.get.setTimeZone(timezone)
+      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
+    }
+    try {
+      val formattedBatchTime =
+        if (batchInterval < 1000) {
+          batchTimeFormatWithMilliseconds.get.format(batchTime)
+        } else {
+          // If batchInterval >= 1 second, don't show milliseconds
+          batchTimeFormat.get.format(batchTime)
+        }
+      if (showYYYYMMSS) {
+        formattedBatchTime
+      } else {
+        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
+      }
+    } finally {
+      if (timezone != null) {
+        batchTimeFormat.get.setTimeZone(oldTimezones._1)
+        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
+      }
     }
   }
 
@@ -571,5 +627,40 @@ private[spark] object UIUtils extends Logging {
 
   def buildErrorResponse(status: Response.Status, msg: String): Response = {
     Response.status(status).entity(msg).`type`(MediaType.TEXT_PLAIN).build()
+  }
+
+  /**
+   * There may be different duration labels in each batch. So we need to
+   * mark those missing duration label as '0d' to avoid UI rending error.
+   */
+  def durationDataPadding(
+      values: Array[(Long, ju.Map[String, JLong])]): Array[(Long, Map[String, Double])] = {
+    val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
+    values.map { case (xValue, yValue) =>
+      val dataPadding = operationLabels.map { opLabel =>
+        if (yValue.containsKey(opLabel)) {
+          (opLabel, yValue.get(opLabel).toDouble)
+        } else {
+          (opLabel, 0d)
+        }
+      }
+      (xValue, dataPadding.toMap)
+    }
+  }
+
+  def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
+    if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{message}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      Seq.empty[Node]
+    }
   }
 }

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -70,9 +70,9 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
+You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
+You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
 from `hadoop.version`.
 
 Example:
@@ -238,8 +238,7 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
-    Rscript -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
+    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'testthat', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
 
 You can run just the SparkR tests using the command:
 

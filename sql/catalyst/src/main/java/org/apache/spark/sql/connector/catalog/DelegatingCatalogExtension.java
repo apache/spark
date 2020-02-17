@@ -52,6 +52,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   public final void initialize(String name, CaseInsensitiveStringMap options) {}
 
   @Override
+  public String[] defaultNamespace() {
+    return delegate.defaultNamespace();
+  }
+
+  @Override
   public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
     return asTableCatalog().listTables(namespace);
   }
@@ -97,11 +102,6 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
     asTableCatalog().renameTable(oldIdent, newIdent);
-  }
-
-  @Override
-  public String[] defaultNamespace() {
-    return asNamespaceCatalog().defaultNamespace();
   }
 
   @Override

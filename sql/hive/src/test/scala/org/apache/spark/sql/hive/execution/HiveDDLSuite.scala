@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -374,33 +375,29 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  private def checkOwner(db: String, expected: String): Unit = {
-    val owner = sql(s"DESCRIBE DATABASE EXTENDED $db")
-      .where("database_description_item='Owner Name'")
-      .collect().head.getString(1)
-    assert(owner === expected)
-  }
-
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
     try {
-      val db1 = "spark_29425_1"
-      val db2 = "spark_29425_2"
-      val owner = "spark_29425"
+      val db = "spark_29425_1"
+      sql(s"CREATE DATABASE $db")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+      sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
+    }
+  }
 
-      sql(s"CREATE DATABASE $db1")
-      checkOwner(db1, Utils.getCurrentUserName())
-      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db1, Utils.getCurrentUserName())
-
-      // TODO: Specify ownership should be forbidden after we implement `SET OWNER` syntax
-      sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')")
-      checkOwner(db2, owner)
-      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db2, owner)
-      // TODO: Changing ownership should be forbidden after we implement `SET OWNER` syntax
-      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('ownerName'='a')")
-      checkOwner(db2, "a")
+  test("Table Ownership") {
+    val catalog = spark.sessionState.catalog
+    try {
+      sql(s"CREATE TABLE spark_30019(k int)")
+      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
     } finally {
       catalog.reset()
     }
@@ -411,7 +408,6 @@ class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-  private val reversedProperties = Seq("ownerName", "ownerType")
 
   override def afterEach(): Unit = {
     try {
@@ -1146,7 +1142,7 @@ class HiveDDLSuite
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
-      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)) ===
+      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ===
         CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
@@ -1185,7 +1181,7 @@ class HiveDDLSuite
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
     val db1 = catalog.getDatabaseMetadata(dbName)
-    assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)) ==
+    assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ==
       CatalogDatabase(
       dbName,
       "",
@@ -1505,7 +1501,8 @@ class HiveDDLSuite
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
         assert(sourceView.viewText.nonEmpty)
-        assert(sourceView.viewDefaultDatabase == Some("default"))
+        assert(sourceView.viewCatalogAndNamespace ==
+          Seq(CatalogManager.SESSION_CATALOG_NAME, "default"))
         assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
@@ -1525,8 +1522,8 @@ class HiveDDLSuite
       s"the created table must be a/an ${tableType.name} table")
     assert(targetTable.viewText.isEmpty,
       "the view text in the created table must be empty")
-    assert(targetTable.viewDefaultDatabase.isEmpty,
-      "the view default database in the created table must be empty")
+    assert(targetTable.viewCatalogAndNamespace.isEmpty,
+      "the view catalog and namespace in the created table must be empty")
     assert(targetTable.viewQueryColumnNames.isEmpty,
       "the view query output columns in the created table must be empty")
     assert(targetTable.comment.isEmpty,

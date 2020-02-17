@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -69,18 +68,17 @@ object HiveResult {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
+    case (ld: LocalDate, DateType) =>
+      dateFormatter.format(DateTimeUtils.localDateToDays(ld))
     case (t: Timestamp, TimestampType) =>
       timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
+    case (i: Instant, TimestampType) =>
+      timestampFormatter.format(DateTimeUtils.instantToMicros(i))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
-    case (interval: CalendarInterval, CalendarIntervalType) =>
-      SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD => toSqlStandardString(interval)
-        case ISO_8601 => toIso8601String(interval)
-        case MULTI_UNITS => toMultiUnitsString(interval)
-      }
+    case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true)).mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>

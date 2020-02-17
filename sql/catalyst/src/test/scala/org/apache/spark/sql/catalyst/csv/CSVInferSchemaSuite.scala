@@ -22,6 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
@@ -147,13 +148,15 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     val inferSchema = new CSVInferSchema(options)
 
-    // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
-    assert(inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
-      DecimalType(4, -9))
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
+      assert(inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
+        DecimalType(4, -9))
+    }
 
     // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
     val value = "12345678901234567890.01234567890123456789"
-    assert(inferSchema.inferField(DecimalType(3, -10), value) == DoubleType)
+    assert(inferSchema.inferField(DecimalType(3, 0), value) == DoubleType)
 
     // Seq(s"${Long.MaxValue}1", "2015-12-01 00:00:00") should be StringType
     assert(inferSchema.inferField(NullType, s"${Long.MaxValue}1") == DecimalType(20, 0))

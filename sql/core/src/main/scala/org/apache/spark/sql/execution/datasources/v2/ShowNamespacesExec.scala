@@ -32,19 +32,16 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 case class ShowNamespacesExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
+    namespace: Seq[String],
     pattern: Option[String])
     extends V2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    val namespaces = namespace.map { ns =>
-        if (ns.nonEmpty) {
-          catalog.listNamespaces(ns.toArray)
-        } else {
-          catalog.listNamespaces()
-        }
-      }
-      .getOrElse(catalog.listNamespaces())
+    val namespaces = if (namespace.nonEmpty) {
+      catalog.listNamespaces(namespace.toArray)
+    } else {
+      catalog.listNamespaces()
+    }
 
     val rows = new ArrayBuffer[InternalRow]()
     val encoder = RowEncoder(schema).resolveAndBind()

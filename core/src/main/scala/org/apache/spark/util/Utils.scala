@@ -1812,14 +1812,14 @@ private[spark] object Utils extends Logging {
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
    * in scala's zipWithIndex
    */
-  def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
+  def getIteratorZipWithIndex[T](iter: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
     new Iterator[(T, Long)] {
       require(startIndex >= 0, "startIndex should be >= 0.")
       var index: Long = startIndex - 1L
-      def hasNext: Boolean = iterator.hasNext
+      def hasNext: Boolean = iter.hasNext
       def next(): (T, Long) = {
         index += 1L
-        (iterator.next(), index)
+        (iter.next(), index)
       }
     }
   }

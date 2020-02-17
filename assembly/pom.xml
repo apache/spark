@@ -117,7 +117,7 @@
           </executions>
           <configuration>
             <target>
-              <delete dir="${basedir}/../python/lib/pyspark.zip"/>
+              <delete file="${basedir}/../python/lib/pyspark.zip"/>
               <zip destfile="${basedir}/../python/lib/pyspark.zip">
                 <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
               </zip>

@@ -218,8 +218,7 @@ object PCAModel extends MLReadable[PCAModel] {
         // pc field is the old matrix format in Spark <= 1.6
         // explainedVariance field is not present in Spark <= 1.6
         val Row(pc: OldDenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
-        new PCAModel(metadata.uid, pc.asML,
-          Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+        new PCAModel(metadata.uid, pc.asML, new DenseVector(Array.emptyDoubleArray))
       }
       metadata.getAndSetParams(model)
       model

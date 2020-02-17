@@ -69,7 +69,8 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
       seed: String,
       subsamplingRate: Double,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): RandomForestRegressorWrapper = {
+      cacheNodeIds: Boolean,
+      bootstrap: Boolean): RandomForestRegressorWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -96,6 +97,7 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
       .setMaxMemoryInMB(maxMemoryInMB)
       .setCacheNodeIds(cacheNodeIds)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setBootstrap(bootstrap)
     if (seed != null && seed.length > 0) rfr.setSeed(seed.toLong)
 
     val pipeline = new Pipeline()

@@ -115,7 +115,7 @@ $env:Path += ";$env:HADOOP_HOME\bin"
 Pop-Location
 
 # ========================== R
-$rVer = "3.6.1"
+$rVer = "3.6.2"
 $rToolsVer = "3.5.1"
 
 InstallR

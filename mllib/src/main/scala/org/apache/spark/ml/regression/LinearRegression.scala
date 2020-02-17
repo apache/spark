@@ -36,7 +36,7 @@ import org.apache.spark.ml.optim.aggregator.{HuberAggregator, LeastSquaresAggreg
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -358,8 +358,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "std"),
-        createSummarizerBuffer("mean", "std", "count")))(
+      (Summarizer.createSummarizerBuffer("mean", "std"),
+        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
       seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight),
           c._2.add(Vectors.dense(instance.label), instance.weight)),
