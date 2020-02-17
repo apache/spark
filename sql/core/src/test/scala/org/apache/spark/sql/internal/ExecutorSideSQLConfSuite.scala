@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.UUID
+
 import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
@@ -144,16 +146,16 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         }
 
         // set local configuration and assert
-        val confValue1 = "e"
+        val confValue1 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue1).createOrReplaceTempView("m")
         spark.sparkContext.setLocalProperty(confKey, confValue1)
-        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM m)").collect.size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM m)").collect().length == 1)
 
         // change the conf value and assert again
-        val confValue2 = "f"
+        val confValue2 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue2).createOrReplaceTempView("n")
         spark.sparkContext.setLocalProperty(confKey, confValue2)
-        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().length == 1)
       }
     }
   }

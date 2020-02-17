@@ -259,11 +259,11 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.5)
 
-  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
       .internal()
-      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
-        "a broadcast hash join operation.")
+      .doc("When true, dynamic partition pruning will only apply when the broadcast exchange of " +
+        "a broadcast hash join operation can be reused as the dynamic pruning filter.")
       .booleanConf
       .createWithDefault(true)
 
@@ -2007,6 +2007,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE =
+    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType")
+      .internal()
+      .doc("When set to true, Spark returns an empty collection with `StringType` as element " +
+        "type if the `array`/`map` function is called without any parameters. Otherwise, Spark " +
+        "returns an empty collection with `NullType` as element type.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -2294,8 +2303,8 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningFallbackFilterRatio: Double =
     getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
 
-  def dynamicPartitionPruningReuseBroadcast: Boolean =
-    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
+  def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
