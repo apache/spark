@@ -38,6 +38,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.TimeZoneUTC
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -402,7 +403,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         StructField("float", FloatType, true),
         StructField("date", DateType, true)
       ))
-      TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+      TimeZone.setDefault(TimeZoneUTC)
       val rdd = spark.sparkContext.parallelize(Seq(
         Row(1f, null),
         Row(2f, new Date(1451948400000L)),

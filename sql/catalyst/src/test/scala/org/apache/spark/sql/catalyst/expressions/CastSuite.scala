@@ -141,7 +141,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015-03-18T12:03:17Z", new Timestamp(c.getTimeInMillis))
@@ -172,7 +172,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
       checkCastStringToTimestamp("2015-03-18T12:03:17.456Z", new Timestamp(c.getTimeInMillis))
