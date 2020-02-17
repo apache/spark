@@ -856,4 +856,17 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       TimeZone.setDefault(defaultTz)
     }
   }
+
+  test("SPARK-30766: date_trunc of old timestamps to hours and days") {
+    def checkTrunc(level: String, expected: String): Unit = {
+      val df = Seq("0010-01-01 01:02:03.123456")
+        .toDF()
+        .select($"value".cast("timestamp").as("ts"))
+        .select(date_trunc(level, $"ts").cast("string"))
+      checkAnswer(df, Row(expected))
+    }
+
+    checkTrunc("HOUR", "0010-01-01 01:00:00")
+    checkTrunc("DAY", "0010-01-01 00:00:00")
+  }
 }

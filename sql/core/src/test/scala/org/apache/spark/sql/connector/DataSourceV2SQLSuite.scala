@@ -1859,12 +1859,12 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1Command("CACHE TABLE", t)
+      testV1CommandSupportingTempView("CACHE TABLE", t)
 
       val e = intercept[AnalysisException] {
         sql(s"CACHE LAZY TABLE $t")
       }
-      assert(e.message.contains("CACHE TABLE is only supported with v1 tables"))
+      assert(e.message.contains("CACHE TABLE is only supported with temp views or v1 tables"))
     }
   }
 
@@ -1873,8 +1873,8 @@ class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1Command("UNCACHE TABLE", t)
-      testV1Command("UNCACHE TABLE", s"IF EXISTS $t")
+      testV1CommandSupportingTempView("UNCACHE TABLE", t)
+      testV1CommandSupportingTempView("UNCACHE TABLE", s"IF EXISTS $t")
     }
   }
 
@@ -1954,7 +1954,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW $v AS SELECT 1")
     }
-    assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
+    assert(e.message.contains("ALTER VIEW QUERY is only supported with temp views or v1 tables"))
   }
 
   test("CREATE VIEW") {
@@ -2252,11 +2252,33 @@ class DataSourceV2SQLSuite
       .head().getString(1) === expectedComment)
   }
 
+  test("SPARK-30799: temp view name can't contain catalog name") {
+    val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
+    withTempView("v") {
+      spark.range(10).createTempView("v")
+      val e1 = intercept[AnalysisException](
+        sql(s"CACHE TABLE $sessionCatalogName.v")
+      )
+      assert(e1.message.contains("Table or view not found: default.v"))
+    }
+    val e2 = intercept[AnalysisException] {
+      sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
+    }
+    assert(e2.message.contains("It is not allowed to add database prefix"))
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+  }
+
+  private def testV1CommandSupportingTempView(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is only supported with temp views or v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

@@ -50,7 +50,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Correlation`](api/scala/index.html#org.apache.spark.ml.stat.Correlation$)
+[`Correlation`](api/scala/org/apache/spark/ml/stat/Correlation$.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -87,7 +87,7 @@ the Chi-squared statistic is computed. All label and feature values must be cate
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`ChiSquareTest` Scala docs](api/scala/index.html#org.apache.spark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Scala docs](api/scala/org/apache/spark/ml/stat/ChiSquareTest$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ChiSquareTestExample.scala %}
 </div>
@@ -114,7 +114,7 @@ as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
+The following example demonstrates using [`Summarizer`](api/scala/org/apache/spark/ml/stat/Summarizer$.html)
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}
