@@ -143,7 +143,10 @@ trait ConstraintHelper {
         inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
       case _ => // No inference
     }
-    inferredConstraints -- constraints -- greaterThans -- lessThans
+    (inferredConstraints -- constraints -- greaterThans -- lessThans).foldLeft(Set[Expression]()) {
+      case (acc, e) if acc.exists(_.semanticEquals(e)) => acc.dropWhile(_.semanticEquals(e))
+      case (acc, e) => acc + e
+    }
   }
 
   private def replaceConstraints(
