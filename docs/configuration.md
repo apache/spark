@@ -1033,7 +1033,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.rolling.maxFileSize</code></td>
   <td>128m</td>
   <td>
-    The max size of event log file before it's rolled over.
+    When <code>spark.eventLog.rolling.enabled=true</code>, specifies the max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>
