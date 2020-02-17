@@ -63,7 +63,7 @@ object HiveResult {
         sessionWithJava8DatetimeEnabled.withActive {
           // We cannot collect the original dataset because its encoders could be created
           // with disabled Java 8 date-time API.
-          val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.queryExecution.logical)
+          val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.logicalPlan)
             .queryExecution
             .executedPlan
             .executeCollectPublic().map(_.toSeq).toSeq
