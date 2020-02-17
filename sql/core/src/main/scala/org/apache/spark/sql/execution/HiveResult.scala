@@ -58,7 +58,7 @@ object HiveResult {
         val java8TimeConf = SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)
         try {
           SQLConf.get.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
-          val result: Seq[Seq[Any]] = ds.filter(lit(true))
+          val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.queryExecution.logical)
             .queryExecution
             .executedPlan
             .executeCollectPublic().map(_.toSeq).toSeq
