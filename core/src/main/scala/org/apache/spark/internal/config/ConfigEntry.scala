@@ -39,7 +39,7 @@ package org.apache.spark.internal.config
  * @param doc the documentation for the configuration
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
- * @tparam version the spark version when the configuration was released.
+ * @param version the spark version when the configuration was released.
  * @tparam T the value type
  */
 private[spark] abstract class ConfigEntry[T] (
