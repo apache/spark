@@ -247,7 +247,7 @@ abstract class HashExpression[E] extends Expression {
 
   override def nullable: Boolean = false
 
-  protected def hasMapType(dt: DataType): Boolean = {
+  private def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
 
@@ -259,8 +259,8 @@ abstract class HashExpression[E] extends Expression {
       !SQLConf.get.getConf(SQLConf.LEGACY_USE_HASH_ON_MAPTYPE)) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName cannot contain elements of MapType. Logically same maps " +
-          s"may have different hashcode, thus hash expressions are prohibited on MapType " +
-          s"elements. To restore previous behavior set spark.sql.legacy.useHashOnMapType to true.")
+          "may have different hashcode, thus hash expressions are prohibited on MapType " +
+          "elements. To restore previous behavior set spark.sql.legacy.useHashOnMapType to true.")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -2134,11 +2134,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       case hashExpression =>
         withSQLConf(SQLConf.LEGACY_USE_HASH_ON_MAPTYPE.key -> true.toString()) {
           val df = spark.createDataset(Map() :: Nil)
-          checkAnswer(df.selectExpr("hash(*)"), sql("SELECT hash(map())"))
+          checkAnswer(df.selectExpr(s"$hashExpression(*)"), sql(s"SELECT $hashExpression(map())"))
         }
     }
   }
-
 
   test("xxhash64 function") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
