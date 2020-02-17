@@ -84,6 +84,6 @@ class CanonicalizeSuite extends SparkFunSuite {
     val range = Range(1, 1, 1, 1)
     val addExpr = Add(range.output.head, Literal(1))
     val subExpr = Subtract(range.output.head, Literal(1))
-    assert(addExpr.canonicalized.semanticHash() != subExpr.canonicalized.semanticHash())
+    assert(addExpr.canonicalized.hashCode() != subExpr.canonicalized.hashCode())
   }
 }
