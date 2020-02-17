@@ -40,7 +40,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+    val tf = TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
@@ -89,7 +89,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("SPARK-6785: java date conversion before and after epoch") {
     def format(d: Date): String = {
-      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
+      TimestampFormatter("uuuu-MM-dd", ZoneId.systemDefault())
         .format(d.getTime * MICROS_PER_MILLIS)
     }
     def checkFromToJavaDate(d1: Date): Unit = {

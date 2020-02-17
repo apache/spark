@@ -49,8 +49,6 @@ object DateTimeUtils {
 
   val TIMEZONE_OPTION = "timeZone"
 
-  def defaultTimeZone(): TimeZone = TimeZone.getDefault()
-
   def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
   def getTimeZone(timeZoneId: String): TimeZone = {
     TimeZone.getTimeZone(getZoneId(timeZoneId))
@@ -58,7 +56,7 @@ object DateTimeUtils {
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
-    millisToDays(millisUtc, defaultTimeZone().toZoneId)
+    millisToDays(millisUtc, ZoneId.systemDefault())
   }
 
   def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
@@ -68,7 +66,7 @@ object DateTimeUtils {
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
-    daysToMillis(days, defaultTimeZone().toZoneId)
+    daysToMillis(days, ZoneId.systemDefault())
   }
 
   def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
