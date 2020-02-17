@@ -179,6 +179,8 @@ private[hive] class SparkExecuteStatementOperation(
           }
           curCol += 1
         }
+        // Convert date-time instances to types that are acceptable by Hive libs
+        // used in conversions to strings.
         val resultRow = row.map {
           case i: Instant => Timestamp.from(i)
           case ld: LocalDate => Date.valueOf(ld)
