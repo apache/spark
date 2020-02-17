@@ -3023,8 +3023,10 @@ class Analyzer(
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
-        // Keeps track of new columns being added. Keys are normalized parent names and
-        // values are field names that belong to their parent.
+        // 'colsToAdd' keeps track of new columns being added. Keys are normalized parent names
+        // and values are field names that belong to their parent. For example, if we add
+        // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
         val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
         val schema = t.schema
         val normalizedChanges = changes.flatMap {
