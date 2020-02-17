@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Spark SQL Keywords
-displayTitle: Spark SQL Keywords
+title: ANSI Compliance
+displayTitle: ANSI Compliance
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -18,6 +18,129 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
+
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
+Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
+The casting behaviours are defined as store assignment rules in the standard.
+
+When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.sql.ansi.enabled</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) When true, Spark tries to conform to the ANSI SQL specification:
+    1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
+    2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.storeAssignmentPolicy</code></td>
+  <td>ANSI</td>
+  <td>
+    (Experimental) When inserting a value into a column with different data type, Spark will perform type coercion.
+    Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy,
+    Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.
+    It disallows certain unreasonable type conversions such as converting string to int or double to boolean.
+    With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.
+    e.g. converting string to int or double to boolean is allowed.
+    It is also the only behavior in Spark 2.x and it is compatible with Hive.
+    With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion,
+    e.g. converting double to int or decimal to double is not allowed.
+  </td>
+</tr>
+</table>
+
+The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled.
+
+### Arithmetic Operations
+
+In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflows by default.
+This means that in case an operation causes overflows, the result is the same that the same operation returns in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
+On the other hand, Spark SQL returns null for decimal overflows.
+When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
+
+{% highlight sql %}
+-- `spark.sql.ansi.enabled=true`
+SELECT 2147483647 + 1;
+
+  java.lang.ArithmeticException: integer overflow
+
+-- `spark.sql.ansi.enabled=false`
+SELECT 2147483647 + 1;
+
+  +----------------+
+  |(2147483647 + 1)|
+  +----------------+
+  |     -2147483648|
+  +----------------+
+
+{% endhighlight %}
+
+### Type Conversion
+
+Spark SQL has three kinds of type conversions: explicit casting, type coercion, and store assignment casting.
+When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
+On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
+
+Currently, the ANSI mode affects explicit casting and assignment casting only.
+In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
+
+{% highlight sql %}
+-- Examples of explicit casting
+
+-- `spark.sql.ansi.enabled=true`
+SELECT CAST('a' AS INT);
+
+  java.lang.NumberFormatException: invalid input syntax for type numeric: a
+
+SELECT CAST(2147483648L AS INT);
+
+  java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+
+-- `spark.sql.ansi.enabled=false` (This is a default behaviour)
+SELECT CAST('a' AS INT);
+
+  +--------------+
+  |CAST(a AS INT)|
+  +--------------+
+  |          null|
+  +--------------+
+
+SELECT CAST(2147483648L AS INT);
+
+  +-----------------------+
+  |CAST(2147483648 AS INT)|
+  +-----------------------+
+  |            -2147483648|
+  +-----------------------+
+
+-- Examples of store assignment rules
+CREATE TABLE t (v INT);
+
+-- `spark.sql.storeAssignmentPolicy=ANSI`
+INSERT INTO t VALUES ('1');
+
+  org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
+  - Cannot safely cast 'v': StringType to IntegerType;
+
+-- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
+INSERT INTO t VALUES ('1');
+SELECT * FROM t;
+
+  +---+
+  |  v|
+  +---+
+  |  1|
+  +---+
+
+{% endhighlight %}
+
+### SQL Keywords
 
 When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
 In this mode, Spark SQL has two kinds of keywords:

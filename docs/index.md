@@ -118,7 +118,7 @@ options for deployment:
 
 **API Docs:**
 
-* [Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
+* [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)

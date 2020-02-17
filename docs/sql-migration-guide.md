@@ -215,6 +215,8 @@ license: |
   For example `SELECT timestamp 'tomorrow';`.
 
   - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
+  
+  - Since Spark 3.0, when the `array`/`map` function is called without any parameters, it returns an empty collection with `NullType` as element type. In Spark version 2.4 and earlier, it returns an empty collection with `StringType` as element type. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.createEmptyCollectionUsingStringType` to `true`.
 
   - Since Spark 3.0, the interval literal syntax does not allow multiple from-to units anymore. For example, `SELECT INTERVAL '1-1' YEAR TO MONTH '2-2' YEAR TO MONTH'` throws parser exception.
 
@@ -326,7 +328,7 @@ license: |
 
   - Since Spark 3.0, `SHOW TBLPROPERTIES` will cause `AnalysisException` if the table does not exist. In Spark version 2.4 and earlier, this scenario caused `NoSuchTableException`. Also, `SHOW TBLPROPERTIES` on a temporary view will cause `AnalysisException`. In Spark version 2.4 and earlier, it returned an empty result.
 
-  - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
+  - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For generating Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
 
   - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. This may need to set `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars` according to the version of the Hive metastore.
   For example: set `spark.sql.hive.metastore.version` to `1.2.1` and `spark.sql.hive.metastore.jars` to `maven` if your Hive metastore version is 1.2.1.
@@ -735,11 +737,11 @@ and writing data out (`DataFrame.write`),
 and deprecated the old APIs (e.g., `SQLContext.parquetFile`, `SQLContext.jsonFile`).
 
 See the API docs for `SQLContext.read` (
-  <a href="api/scala/index.html#org.apache.spark.sql.SQLContext@read:DataFrameReader">Scala</a>,
+  <a href="api/scala/org/apache/spark/sql/SQLContext.html#read:DataFrameReader">Scala</a>,
   <a href="api/java/org/apache/spark/sql/SQLContext.html#read()">Java</a>,
   <a href="api/python/pyspark.sql.html#pyspark.sql.SQLContext.read">Python</a>
 ) and `DataFrame.write` (
-  <a href="api/scala/index.html#org.apache.spark.sql.DataFrame@write:DataFrameWriter">Scala</a>,
+  <a href="api/scala/org/apache/spark/sql/DataFrame.html#write:DataFrameWriter">Scala</a>,
   <a href="api/java/org/apache/spark/sql/Dataset.html#write()">Java</a>,
   <a href="api/python/pyspark.sql.html#pyspark.sql.DataFrame.write">Python</a>
 ) more information.
