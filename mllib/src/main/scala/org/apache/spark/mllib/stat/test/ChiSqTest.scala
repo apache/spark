@@ -195,10 +195,16 @@ private[spark] object ChiSqTest extends Logging {
         contingency.update(i, j, c)
       }
       if (numInstances != nnz) {
+        val nnz = count.iterator
+          .map { case ((_, label), c) => (label, c) }
+          .toArray
+          .groupBy(_._1)
+          .mapValues(_.map(_._2).sum)
         val i = value2Index(0.0)
         label2Index.foreach { case (label, j) =>
           val countByLabel = labelCounts(label)
-          val nzByLabel = countByLabel - count.iterator.filter(_._1._2 == label).map(_._2).sum
+          val nnzByLabel = nnz.getOrElse(label, 0L)
+          val nzByLabel = countByLabel - nnzByLabel
           require(nzByLabel >= 0)
           if (nzByLabel != 0) contingency.update(i, j, nzByLabel)
         }
