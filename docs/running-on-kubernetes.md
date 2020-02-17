@@ -1120,7 +1120,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Path to store files at the spark submit side in cluster mode. For example:
-    <code>spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path</code>
+    <code>spark.kubernetes.file.upload.path=s3a://&lt;s3-bucket&gt;/path</code>
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
 </tr>
@@ -1247,7 +1247,7 @@ The following affect the driver and executor containers. All other containers in
 </tr>
 <tr>
   <td>name</td>
-  <td>See description.</code></td>
+  <td>See description</td>
   <td>
     The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
     "executor" for each executor container) if not defined by the pod template. If the container is defined by the
