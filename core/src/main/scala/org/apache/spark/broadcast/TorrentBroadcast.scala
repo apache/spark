@@ -186,7 +186,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               }
               blocks(pid) = new ByteBufferBlockData(b, true)
             case None =>
-              throw new SparkException(s"Failed to get $pieceId of $broadcastId")
+              throw new BlockNotFoundException(pieceId.toString)
           }
       }
     }

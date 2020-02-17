@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -28,6 +28,7 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import com.google.common.base.Throwables
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
@@ -37,7 +38,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, ShuffleBlockId}
 import org.apache.spark.util._
 
 /**
@@ -824,11 +825,15 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, mappers $startMapIndex-$endMapIndex" +
       s"partitions $startPartition-$endPartition")
-    val statuses = getStatuses(shuffleId, conf)
     try {
+      val statuses = getStatuses(shuffleId, conf)
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
     } catch {
+      case e: IOException if
+        Throwables.getCausalChain(e).asScala.exists(_.isInstanceOf[BlockNotFoundException]) =>
+        mapStatuses.clear()
+        throw new MetadataFetchFailedException(shuffleId, -1, Throwables.getStackTraceAsString(e))
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
