@@ -2166,15 +2166,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             `False` on the :class:`DataFrame` that return the same results, for instance, from
             different plans. Such false negative semantic can be useful when caching as an example.
 
-        >>> df1 = spark.range(100)
-        >>> df2 = spark.range(100)
-        >>> df3 = spark.range(100)
-        >>> df4 = spark.range(100)
+        .. note:: DeveloperApi
+
+        >>> df1 = spark.range(10)
+        >>> df2 = spark.range(10)
         >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id * 2))
         True
-        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df3.withColumn("col1", df3.id + 2))
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id + 2))
         False
-        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df4.withColumn("col0", df4.id * 2))
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col0", df2.id * 2))
         True
         """
         if not isinstance(other, DataFrame):
@@ -2190,18 +2190,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. note:: Unlike the standard hash code, the hash is calculated against the query plan
             simplified by tolerating the cosmetic differences such as attribute names.
 
-        >>> df1 = spark.range(100)
-        >>> df2 = spark.range(100)
-        >>> df3 = spark.range(100)
-        >>> df4 = spark.range(100)
-        >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
-            df2.withColumn("col1", df2.id * 2).semanticHash()
-        True
-        >>> # df1.withColumn("col1", df1.id * 2).semanticHash() == \
-            df3.withColumn("col1", df3.id + 2).semanticHash()  # False
-        >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
-            df4.withColumn("col0", df4.id * 2).semanticHash()
-        True
+        .. note:: DeveloperApi
+
+        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
+        1855039936
+        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKIP
+        1855039936
         """
         return self._jdf.semanticHash()
 
