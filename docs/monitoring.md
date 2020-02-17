@@ -104,12 +104,12 @@ Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.ro
 let you have rolling event log files instead of single huge event log file which may help some scenarios on its own,
 but it still doesn't help you reducing the overall size of logs.
 
-Spark History Server can apply 'compaction' on the rolling event log files to reduce the overall size of
+Spark History Server can apply compaction on the rolling event log files to reduce the overall size of
 logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
 Spark History Server.
 
-Details will be described below, but please note in prior that 'compaction' is LOSSY operation.
-'Compaction' will discard some events which will be no longer seen on UI - you may want to check which events will be discarded
+Details will be described below, but please note in prior that compaction is LOSSY operation.
+Compaction will discard some events which will be no longer seen on UI - you may want to check which events will be discarded
 before enabling the option.
 
 When the compaction happens, the History Server lists all the available event log files for the application, and considers
@@ -119,8 +119,7 @@ For example, if the application A has 5 event log files and <code>spark.history.
 Once it selects the target, it analyzes them to figure out which events can be excluded, and rewrites them
 into one compact file with discarding events which are decided to exclude.
 
-The compaction tries to exclude the events which point to the outdated things like jobs, and so on. As of now, below describes
-the candidates of events to be excluded:
+The compaction tries to exclude the events which point to the outdated data. As of now, below describes the candidates of events to be excluded:
 
 * Events for the job which is finished, and related stage/tasks events
 * Events for the executor which is terminated
