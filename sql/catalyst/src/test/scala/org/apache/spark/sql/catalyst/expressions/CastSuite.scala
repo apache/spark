@@ -280,23 +280,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         MILLISECONDS.toMicros(c.getTimeInMillis))
     }
 
-    val gmtId = Option("GMT")
+    val utcId = Option("UTC")
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, gmtId), null)
+    checkEvaluation(cast("abdef", TimestampType, utcId), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
-    checkEvaluation(cast(cast(nts, TimestampType, gmtId), StringType, gmtId), nts)
+    checkEvaluation(cast(cast(nts, TimestampType, utcId), StringType, utcId), nts)
     checkEvaluation(
-      cast(cast(ts, StringType, gmtId), TimestampType, gmtId),
+      cast(cast(ts, StringType, utcId), TimestampType, utcId),
       DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
-    checkEvaluation(cast(cast(cast(nts, TimestampType, gmtId), DateType, gmtId), StringType), sd)
+    checkEvaluation(cast(cast(cast(nts, TimestampType, utcId), DateType, utcId), StringType), sd)
     checkEvaluation(
-      cast(cast(cast(ts, DateType, gmtId), TimestampType, gmtId), StringType, gmtId),
+      cast(cast(cast(ts, DateType, utcId), TimestampType, utcId), StringType, utcId),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -309,7 +309,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       5.toShort)
     checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, gmtId), ByteType),
+      cast(cast(cast(cast(cast(cast("5", TimestampType, utcId), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
@@ -360,8 +360,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, DecimalType(10, 2)), null)
     checkEvaluation(cast(d, StringType), "1970-01-01")
 
-    val gmtId = Option("GMT")
-    checkEvaluation(cast(cast(d, TimestampType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
+    val utcId = Option("UTC")
+    checkEvaluation(cast(cast(d, TimestampType, utcId), StringType, utcId), "1970-01-01 00:00:00")
   }
 
   test("cast from timestamp") {
