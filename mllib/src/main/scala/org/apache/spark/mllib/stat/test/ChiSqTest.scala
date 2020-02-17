@@ -216,20 +216,14 @@ private[spark] object ChiSqTest extends Logging {
 
     bcLabels.destroy()
 
-    if (results.size == numFeatures) {
-      // all columns contain non-zero values
-      results.toArray.sortBy(_._1).map {
-        case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-          new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
-      }
-    } else {
-      // if some column only contains 0 values
-      val finalResults = Array.ofDim[ChiSqTestResult](numFeatures)
-      results.foreach { case (col, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-        finalResults(col) = new ChiSqTestResult(pValue, degreesOfFreedom, statistic,
-          methodName, nullHypothesis)
-      }
+    val finalResults = Array.ofDim[ChiSqTestResult](numFeatures)
+    results.foreach { case (col, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
+      finalResults(col) = new ChiSqTestResult(pValue, degreesOfFreedom, statistic,
+        methodName, nullHypothesis)
+    }
 
+    if (results.size < numFeatures) {
+      // if some column only contains 0 values
       val zeroContingency = new DenseMatrix(1, numLabels, Array.ofDim[Double](numLabels))
       labelCounts.foreach { case (label, c) =>
         val j = label2Index(label)
@@ -240,8 +234,9 @@ private[spark] object ChiSqTest extends Logging {
       Iterator.range(0, numFeatures)
         .filterNot(results.contains)
         .foreach (col => finalResults(col) = zeroRes)
-      finalResults
     }
+
+    finalResults
   }
 
   /*
