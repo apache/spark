@@ -332,6 +332,8 @@ license: |
 
   - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. This may need to set `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars` according to the version of the Hive metastore.
   For example: set `spark.sql.hive.metastore.version` to `1.2.1` and `spark.sql.hive.metastore.jars` to `maven` if your Hive metastore version is 1.2.1.
+  
+  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
 
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
