@@ -43,6 +43,11 @@ class MultivariateGaussian @Since("2.0.0") (
   require(cov.numCols == cov.numRows, "Covariance matrix must be square")
   require(mean.size == cov.numCols, "Mean vector length must match covariance matrix size")
 
+  /** Private constructor taking Breeze types */
+  private[ml] def this(mean: BDV[Double], cov: BDM[Double]) = {
+    this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
+  }
+
   /**
    * Compute distribution dependent constants:
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
