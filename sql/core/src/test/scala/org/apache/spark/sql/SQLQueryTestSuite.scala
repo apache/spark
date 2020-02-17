@@ -378,7 +378,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
-    localSparkSession.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
 
     if (configSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs
@@ -512,7 +511,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
     val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
-      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      hiveResultString(df).map(replaceNotIncludedMsg)
     }
 
     // If the output is not pre-sorted, sort it.
