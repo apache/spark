@@ -165,36 +165,28 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator: LongAccumulator = {
-    val acc = new LongAccumulator
-    register(acc)
-    acc
+    sc.longAccumulator
   }
 
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator(name: String): LongAccumulator = {
-    val acc = new LongAccumulator
-    register(acc, name)
-    acc
+    sc.longAccumulator(name)
   }
 
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator: DoubleAccumulator = {
-    val acc = new DoubleAccumulator
-    register(acc)
-    acc
+    sc.doubleAccumulator
   }
 
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
-    val acc = new DoubleAccumulator
-    register(acc, name)
-    acc
+    sc.doubleAccumulator(name)
   }
 
   /**
@@ -202,9 +194,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T]: CollectionAccumulator[T] = {
-    val acc = new CollectionAccumulator[T]
-    register(acc)
-    acc
+    sc.collectionAccumulator
   }
 
   /**
@@ -212,9 +202,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
-    val acc = new CollectionAccumulator[T]
-    register(acc, name)
-    acc
+    sc.collectionAccumulator(name)
   }
 
   /** Distribute a local Scala collection to form an RDD. */
