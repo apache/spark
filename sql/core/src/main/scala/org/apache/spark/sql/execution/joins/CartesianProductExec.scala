@@ -22,7 +22,7 @@ import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, Predicate, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
@@ -61,8 +61,9 @@ class UnsafeCartesianRDD(
 case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
-    joinType: JoinType,
     condition: Option[Expression]) extends BaseJoinExec {
+  override def joinType: JoinType = Inner
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override lazy val metrics = Map(
