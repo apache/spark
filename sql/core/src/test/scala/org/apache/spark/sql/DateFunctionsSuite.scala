@@ -729,4 +729,17 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
   }
+
+  test("SPARK-30857: truncate timestamps before the epoch to hours and days") {
+    def checkTrunc(level: String, expected: String): Unit = {
+      val df = Seq("1961-04-12 00:01:02.345")
+        .toDF()
+        .select($"value".cast("timestamp").as("ts"))
+        .select(date_trunc(level, $"ts").cast("string"))
+      checkAnswer(df, Row(expected))
+    }
+
+    checkTrunc("HOUR", "1961-04-12 00:00:00")
+    checkTrunc("DAY", "1961-04-12 00:00:00")
+  }
 }
