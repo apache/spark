@@ -69,9 +69,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       values.append(value)
     } else {
       if (!allowDuplicatedMapKey) {
-        throw new RuntimeException(s"Duplicate map key $key was founded, please set " +
-          s"${LEGACY_ALLOW_DUPLICATED_MAP_KEY.key} to true to remove it with " +
-          "last wins policy.")
+        throw new RuntimeException(s"Duplicate map key $key was founded, please check the input " +
+          "data. If you want to remove the duplicated keys with last-win policy, you can set " +
+          s"${LEGACY_ALLOW_DUPLICATED_MAP_KEY.key} to true.")
       }
       // Overwrite the previous value, as the policy is last wins.
       values(index) = value
