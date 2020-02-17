@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -39,9 +39,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 object DateTimeUtils {
 
-  // we use Int and Long internally to represent [[DateType]] and [[TimestampType]]
-  type SQLDate = Int
-  type SQLTimestamp = Long
+  type SQLDate = DateType.InternalType
+  type SQLTimestamp = TimestampType.InternalType
 
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
@@ -316,13 +315,13 @@ object DateTimeUtils {
     }
   }
 
-  def instantToMicros(instant: Instant): Long = {
+  def instantToMicros(instant: Instant): SQLTimestamp = {
     val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
     val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     result
   }
 
-  def microsToInstant(us: Long): Instant = {
+  def microsToInstant(us: SQLTimestamp): Instant = {
     val secs = Math.floorDiv(us, MICROS_PER_SECOND)
     // Unfolded Math.floorMod(us, MICROS_PER_SECOND) to reuse the result of
     // the above calculation of `secs` via `floorDiv`.
