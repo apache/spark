@@ -2162,7 +2162,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. note:: The equality comparison here is simplified by tolerating the cosmetic differences
             such as attribute names.
 
-        .. note::This API can compare both :class:`DataFrame`\\s very fast but can still return
+        .. note:: This API can compare both :class:`DataFrame`\\s very fast but can still return
             `False` on the :class:`DataFrame` that return the same results, for instance, from
             different plans. Such false negative semantic can be useful when caching as an example.
 
@@ -2197,9 +2197,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
             df2.withColumn("col1", df2.id * 2).semanticHash()
         True
-        >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
-            df3.withColumn("col1", df3.id + 2).semanticHash()
-        False
+        >>> # df1.withColumn("col1", df1.id * 2).semanticHash() == \
+            df3.withColumn("col1", df3.id + 2).semanticHash()  # False
         >>> df1.withColumn("col1", df1.id * 2).semanticHash() == \
             df4.withColumn("col0", df4.id * 2).semanticHash()
         True
