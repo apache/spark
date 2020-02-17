@@ -498,7 +498,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this"),
 
     // [SPARK-30667][CORE] Add allGather method to BarrierTaskContext
-    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.RequestToSync")
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.RequestToSync"),
+
+    // [SPARK-30846][CORE] Add AccumulatorV2 API in JavaSparkContext
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.java.JavaSparkContext.doubleAccumulator")
   )
 
   // Exclude rules for 2.4.x
