@@ -718,9 +718,9 @@ object DateTimeUtils {
         val truncated = level match {
           case TRUNC_TO_MILLISECOND => millis
           case TRUNC_TO_SECOND =>
-            millis - millis % MILLIS_PER_SECOND
+            millis - Math.floorMod(millis, MILLIS_PER_SECOND)
           case TRUNC_TO_MINUTE =>
-            millis - millis % MILLIS_PER_MINUTE
+            millis - Math.floorMod(millis, MILLIS_PER_MINUTE)
           case _ => // Try to truncate date levels
             val dDays = millisToDays(millis, zoneId)
             daysToMillis(truncDate(dDays, level), zoneId)
