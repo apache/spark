@@ -605,8 +605,6 @@ private[hive] class TestHiveQueryExecution(
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
-
-  lazy val dataset = Dataset.ofRows(sparkSession, logical)
 }
 
 
