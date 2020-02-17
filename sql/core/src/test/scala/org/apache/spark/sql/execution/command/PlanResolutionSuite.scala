@@ -128,6 +128,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -145,7 +146,7 @@ class PlanResolutionSuite extends AnalysisTest {
       ResolveInlineTables(conf),
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
+      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
       analyzer.ResolveTables,
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,
