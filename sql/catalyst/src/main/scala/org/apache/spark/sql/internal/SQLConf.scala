@@ -2107,13 +2107,13 @@ object SQLConf {
     .createWithDefault(false)
 
   object LegacyBehaviorPolicy extends Enumeration {
-    val EXCEPTION, LEGACY, NEW_BEHAVIOR = Value
+    val EXCEPTION, LEGACY, CORRECTED = Value
   }
 
   val LEGACY_CTE_PRECEDENCE_POLICY = buildConf("spark.sql.legacy.ctePrecedencePolicy")
     .internal()
     .doc("When LEGACY, outer CTE definitions takes precedence over inner definitions. If set to " +
-      "NEW_BEHAVIOR, inner CTE definitions take precedence. The default value is EXCEPTION, " +
+      "CORRECTED, inner CTE definitions take precedence. The default value is EXCEPTION, " +
       "AnalysisException is thrown while name conflict is detected in nested CTE.")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))

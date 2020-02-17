@@ -35,7 +35,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         traverseAndSubstituteCTE(plan, inTraverse = false)
       case LegacyBehaviorPolicy.LEGACY =>
         legacyTraverseAndSubstituteCTE(plan)
-      case LegacyBehaviorPolicy.NEW_BEHAVIOR =>
+      case LegacyBehaviorPolicy.CORRECTED =>
         traverseAndSubstituteCTE(plan, inTraverse = false)
     }
   }
@@ -54,8 +54,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
           case (cteName, _) =>
             if (cteNames.contains(cteName)) {
               throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
-                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to NEW_BEHAVIOR so that name " +
-                "defined in inner CTE takes precedence. See more details in SPARK-28228.")
+                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+                "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+                "definitions will take precedence. See more details in SPARK-28228.")
             } else {
               cteName
             }
