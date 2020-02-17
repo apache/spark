@@ -869,4 +869,17 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkTrunc("HOUR", "0010-01-01 01:00:00")
     checkTrunc("DAY", "0010-01-01 00:00:00")
   }
+
+  test("SPARK-30793: truncate timestamps before the epoch to seconds and minutes") {
+    def checkTrunc(level: String, expected: String): Unit = {
+      val df = Seq("1961-04-12 00:01:02.345")
+        .toDF()
+        .select($"value".cast("timestamp").as("ts"))
+        .select(date_trunc(level, $"ts").cast("string"))
+      checkAnswer(df, Row(expected))
+    }
+
+    checkTrunc("SECOND", "1961-04-12 00:01:02")
+    checkTrunc("MINUTE", "1961-04-12 00:01:00")
+  }
 }
