@@ -75,72 +75,76 @@ case class BroadcastExchangeExec(
   private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
-          try {
-            // Setup a job group here so later it may get cancelled by groupId if necessary.
-            sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
-              interruptOnCancel = true)
-            val beforeCollect = System.nanoTime()
-            // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
-            val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= 512000000) {
-              throw new SparkException(
-                s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
-            }
+          doBroadcast
+    }
+  }
 
-            val beforeBuild = System.nanoTime()
-            longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
+  private def doBroadcast = {
+    try {
+      // Setup a job group here so later it may get cancelled by groupId if necessary.
+      sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
+        interruptOnCancel = true)
+      val beforeCollect = System.nanoTime()
+      // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
+      val (numRows, input) = child.executeCollectIterator()
+      if (numRows >= 512000000) {
+        throw new SparkException(
+          s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
+      }
 
-            // Construct the relation.
-            val relation = mode.transform(input, Some(numRows))
+      val beforeBuild = System.nanoTime()
+      longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
-            val dataSize = relation match {
-              case map: HashedRelation =>
-                map.estimatedSize
-              case arr: Array[InternalRow] =>
-                arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
-              case _ =>
-                throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
-                  s"type: ${relation.getClass.getName}")
-            }
+      // Construct the relation.
+      val relation = mode.transform(input, Some(numRows))
 
-            longMetric("dataSize") += dataSize
-            if (dataSize >= (8L << 30)) {
-              throw new SparkException(
-                s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
-            }
+      val dataSize = relation match {
+        case map: HashedRelation =>
+          map.estimatedSize
+        case arr: Array[InternalRow] =>
+          arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        case _ =>
+          throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
+            s"type: ${relation.getClass.getName}")
+      }
 
-            val beforeBroadcast = System.nanoTime()
-            longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
+      longMetric("dataSize") += dataSize
+      if (dataSize >= (8L << 30)) {
+        throw new SparkException(
+          s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+      }
 
-            // Broadcast the relation
-            val broadcasted = sparkContext.broadcast(relation)
-            longMetric("broadcastTime") += NANOSECONDS.toMillis(
-              System.nanoTime() - beforeBroadcast)
-            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-            SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-            promise.success(broadcasted)
-            broadcasted
-          } catch {
-            // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
-            // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
-            // will catch this exception and re-throw the wrapped fatal throwable.
-            case oe: OutOfMemoryError =>
-              val ex = new SparkFatalException(
-                new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
-                  "worker nodes. As a workaround, you can either disable broadcast by setting " +
-                  s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-                  s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
-                  .initCause(oe.getCause))
-              promise.failure(ex)
-              throw ex
-            case e if !NonFatal(e) =>
-              val ex = new SparkFatalException(e)
-              promise.failure(ex)
-              throw ex
-            case e: Throwable =>
-              promise.failure(e)
-              throw e
-          }
+      val beforeBroadcast = System.nanoTime()
+      longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
+
+      // Broadcast the relation
+      val broadcasted = sparkContext.broadcast(relation)
+      longMetric("broadcastTime") += NANOSECONDS.toMillis(
+        System.nanoTime() - beforeBroadcast)
+      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+      promise.success(broadcasted)
+      broadcasted
+    } catch {
+      // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
+      // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
+      // will catch this exception and re-throw the wrapped fatal throwable.
+      case oe: OutOfMemoryError =>
+        val ex = new SparkFatalException(
+          new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
+            "worker nodes. As a workaround, you can either disable broadcast by setting " +
+            s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
+            s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
+            .initCause(oe.getCause))
+        promise.failure(ex)
+        throw ex
+      case e if !NonFatal(e) =>
+        val ex = new SparkFatalException(e)
+        promise.failure(ex)
+        throw ex
+      case e: Throwable =>
+        promise.failure(e)
+        throw e
     }
   }
 
