@@ -142,7 +142,7 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testForeach() {
-    LongAccumulator accum = jsc.sc().longAccumulator();
+    LongAccumulator accum = jsc.longAccumulator();
     List<String> data = Arrays.asList("a", "b", "c");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
 

@@ -1904,7 +1904,7 @@ class JavaDroppedWordsCounter {
     if (instance == null) {
       synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
-          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
+          instance = jsc.longAccumulator("WordsInBlacklistCounter");
         }
       }
     }

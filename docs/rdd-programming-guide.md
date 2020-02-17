@@ -1446,7 +1446,7 @@ using its `value` method.
 The code below shows an accumulator being used to add up the elements of an array:
 
 {% highlight java %}
-LongAccumulator accum = jsc.sc().longAccumulator();
+LongAccumulator accum = jsc.longAccumulator();
 
 sc.parallelize(Arrays.asList(1, 2, 3, 4)).foreach(x -> accum.add(x));
 // ...
@@ -1555,7 +1555,7 @@ data.map { x => accum.add(x); x }
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
-LongAccumulator accum = jsc.sc().longAccumulator();
+LongAccumulator accum = jsc.longAccumulator();
 data.map(x -> { accum.add(x); return f(x); });
 // Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}

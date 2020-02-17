@@ -36,6 +36,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.util.{AccumulatorV2, CollectionAccumulator, DoubleAccumulator, LongAccumulator}
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -142,6 +143,79 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     JavaRDD.fromRDD(new EmptyRDD[T](sc))
   }
 
+  /**
+   * Register the given accumulator.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
+   */
+  def register(acc: AccumulatorV2[_, _]): Unit = {
+    sc.register(acc)
+  }
+
+  /**
+   * Register the given accumulator with given name.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
+   */
+  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
+    sc.register(acc, name)
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
+   */
+  def longAccumulator: LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
+   */
+  def longAccumulator(name: String): LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
+   */
+  def doubleAccumulator: DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
+   */
+  def doubleAccumulator(name: String): DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
+   * inputs by adding them into the list.
+   */
+  def collectionAccumulator[T]: CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
+   * inputs by adding them into the list.
+   */
+  def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
+    register(acc, name)
+    acc
+  }
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T]): JavaRDD[T] =

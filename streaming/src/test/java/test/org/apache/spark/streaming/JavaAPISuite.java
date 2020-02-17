@@ -618,8 +618,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testForeachRDD() {
-    final LongAccumulator accumRdd = ssc.sparkContext().sc().longAccumulator();
-    final LongAccumulator accumEle = ssc.sparkContext().sc().longAccumulator();
+    final LongAccumulator accumRdd = ssc.sparkContext().longAccumulator();
+    final LongAccumulator accumEle = ssc.sparkContext().longAccumulator();
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,1,1),
         Arrays.asList(1,1,1));

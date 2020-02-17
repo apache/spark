@@ -280,7 +280,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreach() {
-    LongAccumulator accum = sc.sc().longAccumulator();
+    LongAccumulator accum = sc.longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(s -> accum.add(1));
     assertEquals(2, accum.value().intValue());
@@ -288,7 +288,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreachPartition() {
-    LongAccumulator accum = sc.sc().longAccumulator();
+    LongAccumulator accum = sc.longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreachPartition(iter -> {
       while (iter.hasNext()) {
