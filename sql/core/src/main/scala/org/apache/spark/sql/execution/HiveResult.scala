@@ -55,12 +55,12 @@ object HiveResult {
       case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
         command.executeCollect().map(_.getString(1))
       case _ =>
-        val sessionWithJava8DatatimeEnabled = {
+        val sessionWithJava8DatetimeEnabled = {
           val cloned = ds.sparkSession.cloneSession()
           cloned.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
           cloned
         }
-        sessionWithJava8DatatimeEnabled.withActive {
+        sessionWithJava8DatetimeEnabled.withActive {
           val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.queryExecution.logical)
             .queryExecution
             .executedPlan
