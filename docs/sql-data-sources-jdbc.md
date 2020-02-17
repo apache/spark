@@ -23,7 +23,7 @@ license: |
 {:toc}
 
 Spark SQL also includes a data source that can read data from other databases using JDBC. This
-functionality should be preferred over using [JdbcRDD](api/scala/index.html#org.apache.spark.rdd.JdbcRDD).
+functionality should be preferred over using [JdbcRDD](api/scala/org/apache/spark/rdd/JdbcRDD.html).
 This is because the results are returned
 as a DataFrame and they can easily be processed in Spark SQL or joined with other data sources.
 The JDBC data source is also easier to use from Java or Python as it does not require the user to

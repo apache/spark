@@ -1060,22 +1060,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     outstandingTimezonesIds.foreach { timezone =>
       var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
         Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
-        Some(Literal(timezone)))
+        Some(Literal(timezone)), Some(timezone))
+      def millis(ts: MakeTimestamp): Milliseconds = Milliseconds(timestamp, Some(timezone))
+      def micros(ts: MakeTimestamp): Microseconds = Microseconds(timestamp, Some(timezone))
 
-      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
-      checkEvaluation(Microseconds(timestamp), 10123457)
+      checkEvaluation(millis(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(
+        millis(timestamp.copy(year = Literal(10))),
+        Decimal(BigDecimal(10123.457), 8, 3))
+
+      checkEvaluation(micros(timestamp), 10123457)
+      checkEvaluation(
+        micros(timestamp.copy(year = Literal(10))),
+        10123457)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp), 0)
+      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(micros(timestamp), 0)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
-      checkEvaluation(Microseconds(timestamp), 59999999)
+      checkEvaluation(millis(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(micros(timestamp), 59999999)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp), 0)
+      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(micros(timestamp), 0)
     }
   }
 
@@ -1103,15 +1112,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     outstandingTimezonesIds.foreach { timezone =>
       val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
         Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
-        Some(Literal(timezone)))
+        Some(Literal(timezone)), Some(timezone))
+      def secFrac(ts: MakeTimestamp): SecondWithFraction = SecondWithFraction(ts, Some(timezone))
 
-      checkEvaluation(SecondWithFraction(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(secFrac(timestamp), Decimal(10.123456, 8, 6))
       checkEvaluation(
-        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
+        secFrac(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
         Decimal(59000001, 8, 6))
       checkEvaluation(
-        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
+        secFrac(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
         Decimal(0.000001, 8, 6))
+      checkEvaluation(
+        secFrac(timestamp.copy(year = Literal(10))),
+        Decimal(10.123456, 8, 6))
     }
   }
 
