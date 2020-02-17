@@ -18,9 +18,11 @@ working with Arrow-enabled data.
 
 ### Ensure PyArrow Installed
 
+To use Apache Arrow in PySpark, [the recommended version of PyArrow](#recommended-pandas-and-pyarrow-versions)
+should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.8.0.
+is installed and available on all cluster nodes.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -165,6 +167,12 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Recommended Pandas and PyArrow Versions
+
+For usage with pyspark.sql, the supported versions of Pandas is 0.19.2 and PyArrow is 0.8.0. Higher
+versions may be used, however, compatibility and data correctness can not be guaranteed and should
+be verified by the user.
 
 ### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
 
