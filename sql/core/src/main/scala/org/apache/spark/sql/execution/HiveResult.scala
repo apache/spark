@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
@@ -37,30 +37,45 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(_: DescribeCommandBase) =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    case _: DescribeTableExec =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    // SHOW TABLES in Hive only output table names while our v1 command outputs
-    // database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW TABLES in Hive only output table names while our v2 command outputs
-    // namespace and table name.
-    case command : ShowTablesExec =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
-    // namespace, viewName, and isTemporary.
-    case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
-      command.executeCollect().map(_.getString(1))
-    case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = executedPlan.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e)))
-        .map(_.mkString("\t"))
+  def hiveResultString(ds: Dataset[_]): Seq[String] = {
+    val executedPlan = ds.queryExecution.executedPlan
+    executedPlan match {
+      case ExecutedCommandExec(_: DescribeCommandBase) =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      case _: DescribeTableExec =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      // SHOW TABLES in Hive only output table names while our v1 command outputs
+      // database, table name, isTemp.
+      case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+        command.executeCollect().map(_.getString(1))
+      // SHOW TABLES in Hive only output table names while our v2 command outputs
+      // namespace and table name.
+      case command : ShowTablesExec =>
+        command.executeCollect().map(_.getString(1))
+      // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
+      // namespace, viewName, and isTemporary.
+      case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
+        command.executeCollect().map(_.getString(1))
+      case _ =>
+        val sessionWithJava8DatetimeEnabled = {
+          val cloned = ds.sparkSession.cloneSession()
+          cloned.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
+          cloned
+        }
+        sessionWithJava8DatetimeEnabled.withActive {
+          // We cannot collect the original dataset because its encoders could be created
+          // with disabled Java 8 date-time API.
+          val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.logicalPlan)
+            .queryExecution
+            .executedPlan
+            .executeCollectPublic().map(_.toSeq).toSeq
+          // We need the types so we can output struct field names
+          val types = executedPlan.output.map(_.dataType)
+          // Reformat to match hive tab delimited output.
+          result.map(_.zip(types).map(e => toHiveString(e)))
+            .map(_.mkString("\t"))
+        }
+    }
   }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {

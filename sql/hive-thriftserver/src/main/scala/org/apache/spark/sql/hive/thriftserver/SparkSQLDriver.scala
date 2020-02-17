@@ -60,9 +60,10 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     // TODO unify the error code
     try {
       context.sparkContext.setJobDescription(command)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
+      val df = context.sql(command)
+      val execution = df.queryExecution
       hiveResponse = SQLExecution.withNewExecutionId(execution) {
-        hiveResultString(execution.executedPlan)
+        hiveResultString(df)
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)

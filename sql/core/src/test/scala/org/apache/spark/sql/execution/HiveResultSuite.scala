@@ -26,11 +26,10 @@ class HiveResultSuite extends SharedSparkSession {
   test("date formatting in hive result") {
     val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
     val df = dates.toDF("a").selectExpr("cast(a as date) as b")
-    val executedPlan1 = df.queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan1)
+    val result = HiveResult.hiveResultString(df)
     assert(result == dates)
-    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
-    val result2 = HiveResult.hiveResultString(executedPlan2)
+    val df2 = df.selectExpr("array(b)")
+    val result2 = HiveResult.hiveResultString(df2)
     assert(result2 == dates.map(x => s"[$x]"))
   }
 
@@ -41,11 +40,10 @@ class HiveResultSuite extends SharedSparkSession {
       "1582-10-04 01:02:03",
       "1582-10-15 01:02:03")
     val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
-    val executedPlan1 = df.queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan1)
+    val result = HiveResult.hiveResultString(df)
     assert(result == timestamps)
-    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
-    val result2 = HiveResult.hiveResultString(executedPlan2)
+    val df2 = df.selectExpr("array(b)")
+    val result2 = HiveResult.hiveResultString(df2)
     assert(result2 == timestamps.map(x => s"[$x]"))
   }
 
@@ -58,15 +56,14 @@ class HiveResultSuite extends SharedSparkSession {
   test("decimal formatting in hive result") {
     val df = Seq(new java.math.BigDecimal("1")).toDS()
     Seq(2, 6, 18).foreach { scala =>
-      val executedPlan =
-        df.selectExpr(s"CAST(value AS decimal(38, $scala))").queryExecution.executedPlan
-      val result = HiveResult.hiveResultString(executedPlan)
+      val decimalDf = df.selectExpr(s"CAST(value AS decimal(38, $scala))")
+      val result = HiveResult.hiveResultString(decimalDf)
       assert(result.head.split("\\.").last.length === scala)
     }
 
-    val executedPlan = Seq(java.math.BigDecimal.ZERO).toDS()
-      .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
+    val df2 = Seq(java.math.BigDecimal.ZERO).toDS()
+      .selectExpr(s"CAST(value AS decimal(38, 8))")
+    val result = HiveResult.hiveResultString(df2)
     assert(result.head === "0.00000000")
   }
 
@@ -77,8 +74,7 @@ class HiveResultSuite extends SharedSparkSession {
           withTable(s"$ns.$tbl") {
             spark.sql(s"CREATE TABLE $ns.$tbl (id bigint) USING $source")
             val df = spark.sql(s"SHOW TABLES FROM $ns")
-            val executedPlan = df.queryExecution.executedPlan
-            assert(HiveResult.hiveResultString(executedPlan).head == tbl)
+            assert(HiveResult.hiveResultString(df).head == tbl)
           }
       }
     }
@@ -91,11 +87,10 @@ class HiveResultSuite extends SharedSparkSession {
           withTable(s"$ns.$tbl") {
             spark.sql(s"CREATE TABLE $ns.$tbl (id bigint COMMENT 'col1') USING $source")
             val df = spark.sql(s"DESCRIBE $ns.$tbl")
-            val executedPlan = df.queryExecution.executedPlan
             val expected = "id                  " +
               "\tbigint              " +
               "\tcol1                "
-            assert(HiveResult.hiveResultString(executedPlan).head == expected)
+            assert(HiveResult.hiveResultString(df).head == expected)
           }
       }
     }

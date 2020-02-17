@@ -144,15 +144,14 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         withClue(s"Function '${info.getName}', Expression class '$className'") {
           val example = info.getExamples
           checkExampleSyntax(example)
-          example.split("  > ").toList.foreach {
+          example.split("  > ").toList.foreach(_ match {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(
-                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val actual = unindentAndTrim(hiveResultString(df).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>
-          }
+          })
         }
       }
     }
