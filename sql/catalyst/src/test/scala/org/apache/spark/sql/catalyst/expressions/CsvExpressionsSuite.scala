@@ -27,14 +27,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.TimeZoneGMT
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.TimeZoneUTC
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
   val badCsv = "\u0000\u0000\u0000A\u0001AAA"
 
-  val gmtId = Option(TimeZoneGMT.getID)
+  val gmtId = Option(TimeZoneUTC.getID)
 
   test("from_csv") {
     val csvData = "1"
@@ -75,7 +75,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 
     val csvData1 = "2016-01-01T00:00:00.123Z"
-    var c = Calendar.getInstance(TimeZoneGMT)
+    var c = Calendar.getInstance(TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
@@ -186,7 +186,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
 
   test("to_csv with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
-    val c = Calendar.getInstance(TimeZoneGMT)
+    val c = Calendar.getInstance(TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)

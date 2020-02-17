@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit
  */
 object DateTimeTestUtils {
 
-  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)

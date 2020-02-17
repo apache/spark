@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -263,17 +262,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
-    val ts = withDefaultTimeZone(TimeZoneGMT)(Timestamp.valueOf(nts))
+    val ts = withDefaultTimeZone(TimeZoneUTC)(Timestamp.valueOf(nts))
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getID)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         MILLISECONDS.toMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
