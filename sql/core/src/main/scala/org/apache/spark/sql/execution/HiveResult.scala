@@ -37,7 +37,7 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString[T](ds: Dataset[T]): Seq[String] = {
+  def hiveResultString(ds: Dataset[_]): Seq[String] = {
     val executedPlan = ds.queryExecution.executedPlan
     executedPlan match {
       case ExecutedCommandExec(_: DescribeCommandBase) =>
