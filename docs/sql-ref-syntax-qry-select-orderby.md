@@ -19,8 +19,8 @@ license: |
   limitations under the License.
 ---
 The <code>ORDER BY</code> clause is used to return the result rows in a sorted manner
-in the user specified order. Unlike the <code>SORT BY</code> clause, this clause guarantees
-a total order in the output. 
+in the user specified order. Unlike the [SORT BY](sql-ref-syntax-qry-select-sortby.html)
+clause, this clause guarantees a total order in the output. 
 
 ### Syntax
 {% highlight sql %}
@@ -141,3 +141,13 @@ SELECT * FROM person ORDER BY name ASC, age DESC;
   |300|Mike |80  |
   +---+-----+----+
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

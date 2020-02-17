@@ -188,7 +188,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       sql("CREATE TABLE t(i INT) USING parquet")
       val e = intercept[AnalysisException] {
-        sql("ALTER TABLE t ALTER COLUMN i TYPE INT FIRST")
+        sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
       assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
     }
@@ -1786,7 +1786,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
@@ -2041,6 +2042,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           // Set ACL to table path.
           val customAcl = new java.util.ArrayList[AclEntry]()
           customAcl.add(new AclEntry.Builder()
+            .setName("test")
             .setType(AclEntryType.USER)
             .setScope(AclEntryScope.ACCESS)
             .setPermission(FsAction.READ).build())
@@ -2060,8 +2062,26 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           if (ignore) {
             assert(aclEntries.size() == 0)
           } else {
-            assert(aclEntries.size() == 1)
+            assert(aclEntries.size() == 4)
             assert(aclEntries.get(0) == customAcl.get(0))
+
+            // Setting ACLs will also set user/group/other permissions
+            // as ACL entries.
+            val user = new AclEntry.Builder()
+              .setType(AclEntryType.USER)
+              .setScope(AclEntryScope.ACCESS)
+              .setPermission(FsAction.ALL).build()
+            val group = new AclEntry.Builder()
+              .setType(AclEntryType.GROUP)
+              .setScope(AclEntryScope.ACCESS)
+              .setPermission(FsAction.ALL).build()
+            val other = new AclEntry.Builder()
+              .setType(AclEntryType.OTHER)
+              .setScope(AclEntryScope.ACCESS)
+              .setPermission(FsAction.ALL).build()
+            assert(aclEntries.get(1) == user)
+            assert(aclEntries.get(2) == group)
+            assert(aclEntries.get(3) == other)
           }
         }
       }

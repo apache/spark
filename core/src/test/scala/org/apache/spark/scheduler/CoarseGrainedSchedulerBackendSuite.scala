@@ -34,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
@@ -187,8 +187,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("extra resources from executor") {
-    import TestUtils._
-
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, 1)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
@@ -200,6 +198,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
     sc = new SparkContext(conf)
+    val execGpu = new ExecutorResourceRequests().cores(1).resource(GPU, 3)
+    val taskGpu = new TaskResourceRequests().cpus(1).resource(GPU, 1)
+    val rp = new ResourceProfile(execGpu.requests, taskGpu.requests)
+    sc.resourceProfileManager.addResourceProfile(rp)
+    assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
@@ -224,7 +227,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        5))
+        rp.id))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
     val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
@@ -234,7 +237,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
 
     var exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
-    assert(exec3ResourceProfileId === 5)
+    assert(exec3ResourceProfileId === rp.id)
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",

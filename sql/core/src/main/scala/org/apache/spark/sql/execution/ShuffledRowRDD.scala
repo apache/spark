@@ -116,7 +116,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
-    specifiedPartitionIndices: Option[Array[(Int, Int)]] = None)
+    specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
@@ -126,8 +126,8 @@ class ShuffledRowRDD(
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
-  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionIndices match {
-    case Some(indices) => indices.map(_._1)
+  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
+    case Some(indices) => indices
     case None =>
       // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
       // corresponds to a pre-shuffle partition.
@@ -142,15 +142,16 @@ class ShuffledRowRDD(
   override val partitioner: Option[Partitioner] = Some(part)
 
   override def getPartitions: Array[Partition] = {
-    specifiedPartitionIndices match {
-      case Some(indices) =>
-        Array.tabulate[Partition](indices.length) { i =>
-          new ShuffledRowRDDPartition(i, indices(i)._1, indices(i)._2)
+    assert(partitionStartIndices.length == part.numPartitions)
+    Array.tabulate[Partition](partitionStartIndices.length) { i =>
+      val startIndex = partitionStartIndices(i)
+      val endIndex =
+        if (i < partitionStartIndices.length - 1) {
+          partitionStartIndices(i + 1)
+        } else {
+          numPreShufflePartitions
         }
-      case None =>
-        Array.tabulate[Partition](numPreShufflePartitions) { i =>
-          new ShuffledRowRDDPartition(i, i, i + 1)
-        }
+      new ShuffledRowRDDPartition(i, startIndex, endIndex)
     }
   }
 

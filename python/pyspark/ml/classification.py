@@ -165,8 +165,7 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel,
 
 
 class _LinearSVCParams(_JavaClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
-                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold,
-                       HasBlockSize):
+                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold):
     """
     Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
 
@@ -215,8 +214,6 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     LinearSVCModel...
     >>> model.getThreshold()
     0.5
-    >>> model.getBlockSize()
-    4096
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -255,19 +252,18 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2, blockSize=4096):
+                 aggregationDepth=2):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, blockSize=4096):
+                 aggregationDepth=2):
         """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
-                         standardization=True, threshold=0.0, aggregationDepth=2,
-                         blockSize=4096)
+                         standardization=True, threshold=0.0, aggregationDepth=2)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -276,12 +272,12 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                  aggregationDepth=2, blockSize=4096):
+                  aggregationDepth=2):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, blockSize=4096):
+                  aggregationDepth=2):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -345,13 +341,6 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
-
-    @since("3.0.0")
-    def setBlockSize(self, value):
-        """
-        Sets the value of :py:attr:`blockSize`.
-        """
-        return self._set(blockSize=value)
 
 
 class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
@@ -2164,7 +2153,7 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
 
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
-                                  HasTol, HasStepSize, HasSolver):
+                                  HasTol, HasStepSize, HasSolver, HasBlockSize):
     """
     Params for :py:class:`MultilayerPerceptronClassifier`.
 
@@ -2175,11 +2164,6 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
                    "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
                    "neurons and output layer of 10 neurons.",
                    typeConverter=TypeConverters.toListInt)
-    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
-                      "matrices. Data is stacked within partitions. If block size is more than " +
-                      "remaining data in a partition then it is adjusted to the size of this " +
-                      "data. Recommended size is between 10 and 1000, default is 128.",
-                      typeConverter=TypeConverters.toInt)
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
     initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
@@ -2191,13 +2175,6 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
         Gets the value of layers or its default value.
         """
         return self.getOrDefault(self.layers)
-
-    @since("1.6.0")
-    def getBlockSize(self):
-        """
-        Gets the value of blockSize or its default value.
-        """
-        return self.getOrDefault(self.blockSize)
 
     @since("2.0.0")
     def getInitialWeights(self):
@@ -2222,11 +2199,17 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     ...     (1.0, Vectors.dense([0.0, 1.0])),
     ...     (1.0, Vectors.dense([1.0, 0.0])),
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
-    >>> mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], blockSize=1, seed=123)
+    >>> mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
     >>> mlp.setMaxIter(100)
     MultilayerPerceptronClassifier...
     >>> mlp.getMaxIter()
     100
+    >>> mlp.getBlockSize()
+    128
+    >>> mlp.setBlockSize(1)
+    MultilayerPerceptronClassifier...
+    >>> mlp.getBlockSize()
+    1
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
     MultilayerPerceptronClassificationModel...

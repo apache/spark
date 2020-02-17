@@ -92,12 +92,6 @@ class DataSourceV2DataFrameSessionCatalogSuite
   }
 }
 
-class InMemoryTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("D'oh!")
-  }
-}
-
 class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable] {
   override def newTable(
       name: String,
@@ -105,6 +99,13 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       partitions: Array[Transform],
       properties: util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    val identToUse = Option(InMemoryTableSessionCatalog.customIdentifierResolution)
+      .map(_(ident))
+      .getOrElse(ident)
+    super.loadTable(identToUse)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -131,6 +132,21 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
   }
 }
 
+object InMemoryTableSessionCatalog {
+  private var customIdentifierResolution: Identifier => Identifier = _
+
+  def withCustomIdentifierResolver(
+      resolver: Identifier => Identifier)(
+      f: => Unit): Unit = {
+    try {
+      customIdentifierResolution = resolver
+      f
+    } finally {
+      customIdentifierResolution = null
+    }
+  }
+}
+
 private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
   extends QueryTest
   with SharedSparkSession
@@ -140,7 +156,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format: String = classOf[InMemoryTableProvider].getName
+  protected val v2Format: String = classOf[FakeV2Provider].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

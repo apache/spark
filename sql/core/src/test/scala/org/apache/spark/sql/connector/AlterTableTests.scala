@@ -146,9 +146,9 @@ trait AlterTableTests extends SharedSparkSession {
         .add("point", new StructType().add("x", IntegerType))
         .add("b", StringType))
 
-      val e1 = intercept[SparkException](
+      val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
-      assert(e1.getMessage().contains("AFTER column not found"))
+      assert(e1.getMessage().contains("Couldn't find the reference column"))
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -167,9 +167,9 @@ trait AlterTableTests extends SharedSparkSession {
           .add("z", IntegerType))
         .add("b", StringType))
 
-      val e2 = intercept[SparkException](
+      val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
-      assert(e2.getMessage().contains("AFTER column not found"))
+      assert(e2.getMessage().contains("Couldn't find the reference column"))
     }
   }
 
@@ -309,6 +309,30 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(exc.getMessage.contains("point"))
       assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: add column - new column should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq("id", "point.x", "arr.element.x", "mk.key.x", "mv.value.x").foreach { field =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS $field double")
+        }
+        assert(e.getMessage.contains("add"))
+        assert(e.getMessage.contains(s"$field already exists"))
+      }
     }
   }
 
@@ -595,9 +619,9 @@ trait AlterTableTests extends SharedSparkSession {
           .add("z", IntegerType))
         .add("b", IntegerType))
 
-      val e1 = intercept[SparkException](
+      val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("AFTER column not found"))
+      assert(e1.getMessage.contains("Couldn't resolve positional argument"))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -617,26 +641,13 @@ trait AlterTableTests extends SharedSparkSession {
           .add("y", IntegerType))
         .add("b", IntegerType))
 
-      val e2 = intercept[SparkException](
+      val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("AFTER column not found"))
+      assert(e2.getMessage.contains("Couldn't resolve positional argument"))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN a.y AFTER x"))
-    }
-  }
-
-  test("AlterTable: update column type and comment") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
-
-      val table = getTableMetadata(t)
-
-      assert(table.name === fullTableName(t))
-      assert(table.schema === StructType(Seq(StructField("id", LongType).withComment("doc"))))
     }
   }
 
@@ -849,6 +860,37 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: rename column - new name should not exist") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |id int,
+           |user_id int,
+           |point struct<x: double, y: double>,
+           |arr array<struct<x: double, y: double>>,
+           |mk map<struct<x: double, y: double>, string>,
+           |mv map<string, struct<x: double, y: double>>
+           |)
+           |USING $v2Format""".stripMargin)
+
+      Seq(
+        "id" -> "user_id",
+        "point.x" -> "y",
+        "arr.element.x" -> "y",
+        "mk.key.x" -> "y",
+        "mv.value.x" -> "y").foreach { case (field, newName) =>
+
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+        }
+        assert(e.getMessage.contains("rename"))
+        assert(e.getMessage.contains((field.split("\\.").init :+ newName).mkString(".")))
+        assert(e.getMessage.contains("already exists"))
+      }
+    }
+  }
+
   test("AlterTable: drop column") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -1016,6 +1058,21 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(updated.name === fullTableName(t))
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
+    }
+  }
+
+  test("AlterTable: replace columns") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 int, col2 int COMMENT 'c2') USING $v2Format")
+      sql(s"ALTER TABLE $t REPLACE COLUMNS (col2 string, col3 int COMMENT 'c3')")
+
+      val table = getTableMetadata(t)
+
+      assert(table.name === fullTableName(t))
+      assert(table.schema === StructType(Seq(
+        StructField("col2", StringType),
+        StructField("col3", IntegerType).withComment("c3"))))
     }
   }
 }

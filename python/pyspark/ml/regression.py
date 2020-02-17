@@ -2067,7 +2067,7 @@ class GeneralizedLinearRegression(JavaRegressor, _GeneralizedLinearRegressionPar
         """
         return self._set(tol=value)
 
-    @since("2.2.0")
+    @since("2.0.0")
     def setFitIntercept(self, value):
         """
         Sets the value of :py:attr:`fitIntercept`.

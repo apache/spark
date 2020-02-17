@@ -156,6 +156,10 @@ case class AlterTableAddColumnsStatement(
     tableName: Seq[String],
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
+case class AlterTableReplaceColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
 /**
  * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
  */
@@ -389,7 +393,9 @@ case class LoadDataStatement(
 /**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
  */
-case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+case class ShowCreateTableStatement(
+    tableName: Seq[String],
+    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL

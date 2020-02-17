@@ -107,7 +107,7 @@ private[shared] object SharedParamsCodeGen {
         "validation."),
       ParamDesc[Int]("blockSize", "block size for stacking input data in matrices. Data is " +
         "stacked within partitions. If block size is more than remaining data in a partition " +
-        "then it is adjusted to the size of this data.", Some("4096"),
+        "then it is adjusted to the size of this data.",
         isValid = "ParamValidators.gt(0)", isExpertParam = true)
     )
 

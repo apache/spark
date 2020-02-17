@@ -478,7 +478,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
-    "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite"
+    "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -819,13 +820,16 @@ object Unidoc {
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/examples")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/unsafe")))
+      .map(_.filterNot(f =>
+        f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
+        !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))

@@ -71,7 +71,7 @@ private[spark] class AppStatusListener(
   // causing too many writes to the underlying store, and other expensive operations).
   private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
   private val liveJobs = new HashMap[Int, LiveJob]()
-  private val liveExecutors = new HashMap[String, LiveExecutor]()
+  private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
@@ -772,6 +772,11 @@ private[spark] class AppStatusListener(
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
       exec.totalOffHeap = event.maxOffHeapMem.get
+      // SPARK-30594: whenever(first time or re-register) a BlockManager added, all blocks
+      // from this BlockManager will be reported to driver later. So, we should clean up
+      // used memory to avoid overlapped count.
+      exec.usedOnHeap = 0
+      exec.usedOffHeap = 0
     }
     exec.isActive = true
     exec.maxMemory = event.maxMem
@@ -1042,7 +1047,7 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def updateExecutorMemoryDiskInfo(
+  private[spark] def updateExecutorMemoryDiskInfo(
       exec: LiveExecutor,
       storageLevel: StorageLevel,
       memoryDelta: Long,

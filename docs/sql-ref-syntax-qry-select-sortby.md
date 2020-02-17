@@ -21,7 +21,8 @@ license: |
 The <code>SORT BY</code> clause is used to return the result rows sorted
 within each partition in the user specified order. When there is more than one partition
 <code>SORT BY</code> may return result that is partially ordered. This is different
-than <code>ORDER BY</code> clause which guarantees a total order of the output.
+than [ORDER BY](sql-ref-syntax-qry-select-orderby.html) clause which guarantees a
+total order of the output.
 
 ### Syntax
 {% highlight sql %}
@@ -174,3 +175,13 @@ SELECT /*+ REPARTITION(zip_code) */ name, age, zip_code FROM person
   |Lalit B.|null|94511   |
   +--------+----+--------+
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

@@ -81,6 +81,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
  * and sizes of graph elements, e.g. padding, font style, shape.
  */
 function preprocessGraphLayout(g) {
+  g.graph().ranksep = "70";
   var nodes = g.nodes();
   for (var i = 0; i < nodes.length; i++) {
       var node = g.node(nodes[i]);

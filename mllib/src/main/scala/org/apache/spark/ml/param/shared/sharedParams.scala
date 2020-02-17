@@ -580,7 +580,7 @@ trait HasValidationIndicatorCol extends Params {
 }
 
 /**
- * Trait for shared param blockSize (default: 4096). This trait may be changed or
+ * Trait for shared param blockSize. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -591,8 +591,6 @@ trait HasBlockSize extends Params {
    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", ParamValidators.gt(0))
-
-  setDefault(blockSize, 4096)
 
   /** @group expertGetParam */
   final def getBlockSize: Int = $(blockSize)

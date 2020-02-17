@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
+Spark SQL is Apache Spark's module for working with structured data.
 This guide is a reference for Structured Query Language (SQL) for Apache 
 Spark. This document describes the SQL constructs supported by Spark in detail
 along with usage examples when applicable.

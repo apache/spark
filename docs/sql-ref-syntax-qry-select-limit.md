@@ -18,8 +18,10 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-The <code>LIMIT</code> clause is used to constrain the number of rows returned by the <code>SELECT</code> statement. 
-In general, this clause is used in conjuction with <code>ORDER BY</code> to ensure that the results are deterministic.
+The <code>LIMIT</code> clause is used to constrain the number of rows returned by
+the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
+is used in conjuction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
+ensure that the results are deterministic.
 
 ### Syntax
 {% highlight sql %}
@@ -42,12 +44,13 @@ LIMIT { ALL | integer_expression }
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (name STRING, age INT);
-INSERT INTO person VALUES ('Zen Hui', 25), 
-                          ('Anil B', 18), 
-                          ('Shone S', 16), 
-                          ('Mike A', 25),
-                          ('John A', 18), 
-                          ('Jack N', 16);
+INSERT INTO person VALUES
+    ('Zen Hui', 25), 
+    ('Anil B', 18), 
+    ('Shone S', 16), 
+    ('Mike A', 25),
+    ('John A', 18), 
+    ('Jack N', 16);
                         
 -- Select the first two rows.
 SELECT name, age FROM person ORDER BY name LIMIT 2;
@@ -86,3 +89,13 @@ SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
   |Shone S| 16|
   +-------+---+
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)

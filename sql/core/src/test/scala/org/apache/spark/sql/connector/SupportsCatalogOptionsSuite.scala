@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -275,7 +273,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 }
 
 class CatalogSupportingInMemoryTableProvider
-  extends InMemoryTableProvider
+  extends FakeV2Provider
   with SupportsCatalogOptions {
 
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = {
