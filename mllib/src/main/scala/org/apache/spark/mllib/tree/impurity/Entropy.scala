@@ -25,7 +25,9 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 @Since("1.0.0")
 object Entropy extends Impurity {
 
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private val _log2 = scala.math.log(2)
+
+  private[tree] def log2(x: Double) = scala.math.log(x) / _log2
 
   /**
    * :: DeveloperApi ::
