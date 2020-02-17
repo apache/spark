@@ -754,14 +754,22 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
-    withSQLConf(
-      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
-      withTable("t") {
-        sql("create table t(a int, b string) using parquet partitioned by (a)")
-        val errorMsg = intercept[NumberFormatException] {
-          sql("insert into t partition(a='ansi') values('ansi')")
-        }.getMessage
-        assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+        withTable("t") {
+          sql("create table t(a int, b string) using parquet partitioned by (a)")
+          policy match {
+            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+              val errorMsg = intercept[NumberFormatException] {
+                sql("insert into t partition(a='ansi') values('ansi')")
+              }.getMessage
+              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+              sql("insert into t partition(a='ansi') values('ansi')")
+              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
       }
     }
   }
