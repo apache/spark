@@ -117,6 +117,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   // Copied from Scala 2.13.1
   // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
   // to prevent the issue https://github.com/scala/bug/issues/10495
+  // TODO(SPARK-30848): Remove this once we drop Scala 2.12.
   private final def productHash(x: Product, seed: Int, ignorePrefix: Boolean = false): Int = {
     val arr = x.productArity
     // Case objects have the hashCode inlined directly into the
