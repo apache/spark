@@ -47,9 +47,6 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
-  final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
-
   val TIMEZONE_OPTION = "timeZone"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()

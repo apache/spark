@@ -21,12 +21,13 @@ import java.io.CharArrayWriter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.TimeZoneGMT
 import org.apache.spark.sql.types._
 
 class JacksonGeneratorSuite extends SparkFunSuite {
 
-  val gmtId = DateTimeUtils.TimeZoneGMT.getID
+  val gmtId = TimeZoneGMT.getID
   val option = new JSONOptions(Map.empty, gmtId)
 
   test("initial with StructType and write out a row") {
