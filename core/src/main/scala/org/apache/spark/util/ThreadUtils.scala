@@ -313,6 +313,8 @@ private[spark] object ThreadUtils {
         case _ => future.get(atMost._1, atMost._2)
       }
     } catch {
+      case e: SparkFatalException =>
+        throw e.throwable
       case NonFatal(t)
         if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
