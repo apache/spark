@@ -1,2 +1,2 @@
---SET spark.sql.legacy.ctePrecedencePolicy = new_behavior 
+--SET spark.sql.legacy.ctePrecedencePolicy = corrected
 --IMPORT cte.sql
