@@ -55,9 +55,12 @@ object HiveResult {
       case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
         command.executeCollect().map(_.getString(1))
       case _ =>
-        val java8TimeConf = SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)
-        try {
-          SQLConf.get.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+        val sessionWithJava8DatatimeEnabled = {
+          val cloned = ds.sparkSession.cloneSession()
+          cloned.conf.set(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
+          cloned
+        }
+        sessionWithJava8DatatimeEnabled.withActive {
           val result: Seq[Seq[Any]] = Dataset.ofRows(ds.sparkSession, ds.queryExecution.logical)
             .queryExecution
             .executedPlan
@@ -67,8 +70,6 @@ object HiveResult {
           // Reformat to match hive tab delimited output.
           result.map(_.zip(types).map(e => toHiveString(e)))
             .map(_.mkString("\t"))
-        } finally {
-          SQLConf.get.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, java8TimeConf)
         }
     }
   }
