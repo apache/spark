@@ -114,7 +114,6 @@ private[r] object FMClassifierWrapper
       .setStepSize(stepSize)
       .setTol(tol)
       .setSolver(solver)
-      .setFitIntercept(fitIntercept)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
