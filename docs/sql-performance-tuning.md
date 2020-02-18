@@ -188,9 +188,9 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
 
 ## Adaptive Query Execution
-Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that make use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. There are three mainly feature in AQE, including coalescing post partition number, optimizing local shuffle reader and optimizing skewed join.
- ### Coalescing Post Shuffle Partition Num
- This feature coalesces the post shuffle partitions based on the map output statistics when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled` configuration properties are both enabled. There are four following sub-configurations in this optimization rule. 
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. As of Spark 3.0, there are three major features in AQE, including coalescing post-shuffle partition number, optimizing local shuffle reader and optimizing skewed join.
+ ### Coalescing Post Shuffle Partition Number
+ This feature coalesces the post shuffle partitions based on the map output statistics when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled` configuration properties are both enabled. There are four following sub-configurations in this optimization rule. And this feature can bring about 1.28x performance gain with query 38 in 3TB TPC-DS.
  <table class="table">
    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
    <tr>
@@ -224,9 +224,9 @@ Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that ma
  </table>
  
  ### Optimize Local Shuffle Reader
- This feature optimize the shuffle reader to local shuffle reader when converting the sort merge join to broadcast hash join in runtime and no additional shuffle introduced. It takes effect when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.localShuffleReader.enabled` configuration properties are both enabled.
+ This feature optimize the shuffle reader to local shuffle reader when converting the sort merge join to broadcast hash join in runtime and no additional shuffle introduced. It takes effect when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.localShuffleReader.enabled` configuration properties are both enabled. This feature and coalescing post shuffle partition number feature can bring about 1.76x performance gain with query 77 in 3TB TPC-DS.  
  ### Optimize Skewed Join
- This feature choose the skewed partition and creates multi tasks to handle the skewed partition when both enable `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewedJoinOptimization.enabled`. There are four following sub-configurations in this optimization rule.
+ This feature choose the skewed partition and creates multi tasks to handle the skewed partition when both enable `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewedJoinOptimization.enabled`. There are four following sub-configurations in this optimization rule. This feature can bring about 6x performance gain in specific skewed join use case, which can refer the detailed use case in PR#26434.
   <table class="table">
      <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
      <tr>
