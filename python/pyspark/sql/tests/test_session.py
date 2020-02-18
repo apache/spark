@@ -225,7 +225,7 @@ class SparkSessionTests4(ReusedSQLTestCase):
                 session2.stop()
 
 
-class SparkSessionTests4(ReusedSQLTestCase):
+class SparkSessionTests5(ReusedSQLTestCase):
 
     def test_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test that SQLContext.getOrCreate() returns a usable instance after
