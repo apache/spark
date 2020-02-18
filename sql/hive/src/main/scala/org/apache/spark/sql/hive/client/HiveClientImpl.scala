@@ -185,6 +185,9 @@ private[hive] class HiveClientImpl(
 
     // not to lose command line overwritten properties
     // make a copy overridden props so that it can be reinserted finally
+    // HiveConf.getConfSystemProperties returns all the system properties
+    // which were considered on creation of HiveConf constructor
+    // Refer: org.apache.hadoop.hive.conf.HiveConf#applySystemProperties
     val overriddenHiveProps = HiveConf.getConfSystemProperties.asScala
     val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
       sparkConf.getAll.toMap ++ overriddenHiveProps ++ extraConfig).toMap
