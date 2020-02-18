@@ -222,6 +222,13 @@ private[spark] class DAGScheduler(
   private val maxFailureNumTasksCheck = sc.getConf
     .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES)
 
+  /**
+   * Threshold to try number of times the ignore the fetch failed
+   * due to decommissioning of nodes
+   */
+  private val maxIgnoredFailedStageAttempts = sc.getConf
+    .get(config.GRACEFUL_DECOMMISSION_FETCHFAILED_IGNORE_THRESHOLD)
+
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
@@ -287,6 +294,13 @@ private[spark] class DAGScheduler(
    */
   def workerRemoved(workerId: String, host: String, message: String): Unit = {
     eventProcessLoop.post(WorkerRemoved(workerId, host, message))
+  }
+
+  /**
+   * Called by DecommissionTracker when node is decommissioned
+   */
+  def nodeDecommissioned(host: String): Unit = {
+    eventProcessLoop.post(NodeDecommissioned(host))
   }
 
   /**
@@ -1617,10 +1631,25 @@ private[spark] class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
+          if (!event.reason.asInstanceOf[FetchFailed].countTowardsStageFailures) {
+            // Ignore stage attempts due to fetch failed only
+            // once per attempt
+            if (!failedStage.failedAttemptIds.contains(task.stageAttemptId)) {
+              failedStage.ignoredFailedStageAttempts += 1
+              DecommissionTracker.incrFetchFailIgnoreCnt()
+              failedStage.latestInfo.stageFailureIgnored(true)
+            }
+            logInfo(s"""Ignoring stage failure due to fetch failed from the decommissioned""" +
+              s""" node : {"stage":"$failedStage","attempt":"${task.stageAttemptId}",""" +
+              s""""totalIgnoredAttempts":"${failedStage.ignoredFailedStageAttempts}",""" +
+              s""""node":"$bmAddress"}""")
+          }
           failedStage.failedAttemptIds.add(task.stageAttemptId)
-          val shouldAbortStage =
-            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
-            disallowStageRetryForTest
+          val shouldAbortStage = failedStage.failedAttemptIds.size >=
+              (maxConsecutiveStageAttempts + failedStage.ignoredFailedStageAttempts) ||
+              disallowStageRetryForTest ||
+              failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
+
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
@@ -1661,6 +1690,10 @@ private[spark] class DAGScheduler(
           }
 
           if (shouldAbortStage) {
+            if (failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
+              && DecommissionTracker.isDecommissionEnabled(sc.getConf)) {
+              DecommissionTracker.setFetchFailIgnoreCntThresholdFlag(true)
+            }
             val abortMessage = if (disallowStageRetryForTest) {
               "Fetch failure will not retry stage due to testing config"
             } else {
@@ -1823,9 +1856,10 @@ private[spark] class DAGScheduler(
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           // TODO Refactor the failure handling logic to combine similar code with that of
           // FetchFailed.
-          val shouldAbortStage =
-            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
-              disallowStageRetryForTest
+          val shouldAbortStage = failedStage.failedAttemptIds.size >=
+            (maxConsecutiveStageAttempts + failedStage.ignoredFailedStageAttempts) ||
+            disallowStageRetryForTest ||
+            failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
 
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {
@@ -1979,6 +2013,18 @@ private[spark] class DAGScheduler(
     mapOutputTracker.removeOutputsOnHost(host)
     clearCacheLocs()
   }
+
+  /**
+   * Remove shuffle data mapping when node is decomissioned.
+   *
+   * @param host host of the node that is decommissioned
+   */
+  private[scheduler] def handleNodeDecommissioned(host: String) {
+    logInfo(s"Marking shuffle files lost on the decommissioning host $host")
+    mapOutputTracker.removeOutputsOnHost(host)
+    clearCacheLocs()
+  }
+
 
   private[scheduler] def handleExecutorAdded(execId: String, host: String): Unit = {
     // remove from failedEpoch(execId) ?
@@ -2280,6 +2326,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case WorkerRemoved(workerId, host, message) =>
       dagScheduler.handleWorkerRemoved(workerId, host, message)
+
+    case NodeDecommissioned(host) =>
+      dagScheduler.handleNodeDecommissioned(host)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)

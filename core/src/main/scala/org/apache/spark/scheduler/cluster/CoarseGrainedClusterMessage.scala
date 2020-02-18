@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.ExecutorLossReason
+import org.apache.spark.scheduler.{ExecutorLossReason, NodeDecommissionReason}
 import org.apache.spark.util.SerializableBuffer
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
@@ -96,6 +96,17 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class DecommissionExecutor(executorId: String)  extends CoarseGrainedClusterMessage
 
+  case class NodeLossNotification(nodeIds: Seq[String])
+
+  case class AddNodeToDecommission(hostname: String, decommissionTimeInSeconds: Long,
+    reason: NodeDecommissionReason) extends CoarseGrainedClusterMessage
+
+  case class RemoveNodeToDecommission(hostname: String)
+    extends CoarseGrainedClusterMessage
+
+  case class UpdateNodeToDecommissionSetTerminate(hostname: String)
+    extends CoarseGrainedClusterMessage
+
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
 
@@ -105,6 +116,11 @@ private[spark] object CoarseGrainedClusterMessages {
   case class AddWebUIFilter(
       filterName: String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
+
+  // cluster info update notification
+  case class ClusterInfoUpdate(clusterInfo: ClusterInfo)
+    extends CoarseGrainedClusterMessage
+
 
   // Messages exchanged between the driver and the cluster manager for executor allocation
   // In Yarn mode, these are exchanged between the driver and the AM

@@ -56,6 +56,7 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     blacklistTracker: Option[BlacklistTracker] = None,
+    decommissionTracker: Option[DecommissionTracker] = None,
     clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
@@ -813,6 +814,19 @@ private[spark] class TaskSetManager(
         if (fetchFailed.bmAddress != null) {
           blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
+
+          // Do account fetch failure exception raised by decommissioned
+          // node against stage failure.
+          decommissionTracker match {
+            case Some(decommissionTracker) =>
+              if (decommissionTracker.isNodeDecommissioned(fetchFailed.bmAddress.host)) {
+                logInfo(s"Do not count fetch failure from decommissioned" +
+                  s" node ${fetchFailed.bmAddress.host}")
+                fetchFailed.countTowardsStageFailures = false
+              }
+            case _ =>
+            // No action
+          }
         }
 
         None

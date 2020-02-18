@@ -88,6 +88,9 @@ private[scheduler] case class ExecutorLost(execId: String, reason: ExecutorLossR
 private[scheduler] case class WorkerRemoved(workerId: String, host: String, message: String)
   extends DAGSchedulerEvent
 
+private[scheduler] case class NodeDecommissioned(host: String)
+  extends DAGSchedulerEvent
+
 private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent

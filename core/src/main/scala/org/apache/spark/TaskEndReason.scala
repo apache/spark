@@ -61,6 +61,14 @@ sealed trait TaskFailedReason extends TaskEndReason {
    * on was killed.
    */
   def countTowardsTaskFailures: Boolean = true
+
+  /**
+   * Whether this task failure should be counted towards the maximum number of times the stage is
+   * allowed to fail before the stage is aborted. Set to false in cases where the task's failure
+   * was unrelated to the task; for example, if the task failed because fetch failed exception
+   * from the decommissioned node.
+   */
+  var countTowardsStageFailures: Boolean = true
 }
 
 /**

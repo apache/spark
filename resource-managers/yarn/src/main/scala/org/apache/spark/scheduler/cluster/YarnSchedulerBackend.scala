@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
-import java.util.concurrent.atomic.{AtomicBoolean}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.servlet.DispatcherType
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -36,8 +36,9 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.NodeDecommissionReason
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.util.{Clock, RpcUtils, SystemClock, ThreadUtils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -211,6 +212,70 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
+   * Process cluster info update recieved from AM
+   *
+   */
+  protected def processClusterInfoUpdate(clusterInfo: ClusterInfo): Boolean = {
+
+    // NB: In case of clusterInfoFullSync nodes decommissioning info may be
+    // received multiple times but that is not an issue as long as information
+    // is correct. Actions here are idempotent.
+
+    clusterInfo.nodeInfos.foreach { case (node, nodeInfo) =>
+      nodeInfo.nodeState match {
+
+        case NodeState.GRACEFUL_DECOMMISSIONING =>
+          if (nodeInfo.terminationTime.isDefined && nodeInfo.terminationTime.get > 0) {
+            // eg. Spot Loss/ preemptible VMs loss case
+            addNodeToDecommission(node, nodeInfo.terminationTime.get, NodeLoss)
+          }
+
+        case NodeState.RUNNING =>
+          // If node reused (identified by hostname),
+          // This is the scenario of hostname reused
+          removeNodeToDecommission(node)
+
+        case NodeState.DECOMMISSIONED | NodeState.LOST =>
+          updateNodeToDecommissionSetTerminate(node)
+
+        // NodeState.OTHER
+        case _ =>
+        // ignore other states
+      }
+    }
+    true
+  }
+
+  /**
+   * Add nodes to decommission list, time at which node will be terminated.
+   */
+  override def addNodeToDecommission(hostname: String, terminationTimeMs: Long,
+                                     reason: NodeDecommissionReason): Unit = {
+    if (driverEndpoint != null) {
+      driverEndpoint.send(AddNodeToDecommission(hostname, terminationTimeMs, reason))
+    }
+  }
+
+  /**
+   * Remove node from the decommission map.
+   */
+  override def removeNodeToDecommission(hostname: String): Unit = {
+    if (driverEndpoint != null) {
+      driverEndpoint.send(RemoveNodeToDecommission(hostname))
+    }
+  }
+
+  /**
+   * Update node to mark it terminated
+   */
+  override def updateNodeToDecommissionSetTerminate(hostname: String): Unit = {
+    if (driverEndpoint != null) {
+      driverEndpoint.send(UpdateNodeToDecommissionSetTerminate(hostname))
+    }
+  }
+
+
+  /**
    * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
    * This endpoint communicates with the executors and queries the AM for an executor's exit
    * status when the executor is disconnected.
@@ -319,6 +384,10 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case RetrieveDelegationTokens =>
         context.reply(currentDelegationTokens)
+
+      case ClusterInfoUpdate(clusterInfo) =>
+        logDebug(s"clusterInfoUpdate received at YarnSchedulerEndpoint : $clusterInfo")
+        context.reply(processClusterInfoUpdate(clusterInfo))
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

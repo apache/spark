@@ -24,8 +24,10 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -42,9 +44,8 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
-import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
+import org.apache.spark.scheduler.cluster.{ClusterInfo, NodeInfo, NodeState, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{ClusterInfoUpdate, NodeLossNotification, RemoveExecutor, RetrieveLastAllocatedExecutorId}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
@@ -161,6 +162,17 @@ private[yarn] class YarnAllocator(
 
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
+
+  // Cluster info is information about cluster passed from AM -> Driver.
+  // we keep it cached on the AM side till it is sent to driver and is
+  // cleared once successfully sent. On failure, the failed message is
+  // sent in next cycle.
+  // Visible for testing
+  private val currentClusterInfo = ClusterInfo(new HashMap[String, NodeInfo])
+
+  // Interval in seconds after which the node is decommissioned after this time node
+  // is not available to use.
+  private val nodeLossInterval = sparkConf.get(GRACEFUL_DECOMMISSION_NODE_TIMEOUT)
 
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
@@ -436,6 +448,50 @@ private[yarn] class YarnAllocator(
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, getNumExecutorsRunning))
     }
+
+    // If the flags is enabled than GRACEFUL_DECOMMISSION_ENABLE
+    // than handling the Node loss scenario using the decommission tracker.
+    if (sparkConf.get(GRACEFUL_DECOMMISSION_ENABLE)) {
+      processGracefulDecommission(allocateResponse)
+    }
+  }
+
+  def processGracefulDecommission(allocateResponse: AllocateResponse): Unit = {
+    // Create a consolidated node decommission info report.
+    val nodeInfos = new HashMap[String, NodeInfo]
+
+    // node with updated information.
+    val getUpdatedNodes = allocateResponse.getUpdatedNodes()
+    if (getUpdatedNodes != null) {
+      val updatedNodes = getUpdatedNodes.asScala
+      for (x <- updatedNodes) {
+        if (x.getNodeState.toString.equals(NodeState.DECOMMISSIONING.toString)) {
+          // In hadoop 2.7 there is no support getDecommissioningTimeout whereas
+          // In hadoop 3.1 and later version of hadoop there is support
+          // of getDecommissioningTimeout So the method call made using reflection
+          // to update the value nodeTerminationTime and for lower version of hadoop2.7
+          // use the config spark.graceful.decommission.node.timeout which is specific to cloud
+          var nodeTerminationTime = clock.getTimeMillis() + nodeLossInterval * 1000
+          try {
+              val decommiossioningTimeout = x.getClass.getMethod(
+                "getDecommissioningTimeout").invoke(x).asInstanceOf[Integer]
+              if (decommiossioningTimeout != null) {
+                nodeTerminationTime = clock.getTimeMillis() + decommiossioningTimeout * 1000
+              }
+          } catch {
+            case e: NoSuchMethodException => logDebug(e.toString)
+          }
+          nodeInfos(x.getNodeId().getHost())
+            = NodeInfo(terminationTime = Some(nodeTerminationTime),
+            nodeState = NodeState.getYarnNodeState(x.getNodeState()))
+        } else {
+          nodeInfos(x.getNodeId().getHost())
+            = NodeInfo(terminationTime = None,
+            nodeState = NodeState.getYarnNodeState(x.getNodeState()))
+        }
+      }
+    }
+    processClusterInfo(ClusterInfo(nodeInfos = nodeInfos))
   }
 
   /**
@@ -895,6 +951,22 @@ private[yarn] class YarnAllocator(
       }
     }
   }
+
+  private[yarn] def processClusterInfo(clusterInfo: ClusterInfo): Unit = {
+
+    // Update cached currentClusterInfo.
+    clusterInfo.nodeInfos.foreach{case(k, v) => currentClusterInfo.nodeInfos(k) = v}
+
+    logDebug(s"clusterInfoUpdate: full sync $currentClusterInfo")
+
+    driverRef.ask[Boolean](ClusterInfoUpdate(currentClusterInfo)).andThen {
+      case Success(b) => currentClusterInfo.nodeInfos.clear() // Clear cached data
+      case Failure(f) => logInfo(s"clusterInfoUpdate: sync failed ($f)." +
+        s" Will be synced in next cycle")
+    }(ThreadUtils.sameThread)
+    // Since the time taken to complete is small , so used the single thread here.
+  }
+
 
   /**
    * Register that some RpcCallContext has asked the AM why the executor was lost. Note that

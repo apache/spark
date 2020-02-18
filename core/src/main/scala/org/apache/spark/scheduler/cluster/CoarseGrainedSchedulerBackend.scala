@@ -57,6 +57,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Total number of executors that are currently registered
   protected val totalRegisteredExecutors = new AtomicInteger(0)
   protected val conf = scheduler.sc.conf
+  // Invoked lazily to prevent creating the DecommissionTracker before
+  // ExecutorAllocationClient and DAGScheduler
+  protected lazy val decommissionTracker = scheduler.decommissionTrackerOpt
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
   private val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
   // Submit tasks only after (registered resources / total expected resources)
@@ -203,6 +206,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+
+      case AddNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason) =>
+        decommissionTracker.foreach(
+          _.addNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason))
+
+      case RemoveNodeToDecommission(hostname) =>
+        decommissionTracker.foreach(_.removeNodeToDecommission(hostname))
+
+      case UpdateNodeToDecommissionSetTerminate(hostname) =>
+        decommissionTracker.foreach(_.updateNodeToDecommissionSetTerminate(hostname))
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }
@@ -220,6 +234,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // or if it ignored our blacklist), then we reject that executor immediately.
           logInfo(s"Rejecting $executorId as it has been blacklisted.")
           context.sendFailure(new IllegalStateException(s"Executor is blacklisted: $executorId"))
+        } else if (isNodeDecommissioning(hostname)) {
+          // Refuse any new executor registered from the decommissioning worker. Can only happen
+          // in case of spot loss nodes about to be lost. For nodes gracefuly decommissioning this
+          // won't happen.
+          logInfo(s"Rejecting executor:$executorId registration on decommissioning node:$hostname")
+          context.sendFailure(new IllegalStateException(
+            s"Executor host is decommissioning: $executorId"))
         } else {
           // If the executor's rpc env is not listening for incoming connections, `hostPort`
           // will be null, and the client connection should be used to contact the executor.
@@ -295,6 +316,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val taskDescs = withLock {
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
+          .filter(x => !isNodeDecommissioning(x._2.executorHost))
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
@@ -322,9 +344,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers(executorId: String): Unit = {
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
+        val executorData = executorDataMap(executorId)
         // Filter out executors under killing
-        if (isExecutorActive(executorId)) {
-          val executorData = executorDataMap(executorId)
+        // add the filter to check executor doesnot belong to
+        // decommission nodes
+        if (isExecutorActive(executorId) && !isNodeDecommissioning(executorData.executorHost)) {
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
               Some(executorData.executorAddress.hostPort),
@@ -851,11 +875,45 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def isBlacklisted(executorId: String, hostname: String): Boolean = false
 
+  /**
+   * Add nodes to decommission list, time in ms at which node will be decommissioned.
+   * NB: Public for testing
+   *
+   * @param hostname hostname of worker to be decommissioned.
+   * @param terminationTimeMs time after which node will be forcefully terminated.
+   */
+  protected def addNodeToDecommission(hostname: String, terminationTimeMs: Long,
+                            reason: NodeDecommissionReason): Unit = { None }
+
   // SPARK-27112: We need to ensure that there is ordering of lock acquisition
   // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
   // the deadlock issue exposed in SPARK-27112
   private def withLock[T](fn: => T): T = scheduler.synchronized {
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
+  }
+
+  /**
+   * Remover worker from the decommission map.
+   * NB: Public for testing
+   *
+   * @hostname hostname of worker to be removed from decommissioned list.
+   */
+  def removeNodeToDecommission(hostname: String): Unit = { None }
+
+  /**
+   * Mark node as terminated.
+   * NB: Public for testing
+   *
+   * @hostname hostname of worker to be marked as terminated.
+   */
+  def updateNodeToDecommissionSetTerminate(hostname: String): Unit = { None }
+
+
+  private def isNodeDecommissioning(hostname: String): Boolean = {
+    decommissionTracker match {
+      case None => return false
+      case Some(decommissionTracker) => return decommissionTracker.isNodeDecommissioning(hostname)
+    }
   }
 
 }

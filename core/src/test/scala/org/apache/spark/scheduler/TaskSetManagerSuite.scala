@@ -493,7 +493,8 @@ class TaskSetManagerSuite
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
     val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
-    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
+    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt,
+      clock = clock)
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1

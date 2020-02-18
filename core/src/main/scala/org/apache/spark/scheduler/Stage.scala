@@ -91,8 +91,15 @@ private[scheduler] abstract class Stage(
    */
   val failedAttemptIds = new HashSet[Int]
 
+  /**
+   * Number of times the stage failure needs to be ignored. e.g failed due to fetch failed
+   * exception caused by node decommissioning.
+   */
+  var ignoredFailedStageAttempts = 0
+
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
+    ignoredFailedStageAttempts = 0
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */

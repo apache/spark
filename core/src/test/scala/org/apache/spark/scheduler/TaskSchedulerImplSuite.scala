@@ -1337,7 +1337,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         offers
       }
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock = clock)
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
@@ -1377,7 +1377,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock()
     val taskScheduler = new TaskSchedulerImpl(sc) {
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock = clock)
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
