@@ -50,7 +50,7 @@ def generate_sql_configs_table(sql_configs, path):
 
     ```html
     <table class="table">
-    <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Version</th></tr>
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 
     <tr>
         <td><code>spark.sql.adaptive.enabled</code></td>
