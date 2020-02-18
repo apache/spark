@@ -71,7 +71,7 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/LogisticRegression.html).
 
 {% include_example scala/org/apache/spark/examples/ml/LogisticRegressionWithElasticNetExample.scala %}
 </div>
@@ -109,12 +109,12 @@ only available on the driver.
 
 <div data-lang="scala" markdown="1">
 
-[`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
+[`LogisticRegressionTrainingSummary`](api/scala/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
 provides a summary for a
-[`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
+[`LogisticRegressionModel`](api/scala/org/apache/spark/ml/classification/LogisticRegressionModel.html).
 In the case of binary classification, certain additional metrics are
 available, e.g. ROC curve. The binary summary can be accessed via the
-`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
 
 Continuing the earlier example:
 
@@ -216,7 +216,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.DecisionTreeClassifier).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
 
 {% include_example scala/org/apache/spark/examples/ml/DecisionTreeClassificationExample.scala %}
 
@@ -261,7 +261,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.RandomForestClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/RandomForestClassifierExample.scala %}
 </div>
@@ -302,7 +302,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.GBTClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeClassifierExample.scala %}
 </div>
@@ -358,7 +358,7 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.MultilayerPerceptronClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/MultilayerPerceptronClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/MultilayerPerceptronClassifierExample.scala %}
 </div>
@@ -403,7 +403,7 @@ in Spark ML supports binary classification with linear SVM. Internally, it optim
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.LinearSVC) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/LinearSVC.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/LinearSVCExample.scala %}
 </div>
@@ -447,7 +447,7 @@ The example below demonstrates how to load the
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.OneVsRest) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/OneVsRest.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/OneVsRestExample.scala %}
 </div>
@@ -501,7 +501,7 @@ setting the parameter $\lambda$ (default to $1.0$).
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.NaiveBayes) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/NaiveBayes.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/NaiveBayesExample.scala %}
 </div>
@@ -544,7 +544,7 @@ We scale features to be between 0 and 1 to prevent the exploding gradient proble
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.FMClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/FMClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/FMClassifierExample.scala %}
 </div>
@@ -585,7 +585,7 @@ regression model and extracting model summary statistics.
 
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/LinearRegression.html).
 
 {% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
 </div>
@@ -726,7 +726,7 @@ function and extracting model summary statistics.
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
 </div>
@@ -768,7 +768,7 @@ We use a feature transformer to index categorical features, adding metadata to t
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.DecisionTreeRegressor).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
 
 {% include_example scala/org/apache/spark/examples/ml/DecisionTreeRegressionExample.scala %}
 </div>
@@ -810,7 +810,7 @@ We use a feature transformer to index categorical features, adding metadata to t
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.RandomForestRegressor) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/RandomForestRegressor.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/RandomForestRegressorExample.scala %}
 </div>
@@ -851,7 +851,7 @@ be true in general.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GBTRegressor) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeRegressorExample.scala %}
 </div>
@@ -945,7 +945,7 @@ The implementation matches the result from R's survival function
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.AFTSurvivalRegression) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/AFTSurvivalRegression.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
 </div>
@@ -1025,7 +1025,7 @@ is treated as piecewise linear function. The rules for prediction therefore are:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.ml.regression.IsotonicRegression) for details on the API.
+Refer to the [`IsotonicRegression` Scala docs](api/scala/org/apache/spark/ml/regression/IsotonicRegression.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/IsotonicRegressionExample.scala %}
 </div>
@@ -1066,7 +1066,7 @@ We scale features to be between 0 and 1 to prevent the exploding gradient proble
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.FMRegressor) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/FMRegressor.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/FMRegressorExample.scala %}
 </div>

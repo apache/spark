@@ -75,7 +75,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        new ResolveSessionCatalog(catalogManager, conf, catalog.isView) +:
+        new ResolveSessionCatalog(
+          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -100,9 +101,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected def optimizer: Optimizer = {
     new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
-      override def postHocOptimizationBatches: Seq[Batch] = Seq(
-        Batch("Prune Hive Table Partitions", Once, new PruneHiveTablePartitions(session))
-      )
+      override def postHocOptimizationBatches: Seq[Batch] = super.postHocOptimizationBatches ++
+        Seq(Batch("Prune Hive Table Partitions", Once, new PruneHiveTablePartitions(session)))
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules

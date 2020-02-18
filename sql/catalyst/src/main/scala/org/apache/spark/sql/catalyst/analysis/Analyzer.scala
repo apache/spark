@@ -176,7 +176,15 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
-  protected val fixedPoint = FixedPoint(maxIterations)
+  /**
+   * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
+   * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
+   */
+  protected val fixedPoint =
+    FixedPoint(
+      maxIterations,
+      errorOnExceed = true,
+      maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -3015,9 +3023,29 @@ class Analyzer(
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
+        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
+        // normalized parent name of fields to field names that belong to the parent.
+        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
         val schema = t.schema
         val normalizedChanges = changes.flatMap {
           case add: AddColumn =>
+            def addColumn(
+                parentSchema: StructType,
+                parentName: String,
+                normalizedParentName: Seq[String]): TableChange = {
+              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
+              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
+              val field = add.fieldNames().last
+              colsToAdd(normalizedParentName) = fieldsAdded :+ field
+              TableChange.addColumn(
+                (normalizedParentName :+ field).toArray,
+                add.dataType(),
+                add.isNullable,
+                add.comment,
+                pos)
+            }
             val parent = add.fieldNames().init
             if (parent.nonEmpty) {
               // Adding a nested field, need to normalize the parent column and position
@@ -3029,27 +3057,14 @@ class Analyzer(
                 val (normalizedName, sf) = target.get
                 sf.dataType match {
                   case struct: StructType =>
-                    val pos = findColumnPosition(add.position(), parent.quoted, struct)
-                    Some(TableChange.addColumn(
-                      (normalizedName ++ Seq(sf.name, add.fieldNames().last)).toArray,
-                      add.dataType(),
-                      add.isNullable,
-                      add.comment,
-                      pos))
-
+                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
                   case other =>
                     Some(add)
                 }
               }
             } else {
               // Adding to the root. Just need to normalize position
-              val pos = findColumnPosition(add.position(), "root", schema)
-              Some(TableChange.addColumn(
-                add.fieldNames(),
-                add.dataType(),
-                add.isNullable,
-                add.comment,
-                pos))
+              Some(addColumn(schema, "root", Nil))
             }
 
           case typeChange: UpdateColumnType =>
@@ -3148,17 +3163,18 @@ class Analyzer(
 
     private def findColumnPosition(
         position: ColumnPosition,
-        field: String,
-        struct: StructType): ColumnPosition = {
+        parentName: String,
+        struct: StructType,
+        fieldsAdded: Seq[String]): ColumnPosition = {
       position match {
         case null => null
         case after: After =>
-          struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
+          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
               throw new AnalysisException("Couldn't find the reference column for " +
-                s"$after at $field")
+                s"$after at $parentName")
           }
         case other => other
       }

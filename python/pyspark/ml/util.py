@@ -390,6 +390,7 @@ class DefaultParamsWriter(MLWriter):
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
+
         - class
         - timestamp
         - sparkVersion
@@ -397,6 +398,7 @@ class DefaultParamsWriter(MLWriter):
         - paramMap
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
+
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
         """

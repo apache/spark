@@ -259,11 +259,11 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.5)
 
-  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
       .internal()
-      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
-        "a broadcast hash join operation.")
+      .doc("When true, dynamic partition pruning will only apply when the broadcast exchange of " +
+        "a broadcast hash join operation can be reused as the dynamic pruning filter.")
       .booleanConf
       .createWithDefault(true)
 
@@ -368,14 +368,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
         "the number of post-shuffle partitions based on map output statistics.")
       .booleanConf
       .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
+    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
@@ -425,7 +425,7 @@ object SQLConf {
     .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.enabled")
+    buildConf("spark.sql.adaptive.skewedJoinOptimization.enabled")
     .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
       "runtime.")
     .booleanConf
@@ -894,7 +894,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
+    buildConf("spark.sql.sources.ignoreDataLocality")
       .doc("If true, Spark will not fetch the block locations for each file on " +
         "listing files. This speeds up file listing, but the scheduler cannot " +
         "schedule tasks to take advantage of data locality. It can be particularly " +
@@ -913,7 +913,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
-    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin.enabled")
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .internal()
       .booleanConf
@@ -1062,7 +1062,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.subquery.reuse.enabled")
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.reuseSubquery")
     .internal()
     .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
     .booleanConf
@@ -1102,7 +1102,7 @@ object SQLConf {
     .createOptional
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
-    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation.enabled")
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
       .doc("When true, enable temporary checkpoint locations force delete.")
       .booleanConf
       .createWithDefault(false)
@@ -1629,7 +1629,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
-    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+    buildConf("spark.sql.execution.pandas.convertToArrowArraySafely")
       .internal()
       .doc("When true, Arrow will perform safe type conversion when converting " +
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
@@ -1959,7 +1959,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED =
-    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal.enabled")
+    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
       .internal()
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
@@ -2004,6 +2004,15 @@ object SQLConf {
       .internal()
       .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
       "some data types such as `IntegerType`.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE =
+    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType")
+      .internal()
+      .doc("When set to true, Spark returns an empty collection with `StringType` as element " +
+        "type if the `array`/`map` function is called without any parameters. Otherwise, Spark " +
+        "returns an empty collection with `NullType` as element type.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2091,22 +2100,29 @@ object SQLConf {
       .stringConf
       .createOptional
 
-  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+  object LegacyBehaviorPolicy extends Enumeration {
+    val EXCEPTION, LEGACY, CORRECTED = Value
+  }
+
+  val LEGACY_CTE_PRECEDENCE_POLICY = buildConf("spark.sql.legacy.ctePrecedencePolicy")
     .internal()
-    .doc("When true, outer CTE definitions takes precedence over inner definitions. If set to " +
-      "false, inner CTE definitions take precedence. The default value is empty, " +
-      "AnalysisException is thrown while name conflict is detected in nested CTE.")
-    .booleanConf
-    .createOptional
+    .doc("When LEGACY, outer CTE definitions takes precedence over inner definitions. If set to " +
+      "CORRECTED, inner CTE definitions take precedence. The default value is EXCEPTION, " +
+      "AnalysisException is thrown while name conflict is detected in nested CTE. This config " +
+      "will be removed in future versions and CORRECTED will be the only behavior.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
-    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+    buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
@@ -2133,7 +2149,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_PROPERTY_NON_RESERVED =
-    buildConf("spark.sql.legacy.property.nonReserved")
+    buildConf("spark.sql.legacy.notReserveProperties")
       .internal()
       .doc("When true, all database and table properties are not reserved and available for " +
         "create/alter syntaxes. But please be aware that the reserved properties will be " +
@@ -2178,6 +2194,16 @@ object SQLConf {
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_ALLOW_DUPLICATED_MAP_KEY =
+    buildConf("spark.sql.legacy.allowDuplicatedMapKeys")
+      .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
+        "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
+        "MapFromEntries, StringToMap, MapConcat and TransformKeys. Otherwise, if this is false, " +
+        "which is the default, Spark will throw an exception when duplicated map keys are " +
+        "detected.")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2294,8 +2320,8 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningFallbackFilterRatio: Double =
     getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
 
-  def dynamicPartitionPruningReuseBroadcast: Boolean =
-    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
+  def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

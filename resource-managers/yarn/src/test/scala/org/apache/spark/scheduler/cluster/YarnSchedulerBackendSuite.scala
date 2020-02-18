@@ -24,6 +24,7 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.ui.TestFilter
@@ -51,7 +52,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
     def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
-      this.hostToLocalTaskCount = hostToLocalTaskCount
+      this.rpHostToLocalTaskCount = Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+        hostToLocalTaskCount)
     }
   }
 
@@ -72,7 +74,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
       sched.setNodeBlacklist(blacklist)
-      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
+      val numReq = Map(ResourceProfile.getOrCreateDefaultProfile(sc.getConf) -> numRequested)
+      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numReq)
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
       assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)

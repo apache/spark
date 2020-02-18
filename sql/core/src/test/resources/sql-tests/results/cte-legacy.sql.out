@@ -19,11 +19,11 @@ struct<>
 
 
 -- !query
-SET spark.sql.legacy.ctePrecedence.enabled=true
+SET spark.sql.legacy.ctePrecedencePolicy=legacy
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.ctePrecedence.enabled	true
+spark.sql.legacy.ctePrecedencePolicy	legacy
 
 
 -- !query

@@ -800,7 +800,7 @@ SELECT DATE_TRUNC('MILLENNIUM', TIMESTAMP '1970-03-20 04:30:00.00000')
 -- !query schema
 struct<date_trunc(MILLENNIUM, TIMESTAMP '1970-03-20 04:30:00'):timestamp>
 -- !query output
-1001-01-01 00:07:02
+1001-01-01 00:00:00
 
 
 -- !query
@@ -808,7 +808,7 @@ SELECT DATE_TRUNC('MILLENNIUM', DATE '1970-03-20')
 -- !query schema
 struct<date_trunc(MILLENNIUM, CAST(DATE '1970-03-20' AS TIMESTAMP)):timestamp>
 -- !query output
-1001-01-01 00:07:02
+1001-01-01 00:00:00
 
 
 -- !query
@@ -840,7 +840,7 @@ SELECT DATE_TRUNC('CENTURY', DATE '0002-02-04')
 -- !query schema
 struct<date_trunc(CENTURY, CAST(DATE '0002-02-04' AS TIMESTAMP)):timestamp>
 -- !query output
-0001-01-01 00:07:02
+0001-01-01 00:00:00
 
 
 -- !query
@@ -848,7 +848,7 @@ SELECT DATE_TRUNC('CENTURY', TO_DATE('0055-08-10 BC', 'yyyy-MM-dd G'))
 -- !query schema
 struct<date_trunc(CENTURY, CAST(to_date('0055-08-10 BC', 'yyyy-MM-dd G') AS TIMESTAMP)):timestamp>
 -- !query output
--0099-01-01 00:07:02
+-0099-01-01 00:00:00
 
 
 -- !query
@@ -864,7 +864,7 @@ SELECT DATE_TRUNC('DECADE', DATE '0004-12-25')
 -- !query schema
 struct<date_trunc(DECADE, CAST(DATE '0004-12-25' AS TIMESTAMP)):timestamp>
 -- !query output
-0000-01-01 00:07:02
+0000-01-01 00:00:00
 
 
 -- !query
@@ -872,7 +872,7 @@ SELECT DATE_TRUNC('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G'))
 -- !query schema
 struct<date_trunc(DECADE, CAST(to_date('0002-12-31 BC', 'yyyy-MM-dd G') AS TIMESTAMP)):timestamp>
 -- !query output
--0010-01-01 00:07:02
+-0010-01-01 00:00:00
 
 
 -- !query
