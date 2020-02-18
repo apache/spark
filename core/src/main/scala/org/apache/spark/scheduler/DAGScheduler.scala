@@ -1293,7 +1293,7 @@ private[spark] class DAGScheduler(
           case None =>
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-        acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]], Some(event.task.partitionId))
+        acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]], event.task.partitionId)
         // To avoid UI cruft, ignore cases where value wasn't updated
         if (acc.name.isDefined && !updates.isZero) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))

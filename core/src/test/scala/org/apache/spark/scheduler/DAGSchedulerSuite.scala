@@ -1948,7 +1948,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   test("misbehaved accumulator should not impact other accumulators") {
     val bad = new LongAccumulator {
       override def merge(other: AccumulatorV2[java.lang.Long, java.lang.Long],
-                         fragmentId: Option[Int] = None): Unit = {
+                         fragmentId: Int): Unit = {
         throw new DAGSchedulerSuiteDummyException
       }
     }

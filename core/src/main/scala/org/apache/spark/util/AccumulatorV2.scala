@@ -36,7 +36,7 @@ private[spark] case class AccumulatorMetadata(
 
 object AccumulatorMode extends Enumeration {
   type AccumulatorMode = Value
-  val All, Max, Last = Value
+  val All, First, Larger, Last = Value
 }
 
 /**
@@ -156,7 +156,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * i.e. this should be merge-in-place.
    * The fragmentId provides extra context to recognize multiple updates of the same fragment.
    */
-  def merge(other: AccumulatorV2[IN, OUT], fragmentId: Option[Int] = None): Unit
+  def merge(other: AccumulatorV2[IN, OUT], fragmentId: Int = 0): Unit
 
   /**
    * Defines the current value of this accumulator
@@ -359,41 +359,56 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    */
   def avg: Double = _sum.toDouble / _count
 
-  override def merge(other: AccumulatorV2[jl.Long, jl.Long],
-                     fragmentId: Option[Int] = None): Unit = other match {
-    case o: LongAccumulator =>
-      metadata.mode match {
-        case AccumulatorMode.All =>
-          _sum += o.sum
-          _count += o.count
-        case AccumulatorMode.Max =>
-          val (fragmentSum, fragmentCount) =
-            fragmentId
-              .flatMap(_fragments.remove)
-              .getOrElse((0L, 0L))
-          val (maxSum, maxCount) =
-            if (o.sum > fragmentSum || (o.sum == fragmentSum && o.count < fragmentCount)) {
-              (o.sum, o.count)
-            } else {
-              (fragmentSum, fragmentCount)
-            }
-          _sum += maxSum - fragmentSum
-          _count += maxCount - fragmentCount
-          fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
-        case AccumulatorMode.Last =>
-          val (fragmentSum, fragmentCount) =
-            fragmentId
-              .flatMap(_fragments.put(_, (o.sum, o.count)))
-              .getOrElse((0L, 0L))
-          _sum += o.sum - fragmentSum
-          _count += o.count - fragmentCount
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+  override def merge(other: AccumulatorV2[jl.Long, jl.Long], fragmentId: Int): Unit =
+    other match {
+      case o: LongAccumulator =>
+        metadata.mode match {
+          case AccumulatorMode.All => mergeAll(o)
+          case AccumulatorMode.First => mergeFirst(o, fragmentId)
+          case AccumulatorMode.Larger => mergeLarger(o, fragmentId)
+          case AccumulatorMode.Last => mergeLast(o, fragmentId)
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+        }
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    }
+
+  private[spark] def mergeAll(other: LongAccumulator): Unit = {
+    _sum += other.sum
+    _count += other.count
+  }
+
+  private[spark] def mergeFirst(other: LongAccumulator, fragmentId: Int): Unit = {
+    if (!_fragments.contains(fragmentId)) {
+      _fragments(fragmentId) = (other._sum, other._count)
+      mergeAll(other)
+    }
+  }
+
+  private[spark] def mergeLarger(other: LongAccumulator, fragmentId: Int): Unit = {
+    val (fragmentSum, fragmentCount) =
+      _fragments.remove(fragmentId)
+        .getOrElse((0L, 0L))
+    val (largerSum, largerCount) =
+      if (other._count > fragmentCount) {
+        (other.sum, other.count)
+      } else {
+        (fragmentSum, fragmentCount)
       }
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    _sum += largerSum - fragmentSum
+    _count += largerCount - fragmentCount
+    _fragments(fragmentId) = (largerSum, largerCount)
+  }
+
+  private[spark] def mergeLast(other: LongAccumulator, fragmentId: Int): Unit = {
+    val (fragmentSum, fragmentCount) =
+      _fragments.put(fragmentId, (other.sum, other.count))
+        .getOrElse((0L, 0L))
+    _sum += other.sum - fragmentSum
+    _count += other.count - fragmentCount
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
@@ -466,41 +481,56 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
    */
   def avg: Double = _sum / _count
 
-  override def merge(other: AccumulatorV2[jl.Double, jl.Double],
-                     fragmentId: Option[Int] = None): Unit = other match {
-    case o: DoubleAccumulator =>
-      metadata.mode match {
-        case AccumulatorMode.All =>
-          _sum += o.sum
-          _count += o.count
-        case AccumulatorMode.Max =>
-          val (fragmentSum, fragmentCount) =
-            fragmentId
-              .flatMap(_fragments.remove)
-              .getOrElse((0.0, 0L))
-          val (maxSum, maxCount) =
-            if (o.sum > fragmentSum || (o.sum == fragmentSum && o.count < fragmentCount)) {
-              (o.sum, o.count)
-            } else {
-              (fragmentSum, fragmentCount)
-            }
-          _sum += maxSum - fragmentSum
-          _count += maxCount - fragmentCount
-          fragmentId.foreach(_fragments(_) = (maxSum, maxCount))
-        case AccumulatorMode.Last =>
-          val (fragmentSum, fragmentCount) =
-            fragmentId
-              .flatMap(_fragments.put(_, (o.sum, o.count)))
-              .getOrElse((0.0, 0L))
-          _sum += o.sum - fragmentSum
-          _count += o.count - fragmentCount
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double], fragmentId: Int): Unit =
+    other match {
+      case o: DoubleAccumulator =>
+        metadata.mode match {
+          case AccumulatorMode.All => mergeAll(o)
+          case AccumulatorMode.First => mergeFirst(o, fragmentId)
+          case AccumulatorMode.Larger => mergeLarger(o, fragmentId)
+          case AccumulatorMode.Last => mergeLast(o, fragmentId)
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Cannot merge ${this.getClass.getName} with mode ${metadata.mode}")
+        }
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    }
+
+  private[spark] def mergeAll(other: DoubleAccumulator): Unit = {
+    _sum += other.sum
+    _count += other.count
+  }
+
+  private[spark] def mergeFirst(other: DoubleAccumulator, fragmentId: Int): Unit = {
+    if (!_fragments.contains(fragmentId)) {
+      _fragments(fragmentId) = (other._sum, other._count)
+      mergeAll(other)
+    }
+  }
+
+  private[spark] def mergeLarger(other: DoubleAccumulator, fragmentId: Int): Unit = {
+    val (fragmentSum, fragmentCount) =
+      _fragments.remove(fragmentId)
+        .getOrElse((0.0, 0L))
+    val (largerSum, largerCount) =
+      if (other._count > fragmentCount) {
+        (other.sum, other.count)
+      } else {
+        (fragmentSum, fragmentCount)
       }
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    _sum += largerSum - fragmentSum
+    _count += largerCount - fragmentCount
+    _fragments(fragmentId) = (largerSum, largerCount)
+  }
+
+  private[spark] def mergeLast(other: DoubleAccumulator, fragmentId: Int): Unit = {
+    val (fragmentSum, fragmentCount) =
+      _fragments.put(fragmentId, (other.sum, other.count))
+        .getOrElse((0.0, 0L))
+    _sum += other.sum - fragmentSum
+    _count += other.count - fragmentCount
   }
 
   private[spark] def setValue(newValue: Double): Unit = _sum = newValue
@@ -537,7 +567,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   override def add(v: T): Unit = _list.add(v)
 
   override def merge(other: AccumulatorV2[T, java.util.List[T]],
-                     fragmentId: Option[Int] = None): Unit = other match {
+                     fragmentId: Int): Unit = other match {
     case o: CollectionAccumulator[T] => _list.addAll(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")

@@ -685,7 +685,7 @@ private[spark] class PythonAccumulatorV2(
   }
 
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]],
-                     fragmentId: Option[Int]): Unit = synchronized {
+                     fragmentId: Int): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
     // driver program - but that isn't guaranteed so incase this changes.

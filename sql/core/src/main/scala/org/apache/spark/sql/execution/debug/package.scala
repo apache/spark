@@ -21,7 +21,6 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -208,8 +207,7 @@ package object debug {
       }
       override def reset(): Unit = _set.clear()
       override def add(v: T): Unit = _set.add(v)
-      override def merge(other: AccumulatorV2[T, java.util.Set[T]],
-                         fragmentId: Option[Int] = None): Unit = {
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]], fragmentId: Int): Unit = {
         _set.addAll(other.value)
       }
       override def value: java.util.Set[T] = _set
