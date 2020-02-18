@@ -236,12 +236,14 @@ _functions_2_1_over_column = {
     'degrees': """
                Converts an angle measured in radians to an approximately equivalent angle
                measured in degrees.
+
                :param col: angle in radians
                :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
                """,
     'radians': """
                Converts an angle measured in degrees to an approximately equivalent angle
                measured in radians.
+
                :param col: angle in degrees
                :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
                """,
@@ -2116,6 +2118,7 @@ def array_remove(col, element):
 def array_distinct(col):
     """
     Collection function: removes duplicate values from the array.
+
     :param col: name of column or expression
 
     >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
