@@ -21,9 +21,7 @@ import java.net.URL
 import java.util.UUID
 
 import scala.io.Source
-
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder, VolumeMountBuilder}
-
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, HasMetadata, KeyToPath, PodBuilder, VolumeMountBuilder}
 import org.apache.spark.deploy.k8s.{Config, KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -57,6 +55,7 @@ class MountLogConfFeatureStep(conf: KubernetesConf)
     if (useExistingConfigMap) {
       logInfo(s"Using an existing config map ${configMapName} for logging configuration.")
     }
+    val keyToPath = new KeyToPath(loggingConfigFileName, 511, loggingConfigFileName)
 
     val podUpdated = if (featureEnabled) {
       new PodBuilder(pod.pod)
@@ -64,6 +63,7 @@ class MountLogConfFeatureStep(conf: KubernetesConf)
         .addNewVolume()
           .withName(logConfVolume)
           .withNewConfigMap()
+            .withItems(keyToPath)
             .withName(configMapName)
             .endConfigMap()
           .endVolume()

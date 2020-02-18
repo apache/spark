@@ -286,16 +286,16 @@ private[spark] object Config extends Logging {
   val KUBERNETES_LOGGING_CONF_CONFIG_MAP =
     ConfigBuilder("spark.kubernetes.loggingConf.configMapName")
       .doc("Specify the name of the k8s ConfigMap, containing the logging configuration file, " +
-        "to be mounted on the driver and executors for custom logger configuration.")
+        "to be mounted on the driver and executors for custom logger configuration. If the key " +
+          " is not the default value i.e. `log4j.properties` then please specify it via property" +
+            "`spark.kubernetes.loggingConf.fileName`.")
       .stringConf
       .createOptional
 
   val KUBERNETES_LOGGING_CONF_FILE_NAME =
     ConfigBuilder("spark.kubernetes.loggingConf.fileName")
       .doc("Specify the name of the file, containing the logging configuration, " +
-        "to be mounted on the driver and executors for custom logger configuration. " +
-        "This property needs to be set, even if logging is provided via a user defined" +
-        " ConfigMap, if the file name is not `log4j.properties`.")
+        "to be mounted on the driver and executors for custom logger configuration.")
       .stringConf
       .createWithDefault("log4j.properties")
 

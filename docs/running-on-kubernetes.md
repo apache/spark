@@ -356,10 +356,10 @@ Spark uses `log4j.properties` under the `SPARK_HOME/conf` dir as the standard wa
  for spark to use it, by setting the property: `spark.kubernetes.loggingConf.configMapName` and 
  `spark.kubernetes.loggingConf.fileName`. `spark.kubernetes.loggingConf.configMapName` is the name of config map
   in kubernetes and `spark.kubernetes.loggingConf.fileName` is the name of the file used to create the
-  config map.
+  configMap or it is also referred to as the key of the configMap.
  
-2) For spark cluster mode of deployment, the configuration file present inside the `conf/` dir is
- by default auto configured as a kubernetes config map and setup for all executors and driver as logging
+2) For spark "cluster" mode of deployment, the configuration file present inside the `conf/` dir is
+ by default auto configured as a kubernetes configMap and setup for all executors and driver as logging
  configuration. The name of the logging configuration file is by default `log4j.properties` and can be
  altered using the property: `spark.kubernetes.loggingConf.fileName`.
 
@@ -591,6 +591,24 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Time to wait between each round of executor pod allocation. Specifying values less than 1 second may lead to
     excessive CPU usage on the spark driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.loggingConf.configMapName</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the name of the k8s ConfigMap, containing the logging configuration file to be mounted
+    on the driver and executors for custom logger configuration. If the key is not the default value
+    i.e. `log4j.properties`, then it should be specified via the property
+    <code>spark.kubernetes.loggingConf.fileName</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.loggingConf.fileName</code></td>
+  <td>log4j.properties</td>
+  <td>
+    Specify the name of the file, containing the logging configuration, to be mounted on the driver
+    and executors for custom logger configuration.
   </td>
 </tr>
 <tr>
