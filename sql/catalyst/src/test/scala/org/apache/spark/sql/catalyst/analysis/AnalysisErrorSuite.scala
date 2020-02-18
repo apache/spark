@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -601,5 +602,16 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+       "it refers to non-existent table with same name") {
+    val plan = With(
+      UnresolvedRelation(TableIdentifier("t")),
+      Seq("t" -> SubqueryAlias("t",
+        Project(
+          Alias(Literal(1), "x")() :: Nil,
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+    assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
 }
