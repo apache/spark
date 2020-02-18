@@ -2739,7 +2739,7 @@ class HiveDDLSuite
       val sourceTable = catalog.getTableMetadata(TableIdentifier("sc_part", Some("default")))
       val targetTable = catalog.getTableMetadata(TableIdentifier("ta_part", Some("default")))
       assert(sourceTable.tracksPartitionsInCatalog)
-      assert(sourceTable.tracksPartitionsInCatalog == targetTable.tracksPartitionsInCatalog)
+      assert(targetTable.tracksPartitionsInCatalog)
       assert(targetTable.partitionColumnNames == Seq("ts"))
       sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
       checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
