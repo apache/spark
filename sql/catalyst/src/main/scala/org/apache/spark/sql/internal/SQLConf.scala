@@ -2115,7 +2115,7 @@ object SQLConf {
     .createOptional
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
-    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic.enabled")
+    buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
