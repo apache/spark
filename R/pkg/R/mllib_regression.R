@@ -615,7 +615,6 @@ setMethod("spark.lm", signature(data = "SparkDataFrame", formula = "formula"),
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
 
-
             formula <- paste(deparse(formula), collapse = "")
 
             solver <- match.arg(solver)
@@ -656,7 +655,6 @@ setMethod("summary", signature(object = "LinearRegressionModel"),
             colnames(coefficients) <- c("Estimate")
             rownames(coefficients) <- unlist(features)
             numFeatures <- callJMethod(jobj, "numFeatures")
-
 
             list(
               coefficients = coefficients,
