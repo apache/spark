@@ -15,7 +15,7 @@
 
 site_name: Spark SQL, Built-in Functions
 theme: readthedocs
-nav:
+pages:
   - 'Functions': 'index.md'
 markdown_extensions:
   - toc:
