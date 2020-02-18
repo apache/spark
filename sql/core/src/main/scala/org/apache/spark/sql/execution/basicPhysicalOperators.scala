@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
@@ -746,7 +747,7 @@ case class SubqueryExec(name: String, child: SparkPlan)
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
 
   @transient
-  private lazy val relationFuture: Future[Array[InternalRow]] = {
+  private lazy val relationFuture: JFuture[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLExecution.withThreadLocalCaptured[Array[InternalRow]](

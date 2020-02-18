@@ -157,12 +157,12 @@
         - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:
-            - text: Analyze statement
+            - text: ANALYZE
               url: sql-ref-syntax-aux-analyze.html
               subitems: 
                 - text: ANALYZE TABLE
                   url: sql-ref-syntax-aux-analyze-table.html
-            - text: Caching statements 
+            - text: CACHE
               url: sql-ref-syntax-aux-cache.html
               subitems:
                 - text: CACHE TABLE
@@ -175,7 +175,7 @@
                   url: sql-ref-syntax-aux-refresh-table.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.md
-            - text: Describe Commands
+            - text: DESCRIBE
               url: sql-ref-syntax-aux-describe.html
               subitems:
                 - text: DESCRIBE DATABASE
@@ -186,7 +186,7 @@
                   url: sql-ref-syntax-aux-describe-function.html
                 - text: DESCRIBE QUERY
                   url: sql-ref-syntax-aux-describe-query.html
-            - text: Show commands
+            - text: SHOW
               url: sql-ref-syntax-aux-show.html
               subitems:
                 - text: SHOW COLUMNS 
@@ -205,14 +205,14 @@
                   url: sql-ref-syntax-aux-show-partitions.html
                 - text: SHOW CREATE TABLE
                   url: sql-ref-syntax-aux-show-create-table.html
-            - text: Configuration Management Commands
+            - text: CONFIGURATION MANAGEMENT
               url: sql-ref-syntax-aux-conf-mgmt.html
               subitems:
                 - text: SET 
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
-            - text: Resource Management Commands
+            - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:
                 - text: ADD FILE

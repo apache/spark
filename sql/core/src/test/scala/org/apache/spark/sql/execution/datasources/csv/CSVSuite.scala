@@ -2294,6 +2294,13 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       }
     }
   }
+
+  test("SPARK-30810: parses and convert a CSV Dataset having different column from 'value'") {
+    val ds = spark.range(2).selectExpr("concat('a,b,', id) AS `a.text`").as[String]
+    val csv = spark.read.option("header", true).option("inferSchema", true).csv(ds)
+    assert(csv.schema.fieldNames === Seq("a", "b", "0"))
+    checkAnswer(csv, Row("a", "b", 1))
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

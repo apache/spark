@@ -236,12 +236,14 @@ _functions_2_1_over_column = {
     'degrees': """
                Converts an angle measured in radians to an approximately equivalent angle
                measured in degrees.
+
                :param col: angle in radians
                :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
                """,
     'radians': """
                Converts an angle measured in degrees to an approximately equivalent angle
                measured in radians.
+
                :param col: angle in degrees
                :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
                """,
@@ -2116,6 +2118,7 @@ def array_remove(col, element):
 def array_distinct(col):
     """
     Collection function: removes duplicate values from the array.
+
     :param col: name of column or expression
 
     >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
@@ -2766,12 +2769,12 @@ def map_concat(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions
 
     >>> from pyspark.sql.functions import map_concat
-    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c') as map2")
     >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
     +------------------------+
     |map3                    |
     +------------------------+
-    |[1 -> d, 2 -> b, 3 -> c]|
+    |[1 -> a, 2 -> b, 3 -> c]|
     +------------------------+
     """
     sc = SparkContext._active_spark_context

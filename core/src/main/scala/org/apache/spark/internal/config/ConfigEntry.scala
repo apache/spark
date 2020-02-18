@@ -17,6 +17,35 @@
 
 package org.apache.spark.internal.config
 
+// ====================================================================================
+//                      The guideline for naming configurations
+// ====================================================================================
+/*
+In general, the config name should be a noun that describes its basic purpose. It's
+recommended to add prefix to the config name to make the scope clearer. For example,
+`spark.scheduler.mode` clearly indicates that this config is for the scheduler.
+
+A config name can have multiple prefixes that are structured, which is similar to a
+qualified Java class name. Each prefix behaves like a namespace. We should only create
+a namespace if it's meaningful and can be shared by multiple configs. For example,
+`buffer.inMemoryThreshold` is preferred over `buffer.in.memory.threshold`.
+
+The followings are best practices of naming configs for some common cases:
+1. When adding configs for a big feature, it's better to create an umbrella config that
+   can turn the feature on/off, with a name like `featureName.enabled`. The other configs
+   of this feature should be put under the `featureName` namespace. For example:
+     - spark.sql.cbo.enabled
+     - spark.sql.cbo.starSchemaDetection
+     - spark.sql.cbo.joinReorder.enabled
+     - spark.sql.cbo.joinReorder.dp.threshold
+2. When adding a boolean config, the name should be a verb that describes what
+   happens if this config is set to true, e.g. `spark.shuffle.sort.useRadixSort`.
+3. When adding a config to specify a time duration, it's better to put the time unit
+   in the config name. For example, `featureName.timeoutMs`, which clearly indicates
+   that the time unit is millisecond. The config entry should be created with
+   `ConfigBuilder#timeConf`, to support time strings like `2 minutes`.
+*/
+
 /**
  * An entry contains all meta information for a configuration.
  *

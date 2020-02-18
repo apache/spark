@@ -782,6 +782,11 @@ class DataFrameTests(ReusedSQLTestCase):
                     break
             self.assertEqual(df.take(8), result)
 
+    def test_same_semantics_error(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ValueError, "should be of DataFrame.*int"):
+                self.spark.range(10).sameSemantics(1)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
