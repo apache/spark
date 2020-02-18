@@ -186,3 +186,75 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION(3, c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
+
+## Adaptive Query Execution
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that make use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. There are three mainly feature in AQE, including coalescing post partition number, optimizing local shuffle reader and optimizing skewed join.
+ ### Coalescing Post Shuffle Partition Num
+ This feature coalesces the post shuffle partitions based on the map output statistics when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled` configuration properties are both enabled. There are four following sub-configurations in this optimization rule. 
+ <table class="table">
+   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+   <tr>
+     <td><code>spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled</code></td>
+     <td>true</td>
+     <td>
+       When true and <code>spark.sql.adaptive.enabled</code> is enabled, spark will reduce the post shuffle partitions number based on the map output statistics.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.shuffle.minNumPostShufflePartitions</code></td>
+     <td>1</td>
+     <td>
+       The advisory minimum number of post-shuffle partitions used when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled</code> are both enabled. It is suggested to be almost 2~3x of the parallelism when doing benchmark.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.shuffle.maxNumPostShufflePartitions</code></td>
+     <td>Int.MaxValue</td>
+     <td>
+       The advisory maximum number of post-shuffle partitions used in adaptive execution. This is used as the initial number of pre-shuffle partitions. By default it equals to <code>spark.sql.shuffle.partitions</code>.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.shuffle.targetPostShuffleInputSize</code></td>
+     <td>67108864 (64 MB)</td>
+     <td>
+       The target post-shuffle input size in bytes of a task when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled</code> are both enabled.
+     </td>
+   </tr>
+ </table>
+ 
+ ### Optimize Local Shuffle Reader
+ This feature optimize the shuffle reader to local shuffle reader when converting the sort merge join to broadcast hash join in runtime and no additional shuffle introduced. It takes effect when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.localShuffleReader.enabled` configuration properties are both enabled.
+ ### Optimize Skewed Join
+ This feature choose the skewed partition and creates multi tasks to handle the skewed partition when both enable `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewedJoinOptimization.enabled`. There are four following sub-configurations in this optimization rule.
+  <table class="table">
+     <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+     <tr>
+       <td><code>spark.sql.adaptive.skewedJoinOptimization.enabled</code></td>
+       <td>true</td>
+       <td>
+         When true and <code>spark.sql.adaptive.enabled</code> is enabled, When true and adaptive execution is enabled, a skewed join is automatically optimized at runtime.
+       </td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold</code></td>
+       <td>67108864 (64 MB)</td>
+       <td>
+         Configures the minimum size in bytes for a partition that is considered as a skewed partition in adaptive skewed join.
+       </td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor</code></td>
+       <td>Int.MaxValue</td>
+       <td>
+         A partition is considered as a skewed partition if its size is larger than this factor multiple the median partition size and also larger than <code>spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold</code>
+       </td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionMaxSplits</code></td>
+       <td>5</td>
+       <td>
+         Configures the maximum number of task to handle a skewed partition in adaptive skewed join. 
+       </td>
+     </tr>
+   </table>
