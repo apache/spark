@@ -215,7 +215,7 @@ class Analyzer(
     }
 
     def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
-      plan resolveOperatorsUp {
+      plan resolveOperatorsDown {
         case u: UnresolvedRelation if u.tableIdentifier.database.isEmpty =>
           cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).getOrElse(u)
