@@ -368,14 +368,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
         "the number of post-shuffle partitions based on map output statistics.")
       .booleanConf
       .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
+    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
@@ -425,7 +425,7 @@ object SQLConf {
     .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.enabled")
+    buildConf("spark.sql.adaptive.skewedJoinOptimization.enabled")
     .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
       "runtime.")
     .booleanConf
@@ -894,7 +894,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
+    buildConf("spark.sql.sources.ignoreDataLocality")
       .doc("If true, Spark will not fetch the block locations for each file on " +
         "listing files. This speeds up file listing, but the scheduler cannot " +
         "schedule tasks to take advantage of data locality. It can be particularly " +
@@ -913,7 +913,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
-    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin.enabled")
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .internal()
       .booleanConf
@@ -1062,7 +1062,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.subquery.reuse.enabled")
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.reuseSubquery")
     .internal()
     .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
     .booleanConf
@@ -1102,7 +1102,7 @@ object SQLConf {
     .createOptional
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
-    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation.enabled")
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
       .doc("When true, enable temporary checkpoint locations force delete.")
       .booleanConf
       .createWithDefault(false)
@@ -1629,7 +1629,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
-    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+    buildConf("spark.sql.execution.pandas.convertToArrowArraySafely")
       .internal()
       .doc("When true, Arrow will perform safe type conversion when converting " +
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
@@ -1959,7 +1959,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED =
-    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal.enabled")
+    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
       .internal()
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
@@ -2100,7 +2100,7 @@ object SQLConf {
       .stringConf
       .createOptional
 
-  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
@@ -2122,7 +2122,7 @@ object SQLConf {
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
-    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+    buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
@@ -2149,7 +2149,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_PROPERTY_NON_RESERVED =
-    buildConf("spark.sql.legacy.property.nonReserved")
+    buildConf("spark.sql.legacy.notReserveProperties")
       .internal()
       .doc("When true, all database and table properties are not reserved and available for " +
         "create/alter syntaxes. But please be aware that the reserved properties will be " +
