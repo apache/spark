@@ -554,11 +554,11 @@ class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationB
 class SortOnHostNameBlockReplicationPolicy
   extends BlockReplicationPolicy {
   override def prioritize(
-                           blockManagerId: BlockManagerId,
-                           peers: Seq[BlockManagerId],
-                           peersReplicatedTo: mutable.HashSet[BlockManagerId],
-                           blockId: BlockId,
-                           numReplicas: Int): List[BlockManagerId] = {
+      blockManagerId: BlockManagerId,
+      peers: Seq[BlockManagerId],
+      peersReplicatedTo: mutable.HashSet[BlockManagerId],
+      blockId: BlockId,
+      numReplicas: Int): List[BlockManagerId] = {
     peers.sortBy(_.host).toList
   }
 }
