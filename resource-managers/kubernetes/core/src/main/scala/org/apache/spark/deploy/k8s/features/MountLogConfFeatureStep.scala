@@ -20,7 +20,7 @@ package org.apache.spark.deploy.k8s.features
 import java.net.URL
 import java.util.UUID
 
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, HasMetadata, KeyToPath, PodBuilder}
 
@@ -122,7 +122,8 @@ private[k8s] object MountLogConfFeatureStep extends Logging {
       loggingConfUrl: URL, loggingConfigFileName: String, configMapName: String): ConfigMap = {
     logInfo(s"Logging configuration is picked up from: $loggingConfigFileName")
     val loggerConfStream = loggingConfUrl.openStream()
-    val loggerConfString = Source.createBufferedSource(loggerConfStream).getLines().mkString("\n")
+    val loggerConfString = Source.createBufferedSource(loggerConfStream)(Codec.UTF8)
+      .getLines().mkString("\n")
     new ConfigMapBuilder()
       .withNewMetadata()
       .withName(configMapName)
