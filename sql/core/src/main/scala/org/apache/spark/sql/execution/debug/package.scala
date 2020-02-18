@@ -21,6 +21,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
