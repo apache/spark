@@ -66,7 +66,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
-    /* sum = */ Literal(0).cast(sumDataType),
+    /* sum = */ Literal.default(sumDataType),
     /* count = */ Literal(0L)
   )
 
@@ -87,7 +87,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     /* sum = */
     Add(
       sum,
-      coalesce(child.cast(sumDataType), Literal(0).cast(sumDataType))),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 }

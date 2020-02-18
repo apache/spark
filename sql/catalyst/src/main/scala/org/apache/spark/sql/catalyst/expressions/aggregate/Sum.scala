@@ -61,7 +61,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val zero = Cast(Literal(0), sumDataType)
+  private lazy val zero = Literal.default(sumDataType)
 
   override lazy val aggBufferAttributes = sum :: Nil
 
