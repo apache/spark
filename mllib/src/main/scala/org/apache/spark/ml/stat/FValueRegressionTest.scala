@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.DataFrame
 
-
 /**
  * FValue regression testing for continuous data.
  */

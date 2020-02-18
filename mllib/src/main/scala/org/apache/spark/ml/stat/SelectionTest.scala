@@ -26,7 +26,6 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{avg, col, stddev}
 
-
 @Since("3.1.0")
 object SelectionTest {
 

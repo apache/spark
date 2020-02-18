@@ -83,6 +83,3 @@ class FValueRegressionTestResult private[stat] (
       s"F Value = $statistic \n"
   }
 }
-
-
-
