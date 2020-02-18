@@ -19,7 +19,6 @@ package org.apache.spark.ml.stat
 
 import scala.collection.mutable
 
-
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
  * and validates the data to see if the labels used for k class multi-label classification
@@ -48,13 +47,12 @@ private[ml] class MultiClassSummarizer extends Serializable {
 
     if (label - label.toInt != 0.0 || label < 0) {
       totalInvalidCnt += 1
-      this
     }
     else {
       val (counts: Long, weightSum: Double) = distinctMap.getOrElse(label.toInt, (0L, 0.0))
       distinctMap.put(label.toInt, (counts + 1L, weightSum + weight))
-      this
     }
+    this
   }
 
   /**
@@ -84,7 +82,7 @@ private[ml] class MultiClassSummarizer extends Serializable {
   def countInvalid: Long = totalInvalidCnt
 
   /** @return The number of distinct labels in the input dataset. */
-  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keySet.max + 1
+  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keysIterator.max + 1
 
   /** @return The weightSum of each label in the input dataset. */
   def histogram: Array[Double] = {
