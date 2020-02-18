@@ -149,12 +149,12 @@ case class HasOverflow(
     child: Expression,
     inputType: DecimalType) extends UnaryExpression {
 
-  override def dataType: DataType= BooleanType
+  override def dataType: DataType = BooleanType
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[Decimal].changePrecision(
+    !input.asInstanceOf[Decimal].changePrecision(
       inputType.precision,
       inputType.scale,
       Decimal.ROUND_HALF_UP)
@@ -162,8 +162,9 @@ case class HasOverflow(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-         |${ev.value} = $eval.changePrecision(
+         |${ev.value} = !$eval.changePrecision(
          |  ${inputType.precision}, ${inputType.scale}, Decimal.ROUND_HALF_UP());
+         |  ${ev.isNull} = false;
        """.stripMargin
     })
   }
