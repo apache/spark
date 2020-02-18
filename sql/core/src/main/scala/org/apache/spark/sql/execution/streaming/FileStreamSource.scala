@@ -111,6 +111,8 @@ class FileStreamSource(
 
   logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAgeMs = $maxFileAgeMs")
 
+  private var unreadFiles: Seq[(String, Long)] = _
+
   /**
    * Returns the maximum offset that can be retrieved from the source.
    *
@@ -118,15 +120,35 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
-    // All the new files found - ignore aged files and files that we have seen.
-    val newFiles = fetchAllFiles().filter {
-      case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
+    val newFiles = if (unreadFiles != null) {
+      logDebug(s"Reading from unread files - ${unreadFiles.size} files are available.")
+      unreadFiles
+    } else {
+      // All the new files found - ignore aged files and files that we have seen.
+      fetchAllFiles().filter {
+        case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
+      }
     }
 
     // Obey user's setting to limit the number of files in this batch trigger.
-    val batchFiles = limit match {
-      case files: ReadMaxFiles => newFiles.take(files.maxFiles())
-      case _: ReadAllAvailable => newFiles
+    val (batchFiles, unselectedFiles) = limit match {
+      case files: ReadMaxFiles if !sourceOptions.latestFirst =>
+        // we can cache and reuse remaining fetched list of files in further batches
+        newFiles.splitAt(files.maxFiles())
+
+      case files: ReadMaxFiles =>
+        // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
+        (newFiles.take(files.maxFiles()), null)
+
+      case _: ReadAllAvailable => (newFiles, null)
+    }
+
+    if (unselectedFiles != null && unselectedFiles.nonEmpty) {
+      unreadFiles = unselectedFiles
+      logTrace(s"${unreadFiles.size} unread files are available for further batches.")
+    } else {
+      unreadFiles = null
+      logTrace(s"No unread file is available for further batches.")
     }
 
     batchFiles.foreach { file =>
@@ -139,6 +161,7 @@ class FileStreamSource(
       s"""
          |Number of new files = ${newFiles.size}
          |Number of files selected for batch = ${batchFiles.size}
+         |Number of unread files = ${Option(unreadFiles).map(_.size).getOrElse(0)}
          |Number of seen files = ${seenFiles.size}
          |Number of files purged from tracking map = $numPurged
        """.stripMargin)
