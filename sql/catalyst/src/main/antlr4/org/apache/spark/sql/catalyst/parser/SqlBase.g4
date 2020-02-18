@@ -1801,7 +1801,7 @@ BRACKETED_EMPTY_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ~[+] (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
+    : '/*' (BRACKETED_COMMENT .*? | ~[+] (BRACKETED_COMMENT|.)*?) '*/' -> channel(HIDDEN)
     ;
 
 WS
