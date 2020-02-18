@@ -64,14 +64,14 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
-      val message = context.partitionId().toString
-      val messages = context.allGather(message)
+      val message: String = context.partitionId().toString
+      val messages: ArrayBuffer[String] = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages
     val messages = rdd2.collect().head
     // All the task partitionIds are shared
-    for((x, i) <- messages.view.zipWithIndex) assert(x == i.toString)
+    for((x, i) <- messages.view.zipWithIndex) assert(x.toString == i.toString)
   }
 
   test("throw exception if we attempt to synchronize with different blocking calls") {

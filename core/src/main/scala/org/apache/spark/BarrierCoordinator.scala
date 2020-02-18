@@ -196,7 +196,6 @@ private[spark] class BarrierCoordinator(
             s"tasks, finished successfully.")
           barrierEpoch += 1
           requesters.clear()
-          allGatherMessages.clear()
           cancelTimerTask()
         }
       }
@@ -227,7 +226,6 @@ private[spark] class BarrierCoordinator(
       // messages come from current stage attempt shall fail.
       barrierEpoch = -1
       requesters.clear()
-      allGatherMessages.clear()
       cancelTimerTask()
     }
   }
