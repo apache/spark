@@ -116,14 +116,18 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
           case (key, defaultValue, doc, version) =>
-            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc, version)
+            Row(
+              key,
+              Option(defaultValue).getOrElse("<undefined>"),
+              doc,
+              Option(version).getOrElse("<unknown>"))
         }
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
           StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) ::
-          StructField("version", StringType, nullable = false) :: Nil)
+          StructField("Since version", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.

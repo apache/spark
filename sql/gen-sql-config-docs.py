@@ -70,7 +70,7 @@ def generate_sql_configs_table(sql_configs, path):
         f.write(dedent(
             """
             <table class="table">
-            <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Version</th></tr>
+            <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
