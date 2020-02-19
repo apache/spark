@@ -1580,6 +1580,12 @@ class HiveDDLSuite
         "source table/view path should be different from target table path")
     }
 
+    if (DDLUtils.isHiveTable(targetTable)) {
+      assert(targetTable.tracksPartitionsInCatalog)
+    } else {
+      assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
+    }
+
     // The source table contents should not been seen in the target table.
     assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
     assert(spark.table(targetTable.identifier).count() == 0, "the target table should be empty")
@@ -2722,6 +2728,21 @@ class HiveDDLSuite
         val table = catalog.getTableMetadata(TableIdentifier("s"))
         assert(table.provider === Some("hive"))
       }
+    }
+  }
+
+  test("SPARK-30785: create table like a partitioned table") {
+    val catalog = spark.sessionState.catalog
+    withTable("sc_part", "ta_part") {
+      sql("CREATE TABLE sc_part (key string, ts int) USING parquet PARTITIONED BY (ts)")
+      sql("CREATE TABLE ta_part like sc_part")
+      val sourceTable = catalog.getTableMetadata(TableIdentifier("sc_part", Some("default")))
+      val targetTable = catalog.getTableMetadata(TableIdentifier("ta_part", Some("default")))
+      assert(sourceTable.tracksPartitionsInCatalog)
+      assert(targetTable.tracksPartitionsInCatalog)
+      assert(targetTable.partitionColumnNames == Seq("ts"))
+      sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
+      checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
     }
   }
 }
