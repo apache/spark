@@ -32,7 +32,7 @@ class FValueTestSuite
   test("test DataFrame of labeled points") {
   // scalastyle:off
   /*
-  Use the following sklearn data to in this test
+  Use the following sklearn data in this test
 
   >>> from sklearn.feature_selection import f_regression
   >>> import numpy as np
