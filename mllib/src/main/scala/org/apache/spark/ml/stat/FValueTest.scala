@@ -32,6 +32,12 @@ import org.apache.spark.sql.functions._
 @Since("3.1.0")
 object FValueTest {
 
+  /** Used to construct output schema of tests */
+  private case class FValueResult(
+      pValues: Vector,
+      degreesOfFreedom: Array[Long],
+      fValues: Vector)
+
   /**
    * @param dataset  DataFrame of continuous labels and continuous features.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
@@ -64,7 +70,7 @@ object FValueTest {
 
     val numFeatures = xMeans.size
     val numSamples = count
-    val degreeOfFreedom = numSamples.toInt - 2
+    val degreesOfFreedom = numSamples - 2
 
     // Use two pass equation Cov[X,Y] = E[(X - E[X]) * (Y - E[Y])] to compute covariance because
     // one pass equation Cov[X,Y] = E[XY] - E[X]E[Y] is susceptible to catastrophic cancellation
@@ -92,20 +98,21 @@ object FValueTest {
     }
 
     val pValues = Array.ofDim[Double](numFeatures)
-    val degreesOfFreedoms = Array.ofDim[Int](numFeatures)
+    val degreesOfFreedoms = Array.fill(numFeatures)(degreesOfFreedom)
     val fValues = Array.ofDim[Double](numFeatures)
 
-    val fd = new FDistribution(1, degreeOfFreedom)
+
+    val fd = new FDistribution(1, degreesOfFreedom)
     for(i <- 0 until numFeatures) {
       // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
       val covariance = sumForCov (i) / (numSamples - 1)
       val corr = covariance / (yStd * xStd(i))
-      val fValue = corr * corr / (1 - corr * corr) * degreeOfFreedom
+      val fValue = corr * corr / (1 - corr * corr) * degreesOfFreedom
       pValues(i) = 1.0 - fd.cumulativeProbability(fValue)
-      degreesOfFreedoms(i) = degreeOfFreedom
       fValues(i) = fValue
     }
 
-    spark.createDataFrame(Seq((Vectors.dense(pValues), degreesOfFreedoms, Vectors.dense(fValues))))
+    spark.createDataFrame(
+      Seq(FValueResult(Vectors.dense(pValues), degreesOfFreedoms, Vectors.dense(fValues))))
   }
 }
