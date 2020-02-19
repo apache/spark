@@ -158,6 +158,7 @@ class Connection(Base, LoggingMixin):
         ('gcpcloudsql', 'Google Cloud SQL'),
         ('grpc', 'GRPC Connection'),
         ('yandexcloud', 'Yandex Cloud'),
+        ('livy', 'Apache Livy'),
     ]
 
     def __init__(
