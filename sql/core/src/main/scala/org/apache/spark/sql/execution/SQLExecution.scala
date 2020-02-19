@@ -142,9 +142,19 @@ object SQLExecution {
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
     Future {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
       sc.setLocalProperties(localProps)
-      body
+      val res = body
+      // reset active session and local props.
+      sc.setLocalProperties(originalLocalProps)
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
     }(exec)
   }
 }
