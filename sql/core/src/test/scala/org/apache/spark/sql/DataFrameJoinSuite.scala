@@ -322,4 +322,13 @@ class DataFrameJoinSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-30872: Constraints inferred from inferred attributes") {
+    withTable("t1") {
+      spark.range(20).selectExpr("id as a", "id as b", "id as c").write.saveAsTable("t1")
+      checkAnswer(
+        spark.sql("select count(*) from t1 where a = b and b = c and (c = 3 or c = 13)"),
+        Row(2) :: Nil)
+    }
+  }
 }

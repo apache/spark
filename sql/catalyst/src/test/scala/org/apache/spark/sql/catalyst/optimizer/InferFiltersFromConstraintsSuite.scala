@@ -316,4 +316,12 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         condition)
     }
   }
+
+  test("SPARK-30872: Constraints inferred from inferred attributes") {
+    val original = testRelation.where('a === 'b && 'b === 'c && ('c === 3 || 'c < 13))
+    val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)
+      && 'a === 'b && 'b === 'c && 'a === 'c
+      && ('a === 3 || 'a < 13) && ('b === 3 || 'b < 13) && ('c === 3 || 'c < 13))
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
 }

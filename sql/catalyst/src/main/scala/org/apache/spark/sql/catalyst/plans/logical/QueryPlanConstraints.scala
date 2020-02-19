@@ -61,6 +61,16 @@ trait ConstraintHelper {
    * additional constraint of the form `b = 5`.
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferred = Set.empty[Expression]
+    var lastEqualityInferred = Set.empty[Expression]
+    do {
+      lastEqualityInferred = inferEqualityConstraints(constraints ++ inferred)
+      inferred ++= lastEqualityInferred
+    } while (lastEqualityInferred.nonEmpty)
+    inferred
+  }
+
+  private def inferEqualityConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
@@ -75,7 +85,7 @@ trait ConstraintHelper {
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
-    inferredConstraints -- constraints
+    inferredConstraints.filterNot(i => constraints.exists(_.semanticEquals(i)))
   }
 
   private def replaceConstraints(
