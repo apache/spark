@@ -113,6 +113,14 @@ EXPLAIN FORMATTED
   FROM explain_temp4
   GROUP BY key;
 
+EXPLAIN FORMATTED
+  WITH RECURSIVE r(level) AS (
+    VALUES (0)
+    UNION ALL
+    SELECT level + 1 FROM r WHERE level < 10
+  )
+  SELECT * FROM r;
+
 -- cleanup
 DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;

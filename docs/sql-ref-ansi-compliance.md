@@ -335,6 +335,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>RECORDREADER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>RECORDWRITER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>RECOVER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>RECURSIVE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>REDUCE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>REFERENCES</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>REFRESH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

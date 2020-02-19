@@ -547,3 +547,9 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
+
+case class UnresolvedRecursiveReference(cteName: String, accumulated: Boolean) extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}

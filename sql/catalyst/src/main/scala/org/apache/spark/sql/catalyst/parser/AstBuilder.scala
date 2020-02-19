@@ -137,7 +137,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         s"CTE definition can't have duplicate names: ${duplicates.mkString("'", "', '", "'")}.",
         ctx)
     }
-    With(plan, ctes)
+    With(plan, ctes, ctx.RECURSIVE() != null)
   }
 
   /**

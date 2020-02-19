@@ -113,6 +113,11 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
           splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, joinType, Some(newCondition), hint)
+      case w @ With(_, cteRelations, _) =>
+        w.copy(cteRelations = cteRelations.map {
+          case (cteName, ctePlan) =>
+            cteName -> normalizePlan(normalizeExprIds(ctePlan)).asInstanceOf[SubqueryAlias]
+        })
     }
   }
 

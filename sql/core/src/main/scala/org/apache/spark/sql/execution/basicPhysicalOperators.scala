@@ -24,14 +24,18 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{RecursiveReference, RecursiveRelation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -247,6 +251,136 @@ case class FilterExec(condition: Expression, child: SparkPlan)
        |Input     : ${child.output.mkString("[", ", ", "]")}
        |Condition : ${condition}
      """.stripMargin
+  }
+}
+
+/**
+ * Physical plan node for a recursive relation that encapsulates the physical plan of the anchor
+ * term and the logical plan of the recursive term.
+ *
+ * Anchor is used to initialize the query in the first run.
+ * Recursive term is used to extend the result with new rows, They are logical plans and contain
+ * references to the result of the previous iteration or to the so far accumulated result. These
+ * references are updated with new statistics and data and then compiled to physical plan before
+ * execution.
+ *
+ * The execution terminates once the anchor term or an iteration of the recursive term return no
+ * rows.
+ *
+ * @param cteName the name of the recursive relation
+ * @param anchorTerm this child is used for initializing the query
+ * @param output the attributes of the recursive relation
+ */
+case class RecursiveRelationExec(
+    cteName: String,
+    anchorTerm: SparkPlan,
+    output: Seq[Attribute]) extends SparkPlan {
+  @transient
+  lazy val logicalRecursiveTerm = logicalLink.get.asInstanceOf[RecursiveRelation].recursiveTerm
+
+  override def children: Seq[SparkPlan] = anchorTerm :: Nil
+
+  override def innerChildren: Seq[QueryPlan[_]] = logicalRecursiveTerm +: super.innerChildren
+
+  override def stringArgs: Iterator[Any] = Iterator(cteName, output)
+
+  private val physicalRecursiveTerms = new mutable.ArrayBuffer[SparkPlan]
+
+  def recursiveTermIterations: Seq[SparkPlan] = physicalRecursiveTerms.toList
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  /**
+   * Notify the listeners of the physical plan change.
+   */
+  private def onUpdatePlan(executionId: Long): Unit = {
+    val queryExecution = SQLExecution.getQueryExecution(executionId)
+    sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+      executionId,
+      queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)))
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    val executionIdLong = if (false) {
+      None
+    } else {
+      Option(executionId).map(_.toLong)
+    }
+
+    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+
+    var prevIterationRDD = anchorTerm.execute().map(_.copy())
+    var prevIterationCount = prevIterationRDD.count()
+
+    val accumulatedRDDs = mutable.ArrayBuffer.empty[RDD[InternalRow]]
+    var accumulatedCount = 0L
+
+    val numOutputRows = longMetric("numOutputRows")
+
+    var level = 0
+    while (prevIterationCount > 0) {
+      if (levelLimit != -1 && level > levelLimit) {
+        throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
+          s"exhausted, try increasing ${SQLConf.CTE_RECURSION_LEVEL_LIMIT.key}")
+      }
+
+      accumulatedRDDs += prevIterationRDD
+      accumulatedCount += prevIterationCount
+
+      numOutputRows += prevIterationCount
+      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+
+      val newLogicalRecursiveTerm = logicalRecursiveTerm.transform {
+        case rr @ RecursiveReference(name, _, accumulated, _, _, _) if name == cteName =>
+          val (newStatistics, newRDD) = if (accumulated) {
+            (
+              Statistics(
+                EstimationUtils.getSizePerRow(output) * accumulatedCount,
+                Some(accumulatedCount)
+              ),
+              if (accumulatedRDDs.size > 1) {
+                sparkContext.union(accumulatedRDDs)
+              } else {
+                accumulatedRDDs.head
+              }
+            )
+          } else {
+            (
+              Statistics(
+                EstimationUtils.getSizePerRow(output) * prevIterationCount,
+                Some(prevIterationCount)
+              ),
+              prevIterationRDD
+            )
+          }
+          rr.withNewIteration(level, newStatistics, newRDD)
+      }
+
+      val physicalRecursiveTerm =
+        QueryExecution.prepareExecutedPlan(sqlContext.sparkSession, newLogicalRecursiveTerm)
+
+      physicalRecursiveTerms += physicalRecursiveTerm
+
+      executionIdLong.foreach(onUpdatePlan)
+
+      prevIterationRDD = physicalRecursiveTerm.execute().map(_.copy())
+      prevIterationCount = prevIterationRDD.count()
+
+      level = level + 1
+    }
+
+    executionIdLong.foreach(onUpdatePlan)
+
+    if (accumulatedRDDs.isEmpty) {
+      prevIterationRDD
+    } else if (accumulatedRDDs.size == 1) {
+      accumulatedRDDs.head
+    } else {
+      sparkContext.union(accumulatedRDDs)
+    }
   }
 }
 
