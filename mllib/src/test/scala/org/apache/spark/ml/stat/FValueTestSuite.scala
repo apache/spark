@@ -24,7 +24,7 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class FValueRegressionTestSuite
+class FValueTestSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
@@ -117,7 +117,7 @@ class FValueRegressionTestSuite
 
     for (numParts <- List(2, 4, 6, 8)) {
       val df = spark.createDataFrame(sc.parallelize(data, numParts))
-      val fRegression = FValueRegressionTest.test(df, "features", "label")
+      val fRegression = FValueTest.test(df, "features", "label")
       val (pValues: Vector, fValues: Vector) =
         fRegression.select("_1", "_3")
           .as[(Vector, Vector)].head()
@@ -138,7 +138,7 @@ class FValueRegressionTestSuite
       (9.0, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0)))
     )).toDF("label", "features")
 
-    val fRegression = FValueRegressionTest.test(df, "features", "label")
+    val fRegression = FValueTest.test(df, "features", "label")
     val (pValues: Vector, fValues: Vector) =
       fRegression.select("_1", "_3")
         .as[(Vector, Vector)].head()

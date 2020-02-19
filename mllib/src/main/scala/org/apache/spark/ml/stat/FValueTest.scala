@@ -20,24 +20,31 @@ package org.apache.spark.ml.stat
 import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{avg, col, stddev}
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
 
+
+/**
+ * FValue test for continuous data.
+ */
 @Since("3.1.0")
-object SelectionTest {
+object FValueTest {
 
   /**
    * @param dataset  DataFrame of continuous labels and continuous features.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
    * @param labelCol  Name of label column in dataset, of any numerical type
-   * @return Array containing the SelectionTestResult for every feature against the label.
+   * @return DataFrame containing the test result for every feature against the label.
+   *         This DataFrame will contain a single Row with the following fields:
+   *          - `pValues: Vector`
+   *          - `degreesOfFreedom: Array[Int]`
+   *          - `fValues: Vector`
+   *         Each of these fields has one value per feature.
    */
   @Since("3.1.0")
-  def fValueRegressionTest(dataset: Dataset[_], featuresCol: String, labelCol: String):
-    Array[SelectionTestResult] = {
+  def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
 
     val spark = dataset.sparkSession
     import spark.implicits._
@@ -53,23 +60,20 @@ object SelectionTest {
       .first()
 
     val labeledPointRdd = dataset.select(col("label").cast("double"), col("features"))
-      .as[(Double, Vector)]
-      .rdd.map { case (label, features) => LabeledPoint(label, features) }
+      .as[(Double, Vector)].rdd
 
-    val numFeatures = labeledPointRdd.first().features.size
+    val numFeatures = xMeans.size
     val numSamples = count
     val degreeOfFreedom = numSamples.toInt - 2
-    var fTestResultArray = new Array[SelectionTestResult](numFeatures)
 
     // Use two pass equation Cov[X,Y] = E[(X - E[X]) * (Y - E[Y])] to compute covariance because
     // one pass equation Cov[X,Y] = E[XY] - E[X]E[Y] is susceptible to catastrophic cancellation
-    //
     // sumForCov = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y)))
     val sumForCov = labeledPointRdd.mapPartitions { iter =>
       if (iter.hasNext) {
         val array = Array.ofDim[Double](numFeatures)
         while(iter.hasNext) {
-          val LabeledPoint(label, features) = iter.next
+          val (label, features) = iter.next
           val yDiff = label - yMean
           if (yDiff != 0) {
             features.iterator.zip(xMeans.iterator)
@@ -87,14 +91,21 @@ object SelectionTest {
       array1
     }
 
+    val pValues = Array.ofDim[Double](numFeatures)
+    val degreesOfFreedoms = Array.ofDim[Int](numFeatures)
+    val fValues = Array.ofDim[Double](numFeatures)
+
+    val fd = new FDistribution(1, degreeOfFreedom)
     for(i <- 0 until numFeatures) {
       // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
       val covariance = sumForCov (i) / (numSamples - 1)
       val corr = covariance / (yStd * xStd(i))
       val fValue = corr * corr / (1 - corr * corr) * degreeOfFreedom
-      val pValue = 1.0 - new FDistribution(1, degreeOfFreedom).cumulativeProbability(fValue)
-      fTestResultArray(i) = new FValueRegressionTestResult(pValue, degreeOfFreedom, fValue)
+      pValues(i) = 1.0 - fd.cumulativeProbability(fValue)
+      degreesOfFreedoms(i) = degreeOfFreedom
+      fValues(i) = fValue
     }
-    fTestResultArray
+
+    spark.createDataFrame(Seq((Vectors.dense(pValues), degreesOfFreedoms, Vectors.dense(fValues))))
   }
 }
