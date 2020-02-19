@@ -19,10 +19,10 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.Locale
 
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.
@@ -59,7 +59,7 @@ object ExecutorPodsSnapshot extends Logging {
       phase match {
         case "pending" =>
           PodPending(pod)
-        case "running" => {
+        case "running" =>
           // A pod will be considered running as long as there is at least one running container,
           // so we need to check if there are any failed containers.
           if (pod.getSpec.getRestartPolicy.equals("Never") &&
@@ -69,7 +69,6 @@ object ExecutorPodsSnapshot extends Logging {
               PodFailed(pod)
           }
           PodRunning(pod)
-        }
         case "failed" =>
           PodFailed(pod)
         case "succeeded" =>
