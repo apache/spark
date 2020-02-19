@@ -112,8 +112,8 @@ class ClassificationModel(PredictionModel, _ClassifierParams):
 
 class _ProbabilisticClassifierParams(HasProbabilityCol, HasThresholds, _ClassifierParams):
     """
-    Params for :py:class:`_JavaProbabilisticClassifier` and
-    :py:class:`_JavaProbabilisticClassificationModel`.
+    Params for :py:class:`ProbabilisticClassifier` and
+    :py:class:`ProbabilisticClassificationModel`.
 
     .. versionadded:: 3.0.0
     """

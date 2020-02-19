@@ -27,8 +27,7 @@ from pyspark.ml import classification, clustering, evaluation, feature, fpm, \
 
 __all__ = [
     "Transformer", "UnaryTransformer", "Estimator", "Model",
-    "Predictor", "PredictionModel",
-    "Pipeline", "PipelineModel",
+    "Predictor", "PredictionModel", "Pipeline", "PipelineModel",
     "classification", "clustering", "evaluation", "feature", "fpm", "image",
     "recommendation", "regression", "stat", "tuning", "util", "linalg", "param",
 ]
