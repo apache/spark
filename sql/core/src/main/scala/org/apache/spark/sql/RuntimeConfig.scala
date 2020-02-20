@@ -40,7 +40,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) extends Logging
    */
   def set(key: String, value: String): Unit = {
     requireNonStaticConf(key)
-    requireDefaultValueOfRemovedConf(key, value)
     logDeprecationWarning(key)
     sqlConf.setConfString(key, value)
   }
@@ -159,16 +158,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) extends Logging
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
-    }
-  }
-
-  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
-    SQLConf.removedSQLConfigs.get(key).foreach {
-      case RemovedConfig(configName, version, defaultValue, comment) =>
-        if (value != defaultValue) {
-          throw new AnalysisException(
-            s"The SQL config '$configName' was removed in the version $version. $comment")
-        }
     }
   }
 
