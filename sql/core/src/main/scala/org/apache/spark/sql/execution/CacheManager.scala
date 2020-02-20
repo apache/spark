@@ -79,20 +79,17 @@ class CacheManager extends Logging {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sparkSession = query.sparkSession
-      val qe = sparkSession.sessionState.executePlan(planToCache)
-      val originalValue = sparkSession.sessionState.conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
-      val inMemoryRelation = try {
-        // Avoiding changing the output partitioning, here disable AQE.
-        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
+      val sparkSessionWithAqeOff =
+        QueryExecution.getOrCreateSparkSessionWithAdaptiveExecutionOff(query.sparkSession)
+      val inMemoryRelation = sparkSessionWithAqeOff.withActive {
+        val qe = sparkSessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+          sparkSessionWithAqeOff.sessionState.conf.useCompression,
+          sparkSessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
           qe.executedPlan,
           tableName,
           optimizedPlan = qe.optimizedPlan)
-      } finally {
-        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, originalValue)
       }
 
       this.synchronized {
@@ -194,10 +191,15 @@ class CacheManager extends Logging {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val qe = spark.sessionState.executePlan(cd.plan)
-      val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-        optimizedPlan = qe.optimizedPlan)
+      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
+      val sparkSessionWithAqeOff =
+        QueryExecution.getOrCreateSparkSessionWithAdaptiveExecutionOff(spark)
+      val newCache = sparkSessionWithAqeOff.withActive {
+        val qe = sparkSessionWithAqeOff.sessionState.executePlan(cd.plan)
+        InMemoryRelation(
+          cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
+          optimizedPlan = qe.optimizedPlan)
+      }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
