@@ -168,7 +168,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     // test create hive table failed
     val tblName = "table_not_exists"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"CREATE TABLE $tblName(n into)"))
+      s"CREATE TABLE $tblName(s into)"))
 
     // test describe table failed
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
@@ -176,7 +176,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     // test wrong insert queries
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"INSERT into directory /tmp/test select 1 as a"))
+      s"INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
 
     // test drop hive table which not exists
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
