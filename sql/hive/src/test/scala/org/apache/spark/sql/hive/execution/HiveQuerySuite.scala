@@ -848,11 +848,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
-  test("SPARK-30868 ADD JAR command failed") {
-    val jarPath = "file:///tmp/not_exists.jar"
-    assertThrows[QueryExecutionException](sql(s"ADD JAR $jarPath"))
-  }
-
   test("ADD FILE command") {
     val testFile = TestHive.getHiveFile("data/files/v1.txt").toURI
     sql(s"ADD FILE $testFile")

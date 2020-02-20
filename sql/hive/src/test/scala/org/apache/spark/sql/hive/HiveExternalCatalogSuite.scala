@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.StructType
 
@@ -153,5 +154,33 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     catalog.createTable(hiveTable, ignoreIfExists = false)
     assert(catalog.getTable("db1", "spark_29498").owner === owner)
+  }
+
+  test("SPARK-30868 throw QueryExectionException if run hive query failed") {
+    // test add jars which not exists
+    val jarPath = "file:///tmp/not_exists.jar"
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(s"ADD JAR $jarPath"))
+
+    // test change to the database which not exists
+    val dbName = "db_not_exists"
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+      s"use $dbName"))
+
+    // test create hive table failed
+    val tblName = "table_not_exists"
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+      s"CREATE TABLE $tblName(n int)"))
+
+    // test describe hive table which not exists
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+      s"DESC FORMATED $tblName"))
+
+    // test insert hive table which not exists
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+      s"INSERT into table $tblName values(1)"))
+
+    // test drop hive table which not exists
+    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+      s"DROP TABLE $tblName"))
   }
 }
