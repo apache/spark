@@ -156,28 +156,27 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assert(catalog.getTable("db1", "spark_29498").owner === owner)
   }
 
-  test("SPARK-30868 throw QueryExectionException if run hive query failed") {
+  test("SPARK-30868 throw an exception if HiveClient#runSqlHive fails") {
     // test add jars which not exists
     val jarPath = "file:///tmp/not_exists.jar"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(s"ADD JAR $jarPath"))
 
     // test change to the database which not exists
-    val dbName = "db_not_exists"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"use $dbName"))
+      s"use db_not_exists"))
 
     // test create hive table failed
     val tblName = "table_not_exists"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"CREATE TABLE $tblName(n int)"))
+      s"CREATE TABLE $tblName(n into)"))
 
-    // test describe hive table which not exists
+    // test describe table failed
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       s"DESC FORMATED $tblName"))
 
-    // test insert hive table which not exists
+    // test wrong insert queries
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"INSERT into table $tblName values(1)"))
+      s"INSERT into directory /tmp/test select 1 as a"))
 
     // test drop hive table which not exists
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
