@@ -135,8 +135,6 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
-<<<<<<< HEAD
-=======
     def test_all_gather(self):
         """
         Verify that BarrierTaskContext.allGather() performs global sync among all barrier tasks
@@ -157,7 +155,6 @@ class TaskContextTests(PySparkTestCase):
         pids = rdd.barrier().mapPartitions(f).map(context_barrier).collect()[0]
         self.assertEqual(pids, [0, 1, 2, 3])
 
->>>>>>> 7f928deb9b... Add all gather method to BarrierTaskContext
     def test_barrier_infos(self):
         """
         Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
