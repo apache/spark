@@ -522,11 +522,13 @@ case class ArrayFilter(
   since = "2.4.0")
 case class ArrayExists(
     argument: Expression,
-    function: Expression)
+    function: Expression,
+    followThreeValuedLogic: Boolean)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  private val followThreeValuedLogic =
-    SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC)
+  def this(left: Expression, right: Expression) = {
+    this(left, right, SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC))
+  }
 
   override def nullable: Boolean =
     if (followThreeValuedLogic) {
@@ -572,6 +574,12 @@ case class ArrayExists(
   }
 
   override def prettyName: String = "exists"
+}
+
+object ArrayExists {
+  def apply(argument: Expression, function: Expression): ArrayExists = {
+    new ArrayExists(argument, function)
+  }
 }
 
 /**
