@@ -164,7 +164,6 @@ private[spark] class BarrierCoordinator(
             s"the current synchronized requestMethod `$requestMethodToSync`"
           ))
         )
-        cleanupBarrierStage(barrierId)
       }
 
       // Require the number of tasks is correctly set from the BarrierTaskContext.
