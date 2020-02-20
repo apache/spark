@@ -176,7 +176,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     // test wrong insert queries
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
+      "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
 
     // test drop hive table which not exists
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
