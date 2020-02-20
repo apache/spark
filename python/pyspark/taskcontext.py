@@ -243,6 +243,7 @@ class BarrierTaskContext(TaskContext):
     def getTaskInfos(self):
         """
         .. note:: Experimental
+
         Returns :class:`BarrierTaskInfo` for all tasks in this barrier stage,
         ordered by partition ID.
 
