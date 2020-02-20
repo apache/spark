@@ -56,9 +56,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
+    val d0 = DateTimeUtils.microsToDays(System.currentTimeMillis(), ZoneOffset.UTC)
     val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
+    val d1 = DateTimeUtils.microsToDays(System.currentTimeMillis(), ZoneOffset.UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
     val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
@@ -789,14 +789,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(
               UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
               MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))),
                 Literal(fmt2), timeZoneId),
               -1000L)
             checkEvaluation(UnixTimestamp(
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+              MILLISECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
             val t1 = UnixTimestamp(
               CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
@@ -815,7 +815,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(
               UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
               MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
           }
@@ -853,7 +853,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(
               ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
               MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               ToUnixTimestamp(
                 Literal(sdf2.format(new Timestamp(-1000000))),
@@ -861,7 +861,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               -1000L)
             checkEvaluation(ToUnixTimestamp(
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+              MILLISECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
             val t1 = ToUnixTimestamp(
               CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
@@ -877,7 +877,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(ToUnixTimestamp(
               Literal(date1), Literal.create(null, StringType), timeZoneId),
               MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               ToUnixTimestamp(
                 Literal("2015-07-24"),

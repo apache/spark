@@ -134,7 +134,7 @@ case class CurrentBatchTimestamp(
   def toLiteral: Literal = dataType match {
     case _: TimestampType =>
       Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
-    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs, zoneId), DateType)
+    case _: DateType => Literal(DateTimeUtils.microsToDays(timestampMs, zoneId), DateType)
   }
 }
 

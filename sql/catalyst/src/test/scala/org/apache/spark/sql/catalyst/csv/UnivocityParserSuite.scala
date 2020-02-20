@@ -138,7 +138,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val expectedDate = format.parse(customDate).getTime
     val castedDate = parser.makeConverter("_1", DateType, nullable = true)
         .apply(customDate)
-    assert(castedDate == DateTimeUtils.millisToDays(expectedDate, ZoneOffset.UTC))
+    assert(castedDate == DateTimeUtils.microsToDays(expectedDate, ZoneOffset.UTC))
 
     val timestamp = "2015-01-01 00:00:00"
     timestampsOptions = new CSVOptions(Map(

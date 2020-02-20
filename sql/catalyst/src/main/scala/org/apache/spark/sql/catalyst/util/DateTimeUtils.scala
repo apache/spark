@@ -60,23 +60,23 @@ object DateTimeUtils {
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
-  def millisToDays(millisUtc: Long): SQLDate = {
-    millisToDays(millisUtc, defaultTimeZone().toZoneId)
+  def microsToDays(microsUtc: Long): SQLDate = {
+    microsToDays(microsUtc, defaultTimeZone().toZoneId)
   }
 
-  def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
-    val instant = microsToInstant(Math.multiplyExact(millisUtc, MICROS_PER_MILLIS))
+  def microsToDays(microsUtc: Long, zoneId: ZoneId): SQLDate = {
+    val instant = microsToInstant(microsUtc)
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
   // reverse of millisToDays
-  def daysToMillis(days: SQLDate): Long = {
-    daysToMillis(days, defaultTimeZone().toZoneId)
+  def daysToMicros(days: SQLDate): Long = {
+    daysToMicros(days, defaultTimeZone().toZoneId)
   }
 
-  def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
+  def daysToMicros(days: SQLDate, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
-    instantToMicros(instant) / MICROS_PER_MILLIS
+    instantToMicros(instant)
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
@@ -88,14 +88,14 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    millisToDays(date.getTime)
+    microsToDays(date.getTime)
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(daysToMillis(daysSinceEpoch))
+    new Date(daysToMicros(daysSinceEpoch))
   }
 
   /**
@@ -572,10 +572,10 @@ object DateTimeUtils {
       time2: SQLTimestamp,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
-    val millis1 = MICROSECONDS.toMillis(time1)
-    val millis2 = MICROSECONDS.toMillis(time2)
-    val date1 = millisToDays(millis1, zoneId)
-    val date2 = millisToDays(millis2, zoneId)
+    val micros1 = MICROSECONDS.toMicros(time1)
+    val micros2 = MICROSECONDS.toMicros(time2)
+    val date1 = microsToDays(micros1, zoneId)
+    val date2 = microsToDays(micros2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -589,8 +589,8 @@ object DateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, zoneId))
-    val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, zoneId))
+    val secondsInDay1 = MICROSECONDS.toSeconds(micros1 - daysToMicros(date1, zoneId))
+    val secondsInDay2 = MICROSECONDS.toSeconds(micros2 - daysToMicros(date2, zoneId))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
     val secondsInMonth = DAYS.toSeconds(31)
     val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
@@ -712,18 +712,18 @@ object DateTimeUtils {
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
       case _ =>
-        val millis = MICROSECONDS.toMillis(t)
+        val micros = MICROSECONDS.toMicros(t)
         val truncated = level match {
-          case TRUNC_TO_MILLISECOND => millis
+          case TRUNC_TO_MILLISECOND => MICROSECONDS.toMillis(t) * MICROS_PER_MILLIS
           case TRUNC_TO_SECOND =>
-            millis - Math.floorMod(millis, MILLIS_PER_SECOND)
+            micros - Math.floorMod(micros, MICROS_PER_SECOND)
           case TRUNC_TO_MINUTE =>
-            millis - Math.floorMod(millis, MILLIS_PER_MINUTE)
+            micros - Math.floorMod(micros, MICROS_PER_MINUTE)
           case _ => // Try to truncate date levels
-            val dDays = millisToDays(millis, zoneId)
-            daysToMillis(truncDate(dDays, level), zoneId)
+            val dDays = microsToDays(micros, zoneId)
+            daysToMicros(truncDate(dDays, level), zoneId)
         }
-        truncated * MICROS_PER_MILLIS
+        truncated
     }
   }
 
