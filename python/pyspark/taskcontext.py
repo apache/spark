@@ -63,7 +63,7 @@ class TaskContext(object):
         """
         Return the currently active TaskContext. This can be called inside of
         user functions to access contextual information about running tasks.
-        
+
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
         """
         return cls._taskContext
