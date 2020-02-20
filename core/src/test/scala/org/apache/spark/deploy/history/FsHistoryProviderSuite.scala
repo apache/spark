@@ -185,6 +185,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
+    assume(!logFile2.canRead, "Cancel the case for root can read any files.")
 
     updateAndCheck(provider) { list =>
       list.size should be (1)

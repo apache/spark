@@ -119,6 +119,8 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
       // all disks damaged
       rootDir1.setExecutable(false)
+      assume(!rootDir1.canExecute, "Cancel the case for root can execute any files.")
+      
       val tempShuffleFile3 = diskBlockManager.createTempShuffleBlock()._2
       val tempLocalFile3 = diskBlockManager.createTempLocalBlock()._2
       assert(!tempShuffleFile3.exists(),
