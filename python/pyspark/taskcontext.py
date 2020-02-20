@@ -63,6 +63,7 @@ class TaskContext(object):
         """
         Return the currently active TaskContext. This can be called inside of
         user functions to access contextual information about running tasks.
+        
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
         """
         return cls._taskContext
@@ -145,8 +146,10 @@ class BarrierTaskContext(TaskContext):
 
     """
     .. note:: Experimental
+
     A :class:`TaskContext` with extra contextual info and tooling for tasks in a barrier stage.
     Use :func:`BarrierTaskContext.get` to obtain the barrier context for a running barrier task.
+
     .. versionadded:: 2.4.0
     """
 
@@ -168,9 +171,11 @@ class BarrierTaskContext(TaskContext):
     def get(cls):
         """
         .. note:: Experimental
+
         Return the currently active :class:`BarrierTaskContext`.
         This can be called inside of user functions to access contextual information about
         running tasks.
+
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
             An Exception will raise if it is not in a barrier stage.
         """
@@ -190,12 +195,15 @@ class BarrierTaskContext(TaskContext):
     def barrier(self):
         """
         .. note:: Experimental
+
         Sets a global barrier and waits until all tasks in this stage hit this barrier.
         Similar to `MPI_Barrier` function in MPI, this function blocks until all tasks
         in the same stage have reached this routine.
+
         .. warning:: In a barrier stage, each task much have the same number of `barrier()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
+
         .. versionadded:: 2.4.0
         """
         if self._port is None or self._secret is None:
@@ -207,12 +215,16 @@ class BarrierTaskContext(TaskContext):
     def allGather(self, message=""):
         """
         .. note:: Experimental
+
         This function blocks until all tasks in the same stage have reached this routine.
         Each task passes in a message and returns with a list of all the messages passed in
         by each of those tasks.
+
         .. warning:: In a barrier stage, each task much have the same number of `allGather()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
+
+        .. versionadded:: 3.0.0
         """
         if not isinstance(message, str):
             raise ValueError("Argument `message` must be of type `str`")
@@ -233,6 +245,7 @@ class BarrierTaskContext(TaskContext):
         .. note:: Experimental
         Returns :class:`BarrierTaskInfo` for all tasks in this barrier stage,
         ordered by partition ID.
+
         .. versionadded:: 2.4.0
         """
         if self._port is None or self._secret is None:
@@ -246,8 +259,11 @@ class BarrierTaskContext(TaskContext):
 class BarrierTaskInfo(object):
     """
     .. note:: Experimental
+
     Carries all task infos of a barrier task.
+
     :var address: The IPv4 address (host:port) of the executor that the barrier task is running on
+
     .. versionadded:: 2.4.0
     """
 
