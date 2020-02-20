@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -2899,16 +2900,41 @@ class SQLConf extends Serializable with Logging {
     settings.containsKey(key)
   }
 
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach {
+      case RemovedConfig(configName, version, defaultValue, comment) =>
+        if (value != defaultValue) {
+          throw new AnalysisException(
+            s"The SQL config '$configName' was removed in the version $version. $comment")
+        }
+    }
+  }
+
   protected def setConfWithCheck(key: String, value: String): Unit = {
+    logDeprecationWarning(key)
+    requireDefaultValueOfRemovedConf(key, value)
     settings.put(key, value)
   }
 
   def unsetConf(key: String): Unit = {
+    logDeprecationWarning(key)
     settings.remove(key)
   }
 
   def unsetConf(entry: ConfigEntry[_]): Unit = {
-    settings.remove(entry.key)
+    unsetConf(entry.key)
   }
 
   def clear(): Unit = {
