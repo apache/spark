@@ -2900,6 +2900,18 @@ class SQLConf extends Serializable with Logging {
     settings.containsKey(key)
   }
 
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
+    }
+  }
+
   private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
     SQLConf.removedSQLConfigs.get(key).foreach {
       case RemovedConfig(configName, version, defaultValue, comment) =>
@@ -2911,16 +2923,18 @@ class SQLConf extends Serializable with Logging {
   }
 
   protected def setConfWithCheck(key: String, value: String): Unit = {
+    logDeprecationWarning(key)
     requireDefaultValueOfRemovedConf(key, value)
     settings.put(key, value)
   }
 
   def unsetConf(key: String): Unit = {
+    logDeprecationWarning(key)
     settings.remove(key)
   }
 
   def unsetConf(entry: ConfigEntry[_]): Unit = {
-    settings.remove(entry.key)
+    unsetConf(entry.key)
   }
 
   def clear(): Unit = {
