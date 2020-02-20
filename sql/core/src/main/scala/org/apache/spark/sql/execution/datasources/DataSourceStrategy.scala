@@ -443,30 +443,62 @@ object DataSourceStrategy {
     case expressions.EqualTo(Literal(v, t), a: Attribute) =>
       Some(sources.EqualTo(a.name, convertToScala(v, t)))
 
+    case expressions.EqualTo(Cast(c, dt, tz), Literal(v, t)) if c.isInstanceOf[Attribute] =>
+      Some(sources.EqualTo(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.EqualTo(Literal(v, t), Cast(c, dt, tz)) if c.isInstanceOf[Attribute] =>
+      Some(sources.EqualTo(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
     case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
       Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
     case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
       Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+
+    case expressions.EqualNullSafe(Cast(c, dt, tz), Literal(v, t)) if c.isInstanceOf[Attribute] =>
+      Some(sources.EqualNullSafe(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(Literal(v, t), Cast(c, dt, tz)) if c.isInstanceOf[Attribute] =>
+      Some(sources.EqualNullSafe(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
 
     case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
       Some(sources.GreaterThan(a.name, convertToScala(v, t)))
     case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
       Some(sources.LessThan(a.name, convertToScala(v, t)))
 
+    case expressions.GreaterThan(Cast(c, dt, tz), Literal(v, t)) if c.isInstanceOf[Attribute] =>
+      Some(sources.GreaterThan(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.GreaterThan(Literal(v, t), Cast(c, dt, tz)) if c.isInstanceOf[Attribute] =>
+      Some(sources.LessThan(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
     case expressions.LessThan(a: Attribute, Literal(v, t)) =>
       Some(sources.LessThan(a.name, convertToScala(v, t)))
     case expressions.LessThan(Literal(v, t), a: Attribute) =>
       Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+
+    case expressions.LessThan(Cast(c, dt, tz), Literal(v, t)) if c.isInstanceOf[Attribute] =>
+      Some(sources.LessThan(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.LessThan(Literal(v, t), Cast(c, dt, tz)) if c.isInstanceOf[Attribute] =>
+      Some(sources.GreaterThan(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
 
     case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
       Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
     case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
       Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
 
+    case expressions.GreaterThanOrEqual(Cast(c, dt, tz), Literal(v, t))
+      if c.isInstanceOf[Attribute] =>
+      Some(sources.GreaterThanOrEqual(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(Literal(v, t), Cast(c, dt, tz))
+      if c.isInstanceOf[Attribute] =>
+      Some(sources.LessThanOrEqual(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
     case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
       Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
     case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
       Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+
+    case expressions.LessThanOrEqual(Cast(c, dt, tz), Literal(v, t)) if c.isInstanceOf[Attribute] =>
+      Some(sources.LessThanOrEqual(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(Literal(v, t), Cast(c, dt, tz)) if c.isInstanceOf[Attribute] =>
+      Some(sources.GreaterThanOrEqual(c.asInstanceOf[Attribute].name, convertToScala(v, t)))
 
     case expressions.InSet(a: Attribute, set) =>
       val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
@@ -479,6 +511,11 @@ object DataSourceStrategy {
       val hSet = list.map(_.eval(EmptyRow))
       val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
       Some(sources.In(a.name, hSet.toArray.map(toScala)))
+
+    case expressions.In(Cast(c, dt, tz), list) if list.forall(_.isInstanceOf[Literal]) =>
+      val hSet = list.map(_.eval(EmptyRow))
+      val toScala = CatalystTypeConverters.createToScalaConverter(dt)
+      Some(sources.In(c.asInstanceOf[Attribute].name, hSet.toArray.map(toScala)))
 
     case expressions.IsNull(a: Attribute) =>
       Some(sources.IsNull(a.name))
