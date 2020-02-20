@@ -608,7 +608,7 @@ class DataSourceV2SQLSuite
     val ident = Identifier.of(Array(), "tbl")
     sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
-    sql("DROP TABLE spark_catalog.tbl")
+    sql("DROP TABLE spark_catalog.default.tbl")
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
   }
 
@@ -705,7 +705,6 @@ class DataSourceV2SQLSuite
 
     withTable("t") {
       sql("CREATE TABLE t USING json AS SELECT 1 AS i")
-      checkAnswer(sql("select default.t.i from spark_catalog.t"), Row(1))
       checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
       checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
 
@@ -2121,15 +2120,32 @@ class DataSourceV2SQLSuite
     withTable("t") {
       sql("CREATE TABLE t USING json AS SELECT 1 AS i")
       checkAnswer(sql("select * from t"), Row(1))
-      checkAnswer(sql("select * from spark_catalog.t"), Row(1))
       checkAnswer(sql("select * from spark_catalog.default.t"), Row(1))
     }
+  }
+
+  test("SPARK-30885: v1 table name should be fully qualified") {
+    def run(): Unit = {
+      withTable("t") {
+        sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+        val e = intercept[AnalysisException] {
+          sql("select * from spark_catalog.t")
+        }
+        assert(e.message.contains(
+          "Session catalog cannot have an empty namespace: spark_catalog.t"))
+      }
+    }
+
+    run()
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    run()
   }
 
   test("SPARK-30259: session catalog can be specified in CREATE TABLE AS SELECT command") {
     withTable("tbl") {
       val ident = Identifier.of(Array(), "tbl")
-      sql("CREATE TABLE spark_catalog.tbl USING json AS SELECT 1 AS i")
+      sql("CREATE TABLE spark_catalog.default.tbl USING json AS SELECT 1 AS i")
       assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
     }
   }
@@ -2137,7 +2153,7 @@ class DataSourceV2SQLSuite
   test("SPARK-30259: session catalog can be specified in CREATE TABLE command") {
     withTable("tbl") {
       val ident = Identifier.of(Array(), "tbl")
-      sql("CREATE TABLE spark_catalog.tbl (col string) USING json")
+      sql("CREATE TABLE spark_catalog.default.tbl (col string) USING json")
       assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
     }
   }
@@ -2146,7 +2162,7 @@ class DataSourceV2SQLSuite
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
-    withTable("spark_catalog.t", "testcat.ns.t") {
+    withTable("spark_catalog.default.t", "testcat.ns.t") {
       sql("CREATE TABLE t USING parquet AS SELECT 1")
       sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT 2")
 
@@ -2168,17 +2184,18 @@ class DataSourceV2SQLSuite
 
     withTempView("t") {
       spark.range(10).createTempView("t")
-      withView(s"$sessionCatalogName.v") {
+      withView(s"$sessionCatalogName.default.v") {
         val e = intercept[AnalysisException] {
-          sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT * FROM t")
+          sql(s"CREATE VIEW $sessionCatalogName.default.v AS SELECT * FROM t")
         }
         assert(e.message.contains("referencing a temporary view"))
       }
     }
 
     withTempView("t") {
-      withView(s"$sessionCatalogName.v") {
-        sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT t1.col FROM t t1 JOIN ns1.ns2.t t2")
+      withView(s"$sessionCatalogName.default.v") {
+        sql(s"CREATE VIEW $sessionCatalogName.default.v " +
+          "AS SELECT t1.col FROM t t1 JOIN ns1.ns2.t t2")
         sql(s"USE $sessionCatalogName")
         // The view should read data from table `testcat.ns1.ns2.t` not the temp view.
         spark.range(10).createTempView("t")
@@ -2259,7 +2276,7 @@ class DataSourceV2SQLSuite
       val e1 = intercept[AnalysisException](
         sql(s"CACHE TABLE $sessionCatalogName.v")
       )
-      assert(e1.message.contains("Table or view not found: default.v"))
+      assert(e1.message.contains("Session catalog cannot have an empty namespace: spark_catalog.v"))
     }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
