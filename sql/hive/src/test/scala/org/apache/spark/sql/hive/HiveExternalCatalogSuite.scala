@@ -168,7 +168,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     // test create hive table failed
     val tblName = "table_not_exists"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"CREATE TABLE $tblName(s into)"))
+      s"CREATE TABLE $tblName(n into)"))
 
     // test describe table failed
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
