@@ -2254,6 +2254,14 @@ object SQLConf {
    * The map contains info about removed SQL configs. Keys are SQL config names,
    * map values contain extra information like the version in which the config was removed,
    * config's default value and a comment.
+   *
+   * Removed SQL config should be added to the map iff its non-default value changed
+   * the behavior. Any removed config of `removedSQLConfigs` which set to a non-default
+   * value raises an exception propagated to user's app. For example, the SQL config
+   * `spark.sql.variable.substitute.depth` was deprecated since Spark 2.1 and not
+   * used in Spark 2.4, so, it should not be placed here because any of its values
+   * does not impact on the behavior of Spark 3.0. And this makes migrations to new
+   * Spark versions painless.
    */
   val removedSQLConfigs: Map[String, RemovedConfig] = {
     val configs = Seq(
