@@ -1800,8 +1800,17 @@ BRACKETED_EMPTY_COMMENT
     : '/*' BRACKETED_EMPTY_COMMENT* '*/' -> channel(HIDDEN)
     ;
 
+// The bracketed comment consists of three main parts, from left to right are:
+// '/*', the content of comment, '*/'.
+//   1. '/*' is used to match the beginning of a bracketed comment.
+//   2. The content of comment is divided into two optional parts by '|'.
+//     1. The left part is used to match comments like below:
+//       '/*/*content of nested bracketed*/*/' or '/*/*content of nested bracketed*/content of bracketed*/'
+//     2. The right part is used to avoid conflicts with hints and matches like the comment below:
+//       '/*content of bracketed/*content of nested bracketed*/*/' or '/*content of bracketed/*content of nested bracketed*/content of bracketed*/'
+//   3. '*/' is used to match the end of a bracketed comment.
 BRACKETED_COMMENT
-    : '/*' (BRACKETED_COMMENT .*? | ~[+] (BRACKETED_COMMENT|.)*?)*? '*/' -> channel(HIDDEN)
+    : '/*' ((BRACKETED_COMMENT .*? (BRACKETED_COMMENT|.)*? | ~[+] (BRACKETED_COMMENT|.)*?)) '*/' -> channel(HIDDEN)
     ;
 
 WS
