@@ -270,7 +270,6 @@ class SQLContextTests(unittest.TestCase):
             sql_context = SQLContext.getOrCreate(sc)
             assert(isinstance(sql_context, SQLContext))
         finally:
-            SQLContext._instantiatedContext = None
             if sql_context is not None:
                 sql_context.sparkSession.stop()
             if sc is not None:

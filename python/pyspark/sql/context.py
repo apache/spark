@@ -87,7 +87,8 @@ class SQLContext(object):
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
-        if SQLContext._instantiatedContext is None:
+        if (SQLContext._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
             SQLContext._instantiatedContext = self
 
     @property
@@ -118,7 +119,8 @@ class SQLContext(object):
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
             DeprecationWarning)
 
-        if cls._instantiatedContext is None:
+        if (cls._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
             jsqlContext = sc._jvm.SparkSession.builder().sparkContext(
                 sc._jsc.sc()).getOrCreate().sqlContext()
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
