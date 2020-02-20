@@ -324,6 +324,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       val content = "abc".getBytes
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
       file.setReadable(false)
+      assume(!file.canRead, "Cancel the case for root can read any files.")
 
       // If content is selected, it throws an exception because it's not readable.
       intercept[IOException] {

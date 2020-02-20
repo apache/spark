@@ -84,6 +84,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     val childPath = new File(path.toString, "child")
     path.mkdir()
     path.setWritable(false)
+    assume(!path.canWrite, "Cancel the case for root can write any files.")
 
     val e = intercept[SparkException] {
       sql(
