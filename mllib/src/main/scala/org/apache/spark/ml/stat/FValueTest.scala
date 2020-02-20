@@ -78,7 +78,7 @@ object FValueTest {
     val sumForCov = labeledPointRdd.mapPartitions { iter =>
       if (iter.hasNext) {
         val array = Array.ofDim[Double](numFeatures)
-        while(iter.hasNext) {
+        while (iter.hasNext) {
           val (label, features) = iter.next
           val yDiff = label - yMean
           if (yDiff != 0) {
@@ -101,9 +101,8 @@ object FValueTest {
     val degreesOfFreedoms = Array.fill(numFeatures)(degreesOfFreedom)
     val fValues = Array.ofDim[Double](numFeatures)
 
-
     val fd = new FDistribution(1, degreesOfFreedom)
-    for(i <- 0 until numFeatures) {
+    for (i <- 0 until numFeatures) {
       // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
       val covariance = sumForCov (i) / (numSamples - 1)
       val corr = covariance / (yStd * xStd(i))
