@@ -377,14 +377,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
-  def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[Exception] {
-      df.collect()
-    }.getCause.getMessage
-    assert(message.contains(s"set ${SQLConf.LEGACY_TIME_PARSER_ENABLED.key} to true to restore " +
-      "the behavior before Spark 3.0"))
-  }
-
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
@@ -430,10 +422,19 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(to_date(col("d"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
         Row(Date.valueOf("2014-12-31"))))
-    checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-MM-dd")),
+      Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
+
+    // now switch format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-MM")),
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
 
     // invalid format
-    checkExceptionMessage(df.select(to_date(col("s"), "yyyy-hh-MM")))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-hh-MM")),
+      Seq(Row(null), Row(null), Row(null)))
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-aa")),
       Seq(Row(null), Row(null), Row(null)))
@@ -561,7 +562,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   private def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
 
   test("unix_timestamp") {
-<<<<<<< HEAD
     Seq(false, true).foreach { legacyParser =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
         val date1 = Date.valueOf("2015-07-24")

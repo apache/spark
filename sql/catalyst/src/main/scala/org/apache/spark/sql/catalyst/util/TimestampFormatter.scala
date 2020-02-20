@@ -234,7 +234,7 @@ object TimestampFormatter {
       e: DateTimeParseException, s: String, format: String, zoneId: ZoneId): Unit = {
     assert(!SQLConf.get.legacyTimeParserEnabled,
       "Only check legacy formatter while legacy parser disabled.")
-    val formatter = new LegacyTimestampFormatter(format, zoneId, defaultLocale)
+    val formatter = new LegacySimpleTimestampFormatter(s, zoneId, defaultLocale, lenient = false)
     val res = try {
       Some(formatter.parse(s))
     } catch {
