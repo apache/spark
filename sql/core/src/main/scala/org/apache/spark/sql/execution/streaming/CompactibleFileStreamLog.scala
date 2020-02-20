@@ -188,17 +188,23 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         }
       } ++ logs
     }
-    logInfo(s"It took $loadElapsedMs ms to load ${allLogs.size} entries " +
-      s"(${SizeEstimator.estimate(allLogs)} bytes in memory) for compact batch $batchId.")
-
     val compactedLogs = compactLogs(allLogs)
 
     // Return false as there is another writer.
     val (writeSucceed, writeElapsedMs) = Utils.timeTakenMs {
       super.add(batchId, compactedLogs.toArray)
     }
-    logInfo(s"It took $writeElapsedMs ms to try to write ${compactedLogs.size} entries" +
-      s" for compact batch $batchId. (result: $writeSucceed)")
+
+    val elapsedMs = loadElapsedMs + writeElapsedMs
+    if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
+      logWarning(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
+        s" write: $writeElapsedMs ms) for compact batch $batchId")
+      logWarning(s"Loaded ${allLogs.size} entries (${SizeEstimator.estimate(allLogs)} bytes in " +
+        s"memory), and wrote ${compactedLogs.size} entries for compact batch $batchId")
+    } else {
+      logDebug(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
+        s" write: $writeElapsedMs ms) for compact batch $batchId")
+    }
 
     writeSucceed
   }
@@ -282,6 +288,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
 object CompactibleFileStreamLog {
   val COMPACT_FILE_SUFFIX = ".compact"
+  val COMPACT_LATENCY_WARN_THRESHOLD_MS = 2000
 
   def getBatchIdFromFileName(fileName: String): Long = {
     fileName.stripSuffix(COMPACT_FILE_SUFFIX).toLong
