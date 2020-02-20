@@ -33,6 +33,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
@@ -845,6 +846,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       """.stripMargin)
     assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
+  }
+
+  test("SPARK-30868 ADD JAR command failed") {
+    val jarPath = "file:///tmp/not_exists.jar"
+    assertThrows[QueryExecutionException](sql(s"ADD JAR $jarPath"))
   }
 
   test("ADD FILE command") {
