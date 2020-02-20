@@ -719,8 +719,6 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(trimStr, str) - Remove the leading and trailing `trimStr` characters from `str`.
-
     _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
@@ -750,8 +748,6 @@ object StringTrim {
        SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
-      > SELECT _FUNC_('SL', 'SSparkSQLS');
-       parkSQ
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
@@ -846,8 +842,6 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,8 +852,6 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('Sp', 'SparkSQLS');
-       arkSQLS
   """,
   since = "1.5.0")
 case class StringTrimLeft(
@@ -948,8 +940,6 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,8 +950,6 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SQLS', 'SSparkSQLS');
-       SSpark
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
