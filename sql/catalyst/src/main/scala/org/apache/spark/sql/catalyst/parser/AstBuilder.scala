@@ -3202,8 +3202,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       AnalyzeTableStatement(tableName, partitionSpec, noScan = ctx.identifier != null)
     } else {
       checkPartitionSpec()
-      AnalyzeColumnStatement(
-        tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
+      val colsOpt = Option(visitIdentifierSeq(ctx.identifierSeq()))
+      colsOpt.foreach { cols =>
+        val duplicates = cols.groupBy(identity).filter(_._2.size > 1).keys
+        if (duplicates.nonEmpty) {
+          throw new ParseException(
+            s"Duplicate columns found: ${duplicates.mkString("'", "', '", "'")}.",
+            ctx.identifierSeq())
+        }
+      }
+      AnalyzeColumnStatement(tableName, colsOpt, allColumns = false)
     }
   }
 

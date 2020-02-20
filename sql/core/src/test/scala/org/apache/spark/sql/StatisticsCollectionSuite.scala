@@ -27,6 +27,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -648,6 +649,19 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
         }
       }
+    }
+  }
+
+  test("SPARK-30903: Fail fast on duplicate columns when analyze columns") {
+    val table = "test_table"
+    withTable(table) {
+      sql(s"""
+           |CREATE TABLE $table (value string, name string)
+           |USING PARQUET""".stripMargin)
+      val errorMsg = intercept[ParseException] {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, name, value")
+      }.getMessage
+      assert(errorMsg.contains("Duplicate columns found"))
     }
   }
 }
