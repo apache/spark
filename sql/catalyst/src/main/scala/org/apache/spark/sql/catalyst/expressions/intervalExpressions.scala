@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -110,14 +111,15 @@ object ExtractIntervalPart {
   }
 }
 
-abstract class IntervalNumOperation(
-    interval: Expression,
-    num: Expression,
-    operation: (CalendarInterval, Double) => CalendarInterval,
-    operationName: String)
+abstract class IntervalNumOperation(interval: Expression, num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
+
+  protected def checkOverflow: Boolean = SQLConf.get.ansiEnabled
+
+  protected def operation(interval: CalendarInterval, num: Double): CalendarInterval
+  protected def operationName: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
   override def dataType: DataType = CalendarIntervalType
@@ -137,10 +139,23 @@ abstract class IntervalNumOperation(
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiplyExact, "multiplyExact")
+  extends IntervalNumOperation(interval, num) {
+
+  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (checkOverflow) multiplyExact(interval, num) else multiply(interval, num)
+  }
+  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
+}
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divideExact, "divideExact")
+  extends IntervalNumOperation(interval, num) {
+
+  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (checkOverflow) divideExact(interval, num) else divide(interval, num)
+  }
+
+  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(

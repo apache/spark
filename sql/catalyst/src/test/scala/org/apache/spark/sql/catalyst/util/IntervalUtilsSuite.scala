@@ -267,19 +267,23 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("multiply by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === multiplyExact(interval, 0))
-    interval = new CalendarInterval(123, 456, 789)
-    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiplyExact(interval, 42))
-    interval = new CalendarInterval(-123, -456, -789)
-    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiplyExact(interval, 42))
-    assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
-      multiplyExact(new CalendarInterval(1, 5, 0), 1.5))
-    assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
-      multiplyExact(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+    Seq[(CalendarInterval, Double) => CalendarInterval](multiply, multiplyExact).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 0))
+      interval = new CalendarInterval(123, 456, 789)
+      assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === func(interval, 42))
+      interval = new CalendarInterval(-123, -456, -789)
+      assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === func(interval, 42))
+      interval = new CalendarInterval(1, 5, 0)
+      assert(new CalendarInterval(1, 7, 12 * MICROS_PER_HOUR) === func(interval, 1.5))
+      interval = new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR)
+      assert(new CalendarInterval(2, 2, 12 * MICROS_PER_HOUR) === func(interval, 1.2))
+    }
 
+    val interval = new CalendarInterval(2, 0, 0)
+    assert(multiply(interval, Integer.MAX_VALUE) === new CalendarInterval(Int.MaxValue, 0, 0))
     try {
-      multiplyExact(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
+      multiplyExact(interval, Integer.MAX_VALUE)
       fail("Expected to throw an exception on months overflow")
     } catch {
       case e: ArithmeticException => assert(e.getMessage.contains("overflow"))
@@ -287,15 +291,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("divide by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === divideExact(interval, 10))
-    interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-      divideExact(interval, 2))
-    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divideExact(interval, 0.5))
-    interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divideExact(interval, 2))
-    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divideExact(interval, 0.5))
+    Seq[(CalendarInterval, Double) => CalendarInterval](divide, divideExact).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 10))
+      interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, 1, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+        func(interval, 2))
+      assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === func(interval, 0.5))
+      interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, 0, -15 * MICROS_PER_SECOND) === func(interval, 2))
+      assert(new CalendarInterval(-2, 0, -MICROS_PER_MINUTE) === func(interval, 0.5))
+    }
+    assert(divide(new CalendarInterval(123, 456, 789), 0) === null)
+
     try {
       divideExact(new CalendarInterval(123, 456, 789), 0)
       fail("Expected to throw an exception on divide by zero")
