@@ -80,13 +80,12 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sparkSessionWithAqeOff =
-        QueryExecution.getOrCreateSparkSessionWithAdaptiveExecutionOff(query.sparkSession)
-      val inMemoryRelation = sparkSessionWithAqeOff.withActive {
-        val qe = sparkSessionWithAqeOff.sessionState.executePlan(planToCache)
+      val sessionWithAqeOff = QueryExecution.getOrCloneSessionWithAqeOff(query.sparkSession)
+      val inMemoryRelation = sessionWithAqeOff.withActive {
+        val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sparkSessionWithAqeOff.sessionState.conf.useCompression,
-          sparkSessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
+          sessionWithAqeOff.sessionState.conf.useCompression,
+          sessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
           qe.executedPlan,
           tableName,
           optimizedPlan = qe.optimizedPlan)
@@ -192,10 +191,9 @@ class CacheManager extends Logging {
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sparkSessionWithAqeOff =
-        QueryExecution.getOrCreateSparkSessionWithAdaptiveExecutionOff(spark)
-      val newCache = sparkSessionWithAqeOff.withActive {
-        val qe = sparkSessionWithAqeOff.sessionState.executePlan(cd.plan)
+      val sessionWithAqeOff = QueryExecution.getOrCloneSessionWithAqeOff(spark)
+      val newCache = sessionWithAqeOff.withActive {
+        val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(
           cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
           optimizedPlan = qe.optimizedPlan)

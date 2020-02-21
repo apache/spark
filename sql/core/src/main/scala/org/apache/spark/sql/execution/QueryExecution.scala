@@ -276,7 +276,7 @@ object QueryExecution {
    */
   private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
 
-    val sparkSessionWithAqeOff = getOrCreateSparkSessionWithAdaptiveExecutionOff(sparkSession)
+    val sparkSessionWithAqeOff = getOrCloneSessionWithAqeOff(sparkSession)
 
     Seq(
       // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
@@ -339,7 +339,7 @@ object QueryExecution {
    * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
    * [[SparkSession]] if its adaptive execution is already disabled.
    */
-  def getOrCreateSparkSessionWithAdaptiveExecutionOff[T](session: SparkSession): SparkSession = {
+  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
     if (!session.sessionState.conf.adaptiveExecutionEnabled) {
       session
     } else {
