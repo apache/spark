@@ -161,7 +161,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     val jarPath = "file:///tmp/not_exists.jar"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(s"ADD JAR $jarPath"))
 
-    // test change to the database which not exists
+    // test change to the database which doesn't exists
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       s"use db_not_exists"))
 
@@ -178,7 +178,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
 
-    // test drop hive table which not exists
+    // test drop hive table which doesn't exists
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       s"DROP TABLE $tblName"))
   }
