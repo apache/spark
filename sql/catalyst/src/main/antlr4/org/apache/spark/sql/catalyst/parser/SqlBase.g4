@@ -63,12 +63,15 @@ grammar SqlBase;
   public boolean SQL_standard_keyword_behavior = false;
 
   /**
-   * Verify whether current token is a valid hint token (which follows '/*' and is '+').
+   * This method will be called when we see '/*' and try to match it as a bracketed comment.
+   * If the next character is '+', it should be parsed as hint later, otherwise we cannot match
+   * it as a bracketed comment.
+   *
    * Returns true if the first character is '+'.
    */
   public boolean isHint() {
-    int firstChar = _input.LA(1);
-    if (firstChar == '+') {
+    int nextChar = _input.LA(1);
+    if (nextChar == '+') {
       return true;
     } else {
       return false;
@@ -1807,10 +1810,6 @@ fragment LETTER
 
 SIMPLE_COMMENT
     : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
-    ;
-
-BRACKETED_EMPTY_COMMENT
-    : '/*' BRACKETED_EMPTY_COMMENT* '*/' -> channel(HIDDEN)
     ;
 
 BRACKETED_COMMENT
