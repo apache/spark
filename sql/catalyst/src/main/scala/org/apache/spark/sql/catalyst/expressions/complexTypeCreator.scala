@@ -37,7 +37,8 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """)
-case class CreateArray(children: Seq[Expression], emptyCollection: Boolean) extends Expression {
+case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
+  extends Expression {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -50,7 +51,7 @@ case class CreateArray(children: Seq[Expression], emptyCollection: Boolean) exte
   }
 
   private val defaultElementType: DataType = {
-    if (emptyCollection) {
+    if (useStringTypeWhenEmpty) {
       StringType
     } else {
       NullType
@@ -151,7 +152,8 @@ private [sql] object GenArrayData {
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
   """)
-case class CreateMap(children: Seq[Expression], emptyCollection: Boolean) extends Expression {
+case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
+  extends Expression {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -161,7 +163,7 @@ case class CreateMap(children: Seq[Expression], emptyCollection: Boolean) extend
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
 
   private val defaultElementType: DataType = {
-    if (emptyCollection) {
+    if (useStringTypeWhenEmpty) {
       StringType
     } else {
       NullType
