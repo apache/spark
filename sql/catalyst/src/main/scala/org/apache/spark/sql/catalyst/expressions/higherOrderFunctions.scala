@@ -527,7 +527,9 @@ case class ArrayExists(
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   def this(argument: Expression, function: Expression) = {
-    this(argument, function,
+    this(
+      argument,
+      function,
       SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC))
   }
 
