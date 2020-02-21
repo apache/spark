@@ -33,6 +33,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * by calling the built-in session catalog directly. This is created for convenience, so that users
  * only need to override some methods where they want to apply custom logic. For example, they can
  * override {@code createTable}, do something else before calling {@code super.createTable}.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public abstract class DelegatingCatalogExtension implements CatalogExtension {

@@ -26,6 +26,8 @@ package org.apache.spark.sql.connector.write;
  * <p>
  * This is provided to implement SQL compatible with Hive table operations but is not recommended.
  * Instead, use the {@link SupportsOverwrite overwrite by filter API} to explicitly replace data.
+ *
+ * @since 3.0.0
  */
 public interface SupportsDynamicOverwrite extends WriteBuilder {
   /**
