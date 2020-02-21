@@ -58,7 +58,7 @@ trait LegacyDateFormatter extends DateFormatter {
   def formatDate(d: Date): String
 
   override def parse(s: String): Int = {
-    val micros = DateTimeUtils.fromMillis(parseToDate(s).getTime)
+    val micros = DateTimeUtils.millisToMicros(parseToDate(s).getTime)
     DateTimeUtils.microsToDays(micros)
   }
 

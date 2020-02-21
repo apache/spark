@@ -272,7 +272,7 @@ private[parquet] class ParquetRowConverter(
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.fromMillis(value))
+            updater.setLong(DateTimeUtils.millisToMicros(value))
           }
         }
 

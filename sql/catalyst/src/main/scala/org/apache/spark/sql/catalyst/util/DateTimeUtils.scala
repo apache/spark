@@ -136,7 +136,7 @@ object DateTimeUtils {
    * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
    * precision, so this conversion is lossy.
    */
-  def toMillis(us: SQLTimestamp): Long = {
+  def microsToMillis(us: SQLTimestamp): Long = {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
@@ -146,7 +146,7 @@ object DateTimeUtils {
   /*
    * Converts milliseconds since epoch to SQLTimestamp.
    */
-  def fromMillis(millis: Long): SQLTimestamp = {
+  def millisToMicros(millis: Long): SQLTimestamp = {
     MILLISECONDS.toMicros(millis)
   }
 
@@ -708,7 +708,7 @@ object DateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => t
       case TRUNC_TO_MILLISECOND =>
-        fromMillis(toMillis(t))
+        millisToMicros(microsToMillis(t))
       case TRUNC_TO_SECOND =>
         t - Math.floorMod(t, MICROS_PER_SECOND)
       case TRUNC_TO_MINUTE =>
