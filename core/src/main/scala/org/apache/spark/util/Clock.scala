@@ -42,7 +42,7 @@ private[spark] trait Clock {
    *
    * TL;DR: on modern (2.6.32+) Linux kernels with modern (AMD K8+) CPUs, the values returned by
    * `System.nanoTime()` are consistent across CPU cores *and* packages, and provide always
-   * increasing values (although it may not be completely monotonic when the the system clock is
+   * increasing values (although it may not be completely monotonic when the system clock is
    * adjusted by NTP daemons using time slew).
    */
   // scalastyle:on line.size.limit

@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -41,7 +39,8 @@ import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBui
 class ResolveSessionCatalog(
     val catalogManager: CatalogManager,
     conf: SQLConf,
-    isView: Seq[String] => Boolean)
+    isTempView: Seq[String] => Boolean,
+    isTempFunction: String => Boolean)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
@@ -51,66 +50,108 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          cols.foreach(c => assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand"))
+          cols.foreach { c =>
+            assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
+            if (!c.nullable) {
+              throw new AnalysisException(
+                "ADD COLUMN with v1 tables cannot specify NOT NULL.")
+            }
+          }
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
         val changes = cols.map { col =>
           TableChange.addColumn(
             col.name.toArray,
             col.dataType,
-            true,
+            col.nullable,
             col.comment.orNull,
             col.position.orNull)
         }
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
+    case AlterTableReplaceColumnsStatement(
+        nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
+      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
+        case Some(_: V1Table) =>
+          throw new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
+        case Some(table) =>
+          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
+          val deleteChanges = table.schema.fieldNames.map { name =>
+            TableChange.deleteColumn(Array(name))
+          }
+          val addChanges = cols.map { col =>
+            TableChange.addColumn(
+              col.name.toArray,
+              col.dataType,
+              col.nullable,
+              col.comment.orNull,
+              col.position.orNull)
+          }
+          deleteChanges ++ addChanges
+        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
+      }
+      createAlterTable(nameParts, catalog, tbl, changes)
+
+    case a @ AlterTableAlterColumnStatement(
+         nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          if (colName.length > 1) {
+          if (a.column.length > 1) {
             throw new AnalysisException(
               "ALTER COLUMN with qualified column is only supported with v2 tables.")
           }
-          if (dataType.isEmpty) {
+          if (a.nullable.isDefined) {
             throw new AnalysisException(
-              "ALTER COLUMN with v1 tables must specify new data type.")
+              "ALTER COLUMN with v1 tables cannot specify NOT NULL.")
           }
-          if (pos.isDefined) {
+          if (a.position.isDefined) {
             throw new AnalysisException("" +
               "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
           }
           val builder = new MetadataBuilder
           // Add comment to metadata
-          comment.map(c => builder.putString("comment", c))
+          a.comment.map(c => builder.putString("comment", c))
+          val colName = a.column(0)
+          val dataType = a.dataType.getOrElse {
+            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+              .map(_._2.dataType)
+              .getOrElse {
+                throw new AnalysisException(
+                  s"ALTER COLUMN cannot find column ${quote(colName)} in v1 table. " +
+                    s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
+              }
+          }
           // Add Hive type string to metadata.
-          val cleanedDataType = HiveStringType.replaceCharType(dataType.get)
-          if (dataType.get != cleanedDataType) {
-            builder.putString(HIVE_TYPE_STRING, dataType.get.catalogString)
+          val cleanedDataType = HiveStringType.replaceCharType(dataType)
+          if (dataType != cleanedDataType) {
+            builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
           }
           val newColumn = StructField(
-            colName(0),
+            colName,
             cleanedDataType,
             nullable = true,
             builder.build())
-          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName(0), newColumn)
+          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
       }.getOrElse {
-        val colNameArray = colName.toArray
-        val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(colNameArray, newDataType, true)
+        val colName = a.column.toArray
+        val typeChange = a.dataType.map { newDataType =>
+          TableChange.updateColumnType(colName, newDataType)
         }
-        val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(colNameArray, newComment)
+        val nullabilityChange = a.nullable.map { nullable =>
+          TableChange.updateColumnNullability(colName, nullable)
         }
-        val positionChange = pos.map { newPosition =>
-          TableChange.updateColumnPosition(colNameArray, newPosition)
+        val commentChange = a.comment.map { newComment =>
+          TableChange.updateColumnComment(colName, newComment)
+        }
+        val positionChange = a.position.map { newPosition =>
+          TableChange.updateColumnPosition(colName, newPosition)
         }
         createAlterTable(
           nameParts,
           catalog,
           tbl,
-          typeChange.toSeq ++ commentChange ++ positionChange)
+          typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
       }
 
     case AlterTableRenameColumnStatement(
@@ -177,56 +218,47 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespaceStatement(SessionCatalogAndNamespace(_, ns), _) =>
+    case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       DescribeDatabaseCommand(ns.head, d.extended)
 
-    case AlterNamespaceSetPropertiesStatement(
-        SessionCatalogAndNamespace(_, ns), properties) =>
+    case AlterNamespaceSetProperties(SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       AlterDatabasePropertiesCommand(ns.head, properties)
 
-    case AlterNamespaceSetLocationStatement(SessionCatalogAndNamespace(_, ns), location) =>
+    case AlterNamespaceSetLocation(SessionCatalogAndNamespace(_, ns), location) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       AlterDatabaseSetLocationCommand(ns.head, location)
 
-    case RenameTableStatement(SessionCatalogAndTable(_, oldName), newNameParts, isView) =>
-      AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
+    // v1 RENAME TABLE supports temp view.
+    case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
+      AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
-    case DescribeTableStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), partitionSpec, isExtended) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-      }.getOrElse {
-        // The v1 `DescribeTableCommand` can describe view as well.
-        if (isView(tbl)) {
-          DescribeTableCommand(tbl.asTableIdentifier, partitionSpec, isExtended)
-        } else {
-          if (partitionSpec.nonEmpty) {
-            throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
-          }
-          val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
-          DescribeTable(r, isExtended)
-        }
-      }
+    case DescribeRelation(ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+
+    // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
+    case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumnStatement(
         SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
       loadTable(catalog, tbl.asIdentifier).collect {
+        // `V1Table` also includes permanent views.
         case v1Table: V1Table =>
           DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
       }.getOrElse {
-        if (isView(tbl)) {
+        if (isTempView(tbl)) {
+          // v1 DESCRIBE COLUMN supports temp view.
           DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
         } else {
           throw new AnalysisException("Describing columns is not supported for v2 tables.")
@@ -270,12 +302,13 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-          writeOptions = c.options.filterKeys(_ != "path"),
+          writeOptions = c.options,
           ignoreIfExists = c.ifNotExists)
       }
 
-    case RefreshTableStatement(SessionCatalogAndTable(_, tbl)) =>
-      RefreshTable(tbl.asTableIdentifier)
+    // v1 REFRESH TABLE supports temp view.
+    case RefreshTableStatement(TempViewOrV1Table(name)) =>
+      RefreshTable(name.asTableIdentifier)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -306,17 +339,20 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-          writeOptions = c.options.filterKeys(_ != "path"),
+          writeOptions = c.options,
           orCreate = c.orCreate)
       }
 
-    case DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
-      DropTableCommand(tbl.asTableIdentifier, ifExists, isView = false, purge = purge)
+    // v1 DROP TABLE supports temp view.
+    case DropTableStatement(TempViewOrV1Table(name), ifExists, purge) =>
+      DropTableCommand(name.asTableIdentifier, ifExists, isView = false, purge = purge)
 
-    case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
-      DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
+    // v1 DROP TABLE supports temp view.
+    case DropViewStatement(TempViewOrV1Table(name), ifExists) =>
+      DropTableCommand(name.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
+    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
+        if isSessionCatalog(catalog) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
@@ -324,26 +360,23 @@ class ResolveSessionCatalog(
 
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
+      val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
+    case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
-    case ShowTablesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern)
-        if isSessionCatalog(catalog) =>
+    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
+      assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw new AnalysisException(
             s"The database name is not valid: ${ns.quoted}")
       }
       ShowTablesCommand(Some(ns.head), pattern)
-
-    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
-      ShowTablesCommand(None, pattern)
 
     case ShowTableStatement(ns, pattern, partitionsSpec) =>
       val db = ns match {
@@ -381,17 +414,27 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tbl) =>
+    case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
       ShowCreateTableCommand(v1TableName.asTableIdentifier)
 
+    case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
+      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
+      ShowCreateTableAsSerdeCommand(v1TableName.asTableIdentifier)
+
     case CacheTableStatement(tbl, plan, isLazy, options) =>
-      val v1TableName = parseV1Table(tbl, "CACHE TABLE")
-      CacheTableCommand(v1TableName.asTableIdentifier, plan, isLazy, options)
+      val name = if (plan.isDefined) {
+        // CACHE TABLE ... AS SELECT creates a temp view with the input query.
+        // Temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+        tbl
+      } else {
+        parseTempViewOrV1Table(tbl, "CACHE TABLE")
+      }
+      CacheTableCommand(name.asTableIdentifier, plan, isLazy, options)
 
     case UncacheTableStatement(tbl, ifExists) =>
-      val v1TableName = parseV1Table(tbl, "UNCACHE TABLE")
-      UncacheTableCommand(v1TableName.asTableIdentifier, ifExists)
+      val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
+      UncacheTableCommand(name.asTableIdentifier, ifExists)
 
     case TruncateTableStatement(tbl, partitionSpec) =>
       val v1TableName = parseV1Table(tbl, "TRUNCATE TABLE")
@@ -419,10 +462,6 @@ class ResolveSessionCatalog(
       if (ns.isDefined && ns.get.length > 1) {
         throw new AnalysisException(
           s"Namespace name should have only one part if specified: ${ns.get.quoted}")
-      }
-      if (tbl.length > 2) {
-        throw new AnalysisException(
-          s"Table name should have at most two parts: ${tbl.quoted}")
       }
       ShowColumnsCommand(db, v1TableName)
 
@@ -463,10 +502,10 @@ class ResolveSessionCatalog(
         serdeProperties,
         partitionSpec)
 
-    case AlterViewAsStatement(tbl, originalText, query) =>
-      val v1TableName = parseV1Table(tbl, "ALTER VIEW QUERY")
+    case AlterViewAsStatement(name, originalText, query) =>
+      val viewName = parseTempViewOrV1Table(name, "ALTER VIEW QUERY")
       AlterViewAsCommand(
-        v1TableName.asTableIdentifier,
+        viewName.asTableIdentifier,
         originalText,
         query)
 
@@ -474,7 +513,12 @@ class ResolveSessionCatalog(
       tbl, userSpecifiedColumns, comment, properties,
       originalText, child, allowExisting, replace, viewType) =>
 
-      val v1TableName = parseV1Table(tbl, "CREATE VIEW")
+      val v1TableName = if (viewType != PersistedView) {
+        // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+        tbl
+      } else {
+        parseV1Table(tbl, "CREATE VIEW")
+      }
       CreateViewCommand(
         v1TableName.asTableIdentifier,
         userSpecifiedColumns,
@@ -486,61 +530,97 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowTablePropertiesStatement(SessionCatalogAndTable(_, tbl), propertyKey) =>
-      ShowTablePropertiesCommand(
-        tbl.asTableIdentifier,
-        propertyKey)
+    case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
+      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
-    case DescribeFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), extended) =>
-      val functionIdentifier = if (isSessionCatalog(catalog)) {
-        functionIdent.asMultipartIdentifier match {
-          case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
-          case Seq(fn) => FunctionIdentifier(fn, None)
-          case _ =>
-            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
-        }
-      } else {
-        throw new AnalysisException ("DESCRIBE FUNCTION is only supported in v1 catalog")
-      }
-      DescribeFunctionCommand(functionIdentifier, extended)
+    case DescribeFunctionStatement(nameParts, extended) =>
+      val functionIdent =
+        parseSessionCatalogFunctionIdentifier(nameParts, "DESCRIBE FUNCTION")
+      DescribeFunctionCommand(functionIdent, extended)
 
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
-        case Some(CatalogAndIdentifier(catalog, functionIdent)) =>
-          if (isSessionCatalog(catalog)) {
-            functionIdent.asMultipartIdentifier match {
-              case Seq(db, fn) => (Some(db), Some(fn))
-              case Seq(fn) => (None, Some(fn))
-              case _ =>
-                throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
-            }
-          } else {
-            throw new AnalysisException ("SHOW FUNCTIONS is only supported in v1 catalog")
-          }
+        case Some(nameParts) =>
+          val FunctionIdentifier(fn, db) =
+            parseSessionCatalogFunctionIdentifier(nameParts, "SHOW FUNCTIONS")
+          (db, Some(fn))
         case None => (None, pattern)
       }
       ShowFunctionsCommand(database, function, userScope, systemScope)
 
-    case DropFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
-      if (isSessionCatalog(catalog)) {
-        val (database, function) = functionIdent.asMultipartIdentifier match {
-          case Seq(db, fn) => (Some(db), fn)
-          case Seq(fn) => (None, fn)
-          case _ =>
-            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
+    case DropFunctionStatement(nameParts, ifExists, isTemp) =>
+      val FunctionIdentifier(function, database) =
+        parseSessionCatalogFunctionIdentifier(nameParts, "DROP FUNCTION")
+      DropFunctionCommand(database, function, ifExists, isTemp)
+
+    case CreateFunctionStatement(nameParts,
+      className, resources, isTemp, ignoreIfExists, replace) =>
+      if (isTemp) {
+        // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+        val database = if (nameParts.length > 2) {
+          throw new AnalysisException(s"Unsupported function name '${nameParts.quoted}'")
+        } else if (nameParts.length == 2) {
+          Some(nameParts.head)
+        } else {
+          None
         }
-        DropFunctionCommand(database, function, ifExists, isTemp)
+        CreateFunctionCommand(
+          database,
+          nameParts.last,
+          className,
+          resources,
+          isTemp,
+          ignoreIfExists,
+          replace)
       } else {
-        throw new AnalysisException("DROP FUNCTION is only supported in v1 catalog")
+        val FunctionIdentifier(function, database) =
+          parseSessionCatalogFunctionIdentifier(nameParts, "CREATE FUNCTION")
+        CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
+          replace)
       }
   }
 
-  private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
-    val CatalogAndIdentifier(catalog, ident) = tableName
-    if (!isSessionCatalog(catalog)) {
-      throw new AnalysisException(s"$sql is only supported with v1 tables.")
+  // TODO: move function related v2 statements to the new framework.
+  private def parseSessionCatalogFunctionIdentifier(
+      nameParts: Seq[String],
+      sql: String): FunctionIdentifier = {
+    if (nameParts.length == 1 && isTempFunction(nameParts.head)) {
+      return FunctionIdentifier(nameParts.head)
     }
-    ident.asMultipartIdentifier
+
+    nameParts match {
+      case SessionCatalogAndIdentifier(_, ident) =>
+        if (nameParts.length == 1) {
+          // If there is only one name part, it means the current catalog is the session catalog.
+          // Here we don't fill the default database, to keep the error message unchanged for
+          // v1 commands.
+          FunctionIdentifier(nameParts.head, None)
+        } else {
+          ident.namespace match {
+            // For name parts like `spark_catalog.t`, we need to fill in the default database so
+            // that the caller side won't treat it as a temp function.
+            case Array() if nameParts.head == CatalogManager.SESSION_CATALOG_NAME =>
+              FunctionIdentifier(
+                ident.name, Some(catalogManager.v1SessionCatalog.getCurrentDatabase))
+            case Array(db) => FunctionIdentifier(ident.name, Some(db))
+            case _ =>
+              throw new AnalysisException(s"Unsupported function name '$ident'")
+          }
+        }
+
+      case _ => throw new AnalysisException(s"$sql is only supported in v1 catalog")
+    }
+  }
+
+  private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {
+    case SessionCatalogAndTable(_, tbl) => tbl
+    case _ => throw new AnalysisException(s"$sql is only supported with v1 tables.")
+  }
+
+  private def parseTempViewOrV1Table(
+      nameParts: Seq[String], sql: String): Seq[String] = nameParts match {
+    case TempViewOrV1Table(name) => name
+    case _ => throw new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
   }
 
   private def buildCatalogTable(
@@ -554,16 +634,11 @@ class ResolveSessionCatalog(
       location: Option[String],
       comment: Option[String],
       ifNotExists: Boolean): CatalogTable = {
+    val storage = CatalogStorageFormat.empty.copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
 
-    val storage = DataSource.buildStorageFormatFromOptions(options)
-    if (location.isDefined && storage.locationUri.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-            "you can only specify one of them.")
-    }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
-
-    val tableType = if (customLocation.isDefined) {
+    val tableType = if (location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -572,7 +647,7 @@ class ResolveSessionCatalog(
     CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage.copy(locationUri = customLocation),
+      storage = storage,
       schema = schema,
       provider = Some(provider),
       partitionColumnNames = partitioning.asPartitionColumns,
@@ -584,17 +659,40 @@ class ResolveSessionCatalog(
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
-        Some(catalog -> ident.asMultipartIdentifier)
+        if (nameParts.length == 1) {
+          // If there is only one name part, it means the current catalog is the session catalog.
+          // Here we return the original name part, to keep the error message unchanged for
+          // v1 commands.
+          Some(catalog -> nameParts)
+        } else {
+          Some(catalog -> ident.asMultipartIdentifier)
+        }
+      case _ => None
+    }
+  }
+
+  object TempViewOrV1Table {
+    def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
+      case _ if isTempView(nameParts) => Some(nameParts)
+      case SessionCatalogAndTable(_, tbl) =>
+        if (nameParts.head == CatalogManager.SESSION_CATALOG_NAME && tbl.length == 1) {
+          // For name parts like `spark_catalog.t`, we need to fill in the default database so
+          // that the caller side won't treat it as a temp view.
+          Some(Seq(catalogManager.v1SessionCatalog.getCurrentDatabase, tbl.head))
+        } else {
+          Some(tbl)
+        }
       case _ => None
     }
   }
 
   object SessionCatalogAndNamespace {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndNamespace(catalog, ns) if isSessionCatalog(catalog) =>
-        Some(catalog -> ns)
-      case _ => None
-    }
+    def unapply(resolved: ResolvedNamespace): Option[(CatalogPlugin, Seq[String])] =
+      if (isSessionCatalog(resolved.catalog)) {
+        Some(resolved.catalog -> resolved.namespace)
+      } else {
+        None
+      }
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {

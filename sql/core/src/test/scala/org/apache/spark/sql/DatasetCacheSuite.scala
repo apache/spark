@@ -20,13 +20,17 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 
-class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimits {
+class DatasetCacheSuite extends QueryTest
+  with SharedSparkSession
+  with TimeLimits
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
@@ -36,7 +40,8 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
     val plan = df.queryExecution.withCachedData
     assert(plan.isInstanceOf[InMemoryRelation])
     val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
-    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).size == numOfCachesDependedUpon)
+    assert(find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
+      == numOfCachesDependedUpon)
   }
 
   test("get storage level") {

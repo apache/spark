@@ -22,6 +22,7 @@ import scala.util.Random
 import org.scalatest.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
@@ -34,7 +35,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
+class DataFrameAggregateSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   val absTol = 1e-8
@@ -618,26 +621,27 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
 
         // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find {
+          assert(find(hashAggPlan) {
             case WholeStageCodegenExec(_: HashAggregateExec) => true
             case _ => false
           }.isDefined)
         } else {
-          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+          assert(stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec])
         }
-        hashAggDF.collect()
 
         // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        objHashAggOrSortAggDF.collect()
+        val objHashAggOrSortAggPlan =
+          stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan)
         if (useObjectHashAgg) {
           assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
           assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashAggOrSortAggDF.collect()
       }
     }
   }
@@ -678,17 +682,17 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
         .groupBy("a").agg(collect_list("f").as("g"))
       val aggPlan = objHashAggDF.queryExecution.executedPlan
 
-      val sortAggPlans = aggPlan.collect {
+      val sortAggPlans = collect(aggPlan) {
         case sortAgg: SortAggregateExec => sortAgg
       }
       assert(sortAggPlans.isEmpty)
 
-      val objHashAggPlans = aggPlan.collect {
+      val objHashAggPlans = collect(aggPlan) {
         case objHashAgg: ObjectHashAggregateExec => objHashAgg
       }
       assert(objHashAggPlans.nonEmpty)
 
-      val exchangePlans = aggPlan.collect {
+      val exchangePlans = collect(aggPlan) {
         case shuffle: ShuffleExchangeExec => shuffle
       }
       assert(exchangePlans.length == 1)
@@ -952,38 +956,5 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
       }
       assert(error.message.contains("function count_if requires boolean type"))
     }
-  }
-
-  test("calendar interval agg support hash aggregate") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(df2.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
-  }
-
-  test("Dataset agg functions support calendar intervals") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select($"a", $"b" cast CalendarIntervalType).groupBy($"a" % 2)
-    checkAnswer(df2.sum("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 4, 0)) :: Nil)
-    checkAnswer(df2.avg("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
-    checkAnswer(df2.mean("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
-    checkAnswer(df2.max("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 3, 0)) :: Nil)
-    checkAnswer(df2.min("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 1, 0)) :: Nil)
   }
 }

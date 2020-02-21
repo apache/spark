@@ -23,7 +23,6 @@ import scala.collection.mutable
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
-import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.Waiters.Waiter
 
@@ -34,6 +33,7 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.sql.streaming.ui.StreamingQueryStatusListener
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol
 
@@ -47,7 +47,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   after {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
-    assert(spark.streams.listListeners().isEmpty)
+    // Skip check default `StreamingQueryStatusListener` which is for streaming UI.
+    assert(spark.streams.listListeners()
+      .filterNot(_.isInstanceOf[StreamingQueryStatusListener]).isEmpty)
     // Make sure we don't leak any events to the next test
     spark.sparkContext.listenerBus.waitUntilEmpty()
   }
@@ -252,8 +254,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(newEvent.name === event.name)
     }
 
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name"))
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name", 1L))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null, 1L))
   }
 
   test("QueryProgressEvent serialization") {

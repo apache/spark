@@ -409,9 +409,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("SPARK-28322: IntegralDivide supports decimal type") {
     withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "false") {
       checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), Decimal(0))
-      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), Decimal(2))
+      checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), Decimal(2))
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), Decimal(1))
-      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      checkEvaluation(IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null)
       checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
         BigDecimal("99999999999999999999999999999999999000"))
@@ -422,9 +422,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
     withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
       checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
-      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), 2L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), 2L)
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
-      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      checkEvaluation(IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null)
       // overflows long and so returns a wrong result
       checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),

@@ -116,8 +116,8 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
   testPruning("SELECT a FROM oneToTenPruned", "a")
   testPruning("SELECT b FROM oneToTenPruned", "b")
   testPruning("SELECT a, rand() FROM oneToTenPruned WHERE a > 5", "a")
-  testPruning("SELECT a FROM oneToTenPruned WHERE rand() > 5", "a")
-  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 5", "a")
+  testPruning("SELECT a FROM oneToTenPruned WHERE rand() > 0.5", "a")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 0.5", "a")
   testPruning("SELECT a, rand() FROM oneToTenPruned WHERE b > 5", "a", "b")
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {

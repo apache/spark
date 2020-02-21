@@ -318,7 +318,15 @@ private[hive] class HiveClientImpl(
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
     shim.setCurrentSessionState(state)
-    val ret = try f finally {
+    val ret = try {
+      f
+    } catch {
+      case e: NoClassDefFoundError
+        if HiveUtils.isHive23 && e.getMessage.contains("org/apache/hadoop/hive/serde2/SerDe") =>
+        throw new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
+          " Please migrate your custom SerDes to Hive 2.3 or build your own Spark with" +
+          " hive-1.2 profile. See HIVE-15167 for more details.", e)
+    } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
       HiveCatalogMetrics.incrementHiveClientCalls(1)
@@ -355,7 +363,7 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    val hiveDb = toHiveDatabase(database, true)
+    val hiveDb = toHiveDatabase(database, Some(userName))
     client.createDatabase(hiveDb, ignoreIfExists)
   }
 
@@ -374,32 +382,28 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
-    val hiveDb = toHiveDatabase(database, false)
+    val hiveDb = toHiveDatabase(database)
     client.alterDatabase(database.name, hiveDb)
   }
 
-  private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
+  private def toHiveDatabase(
+      database: CatalogDatabase, userName: Option[String] = None): HiveDatabase = {
     val props = database.properties
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
-    props.get(PROP_OWNER_NAME).orElse(if (isCreate) Some(userName) else None).foreach { ownerName =>
+      (props -- Seq(PROP_OWNER)).asJava)
+    props.get(PROP_OWNER).orElse(userName).foreach { ownerName =>
       shim.setDatabaseOwnerName(hiveDb, ownerName)
     }
-    props.get(PROP_OWNER_TYPE).orElse(if (isCreate) Some(PrincipalType.USER.name) else None)
-      .foreach { ownerType =>
-        shim.setDatabaseOwnerType(hiveDb, ownerType)
-      }
     hiveDb
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
       val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
-        Map(PROP_OWNER_NAME -> shim.getDatabaseOwnerName(d),
-          PROP_OWNER_TYPE -> shim.getDatabaseOwnerType(d))
+        Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
       CatalogDatabase(
         name = d.getName,

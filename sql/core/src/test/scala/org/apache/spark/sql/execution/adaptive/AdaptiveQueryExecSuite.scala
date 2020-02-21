@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -39,6 +40,21 @@ class AdaptiveQueryExecSuite
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+    var finalPlanCnt = 0
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
+            if (sparkPlanInfo.simpleString.startsWith(
+              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              finalPlanCnt += 1
+            }
+          case _ => // ignore other events
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
@@ -49,6 +65,11 @@ class AdaptiveQueryExecSuite
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(finalPlanCnt == 1)
+    spark.sparkContext.removeSparkListener(listener)
+
     val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
@@ -495,7 +516,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "30") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |SELECT * FROM testData t1 join testData2 t2
@@ -558,6 +579,103 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-30524: Do not optimize skew join if introduce additional shuffle") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 2 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
+        // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
+        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        assert(innerSmj.size == 1 && !innerSmj.head.isSkewJoin)
+      }
+    }
+  }
+
+  // TODO: we need a way to customize data distribution after shuffle, to improve test coverage
+  //       of this case.
+  test("SPARK-29544: adaptive skew join with different join types") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 2 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
+          assert(joins.size == 1 && joins.head.isSkewJoin)
+          assert(joins.head.left.collect {
+            case r: SkewJoinShuffleReaderExec => r
+          }.head.partitionSpecs.length == expectedNumPartitions)
+          assert(joins.head.right.collect {
+            case r: SkewJoinShuffleReaderExec => r
+          }.head.partitionSpecs.length == expectedNumPartitions)
+        }
+
+        // skewed inner join optimization
+        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, and divide into 5 splits, so
+        //              5 x 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // So total (25 + 1 + 5) partitions.
+        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        checkSkewJoin(innerSmj, 25 + 1 + 5)
+
+        // skewed left outer join optimization
+        val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, but left join can't split right side,
+        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, and divide into 5 splits, so
+        //              5 sub-partitions.
+        // So total (5 + 1 + 5) partitions.
+        val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
+        checkSkewJoin(leftSmj, 5 + 1 + 5)
+
+        // skewed right outer join optimization
+        val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
+        // left stats: [3496, 0, 0, 0, 4014]
+        // right stats:[6292, 0, 0, 0, 0]
+        // Partition 0: both left and right sides are skewed, but right join can't split left side,
+        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
+        // Partition 4: only left side is skewed, but right join can't split left side, so just
+        //              1 partition.
+        // So total (5 + 1 + 1) partitions.
+        val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
+        checkSkewJoin(rightSmj, 5 + 1 + 1)
+      }
+    }
+  }
+
   test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
@@ -578,4 +696,37 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-30403: AQE should handle InSubquery") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
+        " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
+      )
+    }
+  }
+
+  test("force apply AQE") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
+      assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
+
+  test("SPARK-30719: do not log warning if intentionally skip AQE") {
+    val testAppender = new LogAppender("aqe logging warning test when skip")
+    withLogAppender(testAppender) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val plan = sql("SELECT * FROM testData").queryExecution.executedPlan
+        assert(!plan.isInstanceOf[AdaptiveSparkPlanExec])
+      }
+    }
+    assert(!testAppender.loggingEvents
+      .exists(msg => msg.getRenderedMessage.contains(
+        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
+        s" enabled but is not supported for")))
+  }
 }
+

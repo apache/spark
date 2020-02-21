@@ -113,9 +113,9 @@ abstract class EventLogFileWriter(
     }
   }
 
-  protected def writeJson(json: String, flushLogger: Boolean = false): Unit = {
+  protected def writeLine(line: String, flushLogger: Boolean = false): Unit = {
     // scalastyle:off println
-    writer.foreach(_.println(json))
+    writer.foreach(_.println(line))
     // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
@@ -164,6 +164,7 @@ abstract class EventLogFileWriter(
 object EventLogFileWriter {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
+  val COMPACTED = ".compact"
 
   val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
@@ -192,9 +193,11 @@ object EventLogFileWriter {
   def codecName(log: Path): Option[String] = {
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = log.getName.stripSuffix(COMPACTED).stripSuffix(IN_PROGRESS)
     logName.split("\\.").tail.lastOption
   }
+
+  def isCompacted(log: Path): Boolean = log.getName.endsWith(COMPACTED)
 }
 
 /**
@@ -211,7 +214,7 @@ class SingleEventLogFileWriter(
   override val logPath: String = SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
     appAttemptId, compressionCodecName)
 
-  private val inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
+  protected def inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
 
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()
@@ -222,7 +225,7 @@ class SingleEventLogFileWriter(
   }
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
-    writeJson(eventJson, flushLogger)
+    writeLine(eventJson, flushLogger)
   }
 
   /**
@@ -327,10 +330,11 @@ class RollingEventLogFilesWriter(
       }
     }
 
-    writeJson(eventJson, flushLogger)
+    writeLine(eventJson, flushLogger)
   }
 
-  private def rollEventLogFile(): Unit = {
+  /** exposed for testing only */
+  private[history] def rollEventLogFile(): Unit = {
     closeWriter()
 
     index += 1
@@ -399,16 +403,20 @@ object RollingEventLogFilesWriter {
     status.isDirectory && status.getPath.getName.startsWith(EVENT_LOG_DIR_NAME_PREFIX)
   }
 
+  def isEventLogFile(fileName: String): Boolean = {
+    fileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
+  }
+
   def isEventLogFile(status: FileStatus): Boolean = {
-    status.isFile && status.getPath.getName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
+    status.isFile && isEventLogFile(status.getPath.getName)
   }
 
   def isAppStatusFile(status: FileStatus): Boolean = {
     status.isFile && status.getPath.getName.startsWith(APPSTATUS_FILE_NAME_PREFIX)
   }
 
-  def getIndex(eventLogFileName: String): Long = {
-    require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not an event log file!")
+  def getEventLogFileIndex(eventLogFileName: String): Long = {
+    require(isEventLogFile(eventLogFileName), "Not an event log file!")
     val index = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
     index.toLong
   }

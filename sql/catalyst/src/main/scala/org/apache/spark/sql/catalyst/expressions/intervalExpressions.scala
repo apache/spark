@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -127,34 +125,22 @@ abstract class IntervalNumOperation(
   override def nullable: Boolean = true
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    try {
-      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    } catch {
-      case _: java.lang.ArithmeticException => null
-    }
+    operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (interval, num) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"""
-        try {
-          ${ev.value} = $iu.$operationName($interval, $num);
-        } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (interval, num) => s"$iu.$operationName($interval, $num)")
   }
 
-  override def prettyName: String = operationName + "_interval"
+  override def prettyName: String = operationName.stripSuffix("Exact") + "_interval"
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiply, "multiply")
+  extends IntervalNumOperation(interval, num, multiplyExact, "multiplyExact")
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divide, "divide")
+  extends IntervalNumOperation(interval, num, divideExact, "divideExact")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -259,69 +245,3 @@ case class MakeInterval(
 
   override def prettyName: String = "make_interval"
 }
-
-abstract class IntervalJustifyLike(
-    child: Expression,
-    justify: CalendarInterval => CalendarInterval,
-    justifyFuncName: String) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
-  override def dataType: DataType = CalendarIntervalType
-
-  override def nullSafeEval(input: Any): Any = {
-    try {
-      justify(input.asInstanceOf[CalendarInterval])
-    } catch {
-      case NonFatal(_) => null
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, child => {
-      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      s"""
-         |try {
-         |  ${ev.value} = $iu.$justifyFuncName($child);
-         |} catch (java.lang.ArithmeticException e) {
-         |  ${ev.isNull} = true;
-         |}
-         |""".stripMargin
-    })
-  }
-
-  override def prettyName: String = justifyFuncName
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval so 30-day time periods are represented as months",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       -29 days 25 hours
-  """,
-  since = "3.0.0")
-case class JustifyDays(child: Expression)
-  extends IntervalJustifyLike(child, justifyDays, "justifyDays")
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval so 24-hour time periods are represented as days",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       1 months -57 days -23 hours
-  """,
-  since = "3.0.0")
-case class JustifyHours(child: Expression)
-  extends IntervalJustifyLike(child, justifyHours, "justifyHours")
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval using justifyHours and justifyDays, with additional" +
-    " sign adjustments",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       -27 days -23 hours
-  """,
-  since = "3.0.0")
-case class JustifyInterval(child: Expression)
-  extends IntervalJustifyLike(child, justifyInterval, "justifyInterval")

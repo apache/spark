@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
@@ -29,12 +31,11 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  */
 class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Serializable {
   assert(!keyType.existsRecursively(_.isInstanceOf[MapType]), "key of map cannot be/contain map")
-  assert(keyType != NullType, "map key cannot be null type.")
 
   private lazy val keyToIndex = keyType match {
     // Binary type data is `byte[]`, which can't use `==` to check equality.
-    case _: AtomicType | _: CalendarIntervalType if !keyType.isInstanceOf[BinaryType] =>
-      new java.util.HashMap[Any, Int]()
+    case _: AtomicType | _: CalendarIntervalType | _: NullType
+      if !keyType.isInstanceOf[BinaryType] => new java.util.HashMap[Any, Int]()
     case _ =>
       // for complex types, use interpreted ordering to be able to compare unsafe data with safe
       // data, e.g. UnsafeRow vs GenericInternalRow.
@@ -47,6 +48,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
+
+  private val allowDuplicatedMapKey =
+    SQLConf.get.getConf(LEGACY_ALLOW_DUPLICATED_MAP_KEY)
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
@@ -63,6 +67,11 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       keys.append(key)
       values.append(value)
     } else {
+      if (!allowDuplicatedMapKey) {
+        throw new RuntimeException(s"Duplicate map key $key was founded, please check the input " +
+          "data. If you want to remove the duplicated keys with last-win policy, you can set " +
+          s"${LEGACY_ALLOW_DUPLICATED_MAP_KEY.key} to true.")
+      }
       // Overwrite the previous value, as the policy is last wins.
       values(index) = value
     }

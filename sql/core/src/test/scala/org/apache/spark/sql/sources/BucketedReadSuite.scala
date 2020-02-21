@@ -604,6 +604,20 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("bucket join should work with SubqueryAlias plan") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        withView("v") {
+          spark.range(20).selectExpr("id as i").write.bucketBy(8, "i").saveAsTable("t")
+          sql("CREATE VIEW v AS SELECT * FROM t").collect()
+
+          val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+        }
+      }
+    }
+  }
+
   test("avoid shuffle when grouping keys are a super-set of bucket keys") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")

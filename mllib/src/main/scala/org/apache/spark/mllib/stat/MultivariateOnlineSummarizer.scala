@@ -95,25 +95,23 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localNumNonzeros = nnz
     val localCurrMax = currMax
     val localCurrMin = currMin
-    instance.foreachActive { (index, value) =>
-      if (value != 0.0) {
-        if (localCurrMax(index) < value) {
-          localCurrMax(index) = value
-        }
-        if (localCurrMin(index) > value) {
-          localCurrMin(index) = value
-        }
-
-        val prevMean = localCurrMean(index)
-        val diff = value - prevMean
-        localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
-        localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-        localCurrM2(index) += weight * value * value
-        localCurrL1(index) += weight * math.abs(value)
-
-        localWeightSum(index) += weight
-        localNumNonzeros(index) += 1
+    instance.foreachNonZero { (index, value) =>
+      if (localCurrMax(index) < value) {
+        localCurrMax(index) = value
       }
+      if (localCurrMin(index) > value) {
+        localCurrMin(index) = value
+      }
+
+      val prevMean = localCurrMean(index)
+      val diff = value - prevMean
+      localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
+      localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
+      localCurrM2(index) += weight * value * value
+      localCurrL1(index) += weight * math.abs(value)
+
+      localWeightSum(index) += weight
+      localNumNonzeros(index) += 1
     }
 
     totalWeightSum += weight

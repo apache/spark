@@ -112,7 +112,11 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   object MultiAddData {
     def apply[A]
       (source1: MemoryStream[A], data1: A*)(source2: MemoryStream[A], data2: A*): StreamAction = {
-      val actions = Seq(AddDataMemory(source1, data1), AddDataMemory(source2, data2))
+      apply((source1, data1), (source2, data2))
+    }
+
+    def apply[A](inputs: (MemoryStream[A], Seq[A])*): StreamAction = {
+      val actions = inputs.map { case (source, data) => AddDataMemory(source, data) }
       StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
     }
   }

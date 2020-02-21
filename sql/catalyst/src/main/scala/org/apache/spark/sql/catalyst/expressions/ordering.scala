@@ -101,7 +101,6 @@ object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], 
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case dt: AtomicType => true
-    case CalendarIntervalType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)

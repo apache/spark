@@ -336,6 +336,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
+    val bcSplits = input.sparkContext.broadcast(splits)
 
     val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
@@ -350,7 +351,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
     val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+    bcSplits.destroy()
 
     // don't enqueue leaf nodes into node queue
     assert(nodeStack.isEmpty)
@@ -378,6 +380,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
+    val bcSplits = input.sparkContext.broadcast(splits)
 
     val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
@@ -392,7 +395,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
     val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+    bcSplits.destroy()
 
     // don't enqueue a node into node queue if its impurity is 0.0
     assert(nodeStack.isEmpty)

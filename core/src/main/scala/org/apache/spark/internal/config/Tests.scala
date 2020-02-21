@@ -53,4 +53,13 @@ private[spark] object Tests {
   val TEST_N_CORES_EXECUTOR = ConfigBuilder("spark.testing.nCoresPerExecutor")
     .intConf
     .createWithDefault(2)
+
+  val RESOURCES_WARNING_TESTING =
+    ConfigBuilder("spark.resources.warnings.testing").booleanConf.createWithDefault(false)
+
+  val RESOURCE_PROFILE_MANAGER_TESTING =
+    ConfigBuilder("spark.testing.resourceProfileManager")
+      .booleanConf
+      .createWithDefault(false)
+
 }

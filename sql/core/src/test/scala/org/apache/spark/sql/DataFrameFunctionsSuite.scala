@@ -651,8 +651,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(null)
     )
 
-    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
-    checkAnswer(df1.select(map_concat($"map1", $"map2")), expected1a)
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
+      checkAnswer(df1.select(map_concat($"map1", $"map2")), expected1a)
+    }
 
     val expected1b = Seq(
       Row(Map(1 -> 100, 2 -> 200)),
@@ -3068,11 +3070,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(dfExample2.select(transform_keys(col("j"), (k, v) => k + v)),
         Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
 
-      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
-        Seq(Row(Map(true -> true, true -> false))))
+      withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+        checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
+          Seq(Row(Map(true -> true, true -> false))))
 
-      checkAnswer(dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)),
-        Seq(Row(Map(true -> true, true -> false))))
+        checkAnswer(dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)),
+          Seq(Row(Map(true -> true, true -> false))))
+      }
 
       checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
         Seq(Row(Map(50 -> true, 78 -> false))))
@@ -3499,16 +3503,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
-  test("SPARK-21281 use string types by default if array and map have no argument") {
-    val ds = spark.range(1)
-    var expectedSchema = new StructType()
-      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
-    assert(ds.select(array().as("x")).schema == expectedSchema)
-    expectedSchema = new StructType()
-      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
-    assert(ds.select(map().as("x")).schema == expectedSchema)
-  }
-
   test("SPARK-21281 fails if functions have no argument") {
     val df = Seq(1).toDF("a")
 
@@ -3561,6 +3555,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq(1, 9, 8, 7), 1, 2)))
     checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
       Seq(Row(1)))
+  }
+
+  test("SPARK-29462: Empty array of NullType for array function with no arguments") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (arrayDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key ->
+          arrayDefaultToString.toString) {
+          val schema = spark.range(1).select(array()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[ArrayType])
+          val actualType = schema.head.dataType.asInstanceOf[ArrayType].elementType
+          assert(actualType === expectedType)
+        }
+    }
+  }
+
+  test("SPARK-30790: Empty map with NullType as key/value type for map function with no argument") {
+    Seq((true, StringType), (false, NullType)).foreach {
+      case (mapDefaultToString, expectedType) =>
+        withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key ->
+          mapDefaultToString.toString) {
+          val schema = spark.range(1).select(map()).schema
+          assert(schema.nonEmpty && schema.head.dataType.isInstanceOf[MapType])
+          val actualKeyType = schema.head.dataType.asInstanceOf[MapType].keyType
+          val actualValueType = schema.head.dataType.asInstanceOf[MapType].valueType
+          assert(actualKeyType === expectedType)
+          assert(actualValueType === expectedType)
+        }
+    }
+  }
+
+  test("SPARK-26071: convert map to array and use as map key") {
+    val df = Seq(Map(1 -> "a")).toDF("m")
+    intercept[AnalysisException](df.select(map($"m", lit(1))))
+    checkAnswer(
+      df.select(map(map_entries($"m"), lit(1))),
+      Row(Map(Seq(Row(1, "a")) -> 1)))
   }
 }
 

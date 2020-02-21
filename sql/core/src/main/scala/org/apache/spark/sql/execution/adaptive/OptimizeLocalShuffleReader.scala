@@ -136,9 +136,10 @@ object OptimizeLocalShuffleReader {
     }
   }
 
-  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = {
-    plan.isInstanceOf[ShuffleQueryStageExec] ||
-      plan.isInstanceOf[CoalescedShuffleReaderExec]
+  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
+    case s: ShuffleQueryStageExec => s.shuffle.canChangeNumPartitions
+    case CoalescedShuffleReaderExec(s: ShuffleQueryStageExec, _) => s.shuffle.canChangeNumPartitions
+    case _ => false
   }
 }
 

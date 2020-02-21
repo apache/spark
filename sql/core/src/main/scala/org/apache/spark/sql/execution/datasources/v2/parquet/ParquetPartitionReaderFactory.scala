@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import java.net.URI
-import java.util.TimeZone
+import java.time.ZoneId
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -117,7 +117,7 @@ case class ParquetPartitionReaderFactory(
       file: PartitionedFile,
       buildReaderFunc: (
         ParquetInputSplit, InternalRow, TaskAttemptContextImpl, Option[FilterPredicate],
-          Option[TimeZone]) => RecordReader[Void, T]): RecordReader[Void, T] = {
+          Option[ZoneId]) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
     val filePath = new Path(new URI(file.filePath))
@@ -156,7 +156,7 @@ case class ParquetPartitionReaderFactory(
 
     val convertTz =
       if (timestampConversion && !isCreatedByParquetMr) {
-        Some(DateTimeUtils.getTimeZone(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+        Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
       } else {
         None
       }
@@ -184,7 +184,7 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[TimeZone]): RecordReader[Void, InternalRow] = {
+      convertTz: Option[ZoneId]): RecordReader[Void, InternalRow] = {
     logDebug(s"Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
     // ParquetRecordReader returns InternalRow
@@ -213,7 +213,7 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[TimeZone]): VectorizedParquetRecordReader = {
+      convertTz: Option[ZoneId]): VectorizedParquetRecordReader = {
     val taskContext = Option(TaskContext.get())
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)

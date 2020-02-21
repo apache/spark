@@ -20,7 +20,7 @@
 # Includes:
 # * Java 8
 # * Ivy
-# * Python/PyPandoc (2.7.15/3.6.7)
+# * Python (2.7.15/3.6.7)
 # * R-base/R-base-dev (3.6.1)
 # * Ruby 2.3 build utilities
 
@@ -34,7 +34,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
 ARG BASE_PIP_PKGS="setuptools wheel"
-ARG PIP_PKGS="pyopenssl pypandoc numpy sphinx"
+ARG PIP_PKGS="pyopenssl numpy sphinx"
 
 # Install extra needed repos and refresh.
 # - CRAN repo
@@ -78,7 +78,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
   gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
-  gem install jekyll-redirect-from && \
+  gem install jekyll-redirect-from -v 0.15.0 && \
   gem install rouge
 
 WORKDIR /opt/spark-rm/output

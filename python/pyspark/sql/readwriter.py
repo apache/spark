@@ -48,7 +48,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads data from a data source and returns it as a :class`DataFrame`.
+        """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -171,7 +171,8 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
-             dropFieldIfAllNull=None, encoding=None, locale=None, recursiveFileLookup=None):
+             dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -247,6 +248,9 @@ class DataFrameReader(OptionUtils):
         :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -270,7 +274,7 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale, recursiveFileLookup=recursiveFileLookup)
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -309,8 +313,12 @@ class DataFrameReader(OptionUtils):
         Loads Parquet files, returning the result as a :class:`DataFrame`.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``.
-            The default value is specified in ``spark.sql.parquet.mergeSchema``.
+                            Parquet part-files. This will override
+                            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+                            ``spark.sql.parquet.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -319,13 +327,16 @@ class DataFrameReader(OptionUtils):
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
         mergeSchema = options.get('mergeSchema', None)
+        pathGlobFilter = options.get('pathGlobFilter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
-        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths, wholetext=False, lineSep=None, recursiveFileLookup=None):
+    def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -338,6 +349,9 @@ class DataFrameReader(OptionUtils):
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -349,7 +363,8 @@ class DataFrameReader(OptionUtils):
         [Row(value=u'hello\\nthis')]
         """
         self._set_opts(
-            wholetext=wholetext, lineSep=lineSep, recursiveFileLookup=recursiveFileLookup)
+            wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -362,7 +377,7 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -470,6 +485,9 @@ class DataFrameReader(OptionUtils):
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
                         Maximum length is 1 character.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -492,7 +510,7 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -520,20 +538,24 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path, mergeSchema=None, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
+                            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+                            The default value is specified in ``spark.sql.orc.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
-            disables `partition discovery`_.
+                                    disables `partition discovery`_.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
@@ -594,7 +616,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4

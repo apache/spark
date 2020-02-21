@@ -252,6 +252,9 @@ class IsotonicRegressionModel private[ml] (
       outputSchema($(predictionCol)).metadata)
   }
 
+  @Since("3.0.0")
+  def predict(value: Double): Double = oldModel.predict(value)
+
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false)

@@ -101,8 +101,9 @@ private[this] object JsonPathParser extends RegexParsers {
 
 private[this] object SharedFactory {
   val jsonFactory = new JsonFactoryBuilder()
-    // Enabled for Hive compatibility
+    // The two options below enabled for Hive compatibility
     .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
     .build()
 }
 
@@ -693,10 +694,8 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case map: MapType =>
-      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", map) :: Nil)
-        JacksonUtils.verifySchema(st)
+        JacksonUtils.verifyType(prettyName, map)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>

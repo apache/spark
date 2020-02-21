@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: SQL Syntax
+displayTitle: SQL Syntax
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +19,4 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+Spark SQL is Apache Spark's module for working with structured data. The SQL Syntax section describes the SQL syntax in detail along with usage examples when applicable.

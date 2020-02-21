@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,7 +33,9 @@ trait OperationHelper {
     })
 
   protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
-    expr.transform {
+    // use transformUp instead of transformDown to avoid dead loop
+    // in case of there's Alias whose exprId is the same as its child attribute.
+    expr.transformUp {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
           .map(Alias(_, name)(a.exprId, a.qualifier))
@@ -142,12 +142,14 @@ object ScanOperation extends OperationHelper with PredicateHelper {
       case Filter(condition, child) =>
         collectProjectsAndFilters(child) match {
           case Some((fields, filters, other, aliases)) =>
-            // Follow CombineFilters and only keep going if the collected Filters
-            // are all deterministic and this filter doesn't have common non-deterministic
-            // expressions with lower Project.
-            if (filters.forall(_.deterministic) &&
-              !hasCommonNonDeterministic(Seq(condition), aliases)) {
-              val substitutedCondition = substitute(aliases)(condition)
+            // Follow CombineFilters and only keep going if 1) the collected Filters
+            // and this filter are all deterministic or 2) if this filter is the first
+            // collected filter and doesn't have common non-deterministic expressions
+            // with lower Project.
+            val substitutedCondition = substitute(aliases)(condition)
+            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
+              substitutedCondition.deterministic) || filters.isEmpty
+            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
               Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                 other, aliases))
             } else {

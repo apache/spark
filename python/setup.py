@@ -153,21 +153,15 @@ try:
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
 
-    # Parse the README markdown file into rst for PyPI
-    long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
-    try:
-        import pypandoc
-        long_description = pypandoc.convert('README.md', 'rst')
-    except ImportError:
-        print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
-    except OSError:
-        print("Could not convert - pandoc is not installed", file=sys.stderr)
+    with open('README.md') as f:
+        long_description = f.read()
 
     setup(
         name='pyspark',
         version=VERSION,
         description='Apache Spark Python API',
         long_description=long_description,
+        long_description_content_type="text/markdown",
         author='Spark Developers',
         author_email='dev@spark.apache.org',
         url='https://github.com/apache/spark/tree/master/python',
@@ -179,6 +173,8 @@ try:
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
                   'pyspark.sql',
+                  'pyspark.sql.avro',
+                  'pyspark.sql.pandas',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',
@@ -210,8 +206,7 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.8.1'],
-        setup_requires=['pypandoc'],
+        install_requires=['py4j==0.10.9'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],

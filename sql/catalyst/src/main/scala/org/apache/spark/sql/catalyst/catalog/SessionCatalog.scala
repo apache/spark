@@ -794,6 +794,13 @@ class SessionCatalog(
     }
   }
 
+  // TODO: merge it with `isTemporaryTable`.
+  def isTempView(nameParts: Seq[String]): Boolean = {
+    if (nameParts.length > 2) return false
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    isTemporaryTable(nameParts.asTableIdentifier)
+  }
+
   /**
    * Return whether a table with the specified name is a temporary view.
    *
@@ -819,6 +826,8 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
+        case _: NoSuchDatabaseException => false
+        case _: NoSuchNamespaceException => false
       }
     }
   }
@@ -1333,6 +1342,10 @@ class SessionCatalog(
       functionRegistry.functionExists(name) &&
       !FunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+  }
+
+  def isTempFunction(name: String): Boolean = {
+    isTemporaryFunction(FunctionIdentifier(name))
   }
 
   /**

@@ -53,7 +53,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+  extends BaseAggregateExec with BlockingOperatorWithCodegen with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -75,7 +75,7 @@ case class HashAggregateExec(
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
@@ -152,8 +152,10 @@ case class HashAggregateExec(
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
-    // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+    // ImperativeAggregate and filter predicate are not supported right now
+    // TODO: SPARK-30027 Support codegen for filter exprs in HashAggregateExec
+    !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
+        aggregateExpressions.exists(_.filter.isDefined))
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

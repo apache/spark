@@ -33,8 +33,9 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -45,7 +46,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSparkSession {
+class DataFrameSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -92,9 +95,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(spark.emptyDataFrame.count() === 0)
   }
 
-  test("head and take") {
+  test("head, take and tail") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.tail(2) === testData.collect().takeRight(2))
     assert(testData.head(2).head.schema === testData.schema)
   }
 
@@ -108,8 +112,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   test("Star Expansion - CreateStruct and CreateArray") {
     val structDf = testData2.select("a", "b").as("record")
     // CreateStruct and CreateArray in aggregateExpressions
-    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
-    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).first() == Row(3, Seq(3, 1)))
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).
+      sort("a").first() == Row(1, Row(1, 1)))
+    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).
+      sort("a").first() == Row(1, Seq(1, 1)))
 
     // CreateStruct and CreateArray in project list (unresolved alias)
     assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
@@ -324,7 +330,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 0)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -1693,19 +1699,21 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
+        collect(join.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size === 1)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
+        collect(join.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size == 1)
       assert(
-        join2.queryExecution.executedPlan
-          .collect { case e: BroadcastExchangeExec => true }.size === 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
+        collect(join2.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size == 4)
     }
   }
 
@@ -2242,7 +2250,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
 
     // Assert that no extra shuffle introduced by cogroup.
-    val exchanges = df3.queryExecution.executedPlan.collect {
+    val exchanges = collect(df3.queryExecution.executedPlan) {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
@@ -2278,6 +2286,25 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
     assert(err.getMessage.contains("cannot resolve '`d`'"))
+  }
+
+  test("emptyDataFrame should be foldable") {
+    val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
+    val joined = spark.range(10).join(emptyDf, "id")
+    joined.queryExecution.optimizedPlan match {
+      case LocalRelation(Seq(id), Nil, _) =>
+        assert(id.name == "id")
+      case _ =>
+        fail("emptyDataFrame should be foldable")
+    }
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val e = intercept[AnalysisException] {
+      sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
   }
 }
 

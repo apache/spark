@@ -77,8 +77,7 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are
-currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
@@ -505,6 +504,13 @@ See the [configuration page](configuration.html) for information on Spark config
     the users current context is used.  <strong>NB:</strong> Many of the
     auto-configured settings can be overridden by the use of other Spark
     configuration properties e.g. <code>spark.kubernetes.namespace</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.master</code></td>
+  <td><code>https://kubernetes.default.svc</code></td>
+  <td>
+    The internal Kubernetes master (API server) address to be used for driver to request executors.
   </td>
 </tr>
 <tr>
@@ -1113,7 +1119,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Path to store files at the spark submit side in cluster mode. For example:
-    <code>spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path</code>
+    <code>spark.kubernetes.file.upload.path=s3a://&lt;s3-bucket&gt;/path</code>
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
 </tr>
@@ -1240,7 +1246,7 @@ The following affect the driver and executor containers. All other containers in
 </tr>
 <tr>
   <td>name</td>
-  <td>See description.</code></td>
+  <td>See description</td>
   <td>
     The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
     "executor" for each executor container) if not defined by the pod template. If the container is defined by the

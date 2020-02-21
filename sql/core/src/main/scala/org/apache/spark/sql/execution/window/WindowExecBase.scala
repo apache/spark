@@ -114,7 +114,7 @@ abstract class WindowExecBase(
 
   /**
    * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the WindowFrameFunction.
+   * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Expression, Expression)
@@ -136,7 +136,7 @@ abstract class WindowExecBase(
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
@@ -170,7 +170,7 @@ abstract class WindowExecBase(
               MutableProjection.create(expressions, schema))
         }
 
-        // Create the factory
+        // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Offset Frame
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
@@ -223,7 +223,7 @@ abstract class WindowExecBase(
         // Keep track of the number of expressions. This is a side-effect in a map...
         numExpressions += expressions.size
 
-        // Create the Frame Expression - Factory pair.
+        // Create the Window Expression - Frame Factory pair.
         (expressions, factory)
     }
   }

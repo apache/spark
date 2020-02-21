@@ -234,6 +234,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
     testPredictionModelSinglePrediction(model, validationDataset)
+    testClassificationModelSingleRawPrediction(model, validationDataset)
+    testProbClassificationModelSingleProbPrediction(model, validationDataset)
   }
 
   test("Naive Bayes with weighted samples") {

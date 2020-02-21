@@ -2,348 +2,348 @@
 -- Number of queries: 40
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW t AS SELECT 1
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 select cast(1 as tinyint) + interval 2 day
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS TINYINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7
 
 
--- !query 2
+-- !query
 select cast(1 as smallint) + interval 2 day
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS SMALLINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7
 
 
--- !query 3
+-- !query
 select cast(1 as int) + interval 2 day
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS INT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7
 
 
--- !query 4
+-- !query
 select cast(1 as bigint) + interval 2 day
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BIGINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7
 
 
--- !query 5
+-- !query
 select cast(1 as float) + interval 2 day
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS FLOAT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7
 
 
--- !query 6
+-- !query
 select cast(1 as double) + interval 2 day
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DOUBLE) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7
 
 
--- !query 7
+-- !query
 select cast(1 as decimal(10, 0)) + interval 2 day
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
--- !query 8
+-- !query
 select cast('2017-12-11' as string) + interval 2 day
--- !query 8 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
--- !query 8 output
+-- !query output
 2017-12-13 00:00:00
 
 
--- !query 9
+-- !query
 select cast('2017-12-11 09:30:00' as string) + interval 2 day
--- !query 9 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
--- !query 9 output
+-- !query output
 2017-12-13 09:30:00
 
 
--- !query 10
+-- !query
 select cast('1' as binary) + interval 2 day
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST('1' AS BINARY) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7
 
 
--- !query 11
+-- !query
 select cast(1 as boolean) + interval 2 day
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7
 
 
--- !query 12
+-- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) + interval 2 day
--- !query 12 schema
+-- !query schema
 struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIMESTAMP):timestamp>
--- !query 12 output
+-- !query output
 2017-12-13 09:30:00
 
 
--- !query 13
+-- !query
 select cast('2017-12-11 09:30:00' as date) + interval 2 day
--- !query 13 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + INTERVAL '2 days' AS DATE):date>
--- !query 13 output
+-- !query output
 2017-12-13
 
 
--- !query 14
+-- !query
 select interval 2 day + cast(1 as tinyint)
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS TINYINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7
 
 
--- !query 15
+-- !query
 select interval 2 day + cast(1 as smallint)
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS SMALLINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7
 
 
--- !query 16
+-- !query
 select interval 2 day + cast(1 as int)
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS INT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7
 
 
--- !query 17
+-- !query
 select interval 2 day + cast(1 as bigint)
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BIGINT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7
 
 
--- !query 18
+-- !query
 select interval 2 day + cast(1 as float)
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS FLOAT) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7
 
 
--- !query 19
+-- !query
 select interval 2 day + cast(1 as double)
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DOUBLE) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7
 
 
--- !query 20
+-- !query
 select interval 2 day + cast(1 as decimal(10, 0))
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
--- !query 21
+-- !query
 select interval 2 day + cast('2017-12-11' as string)
--- !query 21 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
--- !query 21 output
+-- !query output
 2017-12-13 00:00:00
 
 
--- !query 22
+-- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as string)
--- !query 22 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
--- !query 22 output
+-- !query output
 2017-12-13 09:30:00
 
 
--- !query 23
+-- !query
 select interval 2 day + cast('1' as binary)
--- !query 23 schema
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST('1' AS BINARY) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7
 
 
--- !query 24
+-- !query
 select interval 2 day + cast(1 as boolean)
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7
 
 
--- !query 25
+-- !query
 select interval 2 day + cast('2017-12-11 09:30:00.0' as timestamp)
--- !query 25 schema
+-- !query schema
 struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIMESTAMP):timestamp>
--- !query 25 output
+-- !query output
 2017-12-13 09:30:00
 
 
--- !query 26
+-- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as date)
--- !query 26 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + INTERVAL '2 days' AS DATE):date>
--- !query 26 output
+-- !query output
 2017-12-13
 
 
--- !query 27
+-- !query
 select cast(1 as tinyint) - interval 2 day
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS TINYINT) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7
 
 
--- !query 28
+-- !query
 select cast(1 as smallint) - interval 2 day
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS SMALLINT) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7
 
 
--- !query 29
+-- !query
 select cast(1 as int) - interval 2 day
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS INT) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7
 
 
--- !query 30
+-- !query
 select cast(1 as bigint) - interval 2 day
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BIGINT) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7
 
 
--- !query 31
+-- !query
 select cast(1 as float) - interval 2 day
--- !query 31 schema
+-- !query schema
 struct<>
--- !query 31 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS FLOAT) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7
 
 
--- !query 32
+-- !query
 select cast(1 as double) - interval 2 day
--- !query 32 schema
+-- !query schema
 struct<>
--- !query 32 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DOUBLE) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7
 
 
--- !query 33
+-- !query
 select cast(1 as decimal(10, 0)) - interval 2 day
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS DECIMAL(10,0)) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
--- !query 34
+-- !query
 select cast('2017-12-11' as string) - interval 2 day
--- !query 34 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) - INTERVAL '2 days' AS STRING):string>
--- !query 34 output
+-- !query output
 2017-12-09 00:00:00
 
 
--- !query 35
+-- !query
 select cast('2017-12-11 09:30:00' as string) - interval 2 day
--- !query 35 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS STRING) AS TIMESTAMP) - INTERVAL '2 days' AS STRING):string>
--- !query 35 output
+-- !query output
 2017-12-09 09:30:00
 
 
--- !query 36
+-- !query
 select cast('1' as binary) - interval 2 day
--- !query 36 schema
+-- !query schema
 struct<>
--- !query 36 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST('1' AS BINARY) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7
 
 
--- !query 37
+-- !query
 select cast(1 as boolean) - interval 2 day
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(1 AS BOOLEAN) - INTERVAL '2 days'' due to data type mismatch: argument 1 requires timestamp type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7
 
 
--- !query 38
+-- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day
--- !query 38 schema
+-- !query schema
 struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2 days' AS TIMESTAMP):timestamp>
--- !query 38 output
+-- !query output
 2017-12-09 09:30:00
 
 
--- !query 39
+-- !query
 select cast('2017-12-11 09:30:00' as date) - interval 2 day
--- !query 39 schema
+-- !query schema
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) - INTERVAL '2 days' AS DATE):date>
--- !query 39 output
+-- !query output
 2017-12-09

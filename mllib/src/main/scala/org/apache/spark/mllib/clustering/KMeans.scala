@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -219,28 +219,21 @@ class KMeans private (
       data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-
     // Compute squared norms and cache them.
     val norms = data.map { case (v, _) =>
       Vectors.norm(v, 2.0)
     }
 
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
-      (new VectorWithNorm(v, norm), w)
+      new VectorWithNorm(v, norm, w)
     }
-    zippedData.persist()
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
     model
   }
 
@@ -248,7 +241,7 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithmWithWeight(
-      data: RDD[(VectorWithNorm, Double)],
+      data: RDD[VectorWithNorm],
       instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
@@ -257,17 +250,14 @@ class KMeans private (
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
-    val dataVectorWithNorm = data.map(d => d._1)
-    val weights = data.map(d => d._2)
-
     val centers = initialModel match {
       case Some(kMeansCenters) =>
         kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
         if (initializationMode == KMeans.RANDOM) {
-          initRandom(dataVectorWithNorm)
+          initRandom(data)
         } else {
-          initKMeansParallel(dataVectorWithNorm, distanceMeasureInstance)
+          initKMeansParallel(data, distanceMeasureInstance)
         }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -284,11 +274,10 @@ class KMeans private (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val costAccum = sc.doubleAccumulator
-      val countAccum = sc.longAccumulator
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val collected = data.mapPartitions { pointsAndWeights =>
+      val collected = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -299,12 +288,11 @@ class KMeans private (
         //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
         val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
 
-        pointsAndWeights.foreach { case (point, weight) =>
+        points.foreach { point =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          costAccum.add(cost * weight)
-          countAccum.add(1)
-          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
-          clusterWeightSum(bestCenter) += weight
+          costAccum.add(cost * point.weight)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
+          clusterWeightSum(bestCenter) += point.weight
         }
 
         clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
@@ -315,7 +303,7 @@ class KMeans private (
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(countAccum.value))
+        instr.foreach(_.logNumExamples(costAccum.count))
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
@@ -521,13 +509,15 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
-    extends Serializable {
+private[clustering] class VectorWithNorm(
+    val vector: Vector,
+    val norm: Double,
+    val weight: Double = 1.0) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm, weight)
 }

@@ -243,6 +243,15 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
+    case WorkerDecommission(id, workerRef) =>
+      logInfo("Recording worker %s decommissioning".format(id))
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else {
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach(decommissionWorker)
+      }
+
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
       masterAddress, resources) =>
@@ -313,7 +322,9 @@ private[deploy] class Master(
             // Only retry certain number of times so we don't go into an infinite loop.
             // Important note: this code path is not exercised by tests, so be very careful when
             // changing this `if` condition.
+            // We also don't count failures from decommissioned workers since they are "expected."
             if (!normalExit
+                && oldState != ExecutorState.DECOMMISSIONED
                 && appInfo.incrementRetryCount() >= maxExecutorRetries
                 && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
@@ -848,6 +859,26 @@ private[deploy] class Master(
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
     true
+  }
+
+  private def decommissionWorker(worker: WorkerInfo): Unit = {
+    if (worker.state != WorkerState.DECOMMISSIONED) {
+      logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
+      worker.setState(WorkerState.DECOMMISSIONED)
+      for (exec <- worker.executors.values) {
+        logInfo("Telling app of decommission executors")
+        exec.application.driver.send(ExecutorUpdated(
+          exec.id, ExecutorState.DECOMMISSIONED,
+          Some("worker decommissioned"), None, workerLost = false))
+        exec.state = ExecutorState.DECOMMISSIONED
+        exec.application.removeExecutor(exec)
+      }
+      // On recovery do not add a decommissioned executor
+      persistenceEngine.removeWorker(worker)
+    } else {
+      logWarning("Skipping decommissioning worker %s on %s:%d as worker is already decommissioned".
+        format(worker.id, worker.host, worker.port))
+    }
   }
 
   private def removeWorker(worker: WorkerInfo, msg: String): Unit = {

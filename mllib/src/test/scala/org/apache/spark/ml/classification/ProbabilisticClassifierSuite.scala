@@ -34,7 +34,7 @@ final class TestProbabilisticClassificationModel(
 
   override def copy(extra: org.apache.spark.ml.param.ParamMap): this.type = defaultCopy(extra)
 
-  override protected def predictRaw(input: Vector): Vector = {
+  override def predictRaw(input: Vector): Vector = {
     input
   }
 

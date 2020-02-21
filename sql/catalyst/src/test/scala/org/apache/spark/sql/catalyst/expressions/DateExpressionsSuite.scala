@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -57,9 +56,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
     val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), TimeZoneGMT)
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
     val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
@@ -243,41 +242,45 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("DateFormat") {
-    checkEvaluation(
-      DateFormatClass(Literal.create(null, TimestampType), Literal("y"), gmtId),
-      null)
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-      Literal.create(null, StringType), gmtId), null)
+    Seq(false, true).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        checkEvaluation(
+          DateFormatClass(Literal.create(null, TimestampType), Literal("y"), gmtId),
+          null)
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
+          Literal.create(null, StringType), gmtId), null)
 
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-      Literal("y"), gmtId), "2015")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), gmtId), "2013")
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-      Literal("H"), gmtId), "0")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), gmtId), "13")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
+          Literal("y"), gmtId), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), gmtId), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
+          Literal("H"), gmtId), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), gmtId), "13")
 
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
-      Literal("y"), pstId), "2015")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), pstId), "2013")
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
-      Literal("H"), pstId), "0")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), pstId), "5")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
+          Literal("y"), pstId), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), pstId), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
+          Literal("H"), pstId), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), pstId), "5")
 
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
-      Literal("y"), jstId), "2015")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), jstId), "2013")
-    checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
-      Literal("H"), jstId), "0")
-    checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
+          Literal("y"), jstId), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), jstId), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
+          Literal("H"), jstId), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
 
-    // SPARK-28072 The codegen path should work
-    checkEvaluation(
-      expression = DateFormatClass(
-        BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
-        BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-        jstId),
-      expected = "22",
-      inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
+        // SPARK-28072 The codegen path should work
+        checkEvaluation(
+          expression = DateFormatClass(
+            BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
+            BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+            jstId),
+          expected = "22",
+          inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
+      }
+    }
   }
 
   test("Hour") {
@@ -496,7 +499,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Valid range of DateType is [0001-01-01, 9999-12-31]
     val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("0001-01-01")), Literal(maxMonthInterval)), 2933261)
+      AddMonths(Literal(LocalDate.parse("0001-01-01")), Literal(maxMonthInterval)),
+      LocalDate.of(10001, 1, 1).toEpochDay.toInt)
     checkEvaluation(
       AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
     // Test evaluation results between Interpreted mode and Codegen mode
@@ -707,162 +711,189 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("from_unixtime") {
-    val fmt1 = "yyyy-MM-dd HH:mm:ss"
-    val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
-    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
-      val timeZoneId = Option(tz.getID)
-      sdf1.setTimeZone(tz)
-      sdf2.setTimeZone(tz)
+    Seq(false, true).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        val fmt1 = "yyyy-MM-dd HH:mm:ss"
+        val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
+        val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+        val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
+        for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+          val timeZoneId = Option(tz.getID)
+          sdf1.setTimeZone(tz)
+          sdf2.setTimeZone(tz)
 
-      checkEvaluation(
-        FromUnixTime(Literal(0L), Literal(fmt1), timeZoneId),
-        sdf1.format(new Timestamp(0)))
-      checkEvaluation(FromUnixTime(
-        Literal(1000L), Literal(fmt1), timeZoneId),
-        sdf1.format(new Timestamp(1000000)))
-      checkEvaluation(
-        FromUnixTime(Literal(-1000L), Literal(fmt2), timeZoneId),
-        sdf2.format(new Timestamp(-1000000)))
-      checkEvaluation(
-        FromUnixTime(Literal.create(null, LongType), Literal.create(null, StringType), timeZoneId),
-        null)
-      checkEvaluation(
-        FromUnixTime(Literal.create(null, LongType), Literal(fmt1), timeZoneId),
-        null)
-      checkEvaluation(
-        FromUnixTime(Literal(1000L), Literal.create(null, StringType), timeZoneId),
-        null)
-      checkEvaluation(
-        FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
+          checkEvaluation(
+            FromUnixTime(Literal(0L), Literal(fmt1), timeZoneId),
+            sdf1.format(new Timestamp(0)))
+          checkEvaluation(FromUnixTime(
+            Literal(1000L), Literal(fmt1), timeZoneId),
+            sdf1.format(new Timestamp(1000000)))
+          checkEvaluation(
+            FromUnixTime(Literal(-1000L), Literal(fmt2), timeZoneId),
+            sdf2.format(new Timestamp(-1000000)))
+          checkEvaluation(
+            FromUnixTime(
+              Literal.create(null, LongType),
+              Literal.create(null, StringType), timeZoneId),
+            null)
+          checkEvaluation(
+            FromUnixTime(Literal.create(null, LongType), Literal(fmt1), timeZoneId),
+            null)
+          checkEvaluation(
+            FromUnixTime(Literal(1000L), Literal.create(null, StringType), timeZoneId),
+            null)
+          checkEvaluation(
+            FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
-      // SPARK-28072 The codegen path for non-literal input should also work
-      checkEvaluation(
-        expression = FromUnixTime(
-          BoundReference(ordinal = 0, dataType = LongType, nullable = true),
-          BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-          timeZoneId),
-        expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
-        inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
+          // SPARK-28072 The codegen path for non-literal input should also work
+          checkEvaluation(
+            expression = FromUnixTime(
+              BoundReference(ordinal = 0, dataType = LongType, nullable = true),
+              BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+              timeZoneId),
+            expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
+            inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
+        }
+      }
     }
   }
 
   test("unix_timestamp") {
-    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
-    val fmt3 = "yy-MM-dd"
-    val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-    sdf3.setTimeZone(TimeZoneGMT)
+    Seq(false, true).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+        val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
+        val fmt3 = "yy-MM-dd"
+        val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
+        sdf3.setTimeZone(TimeZoneGMT)
 
-    withDefaultTimeZone(TimeZoneGMT) {
-      for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
-        val timeZoneId = Option(tz.getID)
-        sdf1.setTimeZone(tz)
-        sdf2.setTimeZone(tz)
+        withDefaultTimeZone(TimeZoneGMT) {
+          for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+            val timeZoneId = Option(tz.getID)
+            sdf1.setTimeZone(tz)
+            sdf2.setTimeZone(tz)
 
-        val date1 = Date.valueOf("2015-07-24")
-        checkEvaluation(UnixTimestamp(
-          Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId), 0L)
-        checkEvaluation(UnixTimestamp(
-          Literal(sdf1.format(new Timestamp(1000000))), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          1000L)
-        checkEvaluation(
-          UnixTimestamp(
-            Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          1000L)
-        checkEvaluation(
-          UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
-        checkEvaluation(
-          UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
-          -1000L)
-        checkEvaluation(UnixTimestamp(
-          Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
-        val t1 = UnixTimestamp(
-          CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-        val t2 = UnixTimestamp(
-          CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-        assert(t2 - t1 <= 1)
-        checkEvaluation(
-          UnixTimestamp(
-            Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId),
-          null)
-        checkEvaluation(
-          UnixTimestamp(Literal.create(null, DateType), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-          null)
-        checkEvaluation(
-          UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
-        checkEvaluation(
-          UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
+            val date1 = Date.valueOf("2015-07-24")
+            checkEvaluation(UnixTimestamp(
+              Literal(sdf1.format(new Timestamp(0))),
+              Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId), 0L)
+            checkEvaluation(UnixTimestamp(
+              Literal(sdf1.format(new Timestamp(1000000))),
+              Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              1000L)
+            checkEvaluation(
+              UnixTimestamp(
+                Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              1000L)
+            checkEvaluation(
+              UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              MILLISECONDS.toSeconds(
+                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+            checkEvaluation(
+              UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))),
+                Literal(fmt2), timeZoneId),
+              -1000L)
+            checkEvaluation(UnixTimestamp(
+              Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
+              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+                DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
+            val t1 = UnixTimestamp(
+              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+            val t2 = UnixTimestamp(
+              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+            assert(t2 - t1 <= 1)
+            checkEvaluation(
+              UnixTimestamp(
+                Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId),
+              null)
+            checkEvaluation(
+              UnixTimestamp(
+                Literal.create(null, DateType),
+                Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              null)
+            checkEvaluation(
+              UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
+              MILLISECONDS.toSeconds(
+                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+            checkEvaluation(
+              UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
+          }
+        }
       }
     }
   }
 
   test("to_unix_timestamp") {
-    val fmt1 = "yyyy-MM-dd HH:mm:ss"
-    val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
-    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
-    val fmt3 = "yy-MM-dd"
-    val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-    sdf3.setTimeZone(TimeZoneGMT)
+    Seq(false, true).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        val fmt1 = "yyyy-MM-dd HH:mm:ss"
+        val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
+        val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+        val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
+        val fmt3 = "yy-MM-dd"
+        val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
+        sdf3.setTimeZone(TimeZoneGMT)
 
-    withDefaultTimeZone(TimeZoneGMT) {
-      for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
-        val timeZoneId = Option(tz.getID)
-        sdf1.setTimeZone(tz)
-        sdf2.setTimeZone(tz)
+        withDefaultTimeZone(TimeZoneGMT) {
+          for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+            val timeZoneId = Option(tz.getID)
+            sdf1.setTimeZone(tz)
+            sdf2.setTimeZone(tz)
 
-        val date1 = Date.valueOf("2015-07-24")
-        checkEvaluation(ToUnixTimestamp(
-          Literal(sdf1.format(new Timestamp(0))), Literal(fmt1), timeZoneId), 0L)
-        checkEvaluation(ToUnixTimestamp(
-          Literal(sdf1.format(new Timestamp(1000000))), Literal(fmt1), timeZoneId),
-          1000L)
-        checkEvaluation(ToUnixTimestamp(
-          Literal(new Timestamp(1000000)), Literal(fmt1)),
-          1000L)
-        checkEvaluation(
-          ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
-        checkEvaluation(
-          ToUnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2), timeZoneId),
-          -1000L)
-        checkEvaluation(ToUnixTimestamp(
-          Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
-            DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz)))
-        val t1 = ToUnixTimestamp(
-          CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-        val t2 = ToUnixTimestamp(
-          CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-        assert(t2 - t1 <= 1)
-        checkEvaluation(ToUnixTimestamp(
-          Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
-        checkEvaluation(
-          ToUnixTimestamp(
-            Literal.create(null, DateType), Literal(fmt1), timeZoneId),
-          null)
-        checkEvaluation(ToUnixTimestamp(
-          Literal(date1), Literal.create(null, StringType), timeZoneId),
-          MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz)))
-        checkEvaluation(
-          ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
+            val date1 = Date.valueOf("2015-07-24")
+            checkEvaluation(ToUnixTimestamp(
+              Literal(sdf1.format(new Timestamp(0))), Literal(fmt1), timeZoneId), 0L)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(sdf1.format(new Timestamp(1000000))), Literal(fmt1), timeZoneId),
+              1000L)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(new Timestamp(1000000)), Literal(fmt1)),
+              1000L)
+            checkEvaluation(
+              ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
+              MILLISECONDS.toSeconds(
+                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+            checkEvaluation(
+              ToUnixTimestamp(
+                Literal(sdf2.format(new Timestamp(-1000000))),
+                Literal(fmt2), timeZoneId),
+              -1000L)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
+              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+                DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
+            val t1 = ToUnixTimestamp(
+              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
+            val t2 = ToUnixTimestamp(
+              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
+            assert(t2 - t1 <= 1)
+            checkEvaluation(ToUnixTimestamp(
+              Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
+            checkEvaluation(
+              ToUnixTimestamp(
+                Literal.create(null, DateType), Literal(fmt1), timeZoneId),
+              null)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(date1), Literal.create(null, StringType), timeZoneId),
+              MILLISECONDS.toSeconds(
+                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+            checkEvaluation(
+              ToUnixTimestamp(
+                Literal("2015-07-24"),
+                Literal("not a valid format"), timeZoneId), null)
 
-        // SPARK-28072 The codegen path for non-literal input should also work
-        checkEvaluation(
-          expression = ToUnixTimestamp(
-            BoundReference(ordinal = 0, dataType = StringType, nullable = true),
-            BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-            timeZoneId),
-          expected = 0L,
-          inputRow = InternalRow(
-            UTF8String.fromString(sdf1.format(new Timestamp(0))), UTF8String.fromString(fmt1)))
+            // SPARK-28072 The codegen path for non-literal input should also work
+            checkEvaluation(
+              expression = ToUnixTimestamp(
+                BoundReference(ordinal = 0, dataType = StringType, nullable = true),
+                BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+                timeZoneId),
+              expected = 0L,
+              inputRow = InternalRow(
+                UTF8String.fromString(sdf1.format(new Timestamp(0))), UTF8String.fromString(fmt1)))
+          }
+        }
       }
     }
   }
@@ -894,29 +925,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-      test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
-      test(null, "UTC", null)
-      test("2015-07-24 00:00:00", null, null)
-      test(null, null, null)
-    }
-    val msg = intercept[AnalysisException] {
-      test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
+    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
   }
 
   test("to_utc_timestamp - invalid time zone id") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-        val msg = intercept[java.time.DateTimeException] {
-          GenerateUnsafeProjection.generate(
-            ToUTCTimestamp(
-              Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
-        }.getMessage
-        assert(msg.contains(invalidTz))
-      }
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(
+          ToUTCTimestamp(
+            Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
     }
   }
 
@@ -933,28 +956,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-      test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
-      test(null, "UTC", null)
-      test("2015-07-24 00:00:00", null, null)
-      test(null, null, null)
-    }
-    val msg = intercept[AnalysisException] {
-      test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-    }.getMessage
-    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
+    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
   }
 
   test("from_utc_timestamp - invalid time zone id") {
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
-        val msg = intercept[java.time.DateTimeException] {
-          GenerateUnsafeProjection.generate(
-            FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
-        }.getMessage
-        assert(msg.contains(invalidTz))
-      }
+    Seq("Invalid time zone", "\"quote", "UTC*42").foreach { invalidTz =>
+      val msg = intercept[java.time.DateTimeException] {
+        GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal(invalidTz)) :: Nil)
+      }.getMessage
+      assert(msg.contains(invalidTz))
     }
   }
 
@@ -1046,22 +1060,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     outstandingTimezonesIds.foreach { timezone =>
       var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
         Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
-        Some(Literal(timezone)))
+        Some(Literal(timezone)), Some(timezone))
+      def millis(ts: MakeTimestamp): Milliseconds = Milliseconds(timestamp, Some(timezone))
+      def micros(ts: MakeTimestamp): Microseconds = Microseconds(timestamp, Some(timezone))
 
-      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
-      checkEvaluation(Microseconds(timestamp), 10123457)
+      checkEvaluation(millis(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(
+        millis(timestamp.copy(year = Literal(10))),
+        Decimal(BigDecimal(10123.457), 8, 3))
+
+      checkEvaluation(micros(timestamp), 10123457)
+      checkEvaluation(
+        micros(timestamp.copy(year = Literal(10))),
+        10123457)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp), 0)
+      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(micros(timestamp), 0)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
-      checkEvaluation(Microseconds(timestamp), 59999999)
+      checkEvaluation(millis(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(micros(timestamp), 59999999)
 
       timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
-      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp), 0)
+      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(micros(timestamp), 0)
     }
   }
 
@@ -1089,15 +1112,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     outstandingTimezonesIds.foreach { timezone =>
       val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
         Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
-        Some(Literal(timezone)))
+        Some(Literal(timezone)), Some(timezone))
+      def secFrac(ts: MakeTimestamp): SecondWithFraction = SecondWithFraction(ts, Some(timezone))
 
-      checkEvaluation(SecondWithFraction(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(secFrac(timestamp), Decimal(10.123456, 8, 6))
       checkEvaluation(
-        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
+        secFrac(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
         Decimal(59000001, 8, 6))
       checkEvaluation(
-        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
+        secFrac(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
         Decimal(0.000001, 8, 6))
+      checkEvaluation(
+        secFrac(timestamp.copy(year = Literal(10))),
+        Decimal(10.123456, 8, 6))
     }
   }
 

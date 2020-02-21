@@ -34,11 +34,17 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
-        <th>Minimum Share</th>
-        <th>Pool Weight</th>
+        <th>
+          <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
+           cores">Minimum Share</span>
+        </th>
+        <th>
+          <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster resources
+           relative to others">Pool Weight</span>
+        </th>
         <th>Active Stages</th>
         <th>Running Tasks</th>
-        <th>SchedulingMode</th>
+        <th>Scheduling Mode</th>
       </thead>
       <tbody>
         {pools.map { case (s, p) => poolRow(request, s, p) }}

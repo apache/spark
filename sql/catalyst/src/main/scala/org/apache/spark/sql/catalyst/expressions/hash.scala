@@ -282,6 +282,7 @@ abstract class HashExpression[E] extends Expression {
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
+    val typedSeed = if (dataType.sameType(LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -296,7 +297,7 @@ abstract class HashExpression[E] extends Expression {
 
     ev.copy(code =
       code"""
-         |$hashResultType ${ev.value} = $seed;
+         |$hashResultType ${ev.value} = $typedSeed;
          |$codes
        """.stripMargin)
   }
@@ -600,7 +601,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
        5602566077635097486
-  """)
+  """,
+  since = "3.0.0")
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 

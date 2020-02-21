@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
-import java.util.{Base64, TimeZone}
+import java.util.Base64
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,12 +29,13 @@ import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Private, Stable, Unstable}
+import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, MapType, StringType, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * @since 1.3.0
@@ -572,6 +573,7 @@ trait Row extends Serializable {
         JString(timestampFormatter.format(DateTimeUtils.instantToMicros(i)))
       case (t: Timestamp, _) =>
         JString(timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t)))
+      case (i: CalendarInterval, _) => JString(i.toString)
       case (a: Array[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(a.iterator, elementType)
       case (s: Seq[_], ArrayType(elementType, _)) =>

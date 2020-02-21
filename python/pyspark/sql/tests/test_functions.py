@@ -310,6 +310,33 @@ class FunctionsTests(ReusedSQLTestCase):
         file_name = df.collect()[0].file
         self.assertTrue("python/test_support/hello/hello.txt" in file_name)
 
+    def test_overlay(self):
+        from pyspark.sql.functions import col, lit, overlay
+        from itertools import chain
+        import re
+
+        actual = list(chain.from_iterable([
+            re.findall("(overlay\\(.*\\))", str(x)) for x in [
+                overlay(col("foo"), col("bar"), 1),
+                overlay("x", "y", 3),
+                overlay(col("x"), col("y"), 1, 3),
+                overlay("x", "y", 2, 5),
+                overlay("x", "y", lit(11)),
+                overlay("x", "y", lit(2), lit(5)),
+            ]
+        ]))
+
+        expected = [
+            "overlay(foo, bar, 1, -1)",
+            "overlay(x, y, 3, -1)",
+            "overlay(x, y, 1, 3)",
+            "overlay(x, y, 2, 5)",
+            "overlay(x, y, 11, -1)",
+            "overlay(x, y, 2, 5)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
 
 if __name__ == "__main__":
     import unittest
