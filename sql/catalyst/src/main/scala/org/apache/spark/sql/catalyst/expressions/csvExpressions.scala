@@ -50,7 +50,8 @@ case class CsvToStructs(
     schema: StructType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    nameOfCorruptRecord: String)
   extends UnaryExpression
     with TimeZoneAwareExpression
     with CodegenFallback
@@ -62,6 +63,10 @@ case class CsvToStructs(
   // The CSV input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
   val nullableSchema: StructType = schema.asNullable
+
+  def this(schema: StructType, options: Map[String, String], child: Expression,
+           timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
+    SQLConf.get.columnNameOfCorruptRecord)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -92,8 +97,6 @@ case class CsvToStructs(
       throw new IllegalArgumentException("Expected one row from CSV parser.")
     }
   }
-
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient lazy val parser = {
     val parsedOptions = new CSVOptions(
@@ -134,6 +137,21 @@ case class CsvToStructs(
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def prettyName: String = "from_csv"
+}
+
+object CsvToStructs{
+  def apply(
+             schema: StructType,
+             options: Map[String, String],
+             child: Expression,
+             timeZoneId: Option[String]): CsvToStructs =
+    new CsvToStructs(schema, options, child, timeZoneId)
+
+  def apply(
+             schema: StructType,
+             options: Map[String, String],
+             child: Expression): CsvToStructs =
+    new CsvToStructs(schema, options, child, None)
 }
 
 /**
