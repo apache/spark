@@ -335,6 +335,10 @@ license: |
   
   - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
 
+  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. The result decimal represent in string can be different between Hive 1.2 and Hive 2.3 when use `TRANSFORM` syntax in sql. In Hive 1.2, decimal will eliminate all non-significant zeros in precision when represents in string. But in Hive 2.3, it will always show 18 digits in precision and make up with zero if its precision is less than 18.
+  
+  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. The local file system has changed from `org.apache.hadoop.fs.LocalFileSystem` to `org.apache.hadoop.hive.ql.io.ProxyLocalFileSystem` when use Hadoop API, e.g. `new Path("file:/").getFileSystem(conf)`, and `fs.rename(Path src, Path dst)` will returns `false` in Hive 2.3 but `true` in Hive 1.2 if `dst` represents a directory.
+
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
   - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.

@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DecimalType, StringType}
 
 class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
   with BeforeAndAfterEach {
@@ -212,9 +212,9 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
-      // In Hive1.2, it does not do well on Decimal conversion. For example, in this case,
-      // it converts a decimal value's type from Decimal(38, 18) to Decimal(1, 0). So we need
-      // do extra cast here for Hive1.2. But in Hive2.3, it still keeps the original Decimal type.
+      // In Hive1.2, decimal will eliminate all non-significant zeros in precision when represents
+      // in string. But in Hive2.3, it will always show 18 digits in precision and make up with
+      // zero if its precision is less than 18.
       val decimalToString: Column => Column = if (HiveUtils.isHive23) {
         c => c.cast("string")
       } else {
