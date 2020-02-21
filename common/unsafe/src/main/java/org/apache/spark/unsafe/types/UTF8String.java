@@ -1077,6 +1077,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static class LongWrapper implements Serializable {
     public transient long value = 0;
+    public transient boolean formatInvalid = false;
   }
 
   /**
@@ -1088,6 +1089,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static class IntWrapper implements Serializable {
     public transient int value = 0;
+    public transient boolean formatInvalid = false;
   }
 
   /**
@@ -1133,6 +1135,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // We allow decimals and will return a truncated integral in that case.
         // Therefore we won't throw an exception here (checking the fractional
         // part happens below.)
+        toLongResult.formatInvalid = true;
         break;
       }
 
@@ -1140,6 +1143,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (b >= '0' && b <= '9') {
         digit = b - '0';
       } else {
+        toLongResult.formatInvalid = false;
         return false;
       }
 
@@ -1233,6 +1237,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (b >= '0' && b <= '9') {
         digit = b - '0';
       } else {
+        intWrapper.formatInvalid = true;
         return false;
       }
 
@@ -1302,7 +1307,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public long toLongExact() {
     LongWrapper result = new LongWrapper();
-    if (toLong(result)) {
+    if (toLong(result) && !result.formatInvalid) {
       return result.value;
     }
     throw new NumberFormatException("invalid input syntax for type numeric: " + this);

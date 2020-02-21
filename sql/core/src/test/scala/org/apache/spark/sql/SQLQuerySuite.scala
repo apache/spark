@@ -3396,14 +3396,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-30471: Fix issue when comparing String and Numeric.") {
     withTempView("ta") {
-//      sql(
-//        s"""
-//          | CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST ('2147483648' AS STRING))
-//          | AS ta(id)
-//          |""".stripMargin)
-//      checkAnswer(sql("SELECT * FROM ta WHERE id > 0"), Row("2147483648"))
-//      checkAnswer(sql("SELECT * FROM ta WHERE id > CAST(0 as Decimal(1, 0))"), Row("2147483648"))
-      sql("select '1 ' = 1Y").explain()
+      sql(
+        s"""
+          | CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST ('2147483648' AS STRING))
+          | AS ta(id)
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM ta WHERE id > 0"), Row("2147483648"))
+      checkAnswer(sql("SELECT * FROM ta WHERE id > CAST(0 as Decimal(1, 0))"), Row("2147483648"))
+      intercept[NumberFormatException](sql("select 2 = '2.1'").collect())
     }
   }
 }
