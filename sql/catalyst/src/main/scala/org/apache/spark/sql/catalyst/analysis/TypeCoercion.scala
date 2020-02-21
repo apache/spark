@@ -553,14 +553,11 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children, useStringTypeWhenEmpty)
+      case a @ CreateArray(children, _)
         if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => CreateArray(
-            children.map(castIfNotSameType(_, finalDataType)),
-            useStringTypeWhenEmpty
-          )
+          case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
@@ -596,7 +593,7 @@ object TypeCoercion {
           case None => m
         }
 
-      case m @ CreateMap(children, useStringTypeWhenEmpty) if m.keys.length == m.values.length &&
+      case m @ CreateMap(children, _) if m.keys.length == m.values.length &&
           (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
         val keyTypes = m.keys.map(_.dataType)
         val newKeys = findWiderCommonType(keyTypes) match {
@@ -610,9 +607,7 @@ object TypeCoercion {
           case None => m.values
         }
 
-        CreateMap(
-          newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) },
-          useStringTypeWhenEmpty)
+        m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
