@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -43,7 +44,7 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
 
   protected def fullIdentifier(ident: Identifier): Identifier = {
     if (ident.namespace().isEmpty) {
-      Identifier.of(Array("default"), ident.name())
+      throw new NoSuchTableException(ident)
     } else {
       ident
     }

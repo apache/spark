@@ -171,8 +171,6 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case Array() =>
-          TableIdentifier(ident.name, Some(catalog.getCurrentDatabase))
         case _ =>
           throw new NoSuchTableException(ident)
       }

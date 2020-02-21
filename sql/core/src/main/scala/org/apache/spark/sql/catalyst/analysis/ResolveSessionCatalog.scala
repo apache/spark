@@ -257,9 +257,10 @@ class ResolveSessionCatalog(
         case v1Table: V1Table =>
           DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
       }.getOrElse {
-        if (isTempView(tbl)) {
+        val tempViewName = tbl.asIdentifier.name
+        if (isTempView(Seq(tempViewName))) {
           // v1 DESCRIBE COLUMN supports temp view.
-          DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
+          DescribeColumnCommand(TableIdentifier(tempViewName), colNameParts, isExtended)
         } else {
           throw new AnalysisException("Describing columns is not supported for v2 tables.")
         }
@@ -396,7 +397,7 @@ class ResolveSessionCatalog(
       }
 
     case AnalyzeColumnStatement(tbl, columnNames, allColumns) =>
-      val v1TableName = parseV1Table(tbl, "ANALYZE TABLE")
+      val v1TableName = parseTempViewOrV1Table(tbl, "ANALYZE TABLE")
       AnalyzeColumnCommand(v1TableName.asTableIdentifier, columnNames, allColumns)
 
     case RepairTableStatement(tbl) =>
@@ -415,6 +416,10 @@ class ResolveSessionCatalog(
         partition)
 
     case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
+      if (isTempView(tbl)) {
+        throw new AnalysisException(
+          s"SHOW CREATE TABLE is not supported on a temporary view: ${tbl.quoted}")
+      }
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
       ShowCreateTableCommand(v1TableName.asTableIdentifier)
 
@@ -449,8 +454,17 @@ class ResolveSessionCatalog(
         partitionSpec)
 
     case ShowColumnsStatement(tbl, ns) =>
+      if (ns.isDefined && ns.get.length > 1) {
+        throw new AnalysisException(
+          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
+      }
+      val nameParts = if (ns.isDefined && tbl.length == 1) {
+        ns.get ++ tbl
+      } else {
+        tbl
+      }
       val sql = "SHOW COLUMNS"
-      val v1TableName = parseV1Table(tbl, sql).asTableIdentifier
+      val v1TableName = parseTempViewOrV1Table(nameParts, sql).asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
         case Some(db) if (v1TableName.database.exists(!resolver(_, db.head))) =>
@@ -458,10 +472,6 @@ class ResolveSessionCatalog(
             s"SHOW COLUMNS with conflicting databases: " +
               s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => ns.map(_.head)
-      }
-      if (ns.isDefined && ns.get.length > 1) {
-        throw new AnalysisException(
-          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
       }
       ShowColumnsCommand(db, v1TableName)
 
@@ -654,14 +664,7 @@ class ResolveSessionCatalog(
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
-        if (nameParts.length == 1) {
-          // If there is only one name part, it means the current catalog is the session catalog.
-          // Here we return the original name part, to keep the error message unchanged for
-          // v1 commands.
-          Some(catalog -> nameParts)
-        } else {
-          Some(catalog -> ident.asMultipartIdentifier)
-        }
+        Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
   }

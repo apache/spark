@@ -128,7 +128,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
-    when(manager.currentNamespace).thenReturn(Array("default"))
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -828,9 +828,8 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
-          val tblIdent = TableIdentifier(tblName, Some("default"))
-          val expected1 = DescribeTableCommand(tblIdent, Map.empty, false)
-          val expected2 = DescribeTableCommand(tblIdent, Map.empty, true)
+          val expected1 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, false)
+          val expected2 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, true)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
@@ -852,7 +851,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false)
+            TableIdentifier(tblName, None), Map("a" -> "1"), false)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
@@ -1126,7 +1125,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   val DSV2ResolutionTests = {
-    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.default.v2Table"
+    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.v2Table"
     Seq(
       ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
       ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
@@ -1142,7 +1141,7 @@ class PlanResolutionSuite extends AnalysisTest {
       (s"SHOW TBLPROPERTIES $v2SessionCatalogTable", true),
       ("SELECT * from tab", false),
       ("SELECT * from testcat.tab", false),
-      (s"SELECT * from $v2SessionCatalogTable", true)
+      (s"SELECT * from ${CatalogManager.SESSION_CATALOG_NAME}.v2Table", true)
     )
   }
 

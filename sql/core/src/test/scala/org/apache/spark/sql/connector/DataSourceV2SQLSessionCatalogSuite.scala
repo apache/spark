@@ -19,13 +19,14 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 
 class DataSourceV2SQLSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with AlterTableTests
   with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
-  override protected val catalogAndNamespace = ""
+  override protected val catalogAndNamespace = "default."
 
   override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
@@ -39,15 +40,18 @@ class DataSourceV2SQLSessionCatalogSuite
   override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(spark.table(tableName), expected)
     checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
-    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
   }
 
   override def getTableMetadata(tableName: String): Table = {
     val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    v2Catalog.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty, nameParts.last))
+    val ident = if (v2Catalog.name == SESSION_CATALOG_NAME) {
+      Identifier.of(nameParts.init.toArray, nameParts.last)
+    } else {
+      Identifier.of(Array.empty, nameParts.last)
+    }
+    v2Catalog.asInstanceOf[TableCatalog].loadTable(ident)
   }
 
   test("SPARK-30697: catalog.isView doesn't throw an error for specialized identifiers") {
@@ -55,7 +59,7 @@ class DataSourceV2SQLSessionCatalogSuite
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
 
-      def idResolver(id: Identifier): Identifier = Identifier.of(Array.empty, id.name())
+      def idResolver(id: Identifier): Identifier = Identifier.of(Array("default"), id.name())
 
       InMemoryTableSessionCatalog.withCustomIdentifierResolver(idResolver) {
         // The following should not throw AnalysisException.
