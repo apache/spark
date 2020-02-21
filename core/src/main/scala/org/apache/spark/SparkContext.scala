@@ -66,7 +66,6 @@ import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
-import org.apache.spark.util.AccumulatorMode.AccumulatorMode
 import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
 

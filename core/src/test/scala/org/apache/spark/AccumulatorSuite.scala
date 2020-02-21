@@ -30,12 +30,11 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorMode, AccumulatorV2, DoubleAccumulator, LongAccumulator}
-import org.apache.spark.util.AccumulatorMode.AccumulatorMode
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorMode, AccumulatorV2, DoubleAccumulator, LongAccumulator, ReliableDoubleAccumulator, ReliableLongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-  import AccumulatorSuite.{createDoubleAccum, createLongAccum}
+  import AccumulatorSuite.{createDoubleAccum, createLongAccum, createReliableDoubleAccum, createReliableLongAccum}
 
   override def afterEach(): Unit = {
     try {
@@ -91,7 +90,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("long accumulator fragments all") {
-    val acc = createLongAccum("long", mode = AccumulatorMode.All)
+    val acc = createReliableLongAccum("long", mode = AccumulatorMode.All)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.value == 0)
@@ -103,76 +102,76 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc2.add(2L)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1)
     assert(acc.value == 1)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 3)
     assert(acc.sum == 4)
     assert(acc.value == 4)
 
     // second fragment
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 4)
     assert(acc.sum == 5)
     assert(acc.value == 5)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 5)
     assert(acc.sum == 6)
     assert(acc.value == 6)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 6)
     assert(acc.sum == 8)
     assert(acc.value == 8)
   }
 
   test("long accumulator fragments first") {
-    val acc = createLongAccum("long", mode = AccumulatorMode.First)
+    val acc = createReliableLongAccum("long", mode = AccumulatorMode.First)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.value == 0)
 
-    val acc1 = acc.copyAndReset()
+    val acc1 = acc.copyAndReset().asInstanceOf[ReliableLongAccumulator]
     acc1.add(1L)
 
-    val acc2 = acc.copyAndReset()
+    val acc2 = acc.copyAndReset().asInstanceOf[ReliableLongAccumulator]
     acc2.add(1L)
     acc2.add(1L)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1)
     assert(acc.value == 1)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1)
     assert(acc.value == 1)
 
     // second fragment
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 3)
     assert(acc.sum == 3)
     assert(acc.value == 3)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 3)
     assert(acc.sum == 3)
     assert(acc.value == 3)
   }
 
   test("long accumulator fragments larger") {
-    val acc = createLongAccum("long", mode = AccumulatorMode.Larger)
+    val acc = createReliableLongAccum("long", mode = AccumulatorMode.Larger)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.value == 0)
@@ -188,55 +187,55 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc3.add(3L)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
     // second fragment
-    acc.merge(acc3, 2)
+    acc.mergeFragment(acc3, 2)
     assert(acc.count == 3)
     assert(acc.sum == 5)
     assert(acc.value == 5)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 3)
     assert(acc.sum == 5)
     assert(acc.value == 5)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4)
     assert(acc.value == 4)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4)
     assert(acc.value == 4)
 
-    acc.merge(acc3, 2)
+    acc.mergeFragment(acc3, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4)
     assert(acc.value == 4)
   }
 
   test("long accumulator fragments last") {
-    val acc = createLongAccum("long", mode = AccumulatorMode.Last)
+    val acc = createReliableLongAccum("long", mode = AccumulatorMode.Last)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.value == 0)
@@ -248,33 +247,33 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc2.add(2L)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1)
     assert(acc.value == 1)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1)
     assert(acc.value == 1)
 
     // second fragment
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 2)
     assert(acc.sum == 2)
     assert(acc.value == 2)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 2)
     assert(acc.sum == 3)
     assert(acc.value == 3)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 2)
     assert(acc.sum == 2)
     assert(acc.value == 2)
@@ -286,40 +285,40 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(acc.sum == 0.0)
     assert(acc.value == 0.0)
 
-    val acc1 = acc.copyAndReset()
+    val acc1 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc1.add(1.0)
 
-    val acc2 = acc.copyAndReset()
+    val acc2 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc2.add(2.0)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1.0)
     assert(acc.value == 1.0)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 3)
     assert(acc.sum == 4.0)
     assert(acc.value == 4.0)
 
     // second fragment
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 4)
     assert(acc.sum == 5.0)
     assert(acc.value == 5.0)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 5)
     assert(acc.sum == 6.0)
     assert(acc.value == 6.0)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 6)
     assert(acc.sum == 8.0)
     assert(acc.value == 8.0)
@@ -331,31 +330,31 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(acc.sum == 0.0)
     assert(acc.value == 0.0)
 
-    val acc1 = acc.copyAndReset()
+    val acc1 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc1.add(1.0)
 
-    val acc2 = acc.copyAndReset()
+    val acc2 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc2.add(1.0)
     acc2.add(1.0)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1.0)
     assert(acc.value == 1.0)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1.0)
     assert(acc.value == 1.0)
 
     // second fragment
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 3)
     assert(acc.sum == 3.0)
     assert(acc.value == 3.0)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 3)
     assert(acc.sum == 3.0)
     assert(acc.value == 3.0)
@@ -367,10 +366,10 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(acc.sum == 0.0)
     assert(acc.value == 0.0)
 
-    val acc1 = acc.copyAndReset()
+    val acc1 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc1.add(2.0)
 
-    val acc2 = acc.copyAndReset()
+    val acc2 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc2.add(1.0)
     acc2.add(1.0)
 
@@ -378,48 +377,48 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc3.add(3.0)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 2)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
     // second fragment
-    acc.merge(acc3, 2)
+    acc.mergeFragment(acc3, 2)
     assert(acc.count == 3)
     assert(acc.sum == 5.0)
     assert(acc.value == 5.0)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 3)
     assert(acc.sum == 5.0)
     assert(acc.value == 5.0)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4.0)
     assert(acc.value == 4.0)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4.0)
     assert(acc.value == 4.0)
 
-    acc.merge(acc3, 2)
+    acc.mergeFragment(acc3, 2)
     assert(acc.count == 4)
     assert(acc.sum == 4.0)
     assert(acc.value == 4.0)
@@ -431,40 +430,40 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(acc.sum == 0.0)
     assert(acc.value == 0.0)
 
-    val acc1 = acc.copyAndReset()
+    val acc1 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc1.add(1.0)
 
-    val acc2 = acc.copyAndReset()
+    val acc2 = acc.copyAndReset().asInstanceOf[ReliableDoubleAccumulator]
     acc2.add(2.0)
 
     // first fragment
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1.0)
     assert(acc.value == 1.0)
 
-    acc.merge(acc2, 1)
+    acc.mergeFragment(acc2, 1)
     assert(acc.count == 1)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc1, 1)
+    acc.mergeFragment(acc1, 1)
     assert(acc.count == 1)
     assert(acc.sum == 1.0)
     assert(acc.value == 1.0)
 
     // second fragment
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 2)
     assert(acc.sum == 2.0)
     assert(acc.value == 2.0)
 
-    acc.merge(acc2, 2)
+    acc.mergeFragment(acc2, 2)
     assert(acc.count == 2)
     assert(acc.sum == 3.0)
     assert(acc.value == 3.0)
 
-    acc.merge(acc1, 2)
+    acc.mergeFragment(acc1, 2)
     assert(acc.count == 2)
     assert(acc.sum == 2.0)
     assert(acc.value == 2)
@@ -483,8 +482,8 @@ private[spark] object AccumulatorSuite {
       countFailedValues: Boolean = false,
       initValue: Double = 0,
       id: Long = AccumulatorContext.newId(),
-      mode: AccumulatorMode = AccumulatorMode.All): DoubleAccumulator = {
-    val acc = new DoubleAccumulator
+      mode: AccumulatorMode = AccumulatorMode.All): ReliableDoubleAccumulator = {
+    val acc = new ReliableDoubleAccumulator
     acc.setValue(initValue)
     acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
     AccumulatorContext.register(acc)
@@ -501,6 +500,38 @@ private[spark] object AccumulatorSuite {
       id: Long = AccumulatorContext.newId(),
       mode: AccumulatorMode = AccumulatorMode.All): LongAccumulator = {
     val acc = new LongAccumulator
+    acc.setValue(initValue)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
+    AccumulatorContext.register(acc)
+    acc
+  }
+
+  /**
+   * Create a reliable double accumulator and register it to `AccumulatorContext`.
+   */
+  def createReliableDoubleAccum(
+      name: String,
+      countFailedValues: Boolean = false,
+      initValue: Double = 0,
+      id: Long = AccumulatorContext.newId(),
+      mode: AccumulatorMode = AccumulatorMode.All): DoubleAccumulator = {
+    val acc = new ReliableDoubleAccumulator
+    acc.setValue(initValue)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
+    AccumulatorContext.register(acc)
+    acc
+  }
+
+  /**
+   * Create a reliable long accumulator and register it to `AccumulatorContext`.
+   */
+  def createReliableLongAccum(
+      name: String,
+      countFailedValues: Boolean = false,
+      initValue: Long = 0,
+      id: Long = AccumulatorContext.newId(),
+      mode: AccumulatorMode = AccumulatorMode.All): ReliableLongAccumulator = {
+    val acc = new ReliableLongAccumulator
     acc.setValue(initValue)
     acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
     AccumulatorContext.register(acc)
