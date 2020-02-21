@@ -2017,6 +2017,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_UNTYPED_SCALA_UDF =
+    buildConf("spark.sql.legacy.allowUntypedScalaUDF")
+      .internal()
+      .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
+        "udf(f: AnyRef, dataType: DataType). Otherwise, exception will be throw.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
