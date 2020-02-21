@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 
 /**
  * Base class of the public logical expression API.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface Expression {

@@ -26,6 +26,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * A mix-in interface of {@link Table}, to indicate that it's readable. This adds
  * {@link #newScanBuilder(CaseInsensitiveStringMap)} that is used to create a scan for batch,
  * micro-batch, or continuous processing.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface SupportsRead extends Table {

@@ -26,6 +26,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * sources use the `DataFrameWriter.save(path)` method, the option `path` can translate to a
  * PathIdentifier. A catalog can then use this PathIdentifier to check the existence of a table, or
  * whether a table can be created at a given directory.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface SupportsCatalogOptions extends TableProvider {

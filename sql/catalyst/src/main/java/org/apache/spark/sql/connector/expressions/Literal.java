@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.DataType;
  * the literal's {@link DataType SQL data type}.
  *
  * @param <T> the JVM type of a value held by the literal
+ * @since 3.0.0
  */
 @Experimental
 public interface Literal<T> extends Expression {
