@@ -344,7 +344,7 @@ object QueryExecution {
       session
     } else {
       val newSession = session.cloneSession()
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
       newSession
     }
   }
