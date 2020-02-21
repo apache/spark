@@ -18,7 +18,14 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.atomic.AtomicLong
+
+import scala.collection.mutable
+import scala.util.Random
+
+import org.apache.hadoop.fs.{FSDataInputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.SQLConf
@@ -240,6 +247,40 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     ))
   }
 
+  test("getLatestBatchId") {
+    withCountOpenLocalFileSystemAsLocalFileSystem {
+      val scheme = CountOpenLocalFileSystem.scheme
+      withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
+        withTempDir { file =>
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
+            s"$scheme:///${file.getCanonicalPath}")
+          for (batchId <- 0 to 2) {
+            sinkLog.add(
+              batchId,
+              Array(newFakeSinkFileStatus("/a/b/" + batchId, FileStreamSinkLog.ADD_ACTION)))
+          }
+
+          def getCountForOpenOnMetadataFile(batchId: Long): Long = {
+            val path = sinkLog.batchIdToPath(batchId).toUri.getPath
+            CountOpenLocalFileSystem.pathToNumOpenCalled
+              .get(path).map(_.get()).getOrElse(0)
+          }
+
+          val curCount = getCountForOpenOnMetadataFile(2)
+
+          assert(sinkLog.getLatestBatchId() === Some(2))
+          // getLatestBatchId doesn't open the latest metadata log file
+          assert(getCountForOpenOnMetadataFile(2L) === curCount)
+
+          assert(sinkLog.getLatest().map(_._1).getOrElse(-1L) === 2L)
+          // getLatest opens the latest metadata log file, which explains the needs on
+          // having "getLatestBatchId".
+          assert(getCountForOpenOnMetadataFile(2L) === curCount + 1)
+        }
+      }
+    }
+  }
+
   /**
    * Create a fake SinkFileStatus using path and action. Most of tests don't care about other fields
    * in SinkFileStatus.
@@ -267,4 +308,38 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     val log = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
     log.allFiles()
   }
+
+  private def withCountOpenLocalFileSystemAsLocalFileSystem(body: => Unit): Unit = {
+    val optionKey = s"fs.${CountOpenLocalFileSystem.scheme}.impl"
+    val originClassForLocalFileSystem = spark.conf.getOption(optionKey)
+    try {
+      spark.conf.set(optionKey, classOf[CountOpenLocalFileSystem].getName)
+      body
+    } finally {
+      originClassForLocalFileSystem match {
+        case Some(fsClazz) => spark.conf.set(optionKey, fsClazz)
+        case _ => spark.conf.unset(optionKey)
+      }
+    }
+  }
+}
+
+class CountOpenLocalFileSystem extends RawLocalFileSystem {
+  import CountOpenLocalFileSystem._
+
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def open(f: Path, bufferSize: Int): FSDataInputStream = {
+    val path = f.toUri.getPath
+    val curVal = pathToNumOpenCalled.getOrElseUpdate(path, new AtomicLong(0))
+    curVal.incrementAndGet()
+    super.open(f, bufferSize)
+  }
+}
+
+object CountOpenLocalFileSystem {
+  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
+  val pathToNumOpenCalled = new mutable.HashMap[String, AtomicLong]
 }
