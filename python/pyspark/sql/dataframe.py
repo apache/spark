@@ -284,7 +284,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         * Scan ExistingRDD (1)
         (1) Scan ExistingRDD [codegen id : 1]
-        Output: [age#0, name#1]
+        Output [2]: [age#0, name#1]
+        ...
 
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
