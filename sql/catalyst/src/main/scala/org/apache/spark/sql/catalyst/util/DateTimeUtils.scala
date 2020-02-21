@@ -86,14 +86,14 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    microsToDays(Math.multiplyExact(date.getTime, MICROS_PER_MILLIS))
+    microsToDays(millisToMicros(date.getTime))
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(daysToMicros(daysSinceEpoch) / MICROS_PER_MILLIS)
+    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
   }
 
   /**
