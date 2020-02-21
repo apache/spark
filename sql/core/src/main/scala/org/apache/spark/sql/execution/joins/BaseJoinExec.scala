@@ -27,6 +27,8 @@ import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils}
 trait BaseJoinExec extends BinaryExecNode {
   def joinType: JoinType
   def condition: Option[Expression]
+  def leftKeys: Seq[Expression]
+  def rightKeys: Seq[Expression]
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)

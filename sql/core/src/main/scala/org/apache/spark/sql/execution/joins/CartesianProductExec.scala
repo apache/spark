@@ -62,7 +62,10 @@ case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
     condition: Option[Expression]) extends BaseJoinExec {
+
   override def joinType: JoinType = Inner
+  override def leftKeys: Seq[Expression] = Nil
+  override def rightKeys: Seq[Expression] = Nil
 
   override def output: Seq[Attribute] = left.output ++ right.output
 

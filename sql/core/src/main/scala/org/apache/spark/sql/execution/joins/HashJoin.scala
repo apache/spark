@@ -27,8 +27,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin extends BaseJoinExec {
-  def leftKeys: Seq[Expression]
-  def rightKeys: Seq[Expression]
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {

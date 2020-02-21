@@ -34,6 +34,9 @@ case class BroadcastNestedLoopJoinExec(
     joinType: JoinType,
     condition: Option[Expression]) extends BaseJoinExec {
 
+  override def leftKeys: Seq[Expression] = Nil
+  override def rightKeys: Seq[Expression] = Nil
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
