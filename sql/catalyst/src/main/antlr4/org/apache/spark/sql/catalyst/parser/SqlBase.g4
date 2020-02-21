@@ -61,6 +61,19 @@ grammar SqlBase;
    * When true, the behavior of keywords follows ANSI SQL standard.
    */
   public boolean SQL_standard_keyword_behavior = false;
+
+  /**
+   * Verify whether current token is a valid hint token (which follows '/*' and is '+').
+   * Returns true if the first character is '+'.
+   */
+  public boolean isHint() {
+    int firstChar = _input.LA(1);
+    if (firstChar == '+') {
+      return true;
+    } else {
+      return false;
+    }
+  }
 }
 
 singleStatement
@@ -1800,17 +1813,8 @@ BRACKETED_EMPTY_COMMENT
     : '/*' BRACKETED_EMPTY_COMMENT* '*/' -> channel(HIDDEN)
     ;
 
-// The bracketed comment consists of three main parts, from left to right are:
-// '/*', the content of comment, '*/'.
-//   1. '/*' is used to match the beginning of a bracketed comment.
-//   2. The content of comment is consists of two parts.
-//     1. The first part is used to match the beginning of the brancketed comment content.
-//        This matches the nested bracketed comment first and then matches the content of the bracketed comment
-//        that need to avoid conflicts with hints.
-//     2. The second part is used to matches the tail of the brancketed comment content.
-//   3. '*/' is used to match the end of a bracketed comment.
 BRACKETED_COMMENT
-    : '/*' (BRACKETED_COMMENT .*? | ~[+]) (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
+    : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
     ;
 
 WS
