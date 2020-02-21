@@ -66,7 +66,8 @@ abstract class DatabaseOnDocker {
   /**
    * Optional step before container starts
    */
-  def beforeContainerStart(hostConfigBuilder: HostConfig.Builder,
+  def beforeContainerStart(
+      hostConfigBuilder: HostConfig.Builder,
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 

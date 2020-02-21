@@ -54,7 +54,7 @@ private[spark] object SecurityUtils extends Logging {
   }
 
   /**
-   * Krb5LoginModule package vary in different JVMs.
+   * Krb5LoginModule package varies in different JVMs.
    * Please see Hadoop UserGroupInformation for further details.
    */
   def getKrb5LoginModuleName(): String = {

@@ -34,13 +34,13 @@ private[jdbc] trait ConnectionProvider {
 private[jdbc] object ConnectionProvider extends Logging {
   def create(driver: Driver, options: JDBCOptions): ConnectionProvider = {
     if (options.keytab == null || options.principal == null) {
-      logInfo("No authentication configuration found, using basic connection provider")
+      logDebug("No authentication configuration found, using basic connection provider")
       new BasicConnectionProvider(driver, options)
     } else {
-      logInfo("Authentication configuration found, using database specific connection provider")
+      logDebug("Authentication configuration found, using database specific connection provider")
       options.driverClass match {
         case PostgresConnectionProvider.driverClass =>
-          logInfo("Postgres connection provider found")
+          logDebug("Postgres connection provider found")
           new PostgresConnectionProvider(driver, options)
 
         case _ =>

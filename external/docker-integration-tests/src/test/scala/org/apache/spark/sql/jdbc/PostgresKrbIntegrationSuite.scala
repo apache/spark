@@ -17,27 +17,23 @@
 
 package org.apache.spark.sql.jdbc
 
-import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.sql.Connection
 import java.util.Properties
-import javax.security.auth.login.Configuration
-import org.apache.hadoop.minikdc.MiniKdc
+
 import scala.io.Source
 
+import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
+import javax.security.auth.login.Configuration
+
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.datasources.jdbc.connection.PostgresConnectionProvider
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.tags.DockerTest
-import org.apache.spark.util.{SecurityUtils, Utils}
 
 @DockerTest
-class PostgresKrbIntegrationSuite extends DockerJDBCIntegrationSuite {
-  private var kdc: MiniKdc = _
-  private var workDir: File = _
-  private val postgresUser = s"postgres/$dockerIp"
-  private var postgresPrincipal: String = _
-  private var keytabFile: File = _
+class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
+  override protected val userName = s"postgres/$dockerIp"
+  override protected val keytabFileName = "postgres.keytab"
 
   override val db = new DatabaseOnDocker {
     override val imageName = "postgres:12.0"
@@ -48,7 +44,7 @@ class PostgresKrbIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val jdbcPort = 5432
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=$postgresPrincipal&gsslib=gssapi"
+      s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
 
     override def getStartupProcessName: Option[String] = None
 
@@ -71,56 +67,6 @@ class PostgresKrbIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
   }
 
-  private def copyExecutableResource(fileName: String, dir: File, processLine: String => String) = {
-    val newEntry = new File(dir.getAbsolutePath, fileName)
-    newEntry.createNewFile()
-    val inputStream = new FileInputStream(getClass.getClassLoader.getResource(fileName).getFile)
-    val outputStream = new FileOutputStream(newEntry)
-    for (line <- Source.fromInputStream(inputStream).getLines()) {
-      val processedLine = processLine(line) + System.lineSeparator()
-      outputStream.write(processedLine.getBytes)
-    }
-    newEntry.setExecutable(true, false)
-    logInfo(s"Created executable resource file: ${newEntry.getAbsolutePath}")
-    newEntry
-  }
-
-  override def beforeAll(): Unit = {
-    SecurityUtils.setGlobalKrbDebug(true)
-
-    val kdcDir = Utils.createTempDir()
-    val kdcConf = MiniKdc.createConf()
-    kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    kdc = new MiniKdc(kdcConf, kdcDir)
-    kdc.start()
-
-    postgresPrincipal = s"$postgresUser@${kdc.getRealm}"
-
-    workDir = Utils.createTempDir()
-    keytabFile = new File(workDir, "postgres.keytab")
-    kdc.createPrincipal(keytabFile, postgresUser)
-    logInfo(s"Created keytab file: ${keytabFile.getAbsolutePath}")
-
-    val config = new PostgresConnectionProvider.PGJDBCConfiguration(
-      Configuration.getConfiguration, keytabFile.getAbsolutePath, postgresPrincipal)
-    Configuration.setConfiguration(config)
-
-    // This must be executed intentionally later
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      if (kdc != null) {
-        kdc.stop()
-      }
-      Configuration.setConfiguration(null)
-      SecurityUtils.setGlobalKrbDebug(false)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   test("Basic read test") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
@@ -132,7 +78,7 @@ class PostgresKrbIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.format("jdbc")
       .option("url", jdbcUrl)
       .option("keytab", keytabFile.getAbsolutePath)
-      .option("principal", postgresPrincipal)
+      .option("principal", principal)
       .option("query", query)
       .load()
     assert(df.collect().toSet === expectedResult)
@@ -153,7 +99,7 @@ class PostgresKrbIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     val props = new Properties
     props.setProperty("keytab", keytabFile.getAbsolutePath)
-    props.setProperty("principal", postgresPrincipal)
+    props.setProperty("principal", principal)
 
     val tableName = "write_test"
     sqlContext.createDataFrame(Seq(("foo", "bar")))
