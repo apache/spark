@@ -137,7 +137,7 @@ object DateTimeUtils {
   }
 
   /*
-   * Converts milliseconds since epoch to Long.
+   * Converts milliseconds since the epoch to microseconds.
    */
   def fromMillis(millis: Long): Long = {
     MILLISECONDS.toMicros(millis)
