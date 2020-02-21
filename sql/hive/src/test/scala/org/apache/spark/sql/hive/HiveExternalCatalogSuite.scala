@@ -170,7 +170,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       s"CREATE TABLE $tblName(n into)"))
 
-    // test describe table failed
+    // test desc table failed
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       s"DESC FORMATED $tblName"))
 
