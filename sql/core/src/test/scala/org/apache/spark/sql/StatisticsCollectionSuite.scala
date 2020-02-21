@@ -220,7 +220,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
              |LOCATION '${dir.toURI}'""".stripMargin)
         val df = Seq(("a", null), ("b", null)).toDF("value", "name")
         df.write.mode("overwrite").insertInto(table)
-        sql(s"ANALYZE TABLE $table PARTITION (name) COMPUTE STATISTICS SCAN")
+        sql(s"ANALYZE TABLE $table PARTITION (name) COMPUTE STATISTICS")
         val partitions = spark.sessionState.catalog.listPartitions(TableIdentifier(table))
         assert(partitions.head.stats.get.rowCount.get == 2)
       }
