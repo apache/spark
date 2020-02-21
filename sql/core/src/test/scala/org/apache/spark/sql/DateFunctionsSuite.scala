@@ -96,8 +96,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("date format") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
         checkAnswer(
@@ -377,6 +377,14 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
+  def checkExceptionMessage(df: DataFrame): Unit = {
+    val message = intercept[Exception] {
+      df.collect()
+    }.getCause.getMessage
+    assert(message.contains(s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
+      "the behavior before Spark 3.0"))
+  }
+
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
@@ -422,14 +430,22 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(to_date(col("d"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
         Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
+    val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+    withSQLConf(confKey -> "corrected") {
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-MM-dd")),
+        Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
+    }
+    withSQLConf(confKey -> "exception") {
+      checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
+    }
 
     // now switch format
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-MM")),
-      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+    withSQLConf(confKey -> "corrected") {
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-dd-MM")),
+        Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+    }
 
     // invalid format
     checkAnswer(
@@ -529,8 +545,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("from_unixtime") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("corrected", "legacy").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
@@ -562,8 +578,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   private def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
 
   test("unix_timestamp") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("corrected", "legacy").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
@@ -629,8 +645,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("to_unix_timestamp") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("corrected", "legacy").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
@@ -680,8 +696,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
 
   test("to_timestamp") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy.toString) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts_date1 = Timestamp.valueOf("2015-07-24 00:00:00")
@@ -701,7 +717,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           df.select(unix_timestamp(col("ss")).cast("timestamp")))
         checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
           Row(ts1), Row(ts2)))
-        if (legacyParser) {
+        if (legacyParserPolicy == "legacy") {
           // In Spark 2.4 and earlier, to_timestamp() parses in seconds precision and cuts off
           // the fractional part of seconds. The behavior was changed by SPARK-27438.
           val legacyFmt = "yyyy/MM/dd HH:mm:ss"
@@ -821,19 +837,18 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
     Seq(true, false).foreach { wholeStageCodegen =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegen.toString) {
-        val confKey = SQLConf.LEGACY_TIME_PARSER_ENABLED.key
-        withSQLConf(confKey -> "true") {
+        val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+        val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+        withSQLConf(confKey -> "legacy") {
           val expected = Timestamp.valueOf("2020-01-27 20:06:11.847")
-          val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
           checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
             Row(expected))
         }
-        withSQLConf(confKey -> "false") {
-          val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
-          val message = intercept[Exception] {
-            df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")).collect()
-          }.getCause.getMessage
-          assert(message.contains(s"set $confKey to true to restore the behavior before Spark 3.0"))
+        withSQLConf(confKey -> "corrected") {
+          checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")), Row(null))
+        }
+        withSQLConf(confKey -> "exception") {
+          checkExceptionMessage(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")))
         }
       }
     }

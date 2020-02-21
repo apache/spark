@@ -2327,5 +2327,5 @@ class CSVLegacyTimeParserSuite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_ENABLED, true)
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
 }
