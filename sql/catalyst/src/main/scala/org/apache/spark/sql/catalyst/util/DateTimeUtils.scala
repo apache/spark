@@ -147,7 +147,7 @@ object DateTimeUtils {
    * Converts milliseconds since epoch to SQLTimestamp.
    */
   def millisToMicros(millis: Long): SQLTimestamp = {
-    MILLISECONDS.toMicros(millis)
+    Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
   def microsToEpochDays(epochMicros: SQLTimestamp, zoneId: ZoneId): SQLDate = {
