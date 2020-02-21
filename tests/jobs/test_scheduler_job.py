@@ -181,8 +181,7 @@ class TestDagFileProcessor(unittest.TestCase):
         executor = MockExecutor(do_update=True, parallelism=3)
 
         with create_session() as session:
-            dagbag = DagBag(executor=executor, dag_folder=os.path.join(settings.DAGS_FOLDER,
-                                                                       "no_dags.py"))
+            dagbag = DagBag(dag_folder=os.path.join(settings.DAGS_FOLDER, "no_dags.py"))
             dag = self.create_test_dag()
             dagbag.bag_dag(dag=dag, root_dag=dag, parent_dag=dag)
             dag = self.create_test_dag()
@@ -2386,11 +2385,8 @@ class TestSchedulerJob(unittest.TestCase):
         get rescheduled
         """
         executor = MockExecutor(do_update=False)
-
-        dagbag = DagBag(executor=executor, dag_folder=os.path.join(settings.DAGS_FOLDER,
-                                                                   "no_dags.py"))
+        dagbag = DagBag(dag_folder=os.path.join(settings.DAGS_FOLDER, "no_dags.py"))
         dagbag.dags.clear()
-        dagbag.executor = executor
 
         dag = DAG(
             dag_id='test_scheduler_reschedule',
@@ -2442,10 +2438,8 @@ class TestSchedulerJob(unittest.TestCase):
         but is still present in the executor.
         """
         executor = MockExecutor(do_update=False)
-        dagbag = DagBag(executor=executor, dag_folder=os.path.join(settings.DAGS_FOLDER,
-                                                                   "no_dags.py"))
+        dagbag = DagBag(dag_folder=os.path.join(settings.DAGS_FOLDER, "no_dags.py"))
         dagbag.dags.clear()
-        dagbag.executor = executor
 
         dag = DAG(
             dag_id='test_retry_still_in_executor',
