@@ -1498,12 +1498,11 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Selects a set of typed column based expressions.
-   *
-   * @group typedrel
-   * @since 3.1.0
+   * Internal helper function for building typed selects that return tuples. For simplicity and
+   * code reuse, we do this without the help of the type system and then use helper functions
+   * that cast appropriately for the user facing interface.
    */
-  def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(exprEnc, logicalPlan.output).named)

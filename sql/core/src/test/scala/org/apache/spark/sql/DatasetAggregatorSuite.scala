@@ -404,16 +404,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }
 
-  test("SPARK-30590: select multiple typed column expressions") {
+  test("SPARK-30590: untyped select should not accept typed column expressions") {
     val df = Seq((1, 2, 3, 4, 5, 6)).toDF("a", "b", "c", "d", "e", "f")
     val fooAgg = (i: Int) => FooAgg(i).toColumn.name(s"foo_agg_$i")
 
     val agg1 = df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5))
     checkDataset(agg1, (3, 5, 7, 9, 11))
-
-    val agg2 = df.selectUntyped(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5), fooAgg(6))
-      .asInstanceOf[Dataset[(Int, Int, Int, Int, Int, Int)]]
-    checkDataset(agg2, (3, 5, 7, 9, 11, 13))
 
     val err = intercept[AnalysisException] {
       df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5), fooAgg(6))
