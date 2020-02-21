@@ -189,7 +189,7 @@ object ExplainUtils {
     case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
     case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
     case str: String => s"${fieldName}: ${str}"
-    case _ => s"${fieldName}: Unknown"
+    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 
   /**

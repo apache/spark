@@ -73,7 +73,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
@@ -92,7 +92,7 @@ Results [2]: [key#x, max#x]
 (6) Exchange 
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
-
+      
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
@@ -103,7 +103,7 @@ Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 (8) Exchange 
 Input [2]: [key#x, max(val)#x]
 Arguments: rangepartitioning(key#x ASC NULLS FIRST, 4), true, [id=#x]
-
+      
 (9) Sort [codegen id : 3]
 Input [2]: [key#x, max(val)#x]
 Arguments: [key#x ASC NULLS FIRST], true, 0
@@ -140,7 +140,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
@@ -159,7 +159,7 @@ Results [2]: [key#x, max#x]
 (6) Exchange 
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
-
+      
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
@@ -208,7 +208,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
@@ -226,7 +226,7 @@ ReadSchema: struct<key:int,val:int>
      
 (6) ColumnarToRow [codegen id : 2]
 Input [2]: [key#x, val#x]
-       
+      
 (7) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
@@ -236,7 +236,7 @@ Output [2]: [key#x, val#x]
 Input [2]: [key#x, val#x]
      
 (9) Union 
-     
+      
 (10) HashAggregate [codegen id : 3]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
@@ -247,7 +247,7 @@ Results [2]: [key#x, val#x]
 (11) Exchange 
 Input [2]: [key#x, val#x]
 Arguments: hashpartitioning(key#x, val#x, 4), true, [id=#x]
-
+      
 (12) HashAggregate [codegen id : 4]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
@@ -287,7 +287,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 2]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
@@ -305,7 +305,7 @@ ReadSchema: struct<key:int,val:int>
      
 (6) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
@@ -317,7 +317,7 @@ Input [2]: [key#x, val#x]
 (9) BroadcastExchange 
 Input [2]: [key#x, val#x]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
+      
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
@@ -352,7 +352,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 2]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Scan parquet default.explain_temp2 
 Output [2]: [key#x, val#x]
 Batched: true
@@ -362,7 +362,7 @@ ReadSchema: struct<key:int,val:int>
      
 (4) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (5) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
@@ -374,7 +374,7 @@ Input [2]: [key#x, val#x]
 (7) BroadcastExchange 
 Input [2]: [key#x, val#x]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
+      
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
@@ -411,7 +411,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x > 3))
@@ -441,7 +441,7 @@ ReadSchema: struct<key:int,val:int>
      
 (6) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x = 2))
@@ -460,7 +460,7 @@ Results [1]: [max#x]
 (10) Exchange 
 Input [1]: [max#x]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (11) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
@@ -487,7 +487,7 @@ ReadSchema: struct<key:int,val:int>
      
 (13) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (14) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
@@ -506,7 +506,7 @@ Results [1]: [max#x]
 (17) Exchange 
 Input [1]: [max#x]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (18) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
@@ -543,7 +543,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : ((key#x = Subquery scalar-subquery#x, [id=#x]) OR (cast(key#x as double) = Subquery scalar-subquery#x, [id=#x]))
@@ -569,7 +569,7 @@ ReadSchema: struct<key:int,val:int>
      
 (5) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (6) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
@@ -588,7 +588,7 @@ Results [1]: [max#x]
 (9) Exchange 
 Input [1]: [max#x]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (10) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
@@ -615,7 +615,7 @@ ReadSchema: struct<key:int,val:int>
      
 (12) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (13) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
@@ -634,7 +634,7 @@ Results [2]: [sum#x, count#xL]
 (16) Exchange 
 Input [2]: [sum#x, count#xL]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (17) HashAggregate [codegen id : 2]
 Input [2]: [sum#x, count#xL]
 Keys: []
@@ -664,7 +664,7 @@ ReadSchema: struct<>
      
 (2) ColumnarToRow [codegen id : 1]
 Input: []
-       
+      
 (3) Project [codegen id : 1]
 Output [1]: [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (scalarsubquery() + scalarsubquery())#x]
 Input: []
@@ -687,7 +687,7 @@ ReadSchema: struct<key:int>
      
 (5) ColumnarToRow [codegen id : 1]
 Input [1]: [key#x]
-       
+      
 (6) HashAggregate [codegen id : 1]
 Input [1]: [key#x]
 Keys: []
@@ -698,7 +698,7 @@ Results [2]: [sum#x, count#xL]
 (7) Exchange 
 Input [2]: [sum#x, count#xL]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (8) HashAggregate [codegen id : 2]
 Input [2]: [sum#x, count#xL]
 Keys: []
@@ -742,7 +742,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 2]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
@@ -760,7 +760,7 @@ ReadSchema: struct<key:int,val:int>
      
 (6) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
@@ -772,7 +772,7 @@ Input [2]: [key#x, val#x]
 (9) BroadcastExchange 
 Input [2]: [key#x, val#x]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
+      
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
@@ -814,7 +814,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
@@ -833,7 +833,7 @@ Results [2]: [key#x, max#x]
 (6) Exchange 
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
-
+      
 (7) HashAggregate [codegen id : 4]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
@@ -854,7 +854,7 @@ Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 (10) BroadcastExchange 
 Input [2]: [key#x, max(val)#x]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
+      
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
@@ -877,13 +877,13 @@ Execute CreateViewCommand (1)
 
 (1) Execute CreateViewCommand 
 Output: []
-       
+      
 (2) CreateViewCommand 
 Arguments: `explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
-
+      
 (3) UnresolvedRelation 
 Arguments: [explain_temp1]
-
+      
 (4) Project 
 Arguments: ['key, 'val]
 
@@ -913,7 +913,7 @@ ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) HashAggregate 
 Input [2]: [key#x, val#x]
 Keys: []
@@ -924,7 +924,7 @@ Results [3]: [count#xL, sum#xL, count#xL]
 (4) Exchange 
 Input [3]: [count#xL, sum#xL, count#xL]
 Arguments: SinglePartition, true, [id=#x]
-
+      
 (5) HashAggregate [codegen id : 2]
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
@@ -957,7 +957,7 @@ ReadSchema: struct<key:int,val:string>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) ObjectHashAggregate 
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
@@ -968,7 +968,7 @@ Results [2]: [key#x, buf#x]
 (4) Exchange 
 Input [2]: [key#x, buf#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
-
+      
 (5) ObjectHashAggregate 
 Input [2]: [key#x, buf#x]
 Keys [1]: [key#x]
@@ -1003,11 +1003,11 @@ ReadSchema: struct<key:int,val:string>
      
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
-       
+      
 (3) Sort [codegen id : 1]
 Input [2]: [key#x, val#x]
 Arguments: [key#x ASC NULLS FIRST], false, 0
-
+      
 (4) SortAggregate 
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
@@ -1018,11 +1018,11 @@ Results [2]: [key#x, min#x]
 (5) Exchange 
 Input [2]: [key#x, min#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
-
+      
 (6) Sort [codegen id : 2]
 Input [2]: [key#x, min#x]
 Arguments: [key#x ASC NULLS FIRST], false, 0
-
+      
 (7) SortAggregate 
 Input [2]: [key#x, min#x]
 Keys [1]: [key#x]
