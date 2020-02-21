@@ -166,20 +166,15 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       s"use db_not_exists"))
 
     // test create hive table failed
-    val tblName = "table_not_exists"
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"CREATE TABLE $tblName(n into)"))
+      s"CREATE TABLE table_not_exists(n into)"))
 
-    // test desc table failed
+    // test desc table failed with wrong `FORMATED` keyword
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"DESC FORMATED $tblName"))
+      s"DESC FORMATED t"))
 
     // test wrong insert query
     assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
       "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
-
-    // test drop hive table which doesn't exists
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"DROP TABLE $tblName"))
   }
 }
