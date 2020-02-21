@@ -24,7 +24,6 @@ import scala.io.Source
 
 import org.apache.hadoop.minikdc.MiniKdc
 
-import org.apache.spark.sql.execution.datasources.jdbc.connection.PostgresConnectionProvider
 import org.apache.spark.util.{SecurityUtils, Utils}
 
 abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
@@ -33,7 +32,8 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   protected val userName: String
   protected var principal: String = _
   protected val keytabFileName: String
-  protected var keytabFile: File = _
+  protected var keytabFullPath: String = _
+  protected def setAuthentication(keytabFile: String, principal: String): Unit
 
   override def beforeAll(): Unit = {
     SecurityUtils.setGlobalKrbDebug(true)
@@ -47,13 +47,12 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     principal = s"$userName@${kdc.getRealm}"
 
     workDir = Utils.createTempDir()
-    keytabFile = new File(workDir, keytabFileName)
+    val keytabFile = new File(workDir, keytabFileName)
+    keytabFullPath = keytabFile.getAbsolutePath
     kdc.createPrincipal(keytabFile, userName)
-    logInfo(s"Created keytab file: ${keytabFile.getAbsolutePath}")
+    logInfo(s"Created keytab file: $keytabFullPath")
 
-    val config = new PostgresConnectionProvider.PGJDBCConfiguration(
-      Configuration.getConfiguration, keytabFile.getAbsolutePath, principal)
-    Configuration.setConfiguration(config)
+    setAuthentication(keytabFullPath, principal)
 
     // This must be executed intentionally later
     super.beforeAll()
@@ -75,11 +74,18 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
       fileName: String, dir: File, processLine: String => String) = {
     val newEntry = new File(dir.getAbsolutePath, fileName)
     newEntry.createNewFile()
-    val inputStream = new FileInputStream(getClass.getClassLoader.getResource(fileName).getFile)
-    val outputStream = new FileOutputStream(newEntry)
-    for (line <- Source.fromInputStream(inputStream).getLines()) {
-      val processedLine = processLine(line) + System.lineSeparator()
-      outputStream.write(processedLine.getBytes)
+    Utils.tryWithResource(
+      new FileInputStream(getClass.getClassLoader.getResource(fileName).getFile)
+    ) { inputStream =>
+      val outputStream = new FileOutputStream(newEntry)
+      try {
+        for (line <- Source.fromInputStream(inputStream).getLines()) {
+          val processedLine = processLine(line) + System.lineSeparator()
+          outputStream.write(processedLine.getBytes)
+        }
+      } finally {
+        outputStream.close()
+      }
     }
     newEntry.setExecutable(true, false)
     logInfo(s"Created executable resource file: ${newEntry.getAbsolutePath}")

@@ -29,7 +29,7 @@ class PostgresConnectionProviderSuite extends SparkFunSuite with BeforeAndAfterE
     JDBCOptions.JDBC_URL -> "jdbc:postgresql://localhost/postgres",
     JDBCOptions.JDBC_TABLE_NAME -> "table",
     JDBCOptions.JDBC_KEYTAB -> "keytab",
-    JDBCOptions.JDBC_PRINCIPAL -> "prinipal"
+    JDBCOptions.JDBC_PRINCIPAL -> "principal"
   ))
 
   var provider: PostgresConnectionProvider = _
@@ -49,7 +49,7 @@ class PostgresConnectionProviderSuite extends SparkFunSuite with BeforeAndAfterE
   }
 
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    // Make sure no authentication for postgres set
+    // Make sure no authentication for postgres is set
     assert(Configuration.getConfiguration.getAppConfigurationEntry(
       PostgresConnectionProvider.appEntry) == null)
 
@@ -58,11 +58,14 @@ class PostgresConnectionProviderSuite extends SparkFunSuite with BeforeAndAfterE
     provider.setAuthenticationConfigIfNeeded()
     val postgresConfig = Configuration.getConfiguration
     assert(savedConfig != postgresConfig)
-    assert(postgresConfig.getAppConfigurationEntry(PostgresConnectionProvider.appEntry) != null)
+    val postgresAppEntry = postgresConfig.getAppConfigurationEntry(
+      PostgresConnectionProvider.appEntry)
+    assert(postgresAppEntry != null)
 
-    // Make sure a second call is not modifying the already changed authentication
+    // Make sure a second call is not modifying the existing authentication
     provider.setAuthenticationConfigIfNeeded()
     assert(postgresConfig == Configuration.getConfiguration)
-    assert(postgresConfig.getAppConfigurationEntry(PostgresConnectionProvider.appEntry) != null)
+    assert(postgresConfig.getAppConfigurationEntry(PostgresConnectionProvider.appEntry) ===
+      postgresAppEntry)
   }
 }

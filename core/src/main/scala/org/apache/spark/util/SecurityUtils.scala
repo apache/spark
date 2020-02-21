@@ -17,12 +17,10 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.internal.Logging
-
 /**
  * Various utility methods used by Spark Security.
  */
-private[spark] object SecurityUtils extends Logging {
+private[spark] object SecurityUtils {
   private val JAVA_VENDOR = "java.vendor"
   private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
   private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"

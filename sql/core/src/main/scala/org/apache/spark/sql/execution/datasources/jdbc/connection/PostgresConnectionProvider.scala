@@ -31,7 +31,7 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
   def setAuthenticationConfigIfNeeded(): Unit = {
     val parent = Configuration.getConfiguration
     val configEntry = parent.getAppConfigurationEntry(PostgresConnectionProvider.appEntry)
-    if (configEntry == null || (configEntry != null && configEntry.isEmpty)) {
+    if (configEntry == null || configEntry.isEmpty) {
       val config = new PGJDBCConfiguration(parent, options.keytab, options.principal)
       Configuration.setConfiguration(config)
     }
