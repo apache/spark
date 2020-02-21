@@ -106,6 +106,10 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
         conf.storeAssignmentPolicy match {
+          // SPARK-30844: try our best to follow StoreAssignmentPolicy for static partition
+          // values but not completely follow because we can't use`DataType.canWrite` due to
+          // the reason that the parser has erased the type info of static partition values
+          // and converted them to string.
           case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
             Some(Alias(AnsiCast(Literal(partValue), field.dataType,
               Option(conf.sessionLocalTimeZone)), field.name)())
