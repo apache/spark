@@ -38,7 +38,6 @@ trait HashJoin extends BaseJoinExec {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"
     } else "None"
-
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
