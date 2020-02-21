@@ -685,7 +685,6 @@ class ResolveSessionCatalog(
         } else {
           Some(tbl)
         }
-      case SessionCatalogAndTable(_, tbl) => Some(tbl)
       case _ => None
     }
   }
