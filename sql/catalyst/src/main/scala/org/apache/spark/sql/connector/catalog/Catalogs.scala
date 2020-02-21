@@ -38,14 +38,13 @@ private[sql] object Catalogs {
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
    * @throws CatalogNotFoundException if the plugin class cannot be found
-   * @throws SparkException           if the plugin class cannot be instantiated
+   * @throws org.apache.spark.SparkException           if the plugin class cannot be instantiated
    */
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
-    var pluginClassName = ""
-    try {
-      pluginClassName = conf.getConfString("spark.sql.catalog." + name)
+    val pluginClassName = try {
+      conf.getConfString("spark.sql.catalog." + name)
     } catch {
       case _: NoSuchElementException =>
         throw new CatalogNotFoundException(
@@ -54,10 +53,11 @@ private[sql] object Catalogs {
     val loader = Utils.getContextOrSparkClassLoader
     try {
       val pluginClass = loader.loadClass(pluginClassName)
-      if (!classOf[CatalogPlugin].isAssignableFrom(pluginClass)) throw new SparkException(
-        s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
-      val plugin = classOf[CatalogPlugin].cast(
-        pluginClass.getDeclaredConstructor().newInstance())
+      if (!classOf[CatalogPlugin].isAssignableFrom(pluginClass)) {
+        throw new SparkException(
+          s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+      }
+      val plugin = pluginClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       plugin.initialize(name, catalogOptions(name, conf))
       plugin
     } catch {
