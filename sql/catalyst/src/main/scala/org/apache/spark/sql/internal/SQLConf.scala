@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -878,8 +879,8 @@ object SQLConf {
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
         "of detected paths exceeds this value during partition discovery, it tries to list the " +
-        "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
-        "LibSVM data sources.")
+        "files with another Spark distributed job. This configuration is effective only when " +
+        "using file-based sources such as Parquet, JSON and ORC.")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
@@ -2263,8 +2264,6 @@ object SQLConf {
         "It was removed to prevent loosing of users data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
-      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
-        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
         "The config was deprecated since Spark 2.3." +
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
@@ -2899,16 +2898,41 @@ class SQLConf extends Serializable with Logging {
     settings.containsKey(key)
   }
 
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach {
+      case RemovedConfig(configName, version, defaultValue, comment) =>
+        if (value != defaultValue) {
+          throw new AnalysisException(
+            s"The SQL config '$configName' was removed in the version $version. $comment")
+        }
+    }
+  }
+
   protected def setConfWithCheck(key: String, value: String): Unit = {
+    logDeprecationWarning(key)
+    requireDefaultValueOfRemovedConf(key, value)
     settings.put(key, value)
   }
 
   def unsetConf(key: String): Unit = {
+    logDeprecationWarning(key)
     settings.remove(key)
   }
 
   def unsetConf(entry: ConfigEntry[_]): Unit = {
-    settings.remove(entry.key)
+    unsetConf(entry.key)
   }
 
   def clear(): Unit = {
