@@ -553,8 +553,7 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children, _)
-        if !haveSameType(children.map(_.dataType)) =>
+      case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
