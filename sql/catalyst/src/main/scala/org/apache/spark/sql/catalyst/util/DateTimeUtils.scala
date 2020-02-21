@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -38,9 +38,6 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * precision.
  */
 object DateTimeUtils {
-
-  type SQLDate = DateType.InternalType
-  type SQLTimestamp = TimestampType.InternalType
 
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
@@ -54,55 +51,55 @@ object DateTimeUtils {
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
-  def millisToDays(millisUtc: Long): SQLDate = {
+  def millisToDays(millisUtc: Long): Int = {
     millisToDays(millisUtc, ZoneId.systemDefault())
   }
 
-  def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
+  def millisToDays(millisUtc: Long, zoneId: ZoneId): Int = {
     val instant = microsToInstant(Math.multiplyExact(millisUtc, MICROS_PER_MILLIS))
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
   // reverse of millisToDays
-  def daysToMillis(days: SQLDate): Long = {
+  def daysToMillis(days: Int): Long = {
     daysToMillis(days, ZoneId.systemDefault())
   }
 
-  def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
+  def daysToMillis(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant) / MICROS_PER_MILLIS
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
+  def timestampToString(tf: TimestampFormatter, us: Long): String = {
     tf.format(us)
   }
 
   /**
    * Returns the number of days since epoch from java.sql.Date.
    */
-  def fromJavaDate(date: Date): SQLDate = {
+  def fromJavaDate(date: Date): Int = {
     millisToDays(date.getTime)
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
-  def toJavaDate(daysSinceEpoch: SQLDate): Date = {
+  def toJavaDate(daysSinceEpoch: Int): Date = {
     new Date(daysToMillis(daysSinceEpoch))
   }
 
   /**
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
-  def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
+  def toJavaTimestamp(us: Long): Timestamp = {
     Timestamp.from(microsToInstant(us))
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
-  def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
+  def fromJavaTimestamp(t: Timestamp): Long = {
     instantToMicros(t.toInstant)
   }
 
@@ -110,7 +107,7 @@ object DateTimeUtils {
    * Returns the number of microseconds since epoch from Julian day
    * and nanoseconds in a day
    */
-  def fromJulianDay(day: Int, nanoseconds: Long): SQLTimestamp = {
+  def fromJulianDay(day: Int, nanoseconds: Long): Long = {
     // use Long to avoid rounding errors
     val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
     SECONDS.toMicros(seconds) + NANOSECONDS.toMicros(nanoseconds)
@@ -121,7 +118,7 @@ object DateTimeUtils {
    *
    * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
-  def toJulianDay(us: SQLTimestamp): (Int, Long) = {
+  def toJulianDay(us: Long): (Int, Long) = {
     val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
     val day = julian_us / MICROS_PER_DAY
     val micros = julian_us % MICROS_PER_DAY
@@ -132,7 +129,7 @@ object DateTimeUtils {
    * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
    * precision, so this conversion is lossy.
    */
-  def toMillis(us: SQLTimestamp): Long = {
+  def toMillis(us: Long): Long = {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
@@ -140,17 +137,17 @@ object DateTimeUtils {
   }
 
   /*
-   * Converts milliseconds since epoch to SQLTimestamp.
+   * Converts milliseconds since epoch to Long.
    */
-  def fromMillis(millis: Long): SQLTimestamp = {
+  def fromMillis(millis: Long): Long = {
     MILLISECONDS.toMicros(millis)
   }
 
-  def microsToEpochDays(epochMicros: SQLTimestamp, zoneId: ZoneId): SQLDate = {
+  def microsToEpochDays(epochMicros: Long, zoneId: ZoneId): Int = {
     localDateToDays(microsToInstant(epochMicros).atZone(zoneId).toLocalDate)
   }
 
-  def epochDaysToMicros(epochDays: SQLDate, zoneId: ZoneId): SQLTimestamp = {
+  def epochDaysToMicros(epochDays: Int, zoneId: ZoneId): Long = {
     val localDate = LocalDate.ofEpochDay(epochDays)
     val zeroLocalTime = LocalTime.MIDNIGHT
     val localDateTime = LocalDateTime.of(localDate, zeroLocalTime)
@@ -183,7 +180,7 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     if (s == null) {
       return None
     }
@@ -315,13 +312,13 @@ object DateTimeUtils {
     }
   }
 
-  def instantToMicros(instant: Instant): SQLTimestamp = {
+  def instantToMicros(instant: Instant): Long = {
     val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
     val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     result
   }
 
-  def microsToInstant(us: SQLTimestamp): Instant = {
+  def microsToInstant(us: Long): Instant = {
     val secs = Math.floorDiv(us, MICROS_PER_SECOND)
     // Unfolded Math.floorMod(us, MICROS_PER_SECOND) to reuse the result of
     // the above calculation of `secs` via `floorDiv`.
@@ -353,7 +350,7 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[SQLDate] = {
+  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[Int] = {
     if (s == null) {
       return None
     }
@@ -401,14 +398,14 @@ object DateTimeUtils {
     }
   }
 
-  private def localTimestamp(microsec: SQLTimestamp, zoneId: ZoneId): LocalDateTime = {
+  private def localTimestamp(microsec: Long, zoneId: ZoneId): LocalDateTime = {
     microsToInstant(microsec).atZone(zoneId).toLocalDateTime
   }
 
   /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
-  def getHours(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+  def getHours(microsec: Long, zoneId: ZoneId): Int = {
     localTimestamp(microsec, zoneId).getHour
   }
 
@@ -416,7 +413,7 @@ object DateTimeUtils {
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getMinutes(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+  def getMinutes(microsec: Long, zoneId: ZoneId): Int = {
     localTimestamp(microsec, zoneId).getMinute
   }
 
@@ -424,14 +421,14 @@ object DateTimeUtils {
    * Returns the second value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getSeconds(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+  def getSeconds(microsec: Long, zoneId: ZoneId): Int = {
     localTimestamp(microsec, zoneId).getSecond
   }
 
   /**
    * Returns the seconds part and its fractional part with microseconds.
    */
-  def getSecondsWithFraction(microsec: SQLTimestamp, zoneId: ZoneId): Decimal = {
+  def getSecondsWithFraction(microsec: Long, zoneId: ZoneId): Decimal = {
     Decimal(getMicroseconds(microsec, zoneId), 8, 6)
   }
 
@@ -439,7 +436,7 @@ object DateTimeUtils {
    * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
    * is expressed in microseconds since the epoch.
    */
-  def getMilliseconds(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
+  def getMilliseconds(timestamp: Long, zoneId: ZoneId): Decimal = {
     Decimal(getMicroseconds(timestamp, zoneId), 8, 3)
   }
 
@@ -447,7 +444,7 @@ object DateTimeUtils {
    * Returns seconds, including fractional parts, multiplied by 1000000. The timestamp
    * is expressed in microseconds since the epoch.
    */
-  def getMicroseconds(timestamp: SQLTimestamp, zoneId: ZoneId): Int = {
+  def getMicroseconds(timestamp: Long, zoneId: ZoneId): Int = {
     val lt = localTimestamp(timestamp, zoneId)
     (lt.getLong(ChronoField.MICRO_OF_SECOND) + lt.getSecond * MICROS_PER_SECOND).toInt
   }
@@ -456,11 +453,11 @@ object DateTimeUtils {
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
-  def getDayInYear(date: SQLDate): Int = {
+  def getDayInYear(date: Int): Int = {
     LocalDate.ofEpochDay(date).getDayOfYear
   }
 
-  private def extractFromYear(date: SQLDate, divider: Int): Int = {
+  private def extractFromYear(date: Int, divider: Int): Int = {
     val localDate = daysToLocalDate(date)
     val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
     var result = yearOfEra / divider
@@ -470,19 +467,19 @@ object DateTimeUtils {
   }
 
   /** Returns the millennium for the given date. The date is expressed in days since 1.1.1970. */
-  def getMillennium(date: SQLDate): Int = extractFromYear(date, 1000)
+  def getMillennium(date: Int): Int = extractFromYear(date, 1000)
 
   /** Returns the century for the given date. The date is expressed in days since 1.1.1970. */
-  def getCentury(date: SQLDate): Int = extractFromYear(date, 100)
+  def getCentury(date: Int): Int = extractFromYear(date, 100)
 
   /** Returns the decade for the given date. The date is expressed in days since 1.1.1970. */
-  def getDecade(date: SQLDate): Int = Math.floorDiv(getYear(date), 10)
+  def getDecade(date: Int): Int = Math.floorDiv(getYear(date), 10)
 
   /**
    * Returns the year value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
-  def getYear(date: SQLDate): Int = {
+  def getYear(date: Int): Int = {
     LocalDate.ofEpochDay(date).getYear
   }
 
@@ -490,7 +487,7 @@ object DateTimeUtils {
    * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
    * year begins with the Monday of the week containing the 4th of January.
    */
-  def getIsoYear(date: SQLDate): Int = {
+  def getIsoYear(date: Int): Int = {
     daysToLocalDate(date).get(IsoFields.WEEK_BASED_YEAR)
   }
 
@@ -498,7 +495,7 @@ object DateTimeUtils {
    * Returns the quarter for the given date. The date is expressed in days
    * since 1.1.1970.
    */
-  def getQuarter(date: SQLDate): Int = {
+  def getQuarter(date: Int): Int = {
     LocalDate.ofEpochDay(date).get(IsoFields.QUARTER_OF_YEAR)
   }
 
@@ -506,7 +503,7 @@ object DateTimeUtils {
    * Split date (expressed in days since 1.1.1970) into four fields:
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
-  def splitDate(date: SQLDate): (Int, Int, Int, Int) = {
+  def splitDate(date: Int): (Int, Int, Int, Int) = {
     val ld = LocalDate.ofEpochDay(date)
     (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
   }
@@ -515,7 +512,7 @@ object DateTimeUtils {
    * Returns the month value for the given date. The date is expressed in days
    * since 1.1.1970. January is month 1.
    */
-  def getMonth(date: SQLDate): Int = {
+  def getMonth(date: Int): Int = {
     LocalDate.ofEpochDay(date).getMonthValue
   }
 
@@ -523,7 +520,7 @@ object DateTimeUtils {
    * Returns the 'day of month' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
-  def getDayOfMonth(date: SQLDate): Int = {
+  def getDayOfMonth(date: Int): Int = {
     LocalDate.ofEpochDay(date).getDayOfMonth
   }
 
@@ -531,7 +528,7 @@ object DateTimeUtils {
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
-  def dateAddMonths(days: SQLDate, months: Int): SQLDate = {
+  def dateAddMonths(days: Int, months: Int): Int = {
     LocalDate.ofEpochDay(days).plusMonths(months).toEpochDay.toInt
   }
 
@@ -540,11 +537,11 @@ object DateTimeUtils {
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
   def timestampAddInterval(
-      start: SQLTimestamp,
+      start: Long,
       months: Int,
       days: Int,
       microseconds: Long,
-      zoneId: ZoneId): SQLTimestamp = {
+      zoneId: ZoneId): Long = {
     val resultTimestamp = microsToInstant(start)
       .atZone(zoneId)
       .plusMonths(months)
@@ -564,8 +561,8 @@ object DateTimeUtils {
    * The result is rounded to 8 decimal places if `roundOff` is set to true.
    */
   def monthsBetween(
-      time1: SQLTimestamp,
-      time2: SQLTimestamp,
+      time1: Long,
+      time2: Long,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
     val millis1 = MICROSECONDS.toMillis(time1)
@@ -629,7 +626,7 @@ object DateTimeUtils {
    * Returns the first date which is later than startDate and is of the given dayOfWeek.
    * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
    */
-  def getNextDateForDayOfWeek(startDate: SQLDate, dayOfWeek: Int): SQLDate = {
+  def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
     startDate + 1 + ((dayOfWeek - 1 - startDate) % 7 + 7) % 7
   }
 
@@ -637,7 +634,7 @@ object DateTimeUtils {
    * Returns last day of the month for the given date. The date is expressed in days
    * since 1.1.1970.
    */
-  def getLastDayOfMonth(date: SQLDate): SQLDate = {
+  def getLastDayOfMonth(date: Int): Int = {
     val localDate = LocalDate.ofEpochDay(date)
     (date - localDate.getDayOfMonth) + localDate.lengthOfMonth()
   }
@@ -668,8 +665,8 @@ object DateTimeUtils {
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 6.
    */
-  def truncDate(d: SQLDate, level: Int): SQLDate = {
-    def truncToYearLevel(divider: Int, adjust: Int): SQLDate = {
+  def truncDate(d: Int, level: Int): Int = {
+    def truncToYearLevel(divider: Int, adjust: Int): Int = {
       val oldYear = getYear(d)
       var newYear = Math.floorDiv(oldYear, divider) * divider
       if (adjust > 0 && newYear == oldYear) {
@@ -693,7 +690,7 @@ object DateTimeUtils {
     }
   }
 
-  private def truncToUnit(t: SQLTimestamp, zoneId: ZoneId, unit: ChronoUnit): SQLTimestamp = {
+  private def truncToUnit(t: Long, zoneId: ZoneId, unit: ChronoUnit): Long = {
     val truncated = microsToInstant(t).atZone(zoneId).truncatedTo(unit)
     instantToMicros(truncated.toInstant)
   }
@@ -702,7 +699,7 @@ object DateTimeUtils {
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
    */
-  def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
+  def truncTimestamp(t: Long, level: Int, zoneId: ZoneId): Long = {
     level match {
       case TRUNC_TO_MICROSECOND => t
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
@@ -757,7 +754,7 @@ object DateTimeUtils {
    * mapping, the conversion here may return wrong result, we should make the timestamp
    * timezone-aware.
    */
-  def convertTz(ts: SQLTimestamp, fromZone: ZoneId, toZone: ZoneId): SQLTimestamp = {
+  def convertTz(ts: Long, fromZone: ZoneId, toZone: ZoneId): Long = {
     val rebasedDateTime = microsToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
     instantToMicros(rebasedDateTime.toInstant)
   }
@@ -766,7 +763,7 @@ object DateTimeUtils {
    * Returns a timestamp of given timezone from utc timestamp, with the same string
    * representation in their timezone.
    */
-  def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
+  def fromUTCTime(time: Long, timeZone: String): Long = {
     convertTz(time, ZoneOffset.UTC, getZoneId(timeZone))
   }
 
@@ -774,7 +771,7 @@ object DateTimeUtils {
    * Returns a utc timestamp from a given timestamp from a given timezone, with the same
    * string representation in their timezone.
    */
-  def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
+  def toUTCTime(time: Long, timeZone: String): Long = {
     convertTz(time, getZoneId(timeZone), ZoneOffset.UTC)
   }
 
@@ -782,16 +779,16 @@ object DateTimeUtils {
    * Returns the number of seconds with fractional part in microsecond precision
    * since 1970-01-01 00:00:00 local time.
    */
-  def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
+  def getEpoch(timestamp: Long, zoneId: ZoneId): Decimal = {
     val offset = SECONDS.toMicros(
       zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds)
     val sinceEpoch = timestamp + offset
     Decimal(sinceEpoch, 20, 6)
   }
 
-  def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
+  def currentTimestamp(): Long = instantToMicros(Instant.now())
 
-  def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
+  def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
 
   private def today(zoneId: ZoneId): ZonedDateTime = {
     Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
@@ -835,7 +832,7 @@ object DateTimeUtils {
    * @return some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
-  def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+  def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" => Some(currentTimestamp())
@@ -846,7 +843,7 @@ object DateTimeUtils {
     }
   }
 
-  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[SQLTimestamp] = {
+  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[Long] = {
     if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
       convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
     } else {
@@ -860,7 +857,7 @@ object DateTimeUtils {
    * @param zoneId - zone identifier used to get the current date.
    * @return some of days since the epoch if the conversion completed successfully otherwise None.
    */
-  def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
+  def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
     extractSpecialValue(input, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
@@ -870,7 +867,7 @@ object DateTimeUtils {
     }
   }
 
-  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[SQLDate] = {
+  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[Int] = {
     if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
       convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
     } else {
@@ -885,7 +882,7 @@ object DateTimeUtils {
    * @return an interval between two dates. The interval can be negative
    *         if the end date is before the start date.
    */
-  def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {
+  def subtractDates(endDate: Int, startDate: Int): CalendarInterval = {
     val period = Period.between(
       LocalDate.ofEpochDay(startDate),
       LocalDate.ofEpochDay(endDate))

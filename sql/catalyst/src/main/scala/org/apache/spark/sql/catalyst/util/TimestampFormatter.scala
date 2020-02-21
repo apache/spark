@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{ convertSpecialTimestamp, SQLTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.convertSpecialTimestamp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 
@@ -105,7 +105,7 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
   // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
   // if the `MILLISECOND` field was parsed to `1234`.
-  def getMicros(): SQLTimestamp = {
+  def getMicros(): Long = {
     // Append 6 zeros to the field: 1234 -> 1234000000
     val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
     // Take the first 6 digits from `d`: 1234000000 -> 123400
@@ -134,7 +134,7 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  def parse(s: String): SQLTimestamp = {
+  def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
@@ -144,7 +144,7 @@ class LegacyFastTimestampFormatter(
     cal.getTimeInMillis * MICROS_PER_MILLIS + micros
   }
 
-  def format(timestamp: SQLTimestamp): String = {
+  def format(timestamp: Long): String = {
     cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
     fastDateFormat.format(cal)

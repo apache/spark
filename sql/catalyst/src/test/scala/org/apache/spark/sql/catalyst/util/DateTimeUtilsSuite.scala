@@ -128,7 +128,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[SQLDate] = {
+  private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[Int] = {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
@@ -156,7 +156,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
-  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
 
@@ -507,7 +507,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     def testTrunc(
         level: Int,
         expected: String,
-        inputTS: SQLTimestamp,
+        inputTS: Long,
         zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
