@@ -492,10 +492,7 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.AFTSurvivalRegression.setPredictionCol"),
 
     // [SPARK-29543][SS][UI] Init structured streaming ui
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this"),
-
-    // [SPARK-30590][SQL] Untyped select API cannot take typed column expression
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.functions.count")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this")
   )
 
   // Exclude rules for 2.4.x

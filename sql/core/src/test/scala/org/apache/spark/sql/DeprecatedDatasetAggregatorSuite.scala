@@ -40,7 +40,7 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
       ds.groupByKey(_._1).agg(
         typed.sum(_._2),
         expr("sum(_2)").as[Long],
-        count("*").as[Long]),
+        count("*")),
       ("a", 30.0, 30L, 2L), ("b", 3.0, 3L, 2L), ("c", 1.0, 1L, 1L))
   }
 
