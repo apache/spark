@@ -1216,7 +1216,7 @@ class StreamSuite extends StreamTest {
     }
 
     var lastTimestamp = System.currentTimeMillis()
-    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    val currentDate = DateTimeUtils.microsToDays(lastTimestamp)
     testStream(df) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>

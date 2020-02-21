@@ -35,11 +35,11 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val d0 = DateTimeUtils.microsToDays(System.currentTimeMillis())
     val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
     val d2 = DateTimeUtils.fromJavaDate(
       sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val d3 = DateTimeUtils.microsToDays(System.currentTimeMillis())
     assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
   }
 
