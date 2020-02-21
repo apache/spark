@@ -514,7 +514,8 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    nameOfCorruptRecord: String)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
 
   // The JSON input data might be missing certain fields. We force the nullability
@@ -525,6 +526,10 @@ case class JsonToStructs(
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
+  def this(schema: DataType, options: Map[String, String], child: Expression,
+            timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
+    SQLConf.get.columnNameOfCorruptRecord)
+
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
@@ -559,7 +564,6 @@ case class JsonToStructs(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
   @transient lazy val parser = {
     val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
@@ -602,6 +606,20 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
+}
+
+object JsonToStructs{
+  def apply(
+             schema: DataType,
+             options: Map[String, String],
+             child: Expression,
+             timeZoneId: Option[String]): JsonToStructs =
+    new JsonToStructs(schema, options, child, timeZoneId)
+
+  def apply(
+             schema: DataType,
+             options: Map[String, String],
+             child: Expression): JsonToStructs = new JsonToStructs(schema, options, child, None)
 }
 
 /**
