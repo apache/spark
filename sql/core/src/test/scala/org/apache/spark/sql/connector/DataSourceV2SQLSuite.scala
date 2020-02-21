@@ -612,6 +612,23 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("CreateTableAsSelect: without USING clause") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val testCatalog = catalog("testcat").asTableCatalog
+
+    sql("CREATE TABLE testcat.t1 AS SELECT 1 i")
+    val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+    // Spark shouldn't set the default provider for catalog plugins.
+    assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+
+    sql("CREATE TABLE t2 AS SELECT 1 i")
+    val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+      .loadTable(Identifier.of(Array(), "t2")).asInstanceOf[V1Table]
+    // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+    assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+  }
+
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
