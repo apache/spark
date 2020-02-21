@@ -615,7 +615,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("toMillis") {
+  test("microsToMillis") {
     assert(DateTimeUtils.microsToMillis(-9223372036844776001L) === -9223372036844777L)
     assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
