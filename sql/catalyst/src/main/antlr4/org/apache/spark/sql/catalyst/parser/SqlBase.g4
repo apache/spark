@@ -64,10 +64,10 @@ grammar SqlBase;
 
   /**
    * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, otherwise we cannot match
+   * If the next character is '+', it should be parsed as hint later, and we cannot match
    * it as a bracketed comment.
    *
-   * Returns true if the first character is '+'.
+   * Returns true if the next character is '+'.
    */
   public boolean isHint() {
     int nextChar = _input.LA(1);
