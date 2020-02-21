@@ -2275,13 +2275,13 @@ class DataSourceV2SQLSuite
 
   test("SPARK-30799: temp view name can't contain catalog name") {
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
-//    withTempView("v") {
-//      spark.range(10).createTempView("v")
-//      val e1 = intercept[AnalysisException](
-//        sql(s"CACHE TABLE $sessionCatalogName.v")
-//      )
-//      assert(e1.message.contains("Table or view not found: default.v"))
-//    }
+    withTempView("v") {
+      spark.range(10).createTempView("v")
+      val e1 = intercept[AnalysisException](
+        sql(s"CACHE TABLE $sessionCatalogName.v")
+      )
+      assert(e1.message.contains("Table or view not found: default.v"))
+    }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
     }
