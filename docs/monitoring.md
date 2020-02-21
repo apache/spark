@@ -657,15 +657,59 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
-Executor metric values and their measured peak values per executor are exposed via the REST API at the end point `/applications/[app-id]/executors`.
-In addition, aggregated per-stage peak values of the executor metrics are written to the event log if `spark.eventLog.logStageExecutorMetrics` is true.
-Executor metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
-A list of the available metrics, with a short description:
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe
+the performance metrics of Executor itself like JVM heap memory, GC information.
+Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON and Prometheus format.
+The JSON end point is exposed at: `/applications/[app-id]/executors`, the Prometheus end point at: `/metrics/executors/prometheus`.
+The Prometheus end point is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
+`spark.eventLog.logStageExecutorMetrics` is true.  
+Executor memory metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
+A list of the available executor metrics, with a short description:
 
 <table class="table">
   <tr><th>Executor Level Metric name</th>
       <th>Short description</th>
+  </tr>
+  <tr>
+    <td>rddBlocks</td>
+    <td>RDD blocks in the block manager of this executor.</td>
+  </tr>
+  <tr>
+    <td>memoryUsed</td>
+    <td>Storage memory used by this executor.</td>
+  </tr>
+  <tr>
+    <td>diskUsed</td>
+    <td>Disk space used for RDD storage by this executor.</tr>
+  <tr>
+    <td>totalCores</td>
+    <td>Number of cores available in this executor.</td>
+  </tr>
+  <tr>
+    <td>maxTasks</td>
+    <td>Maximum number of tasks that can run concurrently in this executor.</td>
+  </tr>
+  <tr>
+    <td>activeTasks</td>
+    <td>Number of tasks currently executing.</td>
+  </tr>
+  <tr>
+    <td>failedTasks</td>
+    <td>Number of tasks that have failed in this executor.</td>
+  </tr>
+  <tr>
+    <td>completedTasks</td>
+    <td>Number of tasks that have completed in this executor.</td>
+  </tr>
+  <tr>
+    <td>totalTasks</td>
+    <td>Total number of tasks (running, failed and completed) in this executor.</td>
+  </tr>
+  <tr>
+    <td>totalDuration</td>
+    <td>Elapsed time the JVM spent executing tasks in this executor.
+    The value is expressed in milliseconds.</td>
   </tr>
   <tr>
     <td>totalGCTime</td>
