@@ -523,8 +523,6 @@ object IntervalUtils {
 
   /**
    * Return a new calendar interval instance of the left interval divides by a dividend.
-   *
-   * @throws ArithmeticException if divided by zero
    */
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) return null
