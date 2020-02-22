@@ -1676,7 +1676,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Networking
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
@@ -1685,6 +1685,7 @@ Apart from these, the following properties are also available, and may be useful
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.blockManager.port</code></td>
@@ -1692,6 +1693,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Port for all block managers to listen on. These exist on both the driver and the executors.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.driver.blockManager.port</code></td>
@@ -1700,6 +1702,7 @@ Apart from these, the following properties are also available, and may be useful
     Driver-specific port for the block manager to listen on, for cases where it cannot use the same
     configuration as executors.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.driver.bindAddress</code></td>
@@ -1713,6 +1716,7 @@ Apart from these, the following properties are also available, and may be useful
     the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
     container's host.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.driver.host</code></td>
@@ -1721,6 +1725,7 @@ Apart from these, the following properties are also available, and may be useful
     Hostname or IP address for the driver.
     This is used for communicating with the executors and the standalone Master.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.driver.port</code></td>
@@ -1729,6 +1734,7 @@ Apart from these, the following properties are also available, and may be useful
     Port for the driver to listen on.
     This is used for communicating with the executors and the standalone Master.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.rpc.io.backLog</code></td>
@@ -1738,6 +1744,7 @@ Apart from these, the following properties are also available, and may be useful
     need to be increased, so that incoming connections are not dropped when a large number of
     connections arrives in a short period of time.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.network.timeout</code></td>
@@ -1749,6 +1756,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.network.io.preferDirectBufs</code></td>
@@ -1758,7 +1766,8 @@ Apart from these, the following properties are also available, and may be useful
     Off-heap buffers are used to reduce garbage collection during shuffle and cache
     block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations to be on-heap.
-    </td>
+  </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.port.maxRetries</code></td>
@@ -1770,6 +1779,7 @@ Apart from these, the following properties are also available, and may be useful
     essentially allows it to try a range of ports from the start port specified
     to port + maxRetries.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
@@ -1778,6 +1788,7 @@ Apart from these, the following properties are also available, and may be useful
     Number of times to retry before an RPC task gives up.
     An RPC task will run at most times of this number.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.rpc.retry.wait</code></td>
@@ -1785,6 +1796,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Duration for an RPC ask operation to wait before retrying.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.rpc.askTimeout</code></td>
@@ -1792,6 +1804,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Duration for an RPC ask operation to wait before timing out.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
@@ -1799,6 +1812,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
@@ -1808,6 +1822,7 @@ Apart from these, the following properties are also available, and may be useful
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
@@ -1819,6 +1834,7 @@ Apart from these, the following properties are also available, and may be useful
     For users who enabled external shuffle service, this feature can only work when
     external shuffle service is at least 2.3.0.
   </td>
+  <td></td>
 </tr>
 </table>
 
