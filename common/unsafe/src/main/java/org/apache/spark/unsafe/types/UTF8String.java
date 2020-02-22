@@ -1305,12 +1305,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return If string contains valid numeric value then it returns the long value otherwise a
    * NumberFormatException  is thrown.
    */
-  public long toLongExact() {
+  public Long toLongExact(boolean ansiEnabled) {
     LongWrapper result = new LongWrapper();
-    if (toLong(result) && !result.formatInvalid) {
+    boolean hasResult = toLong(result);
+
+    if ((!hasResult && ansiEnabled) || result.formatInvalid) {
+      throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    }
+
+    if (hasResult) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    return null;
   }
 
   /**

@@ -478,7 +478,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, _.toLongExact())
+      buildCast[UTF8String](_, _.toLongExact(ansiEnabled))
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -1464,7 +1464,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact($ansiEnabled);"
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case DateType =>
