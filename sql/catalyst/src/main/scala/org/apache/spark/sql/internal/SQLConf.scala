@@ -2025,6 +2025,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_IN_PREDICATE_FOLLOW_BINARY_COMPARISON_TYPE_COERCION =
+    buildConf("spark.sql.legacy.inPredicateFollowBinaryComparisonTypeCoercion")
+      .internal()
+      .doc("When set to true, the in predicate follows binary comparison type coercion.")
+      .booleanConf
+      .createWithDefault(true)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()

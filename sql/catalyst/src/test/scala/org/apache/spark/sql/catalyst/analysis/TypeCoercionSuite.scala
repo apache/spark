@@ -1421,11 +1421,19 @@ class TypeCoercionSuite extends AnalysisTest {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
-    ruleTest(inConversion,
-      In(Literal(Decimal(3.13)), Seq(Literal("1"), Literal(2))),
-      In(Cast(Decimal(3.13), DoubleType),
-        Seq(Cast(Literal("1"), DoubleType), Cast(Literal(2), DoubleType)))
-    )
+    Seq(true, false).foreach { followBinaryComparison =>
+      val converted = if (followBinaryComparison) {
+        In(Cast(Decimal(3.13), DoubleType),
+          Seq(Cast(Literal("1"), DoubleType), Cast(Literal(2), DoubleType)))
+      } else {
+        In(Cast(Decimal(3.13), StringType),
+          Seq(Cast(Literal("1"), StringType), Cast(Literal(2), StringType)))
+      }
+      withSQLConf(SQLConf.LEGACY_IN_PREDICATE_FOLLOW_BINARY_COMPARISON_TYPE_COERCION.key ->
+        followBinaryComparison.toString) {
+        ruleTest(inConversion, In(Literal(Decimal(3.13)), Seq(Literal("1"), Literal(2))), converted)
+      }
+    }
   }
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +

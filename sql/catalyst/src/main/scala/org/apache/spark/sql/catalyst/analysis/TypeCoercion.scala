@@ -492,13 +492,20 @@ object TypeCoercion {
         }
 
       case i @ In(value, list) if list.exists(_.dataType != value.dataType) =>
-        findWiderCommonType(list.map(_.dataType)) match {
-          case Some(listType) =>
-            val finalDataType = findCommonTypeForBinaryComparison(value.dataType, listType, conf)
-              .orElse(findWiderTypeForDecimal(value.dataType, listType))
-              .orElse(findTightestCommonType(value.dataType, listType))
-            finalDataType.map(t => i.withNewChildren(i.children.map(Cast(_, t)))).getOrElse(i)
-          case None => i
+        if (conf.getConf(SQLConf.LEGACY_IN_PREDICATE_FOLLOW_BINARY_COMPARISON_TYPE_COERCION)) {
+          findWiderCommonType(list.map(_.dataType)) match {
+            case Some(listType) =>
+              val finalDataType = findCommonTypeForBinaryComparison(value.dataType, listType, conf)
+                .orElse(findWiderTypeForDecimal(value.dataType, listType))
+                .orElse(findTightestCommonType(value.dataType, listType))
+              finalDataType.map(t => i.withNewChildren(i.children.map(Cast(_, t)))).getOrElse(i)
+            case None => i
+          }
+        } else {
+          findWiderCommonType(i.children.map(_.dataType)) match {
+            case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+            case None => i
+          }
         }
     }
   }
