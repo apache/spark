@@ -65,7 +65,7 @@ object DateTimeUtils {
   }
 
   def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
-    val instant = microsToInstant(Math.multiplyExact(millisUtc, MICROS_PER_MILLIS))
+    val instant = microsToInstant(fromMillis(millisUtc))
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
@@ -76,7 +76,7 @@ object DateTimeUtils {
 
   def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
-    instantToMicros(instant) / MICROS_PER_MILLIS
+    toMillis(instantToMicros(instant))
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
@@ -149,7 +149,7 @@ object DateTimeUtils {
    * Converts milliseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
-    MILLISECONDS.toMicros(millis)
+    Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
   def microsToEpochDays(epochMicros: SQLTimestamp, zoneId: ZoneId): SQLDate = {
@@ -714,7 +714,7 @@ object DateTimeUtils {
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
       case _ =>
-        val millis = MICROSECONDS.toMillis(t)
+        val millis = toMillis(t)
         val truncated = level match {
           case TRUNC_TO_MILLISECOND => millis
           case TRUNC_TO_SECOND =>
@@ -725,7 +725,7 @@ object DateTimeUtils {
             val dDays = millisToDays(millis, zoneId)
             daysToMillis(truncDate(dDays, level), zoneId)
         }
-        truncated * MICROS_PER_MILLIS
+        fromMillis(truncated)
     }
   }
 
