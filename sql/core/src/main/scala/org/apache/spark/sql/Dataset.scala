@@ -1430,12 +1430,23 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    cols.find(_.isInstanceOf[TypedColumn[_, _]]).foreach { typedCol =>
-      throw new AnalysisException(s"$typedCol is a typed column that " +
-        "cannot be passed in untyped `select` API. If you are going to select " +
-        "multiple typed columns, you can use `Dataset.selectUntyped` API.")
+    val untypedCols = cols.map {
+      case typedCol: TypedColumn[_, _] =>
+        val isSimpleEncoder = typedCol.encoder.namedExpressions.head match {
+          case Alias(_: BoundReference, _) if !typedCol.encoder.isSerializedAsStruct => true
+          case _ => false
+        }
+        if (isSimpleEncoder) {
+          // This typed column produces simple type output that can be fit into untyped `DataFrame`.
+          typedCol.withInputType(exprEnc, logicalPlan.output)
+        } else {
+          throw new AnalysisException(s"Typed column $typedCol with complex serializer " +
+            "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
+        }
+
+      case other => other
     }
-    Project(cols.map(_.named), logicalPlan)
+    Project(untypedCols.map(_.named), logicalPlan)
   }
 
   /**
