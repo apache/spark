@@ -59,7 +59,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                 .build()
 
-	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisInputDStream)
+	See the [API docs](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
 
 	</div>

@@ -56,6 +56,8 @@ class SQLContext(object):
     def __init__(self, sparkContext, sparkSession=None, jsqlContext=None):
         """Creates a new SQLContext.
 
+        .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
+
         >>> from datetime import datetime
         >>> sqlContext = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
@@ -70,6 +72,10 @@ class SQLContext(object):
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
+        warnings.warn(
+            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+            DeprecationWarning)
+
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
@@ -81,7 +87,8 @@ class SQLContext(object):
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
-        if SQLContext._instantiatedContext is None:
+        if (SQLContext._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
             SQLContext._instantiatedContext = self
 
     @property
@@ -105,9 +112,17 @@ class SQLContext(object):
         Get the existing SQLContext or create a new one with given SparkContext.
 
         :param sc: SparkContext
+
+        .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
         """
-        if cls._instantiatedContext is None:
-            jsqlContext = sc._jvm.SQLContext.getOrCreate(sc._jsc.sc())
+        warnings.warn(
+            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+            DeprecationWarning)
+
+        if (cls._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
+            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(
+                sc._jsc.sc()).getOrCreate().sqlContext()
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
         return cls._instantiatedContext

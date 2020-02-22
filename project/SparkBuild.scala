@@ -823,6 +823,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/rpc")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))

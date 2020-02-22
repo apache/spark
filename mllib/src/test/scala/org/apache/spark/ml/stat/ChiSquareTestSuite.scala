@@ -55,6 +55,40 @@ class ChiSquareTestSuite
     }
   }
 
+  test("test DataFrame of sparse points") {
+    val data = Seq(
+      LabeledPoint(0.0, Vectors.dense(0.5, 10.0, 0.0, 0.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(1.5, 20.0, 0.0, 1.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.5, 30.0, 0.0, 5.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(3.5, 30.0, 0.0, 3.6, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(3.5, 40.0, 0.0, 4.5, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(3.5, 40.0, 0.0, 4.0, 0.0)))
+    val data2 = data.map { case LabeledPoint(label, features) =>
+      LabeledPoint(label, features.toSparse)
+    }
+
+    for (numParts <- List(2, 4, 6, 8)) {
+      val df = spark.createDataFrame(sc.parallelize(data, numParts))
+      val chi = ChiSquareTest.test(df, "features", "label")
+      val res = chi.select("pValues", "degreesOfFreedom", "statistics")
+        .as[(Vector, Array[Int], Vector)]
+        .collect()
+
+      val df2 = spark.createDataFrame(sc.parallelize(data2, numParts))
+      val chi2 = ChiSquareTest.test(df2, "features", "label")
+      val res2 = chi2.select("pValues", "degreesOfFreedom", "statistics")
+        .as[(Vector, Array[Int], Vector)]
+        .collect()
+
+      assert(res.length === res2.length)
+      res.zip(res2).foreach { case (r, r2) =>
+        assert(r._1 ~== r2._1 relTol 1e-6)
+        assert(r._2 === r2._2)
+        assert(r._3 ~== r2._3 relTol 1e-6)
+      }
+    }
+  }
+
   test("large number of features (SPARK-3087)") {
     // Test that the right number of results is returned
     val numCols = 1001

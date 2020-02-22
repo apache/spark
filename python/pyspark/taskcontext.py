@@ -223,6 +223,8 @@ class BarrierTaskContext(TaskContext):
         .. warning:: In a barrier stage, each task much have the same number of `allGather()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
+
+        .. versionadded:: 3.0.0
         """
         if not isinstance(message, str):
             raise ValueError("Argument `message` must be of type `str`")

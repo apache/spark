@@ -30,6 +30,8 @@ import org.apache.spark.annotation.Experimental;
  *       removeProperty("other_prop")
  *     )
  * </pre>
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface NamespaceChange {

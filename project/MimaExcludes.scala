@@ -74,6 +74,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
 
+    // [SPARK-26580][SQL][ML][FOLLOW-UP] Throw exception when use untyped UDF by default
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.UnaryTransformer.this"),
+
     // [SPARK-27090][CORE] Removing old LEGACY_DRIVER_IDENTIFIER ("<driver>")
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.LEGACY_DRIVER_IDENTIFIER"),
     // [SPARK-25838] Remove formatVersion from Saveable
@@ -492,7 +495,10 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.AFTSurvivalRegression.setPredictionCol"),
 
     // [SPARK-29543][SS][UI] Init structured streaming ui
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this"),
+
+    // [SPARK-30667][CORE] Add allGather method to BarrierTaskContext
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.RequestToSync")
   )
 
   // Exclude rules for 2.4.x

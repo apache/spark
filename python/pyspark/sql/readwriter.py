@@ -48,7 +48,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads data from a data source and returns it as a :class`DataFrame`.
+        """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -616,7 +616,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4

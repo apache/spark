@@ -60,7 +60,7 @@ private[spark] object SignalUtils extends Logging {
     if (SystemUtils.IS_OS_UNIX) {
       try {
         val handler = handlers.getOrElseUpdate(signal, {
-          logInfo("Registered signal handler for " + signal)
+          logInfo("Registering signal handler for " + signal)
           new ActionHandler(new Signal(signal))
         })
         handler.register(action)

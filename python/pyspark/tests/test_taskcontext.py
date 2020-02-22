@@ -148,12 +148,12 @@ class TaskContextTests(PySparkTestCase):
         def context_barrier(x):
             tc = BarrierTaskContext.get()
             time.sleep(random.randint(1, 10))
-            out = tc.allGather(str(context.partitionId()))
+            out = tc.allGather(str(tc.partitionId()))
             pids = [int(e) for e in out]
-            return [pids]
+            return pids
 
         pids = rdd.barrier().mapPartitions(f).map(context_barrier).collect()[0]
-        self.assertTrue(pids == [0, 1, 2, 3])
+        self.assertEqual(pids, [0, 1, 2, 3])
 
     def test_barrier_infos(self):
         """
