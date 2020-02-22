@@ -128,6 +128,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -145,7 +146,7 @@ class PlanResolutionSuite extends AnalysisTest {
       ResolveInlineTables(conf),
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
+      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
       analyzer.ResolveTables,
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,
@@ -885,33 +886,34 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed4 = parseAndResolve(sql4)
 
       parsed1 match {
-        case DeleteFromTable(_: DataSourceV2Relation, None) =>
-        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
+        case DeleteFromTable(AsDataSourceV2Relation(_), None) =>
+        case _ => fail("Expect DeleteFromTable, but got:\n" + parsed1.treeString)
       }
 
       parsed2 match {
         case DeleteFromTable(
-          _: DataSourceV2Relation,
+          AsDataSourceV2Relation(_),
           Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
           assert(name.name == "name")
-        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed2.treeString)
+        case _ => fail("Expect DeleteFromTable, but got:\n" + parsed2.treeString)
       }
 
       parsed3 match {
         case DeleteFromTable(
-          SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+          SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
           Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
           assert(name.name == "t.name")
-        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed3.treeString)
+        case _ => fail("Expect DeleteFromTable, but got:\n" + parsed3.treeString)
       }
 
       parsed4 match {
-        case DeleteFromTable(SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+        case DeleteFromTable(
+            SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Some(InSubquery(values, query))) =>
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
           query match {
-            case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", None),
+            case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
                 _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
@@ -944,7 +946,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed1 match {
         case UpdateTable(
-            _: DataSourceV2Relation,
+            AsDataSourceV2Relation(_),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             None) =>
@@ -956,7 +958,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed2 match {
         case UpdateTable(
-            SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+            SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             None) =>
@@ -968,7 +970,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed3 match {
         case UpdateTable(
-            SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+            SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1)))) =>
@@ -980,14 +982,14 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       parsed4 match {
-        case UpdateTable(SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+        case UpdateTable(SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
           Seq(Assignment(key: UnresolvedAttribute, IntegerLiteral(32))),
           Some(InSubquery(values, query))) =>
           assert(key.name == "t.age")
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
           query match {
-            case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", None),
+            case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
                 _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
@@ -1012,27 +1014,29 @@ class PlanResolutionSuite extends AnalysisTest {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
-        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint COMMENT 'new comment'"
-        val sql3 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
 
         val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
+          val oldColumn = StructField("i", IntegerType)
           val newColumn = StructField("i", LongType)
           val expected1 = AlterTableChangeColumnCommand(
             tableIdent, "i", newColumn)
           val expected2 = AlterTableChangeColumnCommand(
-            tableIdent, "i", newColumn.withComment("new comment"))
+            tableIdent, "i", oldColumn.withComment("new comment"))
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
 
+          val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
           val e1 = intercept[AnalysisException] {
             parseAndResolve(sql3)
           }
-          assert(e1.getMessage.contains("ALTER COLUMN with v1 tables must specify new data type"))
+          assert(e1.getMessage.contains(
+            "ALTER COLUMN cannot find column j in v1 table. Available: i, s"))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1050,8 +1054,6 @@ class PlanResolutionSuite extends AnalysisTest {
           val parsed5 = parseAndResolve(sql5)
           comparePlans(parsed5, expected5)
         } else {
-          val parsed3 = parseAndResolve(sql3)
-
           parsed1 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
@@ -1062,18 +1064,41 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed2 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(
-                TableChange.updateColumnType(Array("i"), LongType),
-                TableChange.updateColumnComment(Array("i"), "new comment")))
-            case _ => fail("expect AlterTable")
-          }
-
-          parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
                 TableChange.updateColumnComment(Array("i"), "new comment")))
             case _ => fail("expect AlterTable")
           }
         }
+    }
+  }
+
+  test("alter table: alter column action is not specified") {
+    val e = intercept[AnalysisException] {
+      parseAndResolve("ALTER TABLE v1Table ALTER COLUMN i")
+    }
+    assert(e.getMessage.contains(
+      "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"))
+  }
+
+  test("alter table: alter column case sensitivity for v1 table") {
+    val tblName = "v1Table"
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val sql = s"ALTER TABLE $tblName ALTER COLUMN I COMMENT 'new comment'"
+        if (caseSensitive) {
+          val e = intercept[AnalysisException] {
+            parseAndResolve(sql)
+          }
+          assert(e.getMessage.contains(
+            "ALTER COLUMN cannot find column I in v1 table. Available: i, s"))
+        } else {
+          val actual = parseAndResolve(sql)
+          val expected = AlterTableChangeColumnCommand(
+            TableIdentifier(tblName, None),
+            "I",
+            StructField("I", IntegerType).withComment("new comment"))
+          comparePlans(actual, expected)
+        }
+      }
     }
   }
 
@@ -1129,7 +1154,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case Project(_, r: DataSourceV2Relation) =>
+        case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
@@ -1206,8 +1231,8 @@ class PlanResolutionSuite extends AnalysisTest {
            """.stripMargin
         parseAndResolve(sql1) match {
           case MergeIntoTable(
-              SubqueryAlias(AliasIdentifier("target", None), target: DataSourceV2Relation),
-              SubqueryAlias(AliasIdentifier("source", None), source: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
@@ -1232,8 +1257,8 @@ class PlanResolutionSuite extends AnalysisTest {
            """.stripMargin
         parseAndResolve(sql2) match {
           case MergeIntoTable(
-              SubqueryAlias(AliasIdentifier("target", None), target: DataSourceV2Relation),
-              SubqueryAlias(AliasIdentifier("source", None), source: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference,
@@ -1258,8 +1283,8 @@ class PlanResolutionSuite extends AnalysisTest {
            """.stripMargin
         parseAndResolve(sql3) match {
           case MergeIntoTable(
-              SubqueryAlias(AliasIdentifier("target", None), target: DataSourceV2Relation),
-              SubqueryAlias(AliasIdentifier("source", None), source: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
               Seq(InsertAction(None, insertAssigns))) =>
@@ -1282,8 +1307,8 @@ class PlanResolutionSuite extends AnalysisTest {
            """.stripMargin
         parseAndResolve(sql4) match {
           case MergeIntoTable(
-              SubqueryAlias(AliasIdentifier("target", None), target: DataSourceV2Relation),
-              SubqueryAlias(AliasIdentifier("source", None), source: Project),
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), source: Project),
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
@@ -1311,8 +1336,8 @@ class PlanResolutionSuite extends AnalysisTest {
            """.stripMargin
         parseAndResolve(sql5) match {
           case MergeIntoTable(
-              SubqueryAlias(AliasIdentifier("target", None), target: DataSourceV2Relation),
-              SubqueryAlias(AliasIdentifier("source", None), source: Project),
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), source: Project),
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
@@ -1346,8 +1371,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parseAndResolve(sql1) match {
         case MergeIntoTable(
-            target: DataSourceV2Relation,
-            source: DataSourceV2Relation,
+            AsDataSourceV2Relation(target),
+            AsDataSourceV2Relation(source),
             _,
             Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
             Seq(InsertAction(
@@ -1453,8 +1478,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case MergeIntoTable(
-          SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
-          SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
+          SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(_)),
+          SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(_)),
           EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
           Seq(
             DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
@@ -1481,3 +1506,11 @@ class PlanResolutionSuite extends AnalysisTest {
   }
   // TODO: add tests for more commands.
 }
+
+object AsDataSourceV2Relation {
+  def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
+    case SubqueryAlias(_, r: DataSourceV2Relation) => Some(r)
+    case _ => None
+  }
+}
+

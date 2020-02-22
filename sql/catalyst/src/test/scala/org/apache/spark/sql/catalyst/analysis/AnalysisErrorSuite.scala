@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -165,6 +166,22 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Distinct window functions are not supported" :: Nil)
 
   errorTest(
+    "window aggregate function with filter predicate",
+    testRelation2.select(
+      WindowExpression(
+        AggregateExpression(
+          Count(UnresolvedAttribute("b")),
+          Complete,
+          isDistinct = false,
+          filter = Some(UnresolvedAttribute("b") > 1)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    "window aggregate function with filter predicate is not supported" :: Nil
+  )
+
+  errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
     "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
@@ -191,12 +208,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
 
   errorTest(
-    "DISTINCT and FILTER cannot be used in aggregate functions at the same time",
+    "DISTINCT aggregate function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE c > 1) FROM TaBlE2"),
     "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
 
   errorTest(
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
+    "non-deterministic filter predicate in aggregate functions",
     CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
@@ -635,5 +652,16 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Filter(Symbol("a") === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val plan = With(
+      UnresolvedRelation(TableIdentifier("t")),
+      Seq("t" -> SubqueryAlias("t",
+        Project(
+          Alias(Literal(1), "x")() :: Nil,
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+    assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
 }

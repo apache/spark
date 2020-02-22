@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{PartialShuffleReaderExec, SkewedPartitionReaderExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
@@ -42,10 +41,16 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isPartial: Boolean = false) extends BinaryExecNode with CodegenSupport {
+    isSkewJoin: Boolean = false) extends BinaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override def nodeName: String = {
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
+  }
+
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
@@ -58,9 +63,9 @@ case class SortMergeJoinExec(
     } else "None"
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Left keys : ${leftKeys}
-       |Right keys: ${rightKeys}
-       |Join condition : ${joinCondStr}
+       |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
+       |${ExplainUtils.generateFieldString("Right keys", rightKeys)}
+       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
      """.stripMargin
   }
 
@@ -98,7 +103,9 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (isPartial) {
+    if (isSkewJoin) {
+      // We re-arrange the shuffle partitions to deal with skew join, and the new children
+      // partitioning doesn't satisfy `HashClusteredDistribution`.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
     } else {
       HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil

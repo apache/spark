@@ -98,7 +98,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction(_: Vector), DataTypes.createArrayType(new VectorUDT))
+    val transformUDF = udf(hashFunction(_: Vector))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
@@ -128,14 +128,13 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       }
 
       // In the origin dataset, find the hash value that hash the same bucket with the key
-      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) =>
-        sameBucket(x, keyHash), DataTypes.BooleanType)
+      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) => sameBucket(x, keyHash))
 
       modelDataset.filter(sameBucketWithKeyUDF(col($(outputCol))))
     } else {
       // In the origin dataset, find the hash value that is closest to the key
       // Limit the use of hashDist since it's controversial
-      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
+      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash))
       val hashDistCol = hashDistUDF(col($(outputCol)))
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
@@ -172,7 +171,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     }
 
     // Get the top k nearest neighbor by their distance to the key
-    val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
+    val keyDistUDF = udf((x: Vector) => keyDistance(x, key))
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
     modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
   }
@@ -290,7 +289,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       .drop(explodeCols: _*).distinct()
 
     // Add a new column to store the distance of the two rows.
-    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y))
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
       distUDF(col(s"$leftColName.${$(inputCol)}"), col(s"$rightColName.${$(inputCol)}")).as(distCol)
     )

@@ -173,6 +173,42 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-30814: add column with position referencing new columns being added") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (a string, b int, point struct<x: double, y: double>) USING $v2Format")
+      sql(s"ALTER TABLE $t ADD COLUMNS (x int AFTER a, y int AFTER x, z int AFTER y)")
+
+      assert(getTableMetadata(t).schema === new StructType()
+        .add("a", StringType)
+        .add("x", IntegerType)
+        .add("y", IntegerType)
+        .add("z", IntegerType)
+        .add("b", IntegerType)
+        .add("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)))
+
+      sql(s"ALTER TABLE $t ADD COLUMNS (point.z double AFTER x, point.zz double AFTER z)")
+      assert(getTableMetadata(t).schema === new StructType()
+        .add("a", StringType)
+        .add("x", IntegerType)
+        .add("y", IntegerType)
+        .add("z", IntegerType)
+        .add("b", IntegerType)
+        .add("point", new StructType()
+          .add("x", DoubleType)
+          .add("z", DoubleType)
+          .add("zz", DoubleType)
+          .add("y", DoubleType)))
+
+      // The new column being referenced should come before being referenced.
+      val e = intercept[AnalysisException](
+        sql(s"ALTER TABLE $t ADD COLUMNS (yy int AFTER xx, xx int)"))
+      assert(e.getMessage().contains("Couldn't find the reference column for AFTER xx at root"))
+    }
+  }
+
   test("AlterTable: add multiple columns") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -651,19 +687,6 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: update column type and comment") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
-
-      val table = getTableMetadata(t)
-
-      assert(table.name === fullTableName(t))
-      assert(table.schema === StructType(Seq(StructField("id", LongType).withComment("doc"))))
-    }
-  }
-
   test("AlterTable: update nested column comment") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -1071,6 +1094,21 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(updated.name === fullTableName(t))
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
+    }
+  }
+
+  test("AlterTable: replace columns") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 int, col2 int COMMENT 'c2') USING $v2Format")
+      sql(s"ALTER TABLE $t REPLACE COLUMNS (col2 string, col3 int COMMENT 'c3')")
+
+      val table = getTableMetadata(t)
+
+      assert(table.name === fullTableName(t))
+      assert(table.schema === StructType(Seq(
+        StructField("col2", StringType),
+        StructField("col3", IntegerType).withComment("c3"))))
     }
   }
 }

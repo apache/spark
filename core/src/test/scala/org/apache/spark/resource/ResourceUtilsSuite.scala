@@ -26,8 +26,10 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.util.Utils
 
 class ResourceUtilsSuite extends SparkFunSuite
@@ -165,6 +167,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val rpBuilder = new ResourceProfileBuilder()
       val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
       val treqs = new TaskResourceRequests().resource(GPU, 1)
+
       val rp = rpBuilder.require(ereqs).require(treqs).build
       val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
         Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp, conf)

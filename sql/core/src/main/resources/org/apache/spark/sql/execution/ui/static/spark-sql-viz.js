@@ -34,7 +34,6 @@ function renderPlanViz() {
   preprocessGraphLayout(g);
   var renderer = new dagreD3.render();
   renderer(graph, g);
-  adjustPositionOfOperationName();
 
   // Round corners on rectangles
   svg
@@ -82,7 +81,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
  * and sizes of graph elements, e.g. padding, font style, shape.
  */
 function preprocessGraphLayout(g) {
-  g.graph().ranksep = "90";
+  g.graph().ranksep = "70";
   var nodes = g.nodes();
   for (var i = 0; i < nodes.length; i++) {
       var node = g.node(nodes[i]);
@@ -127,34 +126,6 @@ function resizeSvg(svg) {
   svg.attr("viewBox", startX + " " + startY + " " + width + " " + height)
      .attr("width", width)
      .attr("height", height);
-}
-
-
-/* Helper function to adjust the position of operation name and mark as a operation-name class. */
-function adjustPositionOfOperationName() {
-  $("#plan-viz-graph svg text")
-      .each(function() {
-        var tspans = $(this).find("tspan");
-
-        if (tspans[0].textContent.trim() !== "") {
-          var isOperationNameOnly =
-              $(tspans).filter(function(i, n) {
-                return i !== 0 && n.textContent.trim() !== "";
-              }).length === 0;
-
-          if (isOperationNameOnly) {
-            // If the only text in a node is operation name,
-            // vertically centering the position of operation name.
-            var operationName = tspans[0].textContent;
-            var half = parseInt(tspans.length / 2);
-            tspans[0].textContent = tspans[half].textContent;
-            tspans[half].textContent = operationName;
-            $(tspans[half]).addClass("operator-name");
-          } else {
-            tspans.first().addClass("operator-name");
-          }
-        }
-      });
 }
 
 /* Helper function to convert attributes to numeric values. */

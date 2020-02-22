@@ -204,9 +204,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<2:int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -222,9 +223,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -240,9 +242,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<3:int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -293,9 +296,10 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -307,9 +311,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query
@@ -322,9 +327,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.;
 
 
 -- !query

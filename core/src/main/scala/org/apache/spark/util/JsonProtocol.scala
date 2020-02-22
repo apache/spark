@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -662,7 +662,8 @@ private[spark] object JsonProtocol {
     val stageInfos = jsonOption(json \ "Stage Infos")
       .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse {
         stageIds.map { id =>
-          new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown")
+          new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
+            resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
         }
       }
     SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
@@ -803,7 +804,8 @@ private[spark] object JsonProtocol {
     }
 
     val stageInfo = new StageInfo(
-      stageId, attemptId, stageName, numTasks, rddInfos, parentIds, details)
+      stageId, attemptId, stageName, numTasks, rddInfos, parentIds, details,
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason

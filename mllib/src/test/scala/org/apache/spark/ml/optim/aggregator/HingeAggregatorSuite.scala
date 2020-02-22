@@ -17,14 +17,13 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -32,21 +31,21 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    instances = standardize(Array(
+    instances = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
       Instance(0.0, 0.3, Vectors.dense(4.0, 0.5))
-    ))
-    instancesConstantFeature = standardize(Array(
+    )
+    instancesConstantFeature = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
       Instance(1.0, 0.3, Vectors.dense(1.0, 0.5))
-    ))
-    instancesConstantFeatureFiltered = standardize(Array(
+    )
+    instancesConstantFeatureFiltered = Array(
       Instance(0.0, 0.1, Vectors.dense(2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0)),
       Instance(2.0, 0.3, Vectors.dense(0.5))
-    ))
+    )
   }
 
    /** Get summary statistics for some data and create a new HingeAggregator. */
@@ -54,23 +53,12 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       instances: Array[Instance],
       coefficients: Vector,
       fitIntercept: Boolean): HingeAggregator = {
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
+    val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
-    new HingeAggregator(instances.head.features.size, fitIntercept)(bcCoefficients)
-  }
-
-  private def standardize(instances: Array[Instance]): Array[Instance] = {
-    val (featuresSummarizer, _) =
-      DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
-    val stdArray = featuresSummarizer.variance.toArray.map(math.sqrt)
-    val numFeatures = stdArray.length
-    instances.map { case Instance(label, weight, features) =>
-      val standardized = Array.ofDim[Double](numFeatures)
-      features.foreachNonZero { (i, v) =>
-        val std = stdArray(i)
-        if (std != 0) standardized(i) = v / std
-      }
-      Instance(label, weight, Vectors.dense(standardized).compressed)
-    }
+    new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
   }
 
   test("aggregator add method input size") {
@@ -116,8 +104,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = instances.head.features.size
-    val (featuresSummarizer, _) = getClassificationSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) = Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val weightSum = instances.map(_.weight).sum
 
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
@@ -169,23 +157,6 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // constant features should not affect gradient
     assert(aggConstantFeatureBinary.gradient(0) === 0.0)
     assert(aggConstantFeatureBinary.gradient(1) == aggConstantFeatureBinaryFiltered.gradient(0))
-  }
-
-  test("add instance block") {
-    val coefArray = Array(1.0, 2.0)
-    val intercept = 1.0
-
-    val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
-      fitIntercept = true)
-    instances.foreach(agg.add)
-
-    val agg2 = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
-      fitIntercept = true)
-    val block = InstanceBlock.fromInstances(instances)
-    agg2.add(block)
-
-    assert(agg.loss ~== agg2.loss relTol 1e-8)
-    assert(agg.gradient ~== agg2.gradient relTol 1e-8)
   }
 
 }

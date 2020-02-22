@@ -189,8 +189,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           example.split("  > ").toList.foreach(_ match {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(
-                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val actual = unindentAndTrim(hiveResultString(df).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>
@@ -3381,6 +3380,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
 
       checkAnswer(df, Row(1))
+    }
+  }
+
+  test("SPARK-26218: Fix the corner case when casting float to Integer") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as FLOAT) as Integer)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").collect()
+      )
     }
   }
 }

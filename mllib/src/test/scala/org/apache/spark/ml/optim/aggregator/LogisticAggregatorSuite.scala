@@ -17,14 +17,13 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Matrices, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -32,21 +31,21 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    instances = standardize(Array(
+    instances = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(4.0, 0.5))
-    ))
-    instancesConstantFeature = standardize(Array(
+    )
+    instancesConstantFeature = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(1.0, 0.5))
-    ))
-    instancesConstantFeatureFiltered = standardize(Array(
+    )
+    instancesConstantFeatureFiltered = Array(
       Instance(0.0, 0.1, Vectors.dense(2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0)),
       Instance(2.0, 0.3, Vectors.dense(0.5))
-    ))
+    )
   }
 
   /** Get summary statistics for some data and create a new LogisticAggregator. */
@@ -55,27 +54,13 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       coefficients: Vector,
       fitIntercept: Boolean,
       isMultinomial: Boolean): LogisticAggregator = {
-    val (_, ySummarizer) =
-      DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
     val numClasses = ySummarizer.histogram.length
-    val numFeatures = instances.head.features.size
+    val featuresStd = featuresSummarizer.std.toArray
+    val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
-    new LogisticAggregator(numFeatures, numClasses, fitIntercept, isMultinomial)(bcCoefficients)
-  }
-
-  private def standardize(instances: Array[Instance]): Array[Instance] = {
-    val (featuresSummarizer, _) =
-      DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
-    val stdArray = featuresSummarizer.variance.toArray.map(math.sqrt)
-    val numFeatures = stdArray.length
-    instances.map { case Instance(label, weight, features) =>
-      val standardized = Array.ofDim[Double](numFeatures)
-      features.foreachNonZero { (i, v) =>
-        val std = stdArray(i)
-        if (std != 0) standardized(i) = v / std
-      }
-      Instance(label, weight, Vectors.dense(standardized).compressed)
-    }
+    new LogisticAggregator(bcFeaturesStd, numClasses, fitIntercept, isMultinomial)(bcCoefficients)
   }
 
   test("aggregator add method input size") {
@@ -148,8 +133,9 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val numFeatures = instances.head.features.size
     val numClasses = instances.map(_.label).toSet.size
     val intercepts = Vectors.dense(interceptArray)
-    val (featuresSummarizer, ySummarizer) = getClassificationSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val weightSum = instances.map(_.weight).sum
 
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ interceptArray),
@@ -214,8 +200,9 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = binaryInstances.head.features.size
-    val (featuresSummarizer, _) = getClassificationSummarizers(binaryInstances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(binaryInstances))
+    val featuresStd = featuresSummarizer.std.toArray
     val weightSum = binaryInstances.map(_.weight).sum
 
     val agg = getNewAggregator(binaryInstances, Vectors.dense(coefArray ++ Array(intercept)),
@@ -290,25 +277,5 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // constant features should not affect gradient
     validateGradient(aggConstantFeatureBinary.gradient,
       aggConstantFeatureBinaryFiltered.gradient, 1)
-  }
-
-  test("add instance block") {
-    val binaryInstances = instances.map { instance =>
-      if (instance.label <= 1.0) instance else Instance(0.0, instance.weight, instance.features)
-    }
-    val coefArray = Array(1.0, 2.0)
-    val intercept = 1.0
-
-    val agg = getNewAggregator(binaryInstances, Vectors.dense(coefArray ++ Array(intercept)),
-      fitIntercept = true, isMultinomial = false)
-    binaryInstances.foreach(agg.add)
-
-    val agg2 = getNewAggregator(binaryInstances, Vectors.dense(coefArray ++ Array(intercept)),
-      fitIntercept = true, isMultinomial = false)
-    val block = InstanceBlock.fromInstances(binaryInstances)
-    agg2.add(block)
-
-    assert(agg.loss ~== agg2.loss relTol 1e-8)
-    assert(agg.gradient ~== agg2.gradient relTol 1e-8)
   }
 }

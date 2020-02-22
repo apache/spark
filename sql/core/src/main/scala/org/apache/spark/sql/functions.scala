@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -2881,7 +2882,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    FromUnixTime(ut.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -2913,7 +2914,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(CurrentTimestamp(), Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -2927,7 +2928,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(s.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -3410,6 +3411,12 @@ object functions {
   /**
    * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), x => x + 1))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => transformed_col, the lambda function to transform the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3421,6 +3428,13 @@ object functions {
   /**
    * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), (x, i) => x + i))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f (col, index) => transformed_col, the lambda function to filter the input column
+   *           given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3431,6 +3445,12 @@ object functions {
 
   /**
    * Returns whether a predicate holds for one or more elements in the array.
+   * {{{
+   *   df.select(exists(col("i"), _ % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3441,6 +3461,12 @@ object functions {
 
   /**
    * Returns whether a predicate holds for every element in the array.
+   * {{{
+   *   df.select(forall(col("i"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3453,11 +3479,10 @@ object functions {
    * Returns an array of elements for which a predicate holds in a given array.
    * {{{
    *   df.select(filter(col("s"), x => x % 2 === 0))
-   *   df.selectExpr("filter(col, x -> x % 2 == 0)")
    * }}}
    *
-   * @param column: the input array column
-   * @param f: col => predicate, the Boolean predicate to filter the input column
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to filter the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3470,11 +3495,10 @@ object functions {
    * Returns an array of elements for which a predicate holds in a given array.
    * {{{
    *   df.select(filter(col("s"), (x, i) => i % 2 === 0))
-   *   df.selectExpr("filter(col, (x, i) -> i % 2 == 0)")
    * }}}
    *
-   * @param column: the input array column
-   * @param f: (col, index) => predicate, the Boolean predicate to filter the input column
+   * @param column the input array column
+   * @param f (col, index) => predicate, the Boolean predicate to filter the input column
    *           given the index. Indices start at 0.
    *
    * @group collection_funcs
@@ -3488,18 +3512,28 @@ object functions {
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *               of all inputs to final result
    *
    * @group collection_funcs
    * @since 3.0.0
    */
   def aggregate(
       expr: Column,
-      zero: Column,
+      initialValue: Column,
       merge: (Column, Column) => Column,
       finish: Column => Column): Column = withExpr {
     ArrayAggregate(
       expr.expr,
-      zero.expr,
+      initialValue.expr,
       createLambda(merge),
       createLambda(finish)
     )
@@ -3508,17 +3542,31 @@ object functions {
   /**
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
    *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
    * @group collection_funcs
    * @since 3.0.0
    */
-  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
-    aggregate(expr, zero, merge, c => c)
+  def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
 
   /**
    * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
+   * {{{
+   *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
+   * }}}
+   *
+   * @param left the left input array column
+   * @param right the right input array column
+   * @param f (lCol, rCol) => col, the lambda function to merge two input columns into one column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3530,6 +3578,12 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new keys for the pairs.
+   * {{{
+   *   df.select(transform_keys(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => new_key, the lambda function to transform the key of input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3541,6 +3595,13 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new values for the pairs.
+   * {{{
+   *   df.select(transform_values(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => new_value, the lambda function to transform the value of input map
+   *          column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3551,6 +3612,12 @@ object functions {
 
   /**
    * Returns a map whose key-value pairs satisfy a predicate.
+   * {{{
+   *   df.select(map_filter(col("m"), (k, v) => k * 10 === v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => predicate, the Boolean predicate to filter the input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3561,6 +3628,13 @@ object functions {
 
   /**
    * Merge two given maps, key-wise into a single map using a function.
+   * {{{
+   *   df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2))
+   * }}}
+   *
+   * @param left the left input map column
+   * @param right the right input map column
+   * @param f (key, value1, value2) => new_value, the lambda function to merge the map values
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -4659,6 +4733,15 @@ object functions {
    * @since 2.0.0
    */
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
+      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
+        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+        "argument, and the closure will see the default value of the Java type for the null " +
+        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+        "You could use other typed Scala UDF APIs to avoid this problem, or set " +
+        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
+      throw new AnalysisException(errorMsg)
+    }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
   }
 

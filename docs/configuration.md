@@ -24,7 +24,7 @@ license: |
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -34,7 +34,7 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+[SparkConf](api/scala/org/apache/spark/SparkConf.html) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application with two threads as follows:
@@ -194,7 +194,7 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.resources.coordinate.enable</code></td>
+ <td><code>spark.resources.coordinateResourcesInStandalone</code></td>
   <td>true</td>
   <td>
     Whether to coordinate resources automatically among workers/drivers(client only) 
@@ -230,7 +230,7 @@ of the most common options to set are:
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses. For a client-submitted driver in Standalone, discovery
     script must assign different resource addresses to this driver comparing to workers' and
-    other drivers' when <code>spark.resources.coordinate.enable</code> is off.
+    other drivers' when <code>spark.resources.coordinateResourcesInStandalone</code> is off.
   </td>
 </tr>
 <tr>
@@ -1033,7 +1033,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.rolling.maxFileSize</code></td>
   <td>128m</td>
   <td>
-    The max size of event log file before it's rolled over.
+    When <code>spark.eventLog.rolling.enabled=true</code>, specifies the max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>
@@ -1101,7 +1101,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage collecting.
+    How many tasks in one stage the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -1326,7 +1326,7 @@ Apart from these, the following properties are also available, and may be useful
     property is useful if you need to register your classes in a custom way, e.g. to specify a custom
     field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
     set to classes that extend
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <a href="api/scala/org/apache/spark/serializer/KryoRegistrator.html">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -1379,7 +1379,7 @@ Apart from these, the following properties are also available, and may be useful
     but is quite slow, so we recommend <a href="tuning.html">using
     <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
     when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <a href="api/scala/org/apache/spark/serializer/Serializer.html">
     <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
@@ -1641,7 +1641,7 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
   <td>false</td>
   <td>
     Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
@@ -1810,7 +1810,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
+  <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
   <td>200m</td>
   <td>
     Remote block will be fetched to disk when size of the block is above this threshold
@@ -2399,47 +2399,15 @@ the driver or executor, or, in the absence of that value, the number of cores av
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
 
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(numRows = 200, truncate = false)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// spark is an existing SparkSession
-spark.sql("SET -v").show(200, false);
-{% endhighlight %}
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# spark is an existing SparkSession
-spark.sql("SET -v").show(n=200, truncate=False)
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session()
-properties <- sql("SET -v")
-showDF(properties, numRows = 200, truncate = FALSE)
-{% endhighlight %}
-
-</div>
-</div>
+        {% include_relative sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 
 ### Spark Streaming
@@ -2787,5 +2755,5 @@ There are configurations available to request resources for the driver: <code>sp
 
 Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
 
-See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinate.enable</code>).
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinateResourcesInStandalone</code>).
 

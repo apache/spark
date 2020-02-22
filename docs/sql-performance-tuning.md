@@ -67,6 +67,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>134217728 (128 MB)</td>
     <td>
       The maximum number of bytes to pack into a single partition when reading files.
+      This configuration is effective only when using file-based sources such as Parquet, JSON and ORC.
     </td>
   </tr>
   <tr>
@@ -76,7 +77,8 @@ that these options will be deprecated in future release as more optimizations ar
       The estimated cost to open a file, measured by the number of bytes could be scanned in the same
       time. This is used when putting multiple files into a partition. It is better to over-estimated,
       then the partitions with small files will be faster than partitions with bigger files (which is
-      scheduled first).
+      scheduled first). This configuration is effective only when using file-based sources such as Parquet,
+      JSON and ORC.
     </td>
   </tr>
   <tr>

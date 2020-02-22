@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
-import org.apache.hadoop.fs.permission.{AclEntry, FsPermission}
+import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -123,7 +124,8 @@ case class CreateTableLikeCommand(
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
-        properties = properties)
+        properties = properties,
+        tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
@@ -538,12 +540,27 @@ case class TruncateTableCommand(
               }
             }
             optAcls.foreach { acls =>
+              val aclEntries = acls.asScala.filter(_.getName != null).asJava
+
+              // If the path doesn't have default ACLs, `setAcl` API will throw an error
+              // as it expects user/group/other permissions must be in ACL entries.
+              // So we need to add tradition user/group/other permission
+              // in the form of ACL.
+              optPermission.map { permission =>
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.USER, permission.getUserAction()))
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.GROUP, permission.getGroupAction()))
+                aclEntries.add(newAclEntry(AclEntryScope.ACCESS,
+                  AclEntryType.OTHER, permission.getOtherAction()))
+              }
+
               try {
-                fs.setAcl(path, acls)
+                fs.setAcl(path, aclEntries)
               } catch {
                 case NonFatal(e) =>
                   throw new SecurityException(
-                    s"Failed to set original ACL $acls back to " +
+                    s"Failed to set original ACL $aclEntries back to " +
                       s"the created path: $path. Exception: ${e.getMessage}")
               }
             }
@@ -573,6 +590,16 @@ case class TruncateTableCommand(
       catalog.alterTableStats(tableName, Some(newStats))
     }
     Seq.empty[Row]
+  }
+
+  private def newAclEntry(
+      scope: AclEntryScope,
+      aclType: AclEntryType,
+      permission: FsAction): AclEntry = {
+    new AclEntry.Builder()
+      .setScope(scope)
+      .setType(aclType)
+      .setPermission(permission).build()
   }
 }
 
@@ -1076,7 +1103,9 @@ case class ShowCreateTableCommand(table: TableIdentifier)
             "Failed to execute SHOW CREATE TABLE against table " +
               s"${tableMetadata.identifier}, which is created by Hive and uses the " +
               "following unsupported feature(s)\n" +
-              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n")
+              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead."
           )
         }
 
@@ -1086,7 +1115,9 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
         if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
           throw new AnalysisException(
-            "SHOW CREATE TABLE doesn't support transactional Hive table")
+            "SHOW CREATE TABLE doesn't support transactional Hive table. " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead.")
         }
 
         convertTableMetadata(tableMetadata)
