@@ -574,8 +574,8 @@ object DateTimeUtils {
       time2: SQLTimestamp,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
-    val millis1 = MICROSECONDS.toMillis(time1)
-    val millis2 = MICROSECONDS.toMillis(time2)
+    val millis1 = toMillis(time1)
+    val millis2 = toMillis(time2)
     val date1 = millisToDays(millis1, zoneId)
     val date2 = millisToDays(millis2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)

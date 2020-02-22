@@ -272,13 +272,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        fromMillis(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        fromMillis(c.getTimeInMillis))
     }
 
     val gmtId = Option("GMT")
