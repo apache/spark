@@ -32,7 +32,7 @@ test <- df
 
 
 # Fit a linear regression model
-model <- spark.lm(df, label ~ features, regParam = 0.3, elasticNetParam = 0.8)
+model <- spark.lm(training, label ~ features, regParam = 0.3, elasticNetParam = 0.8)
 
 # Prediction
 predictions <- predict(model, test)
