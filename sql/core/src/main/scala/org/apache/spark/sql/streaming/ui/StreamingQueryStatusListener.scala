@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.streaming.ui
 
-import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,9 +24,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress}
+import org.apache.spark.sql.streaming.ui.UIUtils.parseProgressTimestamp
 
 /**
  * A customized StreamingQueryListener used in structured streaming UI, which contains all
@@ -35,9 +34,6 @@ import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryPro
  * TODO: Add support for history server.
  */
 private[sql] class StreamingQueryStatusListener(conf: SparkConf) extends StreamingQueryListener {
-
-  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   /**
    * We use runId as the key here instead of id in active query status map,
@@ -51,12 +47,13 @@ private[sql] class StreamingQueryStatusListener(conf: SparkConf) extends Streami
   private val inactiveQueryStatusRetention = conf.get(StaticSQLConf.STREAMING_UI_RETAINED_QUERIES)
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
+    val startTimestamp = parseProgressTimestamp(event.timestamp)
     activeQueryStatus.putIfAbsent(event.runId,
-      new StreamingQueryUIData(event.name, event.id, event.runId, event.submissionTime))
+      new StreamingQueryUIData(event.name, event.id, event.runId, startTimestamp))
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-    val batchTimestamp = timestampFormat.parse(event.progress.timestamp).getTime
+    val batchTimestamp = parseProgressTimestamp(event.progress.timestamp)
     val queryStatus = activeQueryStatus.getOrDefault(
       event.progress.runId,
       new StreamingQueryUIData(event.progress.name, event.progress.id, event.progress.runId,
@@ -89,7 +86,7 @@ private[ui] class StreamingQueryUIData(
     val name: String,
     val id: UUID,
     val runId: UUID,
-    val submissionTime: Long) {
+    val startTimestamp: Long) {
 
   /** Holds the most recent query progress updates. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()

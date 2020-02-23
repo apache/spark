@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql.streaming.ui
 
-import java.text.SimpleDateFormat
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     extends WebUIPage("") with Logging {
-  val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-  df.setTimeZone(getTimeZone("UTC"))
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val content = generateStreamingQueryTable(request)
@@ -61,11 +57,11 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     val name = UIUtils.getQueryName(query)
     val status = UIUtils.getQueryStatus(query)
     val duration = if (queryActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.submissionTime)
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.startTimestamp)
     } else {
       withNoProgress(query, {
         val endTimeMs = query.lastProgress.timestamp
-        SparkUIUtils.formatDurationVerbose(df.parse(endTimeMs).getTime - query.submissionTime)
+        SparkUIUtils.formatDurationVerbose(parseProgressTimestamp(endTimeMs) - query.startTimestamp)
       }, "-")
     }
 
@@ -74,7 +70,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       <td> {status} </td>
       <td> {query.id} </td>
       <td> <a href={statisticsLink}> {query.runId} </a> </td>
-      <td> {SparkUIUtils.formatDate(query.submissionTime)} </td>
+      <td> {SparkUIUtils.formatDate(query.startTimestamp)} </td>
       <td> {duration} </td>
       <td> {withNoProgress(query, {
         (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
@@ -94,29 +90,29 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       .partition(_.isActive)
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
-        "Name", "Status", "Id", "Run ID", "Submitted Time", "Duration", "Avg Input /sec",
+        "Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
         "Avg Process /sec", "Lastest Batch")
 
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = true),
-        activeQueries, true, None, Seq(null), false))
+        activeQueries, true, Some("activeQueries-table"), Seq(null), false))
     } else {
       None
     }
 
     val inactiveQueryTables = if (inactiveQueries.nonEmpty) {
       val headerRow = Seq(
-        "Name", "Status", "Id", "Run ID", "Submitted Time", "Duration", "Avg Input /sec",
+        "Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
         "Avg Process /sec", "Lastest Batch", "Error")
 
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = false),
-        inactiveQueries, true, None, Seq(null), false))
+        inactiveQueries, true, Some("completedQueries-table"), Seq(null), false))
     } else {
       None
     }
 
     // scalastyle:off
     val content =
-      <span id="completed" class="collapse-aggregated-activeQueries collapse-table"
+      <span id="active" class="collapse-aggregated-activeQueries collapse-table"
             onClick="collapseTable('collapse-aggregated-activeQueries','aggregated-activeQueries')">
         <h5 id="activequeries">
           <span class="collapse-table-arrow arrow-open"></span>
