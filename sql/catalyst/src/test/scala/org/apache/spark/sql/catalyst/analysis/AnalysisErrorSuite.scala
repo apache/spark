@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -651,5 +652,16 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Filter(Symbol("a") === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val plan = With(
+      UnresolvedRelation(TableIdentifier("t")),
+      Seq("t" -> SubqueryAlias("t",
+        Project(
+          Alias(Literal(1), "x")() :: Nil,
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+    assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
 }

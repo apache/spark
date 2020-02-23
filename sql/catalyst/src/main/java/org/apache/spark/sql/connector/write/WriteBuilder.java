@@ -28,6 +28,8 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
  *
  * Unless modified by a mixin interface, the {@link BatchWrite} configured by this builder is to
  * append data without affecting existing data.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface WriteBuilder {
