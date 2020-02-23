@@ -612,7 +612,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // prune unrequired nested fields
     case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
         NestedColumnAliasing.canPruneGenerator(g.generator) =>
-      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children, g.output).map {
         case (nestedFieldToAlias, attrToAliases) =>
           val newGenerator = g.generator.transform {
             case f: ExtractValue if nestedFieldToAlias.contains(f) =>

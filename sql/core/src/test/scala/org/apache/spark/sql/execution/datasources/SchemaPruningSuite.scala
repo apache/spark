@@ -301,6 +301,24 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
+  testSchemaPruning("select explode of nested field of array of struct from Generate output") {
+    val df1 = sql(
+      """
+        |SELECT explodedvalue.*
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df1, Row(Row(1, 2)) :: Nil)
+
+    val df2 = sql(
+      """
+        |SELECT explodedvalue.nested.a
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df2, Row(1) :: Nil)
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {

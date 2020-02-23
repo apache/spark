@@ -107,7 +107,7 @@ object NestedColumnAliasing {
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  def getAliasSubMap(exprList: Seq[Expression])
+  def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       exprList.flatMap(collectRootReferenceAndExtractValue).partition {
@@ -115,8 +115,9 @@ object NestedColumnAliasing {
         case _ => false
       }
 
+    val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
     val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
-      .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+      .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
         // Each expression can contain multiple nested fields.
