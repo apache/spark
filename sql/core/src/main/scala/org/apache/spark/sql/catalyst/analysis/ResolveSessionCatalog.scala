@@ -250,8 +250,7 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumnStatement(
-        SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
+    case DescribeColumnStatement(tbl, colNameParts, isExtended) =>
       val name = parseTempViewOrV1Table(tbl, "Describing columns")
       DescribeColumnCommand(name.asTableIdentifier, colNameParts, isExtended)
 
