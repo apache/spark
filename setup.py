@@ -336,6 +336,7 @@ sentry = [
     'blinker>=1.1',
     'sentry-sdk>=0.8.0',
 ]
+singularity = ['spython>=0.0.56']
 slack = [
     'slackclient>=1.0.0,<2.0.0',
 ]
@@ -424,8 +425,8 @@ devel_hadoop = devel_minreq + hdfs + hive + kerberos + presto + webhdfs
 devel_all = (all_dbs + atlas + aws + azure + celery + cgroups + datadog + devel + doc + docker + druid +
              elasticsearch + gcp + grpc + jdbc + jenkins + kerberos + kubernetes + ldap + odbc + oracle +
              pagerduty + papermill + password + pinot + redis + salesforce + samba + segment + sendgrid +
-             sentry + slack + snowflake + ssh + statsd + tableau + virtualenv + webhdfs + yandexcloud +
-             zendesk)
+             sentry + singularity + slack + snowflake + ssh + statsd + tableau + virtualenv + webhdfs +
+             yandexcloud + zendesk)
 
 # Snakebite are not Python 3 compatible :'(
 if PY3:
@@ -566,6 +567,7 @@ def do_setup():
             'segment': segment,
             'sendgrid': sendgrid,
             'sentry': sentry,
+            'singularity': singularity,
             'slack': slack,
             'snowflake': snowflake,
             'ssh': ssh,

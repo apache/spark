@@ -1210,6 +1210,12 @@ These integrations allow you to perform various operations using various softwar
      -
      -
 
+   * - `Singularity <https://sylabs.io/guides/latest/user-guide/>`__
+     -
+     -
+     - :mod:`airflow.providers.singularity.operators.singularity`
+     -
+
    * - `SQLite <https://www.sqlite.org/index.html>`__
      -
      - :mod:`airflow.providers.sqlite.hooks.sqlite`
