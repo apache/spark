@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.parallel.immutable.ParVector
 
