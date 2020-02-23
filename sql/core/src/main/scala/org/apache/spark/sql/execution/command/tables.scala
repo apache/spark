@@ -1085,42 +1085,47 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
-
-    // TODO: [SPARK-28692] unify this after we unify the
-    //  CREATE TABLE syntax for hive serde and data source table.
-    val metadata = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      tableMetadata
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {
-      // For a Hive serde table, we try to convert it to Spark DDL.
-      if (tableMetadata.unsupportedFeatures.nonEmpty) {
-        throw new AnalysisException(
-          "Failed to execute SHOW CREATE TABLE against table " +
-            s"${tableMetadata.identifier}, which is created by Hive and uses the " +
-            "following unsupported feature(s)\n" +
-            tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
-            s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
-            "to show Hive DDL instead."
-        )
+      val tableMetadata = catalog.getTableMetadata(table)
+
+      // TODO: [SPARK-28692] unify this after we unify the
+      //  CREATE TABLE syntax for hive serde and data source table.
+      val metadata = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+        tableMetadata
+      } else {
+        // For a Hive serde table, we try to convert it to Spark DDL.
+        if (tableMetadata.unsupportedFeatures.nonEmpty) {
+          throw new AnalysisException(
+            "Failed to execute SHOW CREATE TABLE against table " +
+              s"${tableMetadata.identifier}, which is created by Hive and uses the " +
+              "following unsupported feature(s)\n" +
+              tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead."
+          )
+        }
+
+        if (tableMetadata.tableType == VIEW) {
+          throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
+        }
+
+        if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
+          throw new AnalysisException(
+            "SHOW CREATE TABLE doesn't support transactional Hive table. " +
+              s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+              "to show Hive DDL instead.")
+        }
+
+        convertTableMetadata(tableMetadata)
       }
 
-      if (tableMetadata.tableType == VIEW) {
-        throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
-      }
+      val stmt = showCreateDataSourceTable(metadata)
 
-      if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
-        throw new AnalysisException(
-          "SHOW CREATE TABLE doesn't support transactional Hive table. " +
-            s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
-            "to show Hive DDL instead.")
-      }
-
-      convertTableMetadata(tableMetadata)
+      Seq(Row(stmt))
     }
-
-    val stmt = showCreateDataSourceTable(metadata)
-
-    Seq(Row(stmt))
   }
 
   private def convertTableMetadata(tableMetadata: CatalogTable): CatalogTable = {

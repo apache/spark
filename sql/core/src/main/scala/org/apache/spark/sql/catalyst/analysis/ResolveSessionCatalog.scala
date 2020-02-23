@@ -252,19 +252,8 @@ class ResolveSessionCatalog(
 
     case DescribeColumnStatement(
         SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        // `V1Table` also includes permanent views.
-        case v1Table: V1Table =>
-          DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
-      }.getOrElse {
-        val tempViewName = tbl.asIdentifier.name
-        if (isTempView(Seq(tempViewName))) {
-          // v1 DESCRIBE COLUMN supports temp view.
-          DescribeColumnCommand(TableIdentifier(tempViewName), colNameParts, isExtended)
-        } else {
-          throw new AnalysisException("Describing columns is not supported for v2 tables.")
-        }
-      }
+      val name = parseTempViewOrV1Table(tbl, "Describing columns")
+      DescribeColumnCommand(name.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
