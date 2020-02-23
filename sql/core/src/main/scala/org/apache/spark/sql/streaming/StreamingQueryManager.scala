@@ -58,8 +58,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   private val activeQueriesSharedLock = sparkSession.sharedState.activeQueriesLock
   private val awaitTerminationLock = new Object
 
+  /**
+   * Track the last terminated query and remember the last failure since the creation of the
+   * context, or since `resetTerminated()` was called. There are three possible values:
+   *
+   * - null: no query has been been terminated.
+   * - None: some queries have been terminated and no one has failed.
+   * - Some(StreamingQueryException): Some queries have been terminated and at least one query has
+   *   failed. The exception is the exception of the last failed query.
+   */
   @GuardedBy("awaitTerminationLock")
-  private var lastTerminatedQuery: StreamingQuery = null
+  private var lastTerminatedQueryException: Option[StreamingQueryException] = null
 
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
@@ -125,11 +134,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     awaitTerminationLock.synchronized {
-      while (lastTerminatedQuery == null) {
+      while (lastTerminatedQueryException == null) {
         awaitTerminationLock.wait(10)
       }
-      if (lastTerminatedQuery != null && lastTerminatedQuery.exception.nonEmpty) {
-        throw lastTerminatedQuery.exception.get
+      if (lastTerminatedQueryException != null && lastTerminatedQueryException.nonEmpty) {
+        throw lastTerminatedQueryException.get
       }
     }
   }
@@ -164,13 +173,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
 
     awaitTerminationLock.synchronized {
-      while (!isTimedout && lastTerminatedQuery == null) {
+      while (!isTimedout && lastTerminatedQueryException == null) {
         awaitTerminationLock.wait(10)
       }
-      if (lastTerminatedQuery != null && lastTerminatedQuery.exception.nonEmpty) {
-        throw lastTerminatedQuery.exception.get
+      if (lastTerminatedQueryException != null && lastTerminatedQueryException.nonEmpty) {
+        throw lastTerminatedQueryException.get
       }
-      lastTerminatedQuery != null
+      lastTerminatedQueryException != null
     }
   }
 
@@ -182,7 +191,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    */
   def resetTerminated(): Unit = {
     awaitTerminationLock.synchronized {
-      lastTerminatedQuery = null
+      lastTerminatedQueryException = null
     }
   }
 
@@ -422,8 +431,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
     unregisterTerminatedStream(terminatedQuery)
     awaitTerminationLock.synchronized {
-      if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
-        lastTerminatedQuery = terminatedQuery
+      if (lastTerminatedQueryException == null || terminatedQuery.exception.nonEmpty) {
+        lastTerminatedQueryException = terminatedQuery.exception
       }
       awaitTerminationLock.notifyAll()
     }
