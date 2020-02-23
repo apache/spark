@@ -31,7 +31,7 @@ training <- df
 test <- df
 
 # Fit a FM classification model
-model <- spark.fmClassifier(df, label ~ features)
+model <- spark.fmClassifier(training, label ~ features)
 
 # Model summary
 summary(model)

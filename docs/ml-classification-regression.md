@@ -565,11 +565,11 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.fmClassifier.html).
+Refer to the [R API docs](api/R/spark.fmClassifier.html) for more details.
 
 Note: At the moment SparkR doesn't suport feature scaling.
 
-{% include_example binomial r/ml/fmClassifier.R %}
+{% include_example r/ml/fmClassifier.R %}
 </div>
 
 </div>

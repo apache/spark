@@ -540,7 +540,7 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
 * [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
-* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
+* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
 
 #### Regression
 
