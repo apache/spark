@@ -168,7 +168,7 @@ class ResourceProfile(
             // limiting resource because the scheduler code uses that for slots
             throw new IllegalArgumentException("The number of slots on an executor has to be " +
               "limited by the number of cores, otherwise you waste resources and " +
-              "dynamic allocation doesn't work properly. Your configuration has " +
+              "some scheduling doesn't work properly. Your configuration has " +
               s"core/task cpu slots = ${taskLimit} and " +
               s"${execReq.resourceName} = ${numTasks}. " +
               "Please adjust your configuration so that all resources require same number " +

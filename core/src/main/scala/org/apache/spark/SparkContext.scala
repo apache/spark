@@ -2798,7 +2798,7 @@ object SparkContext extends Logging {
         defaultProf.maxTasksPerExecutor(sc.conf) < cpuSlots) {
         throw new IllegalArgumentException("The number of slots on an executor has to be " +
           "limited by the number of cores, otherwise you waste resources and " +
-          "dynamic allocation doesn't work properly. Your configuration has " +
+          "some scheduling doesn't work properly. Your configuration has " +
           s"core/task cpu slots = ${cpuSlots} and " +
           s"${limitingResource} = " +
           s"${defaultProf.maxTasksPerExecutor(sc.conf)}. Please adjust your configuration " +
