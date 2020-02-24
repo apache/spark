@@ -308,12 +308,12 @@ class Analyzer(
           case _ => s
         }
         case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => MultiplyInterval(l, r)
-          case (_, CalendarIntervalType) => MultiplyInterval(r, l)
+          case (CalendarIntervalType, _) => MultiplyInterval(l, r, conf.ansiEnabled)
+          case (_, CalendarIntervalType) => MultiplyInterval(r, l, conf.ansiEnabled)
           case _ => m
         }
         case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => DivideInterval(l, r)
+          case (CalendarIntervalType, _) => DivideInterval(l, r, conf.ansiEnabled)
           case _ => d
         }
       }
