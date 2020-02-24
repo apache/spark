@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
@@ -260,7 +261,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         seconds: Int = 0,
         millis: Int = 0,
         micros: Int = 0): Unit = {
-      val secFrac = seconds * MICROS_PER_SECOND + millis * MICROS_PER_MILLIS + micros
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes), Literal(Decimal(secFrac, 8, 6)))
       val totalMonths = years * MONTHS_PER_YEAR + months

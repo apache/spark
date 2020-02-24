@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.{lang => jl}
 import java.io.File
 import java.sql.{Date, Timestamp}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.util.Random
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
@@ -51,10 +51,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   private val d2 = Date.valueOf(d2Str)
   private val t1Str = "2016-05-08 00:00:01.000000"
   private val t1Internal = date(2016, 5, 8, 0, 0, 1)
-  private val t1 = new Timestamp(TimeUnit.MICROSECONDS.toMillis(t1Internal))
+  private val t1 = new Timestamp(DateTimeUtils.toMillis(t1Internal))
   private val t2Str = "2016-05-09 00:00:02.000000"
   private val t2Internal = date(2016, 5, 9, 0, 0, 2)
-  private val t2 = new Timestamp(TimeUnit.MICROSECONDS.toMillis(t2Internal))
+  private val t2 = new Timestamp(DateTimeUtils.toMillis(t2Internal))
 
   /**
    * Define a very simple 3 row table used for testing column serialization.
