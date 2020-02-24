@@ -484,7 +484,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
-  test("forwards compatibility: ignore unknown fields") {
+  test("SPARK-30936: forwards compatibility - ignore unknown fields") {
     val expected = TestListenerEvent("foo", 123)
     val unknownFieldsJson =
       """{
@@ -496,7 +496,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
   }
 
-  test("backwards compatibility: set default values for missing fields") {
+  test("SPARK-30936: backwards compatibility - set default values for missing fields") {
     val expected = TestListenerEvent("foo", 0)
     val unknownFieldsJson =
       """{
