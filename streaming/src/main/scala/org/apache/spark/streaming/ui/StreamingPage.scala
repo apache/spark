@@ -140,6 +140,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <script>{Unparsed(js)}</script>
   }
 
+  private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    val js = "var timeTipStrings = {};\n" + times.map { time =>
+      val formattedTime =
+        SparkUIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
+      s"timeTipStrings[$time] = '$formattedTime';"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
   private def generateStatTable(): Seq[Node] = {
     val batches = listener.retainedBatches
 
@@ -313,7 +323,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchTimes) ++ table ++
+      jsCollector.toHtml
   }
 
   private def generateInputDStreamsTable(
