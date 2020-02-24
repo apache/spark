@@ -19,59 +19,59 @@ package org.apache.spark.internal.config
 
 private[spark] object Deploy {
   val RECOVERY_MODE = ConfigBuilder("spark.deploy.recoveryMode")
-    .version("0.8.1") // No JIRA ID, commit ID: d66c01f2b6defb3db6c1be99523b734a4d960532
+    .version("0.8.1")
     .stringConf
     .createWithDefault("NONE")
 
   val RECOVERY_MODE_FACTORY = ConfigBuilder("spark.deploy.recoveryMode.factory")
-    .version("1.2.0") // SPARK-1830, commit ID: deefd9d7377a8091a1d184b99066febd0e9f6afd
+    .version("1.2.0")
     .stringConf
     .createWithDefault("")
 
   val RECOVERY_DIRECTORY = ConfigBuilder("spark.deploy.recoveryDirectory")
-    .version("0.8.1") // No JIRA ID, commit ID: d66c01f2b6defb3db6c1be99523b734a4d960532
+    .version("0.8.1")
     .stringConf
     .createWithDefault("")
 
   val ZOOKEEPER_URL = ConfigBuilder("spark.deploy.zookeeper.url")
     .doc(s"When `${RECOVERY_MODE.key}` is set to ZOOKEEPER, this " +
       "configuration is used to set the zookeeper URL to connect to.")
-    .version("0.8.1") // No JIRA ID, commit ID: d66c01f2b6defb3db6c1be99523b734a4d960532
+    .version("0.8.1")
     .stringConf
     .createOptional
 
   val ZOOKEEPER_DIRECTORY = ConfigBuilder("spark.deploy.zookeeper.dir")
-    .version("0.8.1") // No JIRA ID, commit ID: d66c01f2b6defb3db6c1be99523b734a4d960532
+    .version("0.8.1")
     .stringConf
     .createOptional
 
   val RETAINED_APPLICATIONS = ConfigBuilder("spark.deploy.retainedApplications")
-    .version("0.8.0") // No JIRA ID, commit ID: 46eecd110a4017ea0c86cbb1010d0ccd6a5eb2ef
+    .version("0.8.0")
     .intConf
     .createWithDefault(200)
 
   val RETAINED_DRIVERS = ConfigBuilder("spark.deploy.retainedDrivers")
-    .version("1.1.0") // No JIRA ID, commit ID: 7446f5ff93142d2dd5c79c63fa947f47a1d4db8b
+    .version("1.1.0")
     .intConf
     .createWithDefault(200)
 
   val REAPER_ITERATIONS = ConfigBuilder("spark.dead.worker.persistence")
-    .version("0.8.0") // No JIRA ID, commit ID: 46eecd110a4017ea0c86cbb1010d0ccd6a5eb2ef
+    .version("0.8.0")
     .intConf
     .createWithDefault(15)
 
   val MAX_EXECUTOR_RETRIES = ConfigBuilder("spark.deploy.maxExecutorRetries")
-    .version("1.6.3") // SPARK-16956, commit ID: ace458f0330f22463ecf7cbee7c0465e10fba8a8
+    .version("1.6.3")
     .intConf
     .createWithDefault(10)
 
   val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOut")
-    .version("0.6.1") // No JIRA ID, commit ID: bb2b9ff37cd2503cc6ea82c5dd395187b0910af0
+    .version("0.6.1")
     .booleanConf
     .createWithDefault(true)
 
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
-    .version("0.9.0") // No JIRA ID, commit ID: d8bcc8e9a095c1b20dd7a17b6535800d39bff80e
+    .version("0.9.0")
     .intConf
     .createWithDefault(Int.MaxValue)
 
