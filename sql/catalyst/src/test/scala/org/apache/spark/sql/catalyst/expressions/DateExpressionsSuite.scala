@@ -47,7 +47,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
-    DateTimeUtils.toMillis(tf.parse(timestamp))
+    DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
   val d = new Date(toMillis(date))
