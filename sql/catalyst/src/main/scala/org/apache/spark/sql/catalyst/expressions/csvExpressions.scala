@@ -139,7 +139,7 @@ case class CsvToStructs(
   override def prettyName: String = "from_csv"
 }
 
-object CsvToStructs{
+object CsvToStructs {
   def apply(
              schema: StructType,
              options: Map[String, String],
