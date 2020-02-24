@@ -3584,6 +3584,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         }
     }
   }
+
+  test("SPARK-26071: convert map to array and use as map key") {
+    val df = Seq(Map(1 -> "a")).toDF("m")
+    intercept[AnalysisException](df.select(map($"m", lit(1))))
+    checkAnswer(
+      df.select(map(map_entries($"m"), lit(1))),
+      Row(Map(Seq(Row(1, "a")) -> 1)))
+  }
 }
 
 object DataFrameFunctionsSuite {
