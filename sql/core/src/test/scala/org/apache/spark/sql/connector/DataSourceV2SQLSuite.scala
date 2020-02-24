@@ -1854,7 +1854,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("SHOW CREATE TABLE", t)
+      testV1CommandSupportingTempView("SHOW CREATE TABLE", t)
     }
   }
 

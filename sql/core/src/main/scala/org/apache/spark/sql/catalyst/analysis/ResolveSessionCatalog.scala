@@ -404,12 +404,8 @@ class ResolveSessionCatalog(
         partition)
 
     case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
-      if (isTempView(tbl)) {
-        throw new AnalysisException(
-          s"SHOW CREATE TABLE is not supported on a temporary view: ${tbl.quoted}")
-      }
-      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
-      ShowCreateTableCommand(v1TableName.asTableIdentifier)
+      val name = parseTempViewOrV1Table(tbl, "SHOW CREATE TABLE")
+      ShowCreateTableCommand(name.asTableIdentifier)
 
     case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")

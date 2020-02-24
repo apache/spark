@@ -19,14 +19,13 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 
 class DataSourceV2SQLSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with AlterTableTests
   with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
-  override protected val catalogAndNamespace = "default."
+  override protected val catalogAndNamespace = ""
 
   override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
@@ -40,6 +39,7 @@ class DataSourceV2SQLSessionCatalogSuite
   override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(spark.table(tableName), expected)
     checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
   }
 
