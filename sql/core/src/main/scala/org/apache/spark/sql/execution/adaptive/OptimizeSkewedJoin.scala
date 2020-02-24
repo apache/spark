@@ -115,15 +115,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       targetSize: Long): Array[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
-    val avgPartitionSize = mapPartitionSizes.sum / mapPartitionSizes.length
-    val advisoryPartitionSize = math.max(avgPartitionSize, targetSize)
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
     var postMapPartitionSize = 0L
     while (i < mapPartitionSizes.length) {
       val nextMapPartitionSize = mapPartitionSizes(i)
-      if (i > 0 && postMapPartitionSize + nextMapPartitionSize > advisoryPartitionSize) {
+      if (i > 0 && postMapPartitionSize + nextMapPartitionSize > targetSize) {
         partitionStartIndices += i
         postMapPartitionSize = nextMapPartitionSize
       } else {
@@ -277,8 +275,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       rightStats: MapOutputStatistics,
       nonSkewPartitionIndices: Seq[Int]): Seq[ShufflePartitionSpec] = {
     assert(nonSkewPartitionIndices.nonEmpty)
-    val isEnabled = conf.getConf(SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
-    if (!isEnabled || nonSkewPartitionIndices.length == 1) {
+    val shouldCoalesce = conf.getConf(SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
+    if (!shouldCoalesce || nonSkewPartitionIndices.length == 1) {
       Seq(SinglePartitionSpec(nonSkewPartitionIndices.head))
     } else {
       val startIndices = ShufflePartitionsCoalescer.coalescePartitions(
