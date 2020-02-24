@@ -608,7 +608,7 @@ case class JsonToStructs(
   override def prettyName: String = "from_json"
 }
 
-object JsonToStructs{
+object JsonToStructs {
   def apply(
              schema: DataType,
              options: Map[String, String],
