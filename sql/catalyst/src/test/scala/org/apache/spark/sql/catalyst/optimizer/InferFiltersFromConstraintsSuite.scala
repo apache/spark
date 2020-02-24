@@ -317,6 +317,13 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
+  test("Should not infer nondeterministic expressions") {
+    val original = testRelation.where('a === 'b && Rand('a) === 1.0)
+    val optimized = testRelation.where(
+      IsNotNull('a) && IsNotNull('b) && 'a === 'b && Rand('a) === 1.0)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
+
   test("SPARK-30872: Constraints inferred from inferred attributes") {
     val original = testRelation.where('a === 'b && 'b === 'c && ('c === 3 || 'c < 13))
     val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)

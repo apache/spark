@@ -62,11 +62,11 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferred = Set.empty[Expression]
-    var lastEqualityInferred = Set.empty[Expression]
+    var lastInferred = Set.empty[Expression]
     do {
-      lastEqualityInferred = inferEqualityConstraints(constraints ++ inferred)
-      inferred ++= lastEqualityInferred
-    } while (lastEqualityInferred.nonEmpty)
+      lastInferred = inferEqualityConstraints(constraints ++ inferred)
+      inferred ++= lastInferred
+    } while (lastInferred.nonEmpty)
     inferred
   }
 
