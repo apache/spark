@@ -42,23 +42,14 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       partitions: Array[Transform],
       properties: util.Map[String, String]): T
 
-  protected def fullIdentifier(ident: Identifier): Identifier = {
-    if (ident.namespace().isEmpty) {
-      throw new NoSuchTableException(ident)
-    } else {
-      ident
-    }
-  }
-
   override def loadTable(ident: Identifier): Table = {
-    val fullIdent = fullIdentifier(ident)
-    if (tables.containsKey(fullIdent)) {
-      tables.get(fullIdent)
+    if (tables.containsKey(ident)) {
+      tables.get(ident)
     } else {
       // Table was created through the built-in catalog
-      val t = super.loadTable(fullIdent)
+      val t = super.loadTable(ident)
       val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(fullIdent, table)
+      tables.put(ident, table)
       table
     }
   }
@@ -70,13 +61,12 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       properties: util.Map[String, String]): Table = {
     val created = super.createTable(ident, schema, partitions, properties)
     val t = newTable(created.name(), schema, partitions, properties)
-    val fullIdent = fullIdentifier(ident)
-    tables.put(fullIdent, t)
+    tables.put(ident, t)
     t
   }
 
   override def dropTable(ident: Identifier): Boolean = {
-    tables.remove(fullIdentifier(ident))
+    tables.remove(ident)
     super.dropTable(ident)
   }
 

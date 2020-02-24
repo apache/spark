@@ -109,8 +109,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val fullIdent = fullIdentifier(ident)
-    Option(tables.get(fullIdent)) match {
+    Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
@@ -123,7 +122,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
           .withData(table.data)
 
-        tables.put(fullIdent, newTable)
+        tables.put(ident, newTable)
 
         newTable
       case _ =>

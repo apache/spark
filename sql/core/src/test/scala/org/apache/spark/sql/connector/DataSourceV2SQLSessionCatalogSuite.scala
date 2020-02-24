@@ -46,12 +46,8 @@ class DataSourceV2SQLSessionCatalogSuite
   override def getTableMetadata(tableName: String): Table = {
     val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    val ident = if (v2Catalog.name == SESSION_CATALOG_NAME) {
-      Identifier.of(nameParts.init.toArray, nameParts.last)
-    } else {
-      Identifier.of(Array.empty, nameParts.last)
-    }
-    v2Catalog.asInstanceOf[TableCatalog].loadTable(ident)
+    v2Catalog.asInstanceOf[TableCatalog]
+      .loadTable(Identifier.of(nameParts.init.toArray, nameParts.last))
   }
 
   test("SPARK-30697: catalog.isView doesn't throw an error for specialized identifiers") {
