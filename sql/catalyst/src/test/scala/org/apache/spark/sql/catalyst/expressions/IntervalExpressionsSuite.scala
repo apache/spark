@@ -203,10 +203,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         num: Double,
         expected: String,
         configs: Seq[String] = Seq("true", "false")): Unit = {
-      val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
       val expectedRes = safeStringToInterval(expected)
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
           if (expectedRes == null) {
             checkExceptionInExpression[ArithmeticException](expr, expected)
           } else {
@@ -234,10 +234,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         num: Double,
         expected: String,
         configs: Seq[String] = Seq("true", "false")): Unit = {
-      val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
       val expectedRes = safeStringToInterval(expected)
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
           if (expected != null && expectedRes == null) {
             checkExceptionInExpression[ArithmeticException](expr, expected)
           } else {
