@@ -115,5 +115,3 @@ class ANOVAClassificationTestResult private[stat] (
       s"F Value = $statistic \n"
   }
 }
-
-

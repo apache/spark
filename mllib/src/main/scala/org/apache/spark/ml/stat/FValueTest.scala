@@ -33,9 +33,9 @@ object FValueTest {
 
   /** Used to construct output schema of tests */
   case class FValueResult(
-                           pValues: Vector,
-                           degreesOfFreedom: Array[Long],
-                           fValues: Vector)
+      pValues: Vector,
+      degreesOfFreedom: Array[Long],
+      fValues: Vector)
 
   /**
    * @param dataset  DataFrame of continuous labels and continuous features.
