@@ -431,13 +431,7 @@ object IntervalUtils {
       monthsWithFraction: Double,
       daysWithFraction: Double,
       microsWithFraction: Double): CalendarInterval = {
-    val truncatedDays = if (daysWithFraction > Int.MaxValue) {
-      Int.MaxValue
-    } else if (daysWithFraction < Int.MinValue) {
-      Int.MinValue
-    } else {
-      daysWithFraction.toInt
-    }
+    val truncatedDays = daysWithFraction.toInt
     val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
     new CalendarInterval(monthsWithFraction.toInt, truncatedDays, micros.round)
   }

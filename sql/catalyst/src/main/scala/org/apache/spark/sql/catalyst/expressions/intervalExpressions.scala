@@ -118,7 +118,7 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
 
   protected def checkOverflow: Boolean = SQLConf.get.ansiEnabled
 
-  protected def operation(interval: CalendarInterval, num: Double): CalendarInterval
+  protected val operation: (CalendarInterval, Double) => CalendarInterval
   protected def operationName: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
@@ -141,18 +141,17 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
 case class MultiplyInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(interval, num) {
 
-  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (checkOverflow) multiplyExact(interval, num) else multiply(interval, num)
-  }
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    (interval, num) => if (checkOverflow) multiplyExact(interval, num) else multiply(interval, num)
+
   override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
 }
 
 case class DivideInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(interval, num) {
 
-  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (checkOverflow) divideExact(interval, num) else divide(interval, num)
-  }
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    (interval, num) => if (checkOverflow) divideExact(interval, num) else divide(interval, num)
 
   override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
 }
