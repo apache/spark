@@ -104,7 +104,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus.apply(_: Expression), tpe)
     }
   }
 

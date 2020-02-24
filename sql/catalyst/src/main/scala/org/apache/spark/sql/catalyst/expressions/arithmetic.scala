@@ -33,9 +33,12 @@ import org.apache.spark.unsafe.types.CalendarInterval
       > SELECT _FUNC_(1);
        -1
   """)
-case class UnaryMinus(child: Expression) extends UnaryExpression
+case class UnaryMinus(child: Expression, checkOverflow: Boolean) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.ansiEnabled
+
+  def this(child: Expression) = {
+    this(child, SQLConf.get.ansiEnabled)
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -87,6 +90,12 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   }
 
   override def sql: String = s"(- ${child.sql})"
+}
+
+object UnaryMinus {
+  def apply(child: Expression): UnaryMinus = {
+    new UnaryMinus(child)
+  }
 }
 
 @ExpressionDescription(
