@@ -157,24 +157,25 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   }
 
   test("SPARK-30868 throw an exception if HiveClient#runSqlHive fails") {
+    val client = externalCatalog.client
     // test add jars which not exists
     val jarPath = "file:///tmp/not_exists.jar"
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(s"ADD JAR $jarPath"))
+    assertThrows[QueryExecutionException](client.runSqlHive(s"ADD JAR $jarPath"))
 
     // test change to the database which doesn't exists
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+    assertThrows[QueryExecutionException](client.runSqlHive(
       s"use db_not_exists"))
 
-    // test create hive table failed
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
-      s"CREATE TABLE table_not_exists(n into)"))
+    // test create hive table failed with unsupported into type
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"CREATE TABLE t(n into)"))
 
     // test desc table failed with wrong `FORMATED` keyword
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+    assertThrows[QueryExecutionException](client.runSqlHive(
       s"DESC FORMATED t"))
 
     // test wrong insert query
-    assertThrows[QueryExecutionException](externalCatalog.client.runSqlHive(
+    assertThrows[QueryExecutionException](client.runSqlHive(
       "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
   }
 }
