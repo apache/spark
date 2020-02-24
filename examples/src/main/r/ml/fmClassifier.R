@@ -24,7 +24,7 @@ library(SparkR)
 # Initialize SparkSession
 sparkR.session(appName = "SparkR-ML-fmclasfier-example")
 
-# $example on:classification$
+# $example on$
 # Load training data
 df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
 training <- df
@@ -40,6 +40,6 @@ summary(model)
 predictions <- predict(model, test)
 head(predictions)
 
-# $example off:classification$
+# $example off$
 
 sparkR.session.stop()
