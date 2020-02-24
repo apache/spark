@@ -158,7 +158,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   test("SPARK-30868 throw an exception if HiveClient#runSqlHive fails") {
     val client = externalCatalog.client
-    // test add jars which not exists
+    // test add jars which doesn't exists
     val jarPath = "file:///tmp/not_exists.jar"
     assertThrows[QueryExecutionException](client.runSqlHive(s"ADD JAR $jarPath"))
 
