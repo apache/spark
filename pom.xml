@@ -275,6 +275,16 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+       <id>scala-integration</id>
+       <url>https://scala-ci.typesafe.com/artifactory/scala-integration</url>
+       <releases>
+         <enabled>true</enabled>
+       </releases>
+       <snapshots>
+         <enabled>false</enabled>
+       </snapshots>
+     </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -3178,20 +3188,7 @@
 
     <profile>
       <id>scala-integration</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <repositories>
-       <repository>
-          <id>scala-integration</id>
-          <url>https://scala-ci.typesafe.com/artifactory/scala-integration</url>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-        </repository>
       </repositories>
     </profile>
 
