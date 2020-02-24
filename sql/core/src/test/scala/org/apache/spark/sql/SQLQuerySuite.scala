@@ -3394,11 +3394,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-30870: Fix nested column aliasing") {
+  test("SPARK-30870: Don't alias a nested column if it means the whole attribute") {
     val df = sql(
       """
-        |SELECT explodedvalue.*
-        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |SELECT explodedvalue.field
+        |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
         |LATERAL VIEW explode(value) AS explodedvalue
       """.stripMargin)
     checkAnswer(df, Row(Row(1, 2)) :: Nil)
