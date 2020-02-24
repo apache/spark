@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.fromMillis
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
@@ -77,7 +77,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     testSingleUnit("HouR", 3, 0, 0, 3 * MICROS_PER_HOUR)
     testSingleUnit("MiNuTe", 3, 0, 0, 3 * MICROS_PER_MINUTE)
     testSingleUnit("Second", 3, 0, 0, 3 * MICROS_PER_SECOND)
-    testSingleUnit("MilliSecond", 3, 0, 0, fromMillis(3))
+    testSingleUnit("MilliSecond", 3, 0, 0, millisToMicros(3))
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
     checkFromInvalidString(null, "cannot be null")
@@ -176,7 +176,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         new CalendarInterval(
           0,
           10,
-          12 * MICROS_PER_MINUTE + fromMillis(888)))
+          12 * MICROS_PER_MINUTE + millisToMicros(888)))
       assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
       try {
