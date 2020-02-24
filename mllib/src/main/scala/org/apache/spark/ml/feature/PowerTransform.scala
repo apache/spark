@@ -23,7 +23,6 @@ import org.apache.commons.math3.optim.nonlinear.scalar._
 import org.apache.commons.math3.optim.univariate._
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark._
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
@@ -34,7 +33,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -58,6 +56,21 @@ private[feature] trait PowerTransformParams extends Params with HasInputCol with
 
   setDefault(modelType -> PowerTransform.YeoJohnson)
 
+  /**
+   * param for number of bins to down-sample the curves in statistics computation.
+   * If 0, no down-sampling will occur.
+   * Default: 100,000.
+   * @group expertParam
+   */
+  val numBins: IntParam = new IntParam(this, "numBins", "Number of bins to down-sample " +
+    "the curves in statistics computation. If 0, no down-sampling will occur. Must be >= 0.",
+    ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  def getNumBins: Int = $(numBins)
+
+  setDefault(numBins -> 100000)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
@@ -76,8 +89,8 @@ private[feature] trait PowerTransformParams extends Params with HasInputCol with
  * Box-Cox requires input data to be strictly positive, while Yeo-Johnson supports both
  * positive or negative data.
  */
-@Since("3.0.0")
-class PowerTransform @Since("3.0.0")(@Since("3.0.0") override val uid: String)
+@Since("3.1.0")
+class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
   extends Estimator[PowerTransformModel] with PowerTransformParams with DefaultParamsWritable {
 
   import PowerTransform._
@@ -93,99 +106,101 @@ class PowerTransform @Since("3.0.0")(@Since("3.0.0") override val uid: String)
   /** @group setParam */
   def setModelType(value: String): this.type = set(modelType, value)
 
+  /** @group expertSetParam */
+  def setNumBins(value: Int): this.type = set(numBins, value)
+
   override def fit(dataset: Dataset[_]): PowerTransformModel = {
     transformSchema(dataset.schema, logging = true)
+
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
     val localModelType = $(modelType)
-
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val numRows = dataset.count()
 
-    val validateUDF = localModelType match {
-      case BoxCox =>
-        udf { vector: Vector => requirePositiveValues(vector); vector }
-      case YeoJohnson =>
-        udf { vector: Vector => requireNonNaNValues(vector); vector }
+    val validateFunc = $(modelType) match {
+      case BoxCox => vec: Vector => requirePositiveValues(vec)
+      case YeoJohnson => vec: Vector => requireNonNaNValues(vec)
     }
 
-    val colPartitioner = new Partitioner {
-      override def numPartitions: Int = numFeatures
+    var pairCounts = dataset
+      .select($(inputCol))
+      .flatMap { case Row(vec: Vector) =>
+        require(vec.size == numFeatures)
+        validateFunc(vec)
+        vec.nonZeroIterator
+      }.toDF("col", "value")
+      .groupBy("col", "value")
+      .agg(count(lit(0)).as("cnt"))
+      .sort("col", "value")
 
-      override def getPartition(key: Any): Int = key match {
-        case (col: Int, _: Double) => col
-      }
-    }
-
-    val points = dataset.select(validateUDF(col($(inputCol)))).rdd.map {
-      case Row(vec: Vector) => vec
-    }.mapPartitions { iter =>
-      if (iter.hasNext) {
-        val nnz = Array.ofDim[Long](numFeatures)
-        var count = 0L
-
-        iter.flatMap { vec =>
-          require(vec.size == numFeatures,
-            s"Number of dimensions must be $numFeatures but got ${vec.size}")
-          count += 1L
-          vec.nonZeroIterator.map { case (col, value) =>
-            nnz(col) += 1L
-            ((col, value), 1L)
+    val groups = if (0 < $(numBins) && $(numBins) <= numRows) {
+      val localNumBins = $(numBins)
+      pairCounts
+        .groupBy("col")
+        .count()
+        .as[(Int, Long)]
+        .flatMap { case (col, num) =>
+          val group = num / localNumBins
+          if (group >= 2) {
+            Some((col, group))
+          } else {
+            None
           }
-        } ++ {
-          nnz.iterator.zipWithIndex.map { case (n, col) =>
-            ((col, 0.0), count - n)
-          }.filterNot(_._2 == 0L)
+        }.collect().toMap
+    } else Map.empty[Int, Long]
+
+    if (groups.nonEmpty) {
+      pairCounts = makeBins(pairCounts.as[(Int, Double, Long)], groups)
+        .toDF("col", "value", "cnt")
+    }
+
+    val solutions = pairCounts
+      .groupBy("col")
+      .agg(collect_list(struct("value", "cnt")))
+      .as[(Int, Seq[(Double, Long)])]
+      .map { case (col, seq) =>
+        val nnz = seq.iterator.map(_._2).sum
+        val nz = numRows - nnz
+        val (solution, _) = localModelType match {
+          case BoxCox =>
+            require(nz >= 0)
+            val computeIter = if (nz > 0) {
+              () => seq.iterator ++ Iterator.single((0.0, nz))
+            } else {
+              () => seq.iterator
+            }
+            solveBoxCox(computeIter)
+          case YeoJohnson =>
+            require(nz == 0)
+            val computeIter = () => seq.iterator
+            solveYeoJohnson(computeIter)
         }
-      } else Iterator.empty
-    }.reduceByKey(
-      partitioner = colPartitioner,
-      func = (c1, c2) => c1 + c2
-    ).mapPartitionsWithIndex { case (pid, iter) =>
-      iter.map { case ((col, value), count) =>
-        require(pid == col)
-        (value, count)
-      }
-    }.persist(StorageLevel.MEMORY_AND_DISK)
+        (col, solution)
+      }.collect().toMap
 
-    val lambda = points.mapPartitionsWithIndex { case (pid, iter) =>
-      val context = TaskContext.get
-      require(context.partitionId == pid)
-      val partition = points.partitions(pid)
-      val computeIter = () => points.iterator(partition, context)
-      val zippedIter = iter.zip(computeIter())
+    val lambda = Array.ofDim[Double](numFeatures)
+    solutions.foreach { case (col, solution) => lambda(col) = solution }
 
-      val (solution, _) = localModelType match {
-        case BoxCox =>
-          var logxSum = 0.0
-          var count = 0L
-          while (zippedIter.hasNext) {
-            val ((x, w), (x1, w1)) = zippedIter.next
-            require(x == x1 && w == w1)
-            logxSum += math.log(x) * w
-            count += w
-          }
-          require(count > 0)
-          solveBoxCox(computeIter, logxSum, count)
-
+    if (solutions.size < numFeatures) {
+      localModelType match {
         case YeoJohnson =>
-          var log1pxSum = 0.0
-          var count = 0L
-          while (zippedIter.hasNext) {
-            val ((x, w), (x1, w1)) = zippedIter.next
-            require(x == x1 && w == w1)
-            log1pxSum += math.signum(x) * math.log1p(math.abs(x)) * w
-            count += w
-          }
-          require(count > 0)
-          solveYeoJohnson(computeIter, log1pxSum, count)
+          // if some column only contains 0 values in YeoJohnson
+          val computeIter = () => Iterator.single((0.0, numRows))
+          val (zeroSolution, _) = solveYeoJohnson(computeIter)
+          Iterator.range(0, numFeatures)
+            .filterNot(solutions.contains)
+            .foreach { col => lambda(col) = zeroSolution }
+
+        case BoxCox =>
+          // This should never happen.
+          throw new IllegalArgumentException("BoxCox requires positive values")
       }
-      Iterator.single((pid, solution))
-    }.collect().sortBy(_._1).map(_._2)
-    require(lambda.length == numFeatures,
-      "PowerTransform on some dimensions were not fitted")
+    }
 
-    points.unpersist()
-
-    copyValues(new PowerTransformModel(uid, Vectors.dense(lambda).compressed)
-      .setParent(this))
+   copyValues(new PowerTransformModel(uid, Vectors.dense(lambda).compressed)
+    .setParent(this))
   }
 
   override def copy(extra: ParamMap): PowerTransform = defaultCopy(extra)
@@ -196,7 +211,7 @@ class PowerTransform @Since("3.0.0")(@Since("3.0.0") override val uid: String)
 }
 
 
-@Since("3.0.0")
+@Since("3.1.0")
 object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
   override def load(path: String): PowerTransform = super.load(path)
@@ -210,17 +225,12 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
   /* Set of modelTypes that PowerTransform supports */
   private[feature] val supportedModelTypes = Array(BoxCox, YeoJohnson)
 
-  private[feature] val BrentLowerBound = -10.0
-
-  private[feature] val BrentUpperBound = 10.0
-
-  private[feature] val BrentRel = 1E-8
-
-  private[feature] val BrentAbs = 1.48E-8
-
-  private[feature] val BrentMaxIter = 1000
-
   private[feature] def brentSolve(obj: UnivariateFunction): (Double, Double) = {
+    val BrentLowerBound = -10.0
+    val BrentUpperBound = 10.0
+    val BrentRel = 1E-8
+    val BrentAbs = 1.48E-8
+    val BrentMaxIter = 1000
     val brent = new BrentOptimizer(BrentRel, BrentAbs)
     val result = brent.optimize(
       new UnivariateObjectiveFunction(obj),
@@ -232,9 +242,12 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
   }
 
   private[feature] def solveBoxCox(
-      computeIter: () => Iterator[(Double, Long)],
-      logxSum: Double,
-      count: Long): (Double, Double) = {
+      computeIter: () => Iterator[(Double, Long)]): (Double, Double) = {
+    val (logxSum, count) = computeIter().fold((0.0, 0L)) {
+      case ((sum, cnt), (x, c)) =>
+        (sum + math.log(x) * c, cnt + c)
+    }
+
     val obj = new UnivariateFunction() {
       override def value(lambda: Double): Double = {
         val lambda0 = math.abs(lambda) < MLUtils.EPSILON
@@ -247,12 +260,12 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
         if (lambda0) {
           while (iter.hasNext) {
-            val (x, w) = iter.next
+            val (x, c) = iter.next
             if (x != xPrev) {
               xPrev = x
               yPrev = math.log(x)
             }
-            ySumL2 += yPrev * yPrev * w
+            ySumL2 += yPrev * yPrev * c
           }
           ySum = logxSum
         } else {
@@ -277,9 +290,12 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
   }
 
   private[feature] def solveYeoJohnson(
-      computeIter: () => Iterator[(Double, Long)],
-      log1pxSum: Double,
-      count: Long): (Double, Double) = {
+      computeIter: () => Iterator[(Double, Long)]): (Double, Double) = {
+    val (log1pxSum, count) = computeIter().fold((0.0, 0L)) {
+      case ((sum, cnt), (x, c)) =>
+        (sum + math.signum(x) * math.log1p(math.abs(x)) * c, cnt + c)
+    }
+
     val obj = new UnivariateFunction() {
       override def value(lambda: Double): Double = {
         val lambda0 = math.abs(lambda) < MLUtils.EPSILON
@@ -292,7 +308,7 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
         var yPrev = Double.NaN
 
         while (iter.hasNext) {
-          val (x, w) = iter.next
+          val (x, c) = iter.next
           if (x != xPrev) {
             xPrev = x
             yPrev = if (x >= 0) {
@@ -309,8 +325,8 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
               }
             }
           }
-          ySum += yPrev * w
-          ySumL2 += yPrev * yPrev * w
+          ySum += yPrev * c
+          ySumL2 += yPrev * yPrev * c
         }
 
         val yAvg = ySum / count
@@ -344,6 +360,64 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
     require(values.forall(v => !v.isNaN),
       s"PowerTransform by Yeo-Johnson method requires NonNaN values but got $v.")
   }
+
+  private[ml] def makeBins(
+      dataset: Dataset[(Int, Double, Long)],
+      groups: Map[Int, Long]): Dataset[(Int, Double, Long)] = {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+    dataset.mapPartitions { iter => makeBins(iter, groups) }
+  }
+
+  /**
+   * Group input iterator by given group sizes
+   * @param iter input iterator containing (column, value, count)
+   * @param groups group size of each column, if do not contain a column, means it size=1.
+   * @return grouped iterator, for a group, use mean of values (weighted by input counts)
+   *         as the output value, and sum of counts as the output count.
+   */
+  private[ml] def makeBins(
+    iter: Iterator[(Int, Double, Long)],
+    groups: Map[Int, Long]): Iterator[(Int, Double, Long)] = {
+    if (iter.hasNext) {
+      var prevCol = -1
+      var group = -1L
+      var valueSum = Double.NaN
+      var countSum = -1L
+      var cnt = 0L
+
+      iter.flatMap { case (col, v, c) =>
+        var ret = Seq.empty[(Int, Double, Long)]
+        if (prevCol != col) {
+          if (prevCol >= 0 && cnt > 0) {
+            ret ++= Seq((prevCol, valueSum / countSum, countSum))
+          }
+
+          prevCol = col
+          group = groups.getOrElse(col, 1L)
+          valueSum = v * c
+          countSum = c
+          cnt = 1L
+        } else {
+          valueSum += v * c
+          countSum += c
+          cnt += 1L
+        }
+
+        if (group == cnt) {
+          ret ++= Seq((col, valueSum / countSum, countSum))
+          valueSum = 0.0
+          countSum = 0L
+          cnt = 0L
+        }
+        ret
+      } ++ {
+        if (prevCol >= 0 && cnt > 0) {
+          Iterator.single((prevCol, valueSum / countSum, countSum))
+        } else Iterator.empty
+      }
+    } else Iterator.empty
+  }
 }
 
 
@@ -352,7 +426,7 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
  *
  * @param lambda parameters of the power transformation for the features
  */
-@Since("3.0.0")
+@Since("3.1.0")
 class PowerTransformModel private[ml](
     override val uid: String,
     val lambda: Vector)
@@ -440,14 +514,14 @@ class PowerTransformModel private[ml](
     outputSchema
   }
 
-  @Since("3.0.0")
+  @Since("3.1.0")
   override def toString: String = {
     s"PowerTransformModel: uid=$uid, modelType=${$(modelType)}, numFeatures=$numFeatures"
   }
 }
 
 
-@Since("3.0.0")
+@Since("3.1.0")
 object PowerTransformModel extends MLReadable[PowerTransformModel] {
 
   private[PowerTransformModel]
