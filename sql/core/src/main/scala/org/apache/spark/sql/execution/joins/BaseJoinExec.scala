@@ -39,9 +39,18 @@ trait BaseJoinExec extends BinaryExecNode {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"
     } else "None"
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
-     """.stripMargin
+    if (leftKeys.nonEmpty || rightKeys.nonEmpty) {
+      s"""
+         |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+         |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
+         |${ExplainUtils.generateFieldString("Right keys", rightKeys)}
+         |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+       """.stripMargin
+    } else {
+      s"""
+         |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+         |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+       """.stripMargin
+    }
   }
 }

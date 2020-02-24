@@ -34,18 +34,6 @@ trait HashJoin extends BaseJoinExec {
     s"$nodeName $joinType ${buildSide} ($opId)".trim
   }
 
-  override def verboseStringWithOperatorId(): String = {
-    val joinCondStr = if (condition.isDefined) {
-      s"${condition.get}"
-    } else "None"
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
-       |${ExplainUtils.generateFieldString("Right keys", rightKeys)}
-       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
-     """.stripMargin
-  }
-
   override def output: Seq[Attribute] = {
     joinType match {
       case _: InnerLike =>
