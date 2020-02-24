@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, AccumulatorMode, JsonProtocol, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -111,7 +111,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   private def createAccumulatorInfos(accumulatorUpdates: Map[Long, Long]): Seq[AccumulableInfo] = {
     accumulatorUpdates.map { case (id, value) =>
       val acc = new LongAccumulator
-      acc.metadata = AccumulatorMetadata(id, None, false, AccumulatorMode.All)
+      acc.metadata = AccumulatorMetadata(id, None, false)
       acc.toInfo(Some(value), None)
     }.toSeq
   }

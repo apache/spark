@@ -74,7 +74,7 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
     currentStats.add(v)
   }
 
-  override def merge(other: AccumulatorV2[Long, EventTimeStats], fragmentId: Int): Unit = {
+  override def merge(other: AccumulatorV2[Long, EventTimeStats]): Unit = {
     currentStats.merge(other.value)
   }
 }

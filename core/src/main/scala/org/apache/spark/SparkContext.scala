@@ -1419,10 +1419,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note Accumulators must be registered before use, or it will throw exception.
    */
-  def register(acc: AccumulatorV2[_, _],
-               name: String,
-               mode: AccumulatorMode = AccumulatorMode.All): Unit = {
-    acc.register(this, name = Option(name), mode = mode)
+  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
+    acc.register(this, name = Option(name))
   }
 
   /**
@@ -1439,18 +1437,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
-    register(acc, name, AccumulatorMode.All)
-    acc
-  }
-
-  /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`
-   * in the given mode.
-   */
-  def longAccumulator(name: String,
-                      mode: AccumulatorMode): LongAccumulator = {
-    val acc = new LongAccumulator
-    register(acc, name, mode)
+    register(acc, name)
     acc
   }
 
@@ -1468,17 +1455,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    register(acc, name, AccumulatorMode.All)
-    acc
-  }
-
-  /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`
-   * in the given mode.
-   */
-  def doubleAccumulator(name: String, mode: AccumulatorMode): DoubleAccumulator = {
-    val acc = new DoubleAccumulator
-    register(acc, name, mode)
+    register(acc, name)
     acc
   }
 
@@ -1498,17 +1475,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
     val acc = new CollectionAccumulator[T]
-    register(acc, name, AccumulatorMode.All)
-    acc
-  }
-
-  /**
-   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
-   * inputs by adding them into the list in the given mode.
-   */
-  def collectionAccumulator[T](name: String, mode: AccumulatorMode): CollectionAccumulator[T] = {
-    val acc = new CollectionAccumulator[T]
-    register(acc, name, mode)
+    register(acc, name)
     acc
   }
 

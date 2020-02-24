@@ -27,129 +27,11 @@ import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 
-import scala.reflect.{ClassTag, classTag}
-
 private[spark] case class AccumulatorMetadata(
     id: Long,
     name: Option[String],
-    countFailedValues: Boolean,
-    mode: AccumulatorMode) extends Serializable
+    countFailedValues: Boolean) extends Serializable
 
-abstract case class AccumulatorMode(name: String) {
-  def merge[IN, OUT, T <: AccumulatorV2[IN, OUT]](acc: ReliableAccumulator[IN, OUT],
-                                                  other: T, fragmentId: Int): Unit = {
-    try {
-      doMerge(acc, other, fragmentId)
-    } catch {
-      case e: ClassCastException =>
-        throw new UnsupportedOperationException(
-          s"Cannot merge ${this.getClass.getName} with mode $name", e)
-    }
-  }
-
-  def doMerge[IN, OUT, T <: AccumulatorV2[IN, OUT]](acc: ReliableAccumulator[IN, OUT],
-                                                    other: T, fragmentId: Int): Unit
-}
-
-object AccumulatorMode {
-  val All: AccumulatorMode = new AccumulatorMode("All") {
-    override def doMerge[IN, OUT, T <: AccumulatorV2[IN, OUT]]
-    (acc: ReliableAccumulator[IN, OUT], other: T, fragmentId: Int): Unit =
-      acc.merge(other)
-  }
-
-  val First: AccumulatorMode = new AccumulatorMode("First") {
-    override def doMerge[IN, OUT, T <: AccumulatorV2[IN, OUT]]
-    (acc: ReliableAccumulator[IN, OUT], other: T, fragmentId: Int): Unit =
-      acc.asInstanceOf[FirstMode[_, _]].mergeFirst(other, fragmentId)
-  }
-
-  val Larger: AccumulatorMode = new AccumulatorMode("Larger") {
-    override def doMerge[IN, OUT, T <: AccumulatorV2[IN, OUT]]
-    (acc: ReliableAccumulator[IN, OUT], other: T, fragmentId: Int): Unit =
-      acc.asInstanceOf[LargerMode[IN, OUT]].mergeLarger(other, fragmentId)
-  }
-
-  val Last: AccumulatorMode = new AccumulatorMode("Last") {
-    override def doMerge[IN, OUT, T <: AccumulatorV2[IN, OUT]]
-    (acc: ReliableAccumulator[IN, OUT], other: T, fragmentId: Int): Unit =
-      acc.asInstanceOf[LastMode[IN, OUT]].mergeLast(other, fragmentId)
-  }
-
-  val values = Set(All, First, Larger, Last)
-}
-
-trait ReliableAccumulator[IN, OUT] extends AccumulatorV2[IN, OUT] {
-
-  /**
-   * Merges another same-type accumulator (a fragment) into this one and updates its state,
-   * i.e. this should be merge-in-place.
-   * The fragmentId provides extra context to recognize multiple updates of the same fragment.
-   */
-  def mergeFragment(other: AccumulatorV2[Any, Any], fragmentId: Int): Unit // = // other match {
-//    case t if classTag[T].runtimeClass.isInstance(t) =>
-//      this.metadata.mode.merge(this, other, fragmentId)
-//    case _ =>
-//      throw new UnsupportedOperationException(
-//        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-//  }
-
-  /**
-   * Removes the referenced accumulator fragment from this accumulator merged earlier.
-   */
-  def unMerge(fragmentId: Int): Unit
-
-  /**
-   * Reliable accumulator memorizes that it contains this accumulator fragment.
-   */
-  def mergedFragment[T <: AccumulatorV2[IN, OUT]](other: T, fragmentId: Int): Unit
-
-  /**
-   * Merges the given accumulator fragment if condition is true.
-   * A fragment with the same if merged earlier will be un-merged in that case first.
-   * If no fragment has been merged earlier with this fragment id, unMerge will be a no-op.
-   * @param other accumulator fragment
-   * @param fragmentId fragment id
-   * @param condition condition
-   * @param unMerge method to un-merge earlier fragment
-   */
-  def replaceIf[T <: AccumulatorV2[IN, OUT]](other: T,
-                                             fragmentId: Int,
-                                             condition: (T, Int) => Boolean,
-                                             unMerge: Int => Unit): Unit = {
-    if (condition(other, fragmentId)) {
-      unMerge(fragmentId)
-      merge(other)
-      mergedFragment(other, fragmentId)
-    }
-  }
-}
-
-trait FirstMode[IN, OUT] {
-  this: ReliableAccumulator[IN, OUT] =>
-
-  def isFirst(fragmentId: Int): Boolean
-
-  // don't make this abstract
-  override def unMerge(fragmentId: Int): Unit =
-    assert(isFirst(fragmentId), "UnMerge should never be called for a merged fragment on FirstMode")
-
-  def mergeFirst[T <: AccumulatorV2[IN, OUT]](other: T, fragmentId: Int): Unit =
-    replaceIf(other, fragmentId, (_, f) => isFirst(f), _ => Unit)
-}
-
-trait LargerMode[IN, OUT] {
-  this: ReliableAccumulator[IN, OUT] =>
-  def isLarger[T <: AccumulatorV2[IN, OUT]](other: T, fragmentId: Int): Boolean
-  def mergeLarger[T <: AccumulatorV2[IN, OUT]](other: T, fragmentId: Int): Unit =
-    replaceIf(other, fragmentId, isLarger, unMerge)
-}
-
-trait LastMode[IN, OUT] {
-  this: ReliableAccumulator[IN, OUT] =>
-  def mergeLast[T <: AccumulatorV2[IN, OUT]](other: T, fragmentId: Int): Unit =
-    replaceIf(other, fragmentId, (_, _) => true, unMerge)
-}
 
 /**
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
@@ -162,28 +44,14 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[this] var atDriverSide = true
 
-  private[spark] def supported(mode: AccumulatorMode): Boolean = mode match {
-    case AccumulatorMode.All => true
-    case AccumulatorMode.First => this.isInstanceOf[FirstMode[_, _]]
-    case AccumulatorMode.Larger => this.isInstanceOf[LargerMode[_, _]]
-    case AccumulatorMode.Last => this.isInstanceOf[LastMode[_, _]]
-    case _ => throw new UnsupportedOperationException(s"Mode $mode not supported")
-  }
-
   private[spark] def register(
       sc: SparkContext,
       name: Option[String] = None,
-      countFailedValues: Boolean = false,
-      mode: AccumulatorMode = AccumulatorMode.All): Unit = {
+      countFailedValues: Boolean = false): Unit = {
     if (this.metadata != null) {
       throw new IllegalStateException("Cannot register an Accumulator twice.")
     }
-    if (!supported(mode)) {
-      throw new UnsupportedOperationException(
-        s"Unsupported accumulator mode for accumulator type ${this.getClass}: $mode"
-      )
-    }
-    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues, mode)
+    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues)
     AccumulatorContext.register(this)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
   }
@@ -277,9 +145,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def add(v: IN): Unit
 
   /**
-   * Merges another same-type accumulator (a fragment) into this one and updates its state,
-   * i.e. this should be merge-in-place.
-   * The fragmentId provides extra context to recognize multiple updates of the same fragment.
+   * Merges another same-type accumulator into this one and updates its state, i.e. this should be
+   * merge-in-place.
    */
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
@@ -341,6 +208,25 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       Utils.getSimpleName(getClass) + s"(id: $id, name: $name, value: $value)"
     }
   }
+}
+
+trait ReliableAccumulator[IN, OUT] extends AccumulatorV2[IN, OUT] {
+
+  private val _fragments = scala.collection.mutable.Set.empty[Int]
+
+  /**
+   * Merges another same-type accumulator (a fragment) into this one and updates its state, i.e.
+   * this should be merge-in-place. The merge only happens for the first occurrence of fragmentId.
+   */
+  def merge(other: AccumulatorV2[IN, OUT], fragmentId: Int): Unit = {
+    if (_fragments.add(fragmentId)) merge(other)
+  }
+
+  /**
+   * Creates a new copy of this accumulator. Does not copy the merging state of merged fragment ids.
+   */
+  override def copy(): AccumulatorV2[IN, OUT]
+
 }
 
 
@@ -425,8 +311,8 @@ private[spark] object AccumulatorContext extends Logging {
  * @since 2.0.0
  */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
-  protected var _sum = 0L
-  protected var _count = 0L
+  private var _sum = 0L
+  private var _count = 0L
 
   /**
    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
@@ -483,17 +369,21 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    */
   def avg: Double = _sum.toDouble / _count
 
-  override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit =
-    other match {
-      case o: LongAccumulator =>
-        _sum += o.sum
-        _count += o.count
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-    }
+  override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
+    case o: LongAccumulator =>
+      _sum += o.sum
+      _count += o.count
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
+
+  private[spark] def setValue(newValue: LongAccumulator): Unit = {
+    _sum = newValue._sum
+    _count = newValue._count
+  }
 
   override def value: jl.Long = _sum
 }
@@ -506,8 +396,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
  * @since 2.0.0
  */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
-  protected var _sum = 0.0
-  protected var _count = 0L
+  private var _sum = 0.0
+  private var _count = 0L
 
   /**
    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
@@ -573,6 +463,11 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 
   private[spark] def setValue(newValue: Double): Unit = _sum = newValue
 
+  private[spark] def setValue(newValue: DoubleAccumulator): Unit = {
+    _sum = newValue._sum
+    _count = newValue._count
+  }
+
   override def value: jl.Double = _sum
 }
 
@@ -622,78 +517,38 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
 
 case class ReliableLongAccumulator() extends LongAccumulator
-  with ReliableAccumulator[jl.Long, jl.Long]
-  with FirstMode[jl.Long, jl.Long]
-  with LargerMode[jl.Long, jl.Long]
-  with LastMode[jl.Long, jl.Long] {
+  with ReliableAccumulator[jl.Long, jl.Long] {
 
-  // used by larger and last mode
-  private val _fragments = scala.collection.mutable.Map.empty[Int, (Long, Long)]
-
-  override def mergeFragment(other: AccumulatorV2[Any, Any], fragmentId: Int): Unit = other match {
-    case o: ReliableLongAccumulator => this.metadata.mode.merge(this, o, fragmentId)
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}"
-    )
+  override def copy(): ReliableLongAccumulator = {
+    val newAcc = new ReliableLongAccumulator
+    newAcc.setValue(this)
+    newAcc
   }
-
 
   override def copyAndReset(): ReliableLongAccumulator = new ReliableLongAccumulator
-
-  // used by first mode
-  override def isFirst(fragmentId: Int): Boolean =
-    !_fragments.contains(fragmentId)
-
-  // used by larger mode
-  override def isLarger(other: ReliableLongAccumulator, fragmentId: Int): Boolean = {
-    val (_, fragmentCount) = _fragments.getOrElse(fragmentId, (0L, 0L))
-    other._count > fragmentCount
-  }
-
-  // used by larger and last mode
-  override def unMerge(fragmentId: Int): Unit = {
-    val (fragmentSum, fragmentCount) = _fragments.remove(fragmentId).getOrElse((0L, 0L))
-    _sum -= fragmentSum
-    _count -= fragmentCount
-  }
-
-  // used by larger and last mode
-  override def mergedFragment(other: ReliableLongAccumulator, fragmentId: Int): Unit = {
-    _fragments(fragmentId) = (other.sum, other.count)
-  }
 }
 
 case class ReliableDoubleAccumulator() extends DoubleAccumulator
-  with ReliableAccumulator[jl.Double, jl.Double, ReliableDoubleAccumulator]
-  with FirstMode[jl.Double, jl.Double, ReliableDoubleAccumulator]
-  with LargerMode[jl.Double, jl.Double, ReliableDoubleAccumulator]
-  with LastMode[jl.Double, jl.Double, ReliableDoubleAccumulator] {
+  with ReliableAccumulator[jl.Double, jl.Double] {
 
-  // used by all modes
-  private val _fragments = scala.collection.mutable.Map.empty[Int, (Double, Long)]
+  override def copy(): ReliableDoubleAccumulator = {
+    val newAcc = new ReliableDoubleAccumulator
+    newAcc.setValue(this)
+    newAcc
+  }
 
   override def copyAndReset(): ReliableDoubleAccumulator = new ReliableDoubleAccumulator
+}
 
-  // used by first mode
-  override def isFirst(fragmentId: Int): Boolean =
-    !_fragments.contains(fragmentId)
+case class ReliableCollectionAccumulator[T]() extends CollectionAccumulator[T]
+  with ReliableAccumulator[T, java.util.List[T]] {
 
-  // used by larger mode
-  override def isLarger(other: ReliableDoubleAccumulator, fragmentId: Int): Boolean = {
-    val (_, fragmentCount) = _fragments.getOrElse(fragmentId, (0.0, 0L))
-    other._count > fragmentCount
+  override def copy(): ReliableCollectionAccumulator[T] = {
+    val newAcc = new ReliableCollectionAccumulator[T]
+    newAcc.setValue(this.value)
+    newAcc
   }
 
-  // used by larger and last mode
-  override def unMerge(fragmentId: Int): Unit = {
-    val (fragmentSum, fragmentCount) = _fragments.remove(fragmentId).getOrElse((0.0, 0L))
-    _sum -= fragmentSum
-    _count -= fragmentCount
-  }
-
-  // used by larger and last mode
-  override def mergedFragment(other: ReliableDoubleAccumulator, fragmentId: Int): Unit = {
-    _fragments(fragmentId) = (other.sum, other.count)
-  }
-
+  override def copyAndReset(): ReliableCollectionAccumulator[T] =
+    new ReliableCollectionAccumulator[T]
 }

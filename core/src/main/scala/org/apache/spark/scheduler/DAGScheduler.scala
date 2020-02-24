@@ -1294,9 +1294,8 @@ private[spark] class DAGScheduler(
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
         acc match {
-          case _: ReliableAccumulator[Any, Any] =>
-            acc.asInstanceOf[ReliableAccumulator[Any, Any]]
-              .mergeFragment(updates.asInstanceOf[AccumulatorV2[Any, Any]], event.task.partitionId)
+          case a: ReliableAccumulator[Any, Any] =>
+            a.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]], event.task.partitionId)
           case _ => acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         }
         // To avoid UI cruft, ignore cases where value wasn't updated

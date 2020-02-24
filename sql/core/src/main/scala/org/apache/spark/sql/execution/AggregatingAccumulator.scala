@@ -147,8 +147,7 @@ class AggregatingAccumulator private(
     }
   }
 
-  override def merge(other: AccumulatorV2[InternalRow, InternalRow],
-                     fragmentId: Int): Unit = withSQLConf(()) {
+  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(()) {
     if (!other.isZero) {
       other match {
         case agg: AggregatingAccumulator =>

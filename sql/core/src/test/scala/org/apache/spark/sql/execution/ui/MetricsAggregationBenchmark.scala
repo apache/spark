@@ -31,7 +31,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, AccumulatorMode, LongAccumulator, Utils}
+import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 /**
@@ -116,7 +116,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
         val accumulables = (0 until numMetrics).map { mid =>
           val acc = new LongAccumulator
-          acc.metadata = AccumulatorMetadata(mid, None, false, AccumulatorMode.All)
+          acc.metadata = AccumulatorMetadata(mid, None, false)
           acc.toInfo(Some(i.toLong), None)
         }
 
