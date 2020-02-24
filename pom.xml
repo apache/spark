@@ -160,7 +160,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.10</scala.version>
+    <scala.version>2.12.11-bin-4c726db</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -3171,6 +3171,25 @@
           </snapshots>
           <releases>
             <enabled>false</enabled>
+          </releases>
+        </repository>
+      </repositories>
+    </profile>
+
+    <profile>
+      <id>scala-integration</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <repositories>
+       <repository>
+          <id>scala-integration</id>
+          <url>https://scala-ci.typesafe.com/artifactory/scala-integration</url>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <releases>
+            <enabled>true</enabled>
           </releases>
         </repository>
       </repositories>
