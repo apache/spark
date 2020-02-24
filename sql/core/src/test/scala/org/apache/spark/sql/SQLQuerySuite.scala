@@ -3394,7 +3394,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-30870: Don't alias a nested column if it means the whole attribute") {
+  test("SPARK-30870: Column pruning shouldn't alias a nested column if it means the whole " +
+    "structure") {
     val df = sql(
       """
         |SELECT explodedvalue.field
