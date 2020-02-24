@@ -3186,7 +3186,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
+        ctx.identifier())
     }
 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())

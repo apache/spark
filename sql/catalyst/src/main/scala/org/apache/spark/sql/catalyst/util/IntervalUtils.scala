@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.fromMillis
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -704,9 +705,7 @@ object IntervalUtils {
                   microseconds = Math.addExact(microseconds, minutesUs)
                   i += minuteStr.numBytes()
                 } else if (s.matchAt(millisStr, i)) {
-                  val millisUs = Math.multiplyExact(
-                    currentValue,
-                    MICROS_PER_MILLIS)
+                  val millisUs = fromMillis(currentValue)
                   microseconds = Math.addExact(microseconds, millisUs)
                   i += millisStr.numBytes()
                 } else if (s.matchAt(microsStr, i)) {

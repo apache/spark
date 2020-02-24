@@ -666,7 +666,11 @@ private[spark] class BlockManager(
         // stream.
         channel.close()
         val blockSize = channel.getCount
-        TempFileBasedBlockStoreUpdater(blockId, level, classTag, tmpFile, blockSize).save()
+        val blockStored = TempFileBasedBlockStoreUpdater(
+          blockId, level, classTag, tmpFile, blockSize).save()
+        if (!blockStored) {
+          throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
+        }
       }
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {

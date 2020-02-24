@@ -55,7 +55,7 @@ object DateTimeUtils {
   }
 
   def millisToDays(millis: Long, zoneId: ZoneId): Int = {
-    val instant = microsToInstant(Math.multiplyExact(millis, MICROS_PER_MILLIS))
+    val instant = microsToInstant(fromMillis(millis))
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
@@ -66,7 +66,7 @@ object DateTimeUtils {
 
   def daysToMillis(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
-    instantToMicros(instant) / MICROS_PER_MILLIS
+    toMillis(instantToMicros(instant))
   }
 
   // Converts the `micros` timestamp to string according to Hive TimestampWritable convention.
@@ -139,7 +139,7 @@ object DateTimeUtils {
    * Converts milliseconds since the epoch to microseconds.
    */
   def fromMillis(millis: Long): Long = {
-    MILLISECONDS.toMicros(millis)
+    Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
   def microsToEpochDays(micros: Long, zoneId: ZoneId): Int = {
@@ -568,8 +568,8 @@ object DateTimeUtils {
       time2: Long,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
-    val millis1 = MICROSECONDS.toMillis(time1)
-    val millis2 = MICROSECONDS.toMillis(time2)
+    val millis1 = toMillis(time1)
+    val millis2 = toMillis(time2)
     val date1 = millisToDays(millis1, zoneId)
     val date2 = millisToDays(millis2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
@@ -705,7 +705,7 @@ object DateTimeUtils {
       case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ =>
-        val millis = MICROSECONDS.toMillis(micros)
+        val millis = toMillis(micros)
         val truncated = level match {
           case TRUNC_TO_MILLISECOND => millis
           case TRUNC_TO_SECOND =>
@@ -716,7 +716,7 @@ object DateTimeUtils {
             val dDays = millisToDays(millis, zoneId)
             daysToMillis(truncDate(dDays, level), zoneId)
         }
-        truncated * MICROS_PER_MILLIS
+        fromMillis(truncated)
     }
   }
 

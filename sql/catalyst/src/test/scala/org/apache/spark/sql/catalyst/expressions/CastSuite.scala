@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.parallel.immutable.ParVector
 
@@ -271,13 +270,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        fromMillis(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        fromMillis(c.getTimeInMillis))
     }
 
     val utcId = Option("UTC")

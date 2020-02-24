@@ -23,6 +23,8 @@ import org.apache.spark.sql.sources.Filter;
 /**
  * A mix-in interface for {@link Table} delete support. Data sources can implement this
  * interface to provide the ability to delete data from tables that matches filter expressions.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface SupportsDelete {

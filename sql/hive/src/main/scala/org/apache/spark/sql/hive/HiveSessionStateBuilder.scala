@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.hive.client.HiveClient
@@ -93,6 +94,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       PreWriteCheck +:
         PreReadCheck +:
         TableCapabilityCheck +:
+        CommandCheck(conf) +:
         customCheckRules
   }
 

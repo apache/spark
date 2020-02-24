@@ -125,6 +125,7 @@ class StreamingQuery(object):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
+
         :return: a map
         """
         lastProgress = self._jsq.lastProgress()
@@ -368,7 +369,8 @@ class DataStreamReader(OptionUtils):
 
     @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+        """Loads a data stream from a data source and returns it as a
+        :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. note:: Evolving.
 
