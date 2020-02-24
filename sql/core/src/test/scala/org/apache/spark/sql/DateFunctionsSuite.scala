@@ -441,11 +441,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
 
     // now switch format
-    withSQLConf(confKey -> "corrected") {
-      checkAnswer(
-        df.select(to_date(col("s"), "yyyy-dd-MM")),
-        Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
-    }
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-MM")),
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
 
     // invalid format
     checkAnswer(
@@ -697,7 +695,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("to_timestamp") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy.toString) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts_date1 = Timestamp.valueOf("2015-07-24 00:00:00")

@@ -26,7 +26,6 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
