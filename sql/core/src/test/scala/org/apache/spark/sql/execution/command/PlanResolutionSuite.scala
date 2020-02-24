@@ -1277,7 +1277,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |MERGE INTO $target AS target
              |USING $source AS source
              |ON target.i = source.i
-             |WHEN MATCHED THEN DELETE
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED THEN UPDATE SET target.s = source.s
              |WHEN NOT MATCHED THEN INSERT (target.i, target.s) values (source.i, source.s)
            """.stripMargin
@@ -1286,7 +1286,7 @@ class PlanResolutionSuite extends AnalysisTest {
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
-              Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
+              Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
               Seq(InsertAction(None, insertAssigns))) =>
             checkResolution(target, source, mergeCondition, None, None, None,
               updateAssigns, insertAssigns)
@@ -1364,7 +1364,7 @@ class PlanResolutionSuite extends AnalysisTest {
            |MERGE INTO $target
            |USING $source
            |ON 1 = 1
-           |WHEN MATCHED THEN DELETE
+           |WHEN MATCHED AND (${target}.s='delete') THEN DELETE
            |WHEN MATCHED THEN UPDATE SET s = 1
            |WHEN NOT MATCHED AND (s = 'a') THEN INSERT (i) values (i)
          """.stripMargin
@@ -1374,7 +1374,7 @@ class PlanResolutionSuite extends AnalysisTest {
             AsDataSourceV2Relation(target),
             AsDataSourceV2Relation(source),
             _,
-            Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
             Seq(InsertAction(
               Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
               insertAssigns))) =>
@@ -1451,7 +1451,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |MERGE INTO non_exist_target
          |USING non_exist_source
          |ON target.i = source.i
-         |WHEN MATCHED THEN DELETE
+         |WHEN MATCHED AND (non_exist_target.s='delete') THEN DELETE
          |WHEN MATCHED THEN UPDATE SET *
          |WHEN NOT MATCHED THEN INSERT *
        """.stripMargin
