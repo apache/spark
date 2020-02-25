@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InputStream, IOException, OutputStream}
+import java.io.{DataInputStream, DataOutputStream, InputStream, IOException, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.collection.mutable
 import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.{SizeEstimator, Utils}
 
@@ -68,6 +71,19 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   protected def defaultCompactInterval: Int
 
+  /**
+   * In some case, log files being written from the application A should be able to be read from
+   * application B, which Spark versions between twos may not be same. To support writing log file
+   * which is readable from lower version of Spark, this method receives additional metadata log
+   * version which will be only used for writing.
+   *
+   * Note that this class doesn't "rewrite" the old batch files: to ensure the metadata to be read
+   * by lower version of Spark, the metadata log should be written with proper version from the
+   * scratch, or at least one compact batch should be written with proper version. (so that reader
+   * will ignore previous batch logs which may be written with higher version)
+   */
+  protected def writeMetadataLogVersion: Option[Int] = None
+
   protected final lazy val compactInterval: Int = {
     // SPARK-18187: "compactInterval" can be set by user via defaultCompactInterval.
     // If there are existing log entries, then we should ensure a compatible compactInterval
@@ -106,6 +122,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     interval
   }
 
+  private val sparkConf = sparkSession.sparkContext.getConf
+
   /**
    * Filter out the obsolete logs.
    */
@@ -132,22 +150,86 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
   }
 
+  protected def serializeEntryToV2(data: T): Array[Byte]
+  protected def deserializeEntryFromV2(serialized: Array[Byte]): T
+
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(("v" + metadataLogVersion).getBytes(UTF_8))
+    val version = writeMetadataLogVersion.getOrElse(metadataLogVersion)
+    out.write(("v" + version).getBytes(UTF_8))
+    version match {
+      case 1 => serializeToV1(out, logData)
+      case 2 => serializeToV2(out, logData)
+      case _ =>
+        throw new IllegalStateException(s"UnsupportedLogVersion: unknown log version is provided" +
+          s", v$metadataLogVersion.")
+    }
+  }
+
+  private def serializeToV1(out: OutputStream, logData: Array[T]): Unit = {
     logData.foreach { data =>
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
     }
   }
 
+  private def serializeToV2(out: OutputStream, logData: Array[T]): Unit = {
+    out.write('\n')
+    val dos = compressStream(out)
+    if (logData.nonEmpty) {
+      logData.foreach { data =>
+        val serialized = serializeEntryToV2(data)
+        dos.writeInt(serialized.length)
+        dos.write(serialized)
+      }
+    }
+    dos.writeInt(-1)
+    dos.flush()
+  }
+
   override def deserialize(in: InputStream): Array[T] = {
-    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
-    if (!lines.hasNext) {
+    val line = readLine(in)
+    if (line == null || line.isEmpty) {
       throw new IllegalStateException("Incomplete log file")
     }
-    validateVersion(lines.next(), metadataLogVersion)
+
+    val version = parseVersion(line)
+    version match {
+      case 1 if version <= metadataLogVersion => deserializeFromV1(in)
+      case 2 if version <= metadataLogVersion => deserializeFromV2(in)
+      case version =>
+        throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
+          s"is v${metadataLogVersion}, but encountered v$version. The log file was produced " +
+          s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
+    }
+  }
+
+  private def deserializeFromV1(in: InputStream): Array[T] = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     lines.map(Serialization.read[T]).toArray
+  }
+
+  private def deserializeFromV2(in: InputStream): Array[T] = {
+    val list = new scala.collection.mutable.ArrayBuffer[T]
+
+    val dis = decompressStream(in)
+    var eof = false
+
+    while (!eof) {
+      val size = dis.readInt()
+      if (size == -1) {
+        eof = true
+      } else if (size < 0) {
+        throw new IOException(
+          s"Error to deserialize file: size cannot be $size")
+      } else {
+        val buffer = new Array[Byte](size)
+        ByteStreams.readFully(dis, buffer, 0, size)
+        list += deserializeEntryFromV2(buffer)
+      }
+    }
+
+    list.toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
@@ -283,6 +365,33 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         }
       }
     }
+  }
+
+  private def readLine(in: InputStream): String = {
+    val line = new mutable.ArrayBuffer[Byte]()
+    var eol = false
+    while (!eol) {
+      val b = in.read()
+      if (b == -1 || b == '\n') {
+        eol = true
+      } else {
+        line += b.toByte
+      }
+    }
+
+    new String(line.toArray, UTF_8)
+  }
+
+  private def compressStream(outputStream: OutputStream): DataOutputStream = {
+    // set syncFlush to true since we don't call close for compressed stream but call flush instead
+    val compressed = new LZ4CompressionCodec(sparkConf)
+      .compressedOutputStream(outputStream, syncFlush = true)
+    new DataOutputStream(compressed)
+  }
+
+  private def decompressStream(inputStream: InputStream): DataInputStream = {
+    val compressed = new LZ4CompressionCodec(sparkConf).compressedInputStream(inputStream)
+    new DataInputStream(compressed)
   }
 }
 

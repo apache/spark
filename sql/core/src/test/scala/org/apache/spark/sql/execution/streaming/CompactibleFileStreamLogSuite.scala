@@ -109,45 +109,49 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
       })
   }
 
-  test("serialize") {
+  test("serialize & deserialize") {
     withFakeCompactibleFileStreamLog(
       fileCleanupDelayMs = Long.MaxValue,
       defaultCompactInterval = 3,
       defaultMinBatchesToRetain = 1,
       compactibleLog => {
         val logs = Array("entry_1", "entry_2", "entry_3")
-        val expected = s"""v${FakeCompactibleFileStreamLog.VERSION}
-            |"entry_1"
-            |"entry_2"
-            |"entry_3"""".stripMargin
+
         val baos = new ByteArrayOutputStream()
         compactibleLog.serialize(logs, baos)
-        assert(expected === baos.toString(UTF_8.name()))
+
+        val actualLogs = compactibleLog.deserialize(new ByteArrayInputStream(baos.toByteArray))
+        assert(actualLogs === logs)
 
         baos.reset()
         compactibleLog.serialize(Array(), baos)
-        assert(s"v${FakeCompactibleFileStreamLog.VERSION}" === baos.toString(UTF_8.name()))
+        val actualLogs2 = compactibleLog.deserialize(new ByteArrayInputStream(baos.toByteArray))
+        assert(actualLogs2.isEmpty)
       })
   }
 
-  test("deserialize") {
-    withFakeCompactibleFileStreamLog(
-      fileCleanupDelayMs = Long.MaxValue,
-      defaultCompactInterval = 3,
-      defaultMinBatchesToRetain = 1,
-      compactibleLog => {
-        val logs = s"""v${FakeCompactibleFileStreamLog.VERSION}
-            |"entry_1"
-            |"entry_2"
-            |"entry_3"""".stripMargin
-        val expected = Array("entry_1", "entry_2", "entry_3")
-        assert(expected ===
-          compactibleLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
+  test("write older version of metadata for compatibility") {
+    withTempDir { dir =>
+      def newFakeCompactibleFileStreamLog(
+          readVersion: Int,
+          writeVersion: Option[Int]): FakeCompactibleFileStreamLog =
+        new FakeCompactibleFileStreamLog(
+          readVersion,
+          writeVersion,
+          _fileCleanupDelayMs = Long.MaxValue, // this param does not matter here in this test case
+          _defaultCompactInterval = 3,         // this param does not matter here in this test case
+          _defaultMinBatchesToRetain = 1,      // this param does not matter here in this test case
+          spark,
+          dir.getCanonicalPath)
 
-        assert(Nil ===
-          compactibleLog.deserialize(
-            new ByteArrayInputStream(s"v${FakeCompactibleFileStreamLog.VERSION}".getBytes(UTF_8))))
-      })
+      // writer understands version 2 but to ensure compatibility it sets the write version to 1
+      val writer = newFakeCompactibleFileStreamLog(2, Some(1))
+      // suppose a reader only understand version 1
+      val reader = newFakeCompactibleFileStreamLog(1, None)
+      writer.add(0, Array("entry"))
+      // reader can read the metadata log writer just wrote
+      assert(Array("entry") === reader.get(0).get)
+    }
   }
 
   test("deserialization log written by future version") {
@@ -155,6 +159,7 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
       def newFakeCompactibleFileStreamLog(version: Int): FakeCompactibleFileStreamLog =
         new FakeCompactibleFileStreamLog(
           version,
+          None,
           _fileCleanupDelayMs = Long.MaxValue, // this param does not matter here in this test case
           _defaultCompactInterval = 3,         // this param does not matter here in this test case
           _defaultMinBatchesToRetain = 1,      // this param does not matter here in this test case
@@ -263,6 +268,7 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
     withTempDir { file =>
       val compactibleLog = new FakeCompactibleFileStreamLog(
         FakeCompactibleFileStreamLog.VERSION,
+        None,
         fileCleanupDelayMs,
         defaultCompactInterval,
         defaultMinBatchesToRetain,
@@ -274,11 +280,12 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
 }
 
 object FakeCompactibleFileStreamLog {
-  val VERSION = 1
+  val VERSION = 2
 }
 
 class FakeCompactibleFileStreamLog(
     metadataLogVersion: Int,
+    _writeMetadataLogVersion: Option[Int],
     _fileCleanupDelayMs: Long,
     _defaultCompactInterval: Int,
     _defaultMinBatchesToRetain: Int,
@@ -296,7 +303,17 @@ class FakeCompactibleFileStreamLog(
 
   override protected def defaultCompactInterval: Int = _defaultCompactInterval
 
+  override protected def writeMetadataLogVersion: Option[Int] = _writeMetadataLogVersion
+
   override protected val minBatchesToRetain: Int = _defaultMinBatchesToRetain
 
   override def compactLogs(logs: Seq[String]): Seq[String] = logs
+
+  override protected def serializeEntryToV2(data: String): Array[Byte] = {
+    data.getBytes(UTF_8)
+  }
+
+  override protected def deserializeEntryFromV2(serialized: Array[Byte]): String = {
+    new String(serialized, UTF_8)
+  }
 }

@@ -135,8 +135,11 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
   private[this] val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
+    compressedOutputStream(s, syncFlush = false)
+  }
+
+  def compressedOutputStream(s: OutputStream, syncFlush: Boolean): OutputStream = {
     val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
-    val syncFlush = false
     new LZ4BlockOutputStream(
       s,
       blockSize,

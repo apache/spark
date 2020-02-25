@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.net.URI
 
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -97,6 +98,10 @@ class FileStreamSinkLog(
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
 
+  // The validation of version is done in SQLConf.
+  protected override val writeMetadataLogVersion: Option[Int] =
+    sparkSession.sessionState.conf.fileSinkWriteMetadataLogVersion
+
   override def compactLogs(logs: Seq[SinkFileStatus]): Seq[SinkFileStatus] = {
     val deletedFiles = logs.filter(_.action == FileStreamSinkLog.DELETE_ACTION).map(_.path).toSet
     if (deletedFiles.isEmpty) {
@@ -105,10 +110,45 @@ class FileStreamSinkLog(
       logs.filter(f => !deletedFiles.contains(f.path))
     }
   }
+
+  override protected def serializeEntryToV2(data: SinkFileStatus): Array[Byte] = {
+    val baos = new ByteArrayOutputStream()
+    val dos = new DataOutputStream(baos)
+
+    dos.writeUTF(data.path)
+    dos.writeLong(data.size)
+    dos.writeBoolean(data.isDir)
+    dos.writeLong(data.modificationTime)
+    dos.writeInt(data.blockReplication)
+    dos.writeLong(data.blockSize)
+    dos.writeUTF(data.action)
+    dos.close()
+
+    baos.toByteArray
+  }
+
+  override protected def deserializeEntryFromV2(serialized: Array[Byte]): SinkFileStatus = {
+    val bais = new ByteArrayInputStream(serialized)
+    val dis = new DataInputStream(bais)
+
+    val status = SinkFileStatus(
+      dis.readUTF(),
+      dis.readLong(),
+      dis.readBoolean(),
+      dis.readLong(),
+      dis.readInt(),
+      dis.readLong(),
+      dis.readUTF())
+
+    dis.close()
+
+    status
+  }
 }
 
 object FileStreamSinkLog {
-  val VERSION = 1
+  val VERSION = 2
+  val SUPPORTED_VERSIONS = Seq(1, 2)
   val DELETE_ACTION = "delete"
   val ADD_ACTION = "add"
 }

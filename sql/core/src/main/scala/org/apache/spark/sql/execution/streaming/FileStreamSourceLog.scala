@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.{LinkedHashMap => JLinkedHashMap}
 import java.util.Map.Entry
 
@@ -122,8 +123,34 @@ class FileStreamSourceLog(
     }
     batches
   }
+
+  override protected def serializeEntryToV2(data: FileEntry): Array[Byte] = {
+    val baos = new ByteArrayOutputStream()
+    val dos = new DataOutputStream(baos)
+
+    dos.writeUTF(data.path)
+    dos.writeLong(data.timestamp)
+    dos.writeLong(data.batchId)
+    dos.close()
+
+    baos.toByteArray
+  }
+
+  override protected def deserializeEntryFromV2(serialized: Array[Byte]): FileEntry = {
+    val bais = new ByteArrayInputStream(serialized)
+    val dis = new DataInputStream(bais)
+
+    val entry = FileEntry(
+      dis.readUTF(),
+      dis.readLong(),
+      dis.readLong())
+
+    dis.close()
+
+    entry
+  }
 }
 
 object FileStreamSourceLog {
-  val VERSION = 1
+  val VERSION = 2
 }

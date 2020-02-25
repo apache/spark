@@ -1464,6 +1464,21 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
+  val FILE_SINK_LOG_WRITE_METADATA_VERSION =
+    buildConf("spark.sql.streaming.fileSink.log.writeMetadataVersion")
+      .doc("The version of file stream sink log metadata. By default the version is set to " +
+        "the highest version current Spark handles, as higher version tends to be better in " +
+        "some aspects. You may want to set this to lower value when the outputs should be " +
+        "readable from lower version of Spark. " +
+        "Note that it doesn't 'rewrite' the old batch files: to ensure the metadata to be " +
+        "read by lower version of Spark, the metadata log should be written from the scratch, " +
+        "or at least one compact batch should be written with configured version. " +
+        "Available metadata versions: 1 (all versions) 2 (3.1.0+)")
+      .version("3.1.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createOptional
+
   val FILE_SOURCE_LOG_DELETION = buildConf("spark.sql.streaming.fileSource.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream source.")
@@ -2807,6 +2822,8 @@ class SQLConf extends Serializable with Logging {
   def fileSinkLogCompactInterval: Int = getConf(FILE_SINK_LOG_COMPACT_INTERVAL)
 
   def fileSinkLogCleanupDelay: Long = getConf(FILE_SINK_LOG_CLEANUP_DELAY)
+
+  def fileSinkWriteMetadataLogVersion: Option[Int] = getConf(FILE_SINK_LOG_WRITE_METADATA_VERSION)
 
   def fileSourceLogDeletion: Boolean = getConf(FILE_SOURCE_LOG_DELETION)
 

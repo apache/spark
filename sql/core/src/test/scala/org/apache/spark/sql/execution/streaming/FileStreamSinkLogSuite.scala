@@ -37,7 +37,25 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   import CompactibleFileStreamLog._
   import FileStreamSinkLog._
 
-  test("compactLogs") {
+  def executeFuncWithMetadataVersion(metadataVersion: Int, func: => Any): Unit = {
+    withSQLConf(
+      Seq(SQLConf.FILE_SINK_LOG_WRITE_METADATA_VERSION.key -> metadataVersion.toString): _*) {
+      func
+    }
+  }
+
+  // This makes sure tests are passing for all supported versions on write version, where
+  // the read version is set to the highest supported version. This ensures Spark can read
+  // older versions of file stream sink metadata log.
+  def testWithAllMetadataVersions(name: String)(func: => Any): Unit = {
+    for (version <- FileStreamSinkLog.SUPPORTED_VERSIONS) {
+      test(s"$name - metadata version $version") {
+        executeFuncWithMetadataVersion(version, func)
+      }
+    }
+  }
+
+  testWithAllMetadataVersions("compactLogs") {
     withFileStreamSinkLog { sinkLog =>
       val logs = Seq(
         newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION),
@@ -53,7 +71,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("serialize") {
+  testWithAllMetadataVersions("serialize & deserialize") {
     withFileStreamSinkLog { sinkLog =>
       val logs = Array(
         SinkFileStatus(
@@ -81,63 +99,20 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           blockSize = 30000L,
           action = FileStreamSinkLog.ADD_ACTION))
 
-      // scalastyle:off
-      val expected = s"""v$VERSION
-          |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
-          |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
-      // scalastyle:on
       val baos = new ByteArrayOutputStream()
       sinkLog.serialize(logs, baos)
-      assert(expected === baos.toString(UTF_8.name()))
+
+      val actualLogs = sinkLog.deserialize(new ByteArrayInputStream(baos.toByteArray))
+      assert(actualLogs === logs)
+
       baos.reset()
       sinkLog.serialize(Array(), baos)
-      assert(s"v$VERSION" === baos.toString(UTF_8.name()))
+      val actualLogs2 = sinkLog.deserialize(new ByteArrayInputStream(baos.toByteArray))
+      assert(actualLogs2.isEmpty)
     }
   }
 
-  test("deserialize") {
-    withFileStreamSinkLog { sinkLog =>
-      // scalastyle:off
-      val logs = s"""v$VERSION
-          |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
-          |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
-      // scalastyle:on
-
-      val expected = Seq(
-        SinkFileStatus(
-          path = "/a/b/x",
-          size = 100L,
-          isDir = false,
-          modificationTime = 1000L,
-          blockReplication = 1,
-          blockSize = 10000L,
-          action = FileStreamSinkLog.ADD_ACTION),
-        SinkFileStatus(
-          path = "/a/b/y",
-          size = 200L,
-          isDir = false,
-          modificationTime = 2000L,
-          blockReplication = 2,
-          blockSize = 20000L,
-          action = FileStreamSinkLog.DELETE_ACTION),
-        SinkFileStatus(
-          path = "/a/b/z",
-          size = 300L,
-          isDir = false,
-          modificationTime = 3000L,
-          blockReplication = 3,
-          blockSize = 30000L,
-          action = FileStreamSinkLog.ADD_ACTION))
-
-      assert(expected === sinkLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
-
-      assert(Nil === sinkLog.deserialize(new ByteArrayInputStream(s"v$VERSION".getBytes(UTF_8))))
-    }
-  }
-
-  test("compact") {
+  testWithAllMetadataVersions("compact") {
     withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         for (batchId <- 0 to 10) {
@@ -157,7 +132,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("delete expired file") {
+  testWithAllMetadataVersions("delete expired file") {
     // Set FILE_SINK_LOG_CLEANUP_DELAY to 0 so that we can detect the deleting behaviour
     // deterministically and one min batches to retain
     withSQLConf(
@@ -233,7 +208,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("read Spark 2.1.0 log format") {
+  testWithAllMetadataVersions("read Spark 2.1.0 log format") {
     assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
       // SinkFileStatus("/a/b/0", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION), -> deleted
       SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
@@ -248,7 +223,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     ))
   }
 
-  test("getLatestBatchId") {
+  testWithAllMetadataVersions("getLatestBatchId") {
     withCountOpenLocalFileSystemAsLocalFileSystem {
       val scheme = CountOpenLocalFileSystem.scheme
       withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
