@@ -199,11 +199,16 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("multiply") {
-    def check(interval: String, num: Double, expected: String): Unit = {
-      val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
+    def check(
+        interval: String,
+        num: Double,
+        expected: String,
+        isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
-      Seq("true", "false").foreach { v =>
+      val configs = if (isAnsi.isEmpty) Seq("true", "false") else isAnsi.map(_.toString).toSeq
+      configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
           if (expectedRes == null) {
             checkExceptionInExpression[ArithmeticException](expr, expected)
           } else {
@@ -220,17 +225,23 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("1 year 1 second", 0.5, "6 months 500 milliseconds")
     check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
-    check("1 month 2 microseconds", 1.5, "1 months 15 days 3 microseconds")
-    check("2 months", Int.MaxValue, "integer overflow")
+    check("1 month 2 microseconds", 1.5, "1 months 3 microseconds")
+    check("2 months", Int.MaxValue, "integer overflow", Some(true))
+    check("2 months", Int.MaxValue, Int.MaxValue + " months", Some(false))
   }
 
   test("divide") {
-    def check(interval: String, num: Double, expected: String): Unit = {
-      val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
+    def check(
+        interval: String,
+        num: Double,
+        expected: String,
+        isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
-      Seq("true", "false").foreach { v =>
+      val configs = if (isAnsi.isEmpty) Seq("true", "false") else isAnsi.map(_.toString).toSeq
+      configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
-          if (expectedRes == null) {
+          val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
+          if (expected != null && expectedRes == null) {
             checkExceptionInExpression[ArithmeticException](expr, expected)
           } else {
             checkEvaluation(expr, expectedRes)
@@ -245,9 +256,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("6 years -7 seconds", 3, "2 years -2.333333 seconds")
     check("2 years -8 seconds", 0.5, "4 years -16 seconds")
     check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
-    check("1 month 3 microsecond", 1.5, "20 days 2 microseconds")
-    check("1 second", 0, "divide by zero")
-    check(s"${Int.MaxValue} months", 0.9, "integer overflow")
+    check("1 month 3 microsecond", 1.5, "2 microseconds")
+    check("1 second", 0, "divide by zero", Some(true))
+    check("1 second", 0, null, Some(false))
+    check(s"${Int.MaxValue} months", 0.9, "integer overflow", Some(true))
+    check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Some(false))
   }
 
   test("make interval") {

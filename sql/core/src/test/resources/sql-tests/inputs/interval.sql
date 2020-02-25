@@ -4,6 +4,10 @@
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
 select interval 4 month 2 weeks 3 microseconds * 1.5;
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;
+select interval 2147483647 month * 2;
+select interval 2147483647 month / 0.5;
+select interval 2147483647 day * 2;
+select interval 2147483647 day / 0.5;
 
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;

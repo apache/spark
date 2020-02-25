@@ -405,20 +405,36 @@ object IntervalUtils {
   }
 
   /**
-   * Makes an interval from months, days and micros with the fractional part by
-   * adding the month fraction to days and the days fraction to micros.
-   *
-   * @throws ArithmeticException if the result overflows any field value
+   * Makes an interval from months, days and micros with the fractional part.
+   * The overflow style here follows the way of ansi sql standard and the natural rules for
+   * intervals as defined in the Gregorian calendar. Thus, the days fraction will be added
+   * to microseconds but the months fraction will not be added to days, and it will throw
+   * exception if any part overflows.
    */
   private def fromDoubles(
       monthsWithFraction: Double,
       daysWithFraction: Double,
       microsWithFraction: Double): CalendarInterval = {
     val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
-    val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
-    val truncatedDays = Math.toIntExact(days.toLong)
-    val micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays)
+    val truncatedDays = Math.toIntExact(daysWithFraction.toLong)
+    val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
+  }
+
+  /**
+   * Makes an interval from months, days and micros with the fractional part.
+   * The overflow style here follows the way of casting [[java.lang.Double]] to integrals and the
+   * natural rules for intervals as defined in the Gregorian calendar. Thus, the days fraction
+   * will be added to microseconds but the months fraction will not be added to days, and there may
+   * be rounding or truncation in months(or day and microseconds) part.
+   */
+  private def safeFromDoubles(
+      monthsWithFraction: Double,
+      daysWithFraction: Double,
+      microsWithFraction: Double): CalendarInterval = {
+    val truncatedDays = daysWithFraction.toInt
+    val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
+    new CalendarInterval(monthsWithFraction.toInt, truncatedDays, micros.round)
   }
 
   /**
@@ -486,11 +502,26 @@ object IntervalUtils {
 
   /**
    * Return a new calendar interval instance of the left interval times a multiplier.
+   */
+  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+    safeFromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval times a multiplier.
    *
    * @throws ArithmeticException if the result overflows any field value
    */
   def multiplyExact(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval divides by a dividend.
+   */
+  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (num == 0) return null
+    safeFromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
   /**
