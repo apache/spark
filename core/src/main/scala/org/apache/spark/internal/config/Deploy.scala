@@ -75,5 +75,10 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(Int.MaxValue)
 
+  val CORES_RESERVED_FOR_APPS = ConfigBuilder("spark.deploy.coresReservedForApps")
+    .version("2.4.6")
+    .intConf
+    .createWithDefault(0)
+    
 
 }

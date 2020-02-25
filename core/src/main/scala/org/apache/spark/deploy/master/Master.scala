@@ -64,6 +64,7 @@ private[deploy] class Master(
   private val reaperIterations = conf.get(REAPER_ITERATIONS)
   private val recoveryMode = conf.get(RECOVERY_MODE)
   private val maxExecutorRetries = conf.get(MAX_EXECUTOR_RETRIES)
+  private val coresReservedForApps = conf.get(CORES_RESERVED_FOR_APPS)
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
@@ -797,28 +798,32 @@ private[deploy] class Master(
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
-    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
-      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
-      // start from the last worker that was assigned a driver, and continue onwards until we have
-      // explored all alive workers.
-      var launched = false
-      var isClusterIdle = true
-      var numWorkersVisited = 0
-      while (numWorkersVisited < numWorkersAlive && !launched) {
-        val worker = shuffledAliveWorkers(curPos)
-        isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
-        numWorkersVisited += 1
-        if (canLaunchDriver(worker, driver.desc)) {
-          val allocated = worker.acquireResources(driver.desc.resourceReqs)
-          driver.withResources(allocated)
-          launchDriver(worker, driver)
-          waitingDrivers -= driver
-          launched = true
+    val allFreeCores = shuffledAliveWorkers.map(_.coresFree).sum
+    val forDriversFreeCores = math.max(allFreeCores - coresReservedForApps,0)
+    if (forDriversFreeCores > 0) {
+      for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+        // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+        // start from the last worker that was assigned a driver, and continue onwards until we have
+        // explored all alive workers.
+        var launched = false
+        var isClusterIdle = true
+        var numWorkersVisited = 0
+        while (numWorkersVisited < numWorkersAlive && !launched) {
+          val worker = shuffledAliveWorkers(curPos)
+          isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
+          numWorkersVisited += 1
+          if (canLaunchDriver(worker, driver.desc)) {
+            val allocated = worker.acquireResources(driver.desc.resourceReqs)
+            driver.withResources(allocated)
+            launchDriver(worker, driver)
+            waitingDrivers -= driver
+            launched = true
+          }
+          curPos = (curPos + 1) % numWorkersAlive
         }
-        curPos = (curPos + 1) % numWorkersAlive
-      }
-      if (!launched && isClusterIdle) {
-        logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
+        if (!launched && isClusterIdle) {
+          logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
+        }
       }
     }
     startExecutorsOnWorkers()
