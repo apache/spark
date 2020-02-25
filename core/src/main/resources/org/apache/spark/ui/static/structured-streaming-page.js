@@ -106,7 +106,7 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
         .on('mouseover', function(d) {
             var tip = '';
             var idx = 0;
-            var _values = formattedTimeToValues[d._x]
+            var _values = formattedTimeToValues[d._x];
             _values.forEach(function (k) {
                 tip += labels[idx] + ': ' + k + '   ';
                 idx += 1;

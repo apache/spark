@@ -131,11 +131,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   }
 
   def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
-    val batchTimes = withNoProgress(query,
-      query.recentProgress.map(p => df.parse(p.timestamp).getTime), Array.empty[Long])
     val batchToTimestamps = withNoProgress(query,
       query.recentProgress.map(p => (p.batchId, df.parse(p.timestamp).getTime)),
       Array.empty[(Long, Long)])
+    val batchTimes = batchToTimestamps.map(_._2)
     val minBatchTime =
       withNoProgress(query, df.parse(query.recentProgress.head.timestamp).getTime, 0L)
     val maxBatchTime =

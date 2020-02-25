@@ -141,10 +141,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    // We leverage timeFormat as the value would be same as timeFormat. This means it is
+    // sensitive to the order - generateTimeMap should be called earlier than this.
     val js = "var timeTipStrings = {};\n" + times.map { time =>
-      val formattedTime =
-        SparkUIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
-      s"timeTipStrings[$time] = '$formattedTime';"
+      s"timeTipStrings[$time] = timeFormat[$time];"
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
