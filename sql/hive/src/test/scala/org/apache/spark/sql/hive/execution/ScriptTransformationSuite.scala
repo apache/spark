@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{DecimalType, StringType}
+import org.apache.spark.sql.types.StringType
 
 class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
   with BeforeAndAfterEach {
