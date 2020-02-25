@@ -1432,15 +1432,10 @@ class Dataset[T] private[sql](
   def select(cols: Column*): DataFrame = withPlan {
     val untypedCols = cols.map {
       case typedCol: TypedColumn[_, _] =>
-        val isSimpleEncoder = typedCol.encoder.namedExpressions.head match {
-          case Alias(_: BoundReference, _) if !typedCol.encoder.isSerializedAsStruct => true
-          case _ => false
-        }
-        if (isSimpleEncoder) {
-          // This typed column produces simple type output that can be fit into untyped `DataFrame`.
-          typedCol.withInputType(exprEnc, logicalPlan.output)
+        if (!typedCol.needInputType) {
+          typedCol
         } else {
-          throw new AnalysisException(s"Typed column $typedCol with complex serializer " +
+          throw new AnalysisException(s"Typed column $typedCol that needs input type and schema " +
             "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
         }
 
