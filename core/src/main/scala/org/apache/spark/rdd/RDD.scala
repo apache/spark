@@ -1721,6 +1721,7 @@ abstract class RDD[T: ClassTag](
    * It will result in new executors with the resources specified being acquired to
    * calculate the RDD.
    */
+  // PRIVATE for now for testing purposes, will be made public with SPARK-29150
   @Experimental
   @Since("3.0.0")
   private[spark] def withResources(rp: ResourceProfile): this.type = {
@@ -1731,9 +1732,10 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Get the ResourceProfile specified with this RDD or None if it wasn't specified.
-   * @return the user specified ResourceProfile or null (for Java compiatibility) if
+   * @return the user specified ResourceProfile or null (for Java compatibility) if
    *         none was specified
    */
+  // PRIVATE for now for testing purposes, will be made public with SPARK-29150
   @Experimental
   @Since("3.0.0")
   private[spark] def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
@@ -1743,7 +1745,6 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
-
   private var resourceProfile: Option[ResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
