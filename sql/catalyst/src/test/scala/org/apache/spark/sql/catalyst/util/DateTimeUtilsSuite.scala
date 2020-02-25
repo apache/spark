@@ -89,8 +89,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("SPARK-6785: java date conversion before and after epoch") {
     def format(d: Date): String = {
-      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
-        .format(d.getTime * MICROS_PER_MILLIS)
+      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId).format(fromMillis(d.getTime))
     }
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
@@ -584,15 +583,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("daysToMillis and millisToDays") {
-    val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, zid = zonePST))
+    val input = toMillis(date(2015, 12, 31, 16, zid = zonePST))
     assert(millisToDays(input, zonePST) === 16800)
     assert(millisToDays(input, ZoneOffset.UTC) === 16801)
     assert(millisToDays(-1 * MILLIS_PER_DAY + 1, ZoneOffset.UTC) == -1)
 
-    var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, zid = zonePST))
+    var expected = toMillis(date(2015, 12, 31, zid = zonePST))
     assert(daysToMillis(16800, zonePST) === expected)
 
-    expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, zid = zoneGMT))
+    expected = toMillis(date(2015, 12, 31, zid = zoneGMT))
     assert(daysToMillis(16800, ZoneOffset.UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.

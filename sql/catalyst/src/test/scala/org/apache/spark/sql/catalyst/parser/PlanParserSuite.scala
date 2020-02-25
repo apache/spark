@@ -55,6 +55,104 @@ class PlanParserSuite extends AnalysisTest {
     With(plan, ctes)
   }
 
+  test("single comment") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\nSELECT * FROM a", plan)
+  }
+
+  test("bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This is an example of SQL which should not execute:
+        | * select 'multi-line';
+        | */
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*
+        |SELECT 'trailing' as x1; -- inside block comment
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This block comment surrounds a query which itself has a block comment...
+        |SELECT /* embedded single line */ 'embedded' AS x2;
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |SELECT -- continued after the following block comments...
+        |/* Deeply nested comment.
+        |   This includes a single apostrophe to make sure we aren't decoding this part as a string.
+        |SELECT 'deep nest' AS n1;
+        |/* Second level of nesting...
+        |SELECT 'deeper nest' as n2;
+        |/* Third level of nesting...
+        |SELECT 'deepest nest' as n3;
+        |*/
+        |Hoo boy. Still two deep...
+        |*/
+        |Now just one deep...
+        |*/
+        |* FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case three") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This block comment surrounds a query which itself has a block comment...
+        |//* I am a nested bracketed comment.
+        |*/
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case four") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/**/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case five") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/*abc*/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case six") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/*foo*//*bar*/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)

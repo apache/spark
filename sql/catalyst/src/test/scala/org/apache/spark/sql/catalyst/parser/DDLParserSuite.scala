@@ -1190,6 +1190,56 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("There should be at most 1 'WHEN NOT MATCHED' clause."))
   }
 
+  test("merge into table: the first matched clause must have a condition if there's a second") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+          |WHEN MATCHED THEN DELETE
+          |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+          |WHEN NOT MATCHED AND (target.col2='insert')
+          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("the first MATCHED clause must have a condition"))
+  }
+
+  test("merge into table: there must be a when (not) matched condition") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
+  }
+
+  test("merge into table: there can be only a single use DELETE or UPDATE") {
+    Seq("UPDATE SET *", "DELETE").foreach { op =>
+      val exc = intercept[ParseException] {
+        parsePlan(
+          s"""
+             |MERGE INTO testcat1.ns1.ns2.tbl AS target
+             |USING testcat2.ns1.ns2.tbl AS source
+             |ON target.col1 = source.col1
+             |WHEN MATCHED AND (target.col2='delete') THEN $op
+             |WHEN MATCHED THEN $op
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+           """.stripMargin)
+      }
+
+      assert(exc.getMessage.contains(
+        "UPDATE and DELETE can appear at most once in MATCHED clauses"))
+    }
+  }
+
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
