@@ -24,6 +24,8 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  * A concrete implementation of {@link Distribution}. Represents a distribution where records that
  * share the same values for the {@link #clusteredColumns} will be produced by the same
  * {@link PartitionReader}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public class ClusteredDistribution implements Distribution {

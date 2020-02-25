@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -276,14 +276,7 @@ object QueryExecution {
    */
   private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
 
-    val sparkSessionWithAdaptiveExecutionOff =
-    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      val session = sparkSession.cloneSession()
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
-      session
-    } else {
-      sparkSession
-    }
+    val sparkSessionWithAqeOff = getOrCloneSessionWithAqeOff(sparkSession)
 
     Seq(
       // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
@@ -291,8 +284,8 @@ object QueryExecution {
       InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession)),
       // If the following rules apply, it means the main query is not AQE-ed, so we make sure the
       // subqueries are not AQE-ed either.
-      PlanDynamicPruningFilters(sparkSessionWithAdaptiveExecutionOff),
-      PlanSubqueries(sparkSessionWithAdaptiveExecutionOff),
+      PlanDynamicPruningFilters(sparkSessionWithAqeOff),
+      PlanSubqueries(sparkSessionWithAqeOff),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
@@ -340,5 +333,19 @@ object QueryExecution {
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
     val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
+  }
+
+  /**
+   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
+   * [[SparkSession]] if its adaptive execution is already disabled.
+   */
+  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
+    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
+      session
+    } else {
+      val newSession = session.cloneSession()
+      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      newSession
+    }
   }
 }

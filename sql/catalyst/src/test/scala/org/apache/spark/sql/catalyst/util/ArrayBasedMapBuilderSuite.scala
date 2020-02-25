@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
 
-class ArrayBasedMapBuilderSuite extends SparkFunSuite {
+class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
 
   test("basic") {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -42,64 +44,79 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite {
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
-  test("remove duplicated keys with last wins policy") {
+  test("fail while duplicated keys detected") {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     builder.put(1, 1)
-    builder.put(2, 2)
-    builder.put(1, 2)
-    val map = builder.build()
-    assert(map.numElements() == 2)
-    assert(ArrayBasedMapData.toScalaMap(map) == Map(1 -> 2, 2 -> 2))
+    val e = intercept[RuntimeException](builder.put(1, 2))
+    assert(e.getMessage.contains("Duplicate map key 1 was founded"))
+  }
+
+  test("remove duplicated keys with last wins policy") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+      builder.put(1, 1)
+      builder.put(2, 2)
+      builder.put(1, 2)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+      assert(ArrayBasedMapData.toScalaMap(map) == Map(1 -> 2, 2 -> 2))
+    }
   }
 
   test("binary type key") {
-    val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
-    builder.put(Array(1.toByte), 1)
-    builder.put(Array(2.toByte), 2)
-    builder.put(Array(1.toByte), 3)
-    val map = builder.build()
-    assert(map.numElements() == 2)
-    val entries = ArrayBasedMapData.toScalaMap(map).iterator.toSeq
-    assert(entries(0)._1.asInstanceOf[Array[Byte]].toSeq == Seq(1))
-    assert(entries(0)._2 == 3)
-    assert(entries(1)._1.asInstanceOf[Array[Byte]].toSeq == Seq(2))
-    assert(entries(1)._2 == 2)
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
+      builder.put(Array(1.toByte), 1)
+      builder.put(Array(2.toByte), 2)
+      builder.put(Array(1.toByte), 3)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+      val entries = ArrayBasedMapData.toScalaMap(map).iterator.toSeq
+      assert(entries(0)._1.asInstanceOf[Array[Byte]].toSeq == Seq(1))
+      assert(entries(0)._2 == 3)
+      assert(entries(1)._1.asInstanceOf[Array[Byte]].toSeq == Seq(2))
+      assert(entries(1)._2 == 2)
+    }
   }
 
   test("struct type key") {
-    val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
-    builder.put(InternalRow(1), 1)
-    builder.put(InternalRow(2), 2)
-    val unsafeRow = {
-      val row = new UnsafeRow(1)
-      val bytes = new Array[Byte](16)
-      row.pointTo(bytes, 16)
-      row.setInt(0, 1)
-      row
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
+      builder.put(InternalRow(1), 1)
+      builder.put(InternalRow(2), 2)
+      val unsafeRow = {
+        val row = new UnsafeRow(1)
+        val bytes = new Array[Byte](16)
+        row.pointTo(bytes, 16)
+        row.setInt(0, 1)
+        row
+      }
+      builder.put(unsafeRow, 3)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+      assert(ArrayBasedMapData.toScalaMap(map) == Map(InternalRow(1) -> 3, InternalRow(2) -> 2))
     }
-    builder.put(unsafeRow, 3)
-    val map = builder.build()
-    assert(map.numElements() == 2)
-    assert(ArrayBasedMapData.toScalaMap(map) == Map(InternalRow(1) -> 3, InternalRow(2) -> 2))
   }
 
   test("array type key") {
-    val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
-    builder.put(new GenericArrayData(Seq(1, 1)), 1)
-    builder.put(new GenericArrayData(Seq(2, 2)), 2)
-    val unsafeArray = {
-      val array = new UnsafeArrayData()
-      val bytes = new Array[Byte](24)
-      Platform.putLong(bytes, Platform.BYTE_ARRAY_OFFSET, 2)
-      array.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET, 24)
-      array.setInt(0, 1)
-      array.setInt(1, 1)
-      array
+    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
+      builder.put(new GenericArrayData(Seq(1, 1)), 1)
+      builder.put(new GenericArrayData(Seq(2, 2)), 2)
+      val unsafeArray = {
+        val array = new UnsafeArrayData()
+        val bytes = new Array[Byte](24)
+        Platform.putLong(bytes, Platform.BYTE_ARRAY_OFFSET, 2)
+        array.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET, 24)
+        array.setInt(0, 1)
+        array.setInt(1, 1)
+        array
+      }
+      builder.put(unsafeArray, 3)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+      assert(ArrayBasedMapData.toScalaMap(map) ==
+        Map(new GenericArrayData(Seq(1, 1)) -> 3, new GenericArrayData(Seq(2, 2)) -> 2))
     }
-    builder.put(unsafeArray, 3)
-    val map = builder.build()
-    assert(map.numElements() == 2)
-    assert(ArrayBasedMapData.toScalaMap(map) ==
-      Map(new GenericArrayData(Seq(1, 1)) -> 3, new GenericArrayData(Seq(2, 2)) -> 2))
   }
 }

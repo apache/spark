@@ -194,7 +194,7 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.resources.coordinate.enable</code></td>
+ <td><code>spark.resources.coordinateResourcesInStandalone</code></td>
   <td>true</td>
   <td>
     Whether to coordinate resources automatically among workers/drivers(client only) 
@@ -230,7 +230,7 @@ of the most common options to set are:
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses. For a client-submitted driver in Standalone, discovery
     script must assign different resource addresses to this driver comparing to workers' and
-    other drivers' when <code>spark.resources.coordinate.enable</code> is off.
+    other drivers' when <code>spark.resources.coordinateResourcesInStandalone</code> is off.
   </td>
 </tr>
 <tr>
@@ -1033,7 +1033,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.rolling.maxFileSize</code></td>
   <td>128m</td>
   <td>
-    The max size of event log file before it's rolled over.
+    When <code>spark.eventLog.rolling.enabled=true</code>, specifies the max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>
@@ -1101,7 +1101,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage collecting.
+    How many tasks in one stage the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -1641,7 +1641,7 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.eventLog.logStageExecutorMetrics.enabled</code></td>
+  <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
   <td>false</td>
   <td>
     Whether to write per-stage peaks of executor metrics (for each executor) to the event log.
@@ -2597,22 +2597,25 @@ Spark subsystems.
 ### Deploy
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
     <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
     This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.zookeeper.url</code></td>
     <td>None</td>
     <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.zookeeper.dir</code></td>
     <td>None</td>
     <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 
@@ -2755,5 +2758,5 @@ There are configurations available to request resources for the driver: <code>sp
 
 Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
 
-See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinate.enable</code>).
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinateResourcesInStandalone</code>).
 

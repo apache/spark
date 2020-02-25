@@ -24,6 +24,8 @@ import org.apache.spark.annotation.Experimental;
  * <p>
  * For example, the transform date(ts) is used to derive a date value from a timestamp column. The
  * transform name is "date" and its argument is a reference to the "ts" column.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface Transform extends Expression {
