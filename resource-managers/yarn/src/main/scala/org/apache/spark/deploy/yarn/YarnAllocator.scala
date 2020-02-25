@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.util.Collections
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -75,11 +76,13 @@ private[yarn] class YarnAllocator(
   import YarnAllocator._
 
   // Visible for testing.
+  @GuardedBy("this")
   val allocatedHostToContainersMapPerRPId =
     new HashMap[Int, HashMap[String, collection.mutable.Set[ContainerId]]]
   allocatedHostToContainersMapPerRPId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     new HashMap[String, mutable.Set[ContainerId]]()
 
+  @GuardedBy("this")
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
 
   // Containers that we no longer care about. We've either already told the RM to release them or
@@ -93,6 +96,7 @@ private[yarn] class YarnAllocator(
   runningExecutorsPerResourceProfileId.put(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
     Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
 
+  @GuardedBy("this")
   private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
   numExecutorsStartingPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     new AtomicInteger(0)
@@ -118,6 +122,7 @@ private[yarn] class YarnAllocator(
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
+  @GuardedBy("this")
   private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
   targetNumExecutorsPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
@@ -125,17 +130,23 @@ private[yarn] class YarnAllocator(
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
   // was lost.
+  @GuardedBy("this")
   private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
   // Maintain loss reasons for already released executors, it will be added when executor loss
   // reason is got from AM-RM call, and be removed after querying this loss reason.
+  @GuardedBy("this")
   private val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
+  @GuardedBy("this")
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
 
+  @GuardedBy("this")
   private var numUnexpectedContainerRelease = 0L
+
+  @GuardedBy("this")
   private val containerIdToExecutorIdAndResourceProfileId = new HashMap[ContainerId, (String, Int)]
 
   // Executor memory in MiB.
@@ -167,10 +178,12 @@ private[yarn] class YarnAllocator(
     resource
   }
 
+  @GuardedBy("this")
   private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
   rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
 
   // note currently we don't remove ResourceProfiles
+  @GuardedBy("this")
   private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
   rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -185,10 +198,12 @@ private[yarn] class YarnAllocator(
 
   // A map of ResourceProfile id to a map of preferred hostname and possible
   // task numbers running on it.
+  @GuardedBy("this")
   private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
     Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
 
   // ResourceProfile Id to number of tasks that have locality preferences in active stages
+  @GuardedBy("this")
   private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
     Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
 
