@@ -250,20 +250,9 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumnStatement(
-        SessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        // `V1Table` also includes permanent views.
-        case v1Table: V1Table =>
-          DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
-      }.getOrElse {
-        if (isTempView(tbl)) {
-          // v1 DESCRIBE COLUMN supports temp view.
-          DescribeColumnCommand(tbl.asTableIdentifier, colNameParts, isExtended)
-        } else {
-          throw new AnalysisException("Describing columns is not supported for v2 tables.")
-        }
-      }
+    case DescribeColumnStatement(tbl, colNameParts, isExtended) =>
+      val name = parseTempViewOrV1Table(tbl, "Describing columns")
+      DescribeColumnCommand(name.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -396,7 +385,7 @@ class ResolveSessionCatalog(
       }
 
     case AnalyzeColumnStatement(tbl, columnNames, allColumns) =>
-      val v1TableName = parseV1Table(tbl, "ANALYZE TABLE")
+      val v1TableName = parseTempViewOrV1Table(tbl, "ANALYZE TABLE")
       AnalyzeColumnCommand(v1TableName.asTableIdentifier, columnNames, allColumns)
 
     case RepairTableStatement(tbl) =>
@@ -415,8 +404,8 @@ class ResolveSessionCatalog(
         partition)
 
     case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
-      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE")
-      ShowCreateTableCommand(v1TableName.asTableIdentifier)
+      val name = parseTempViewOrV1Table(tbl, "SHOW CREATE TABLE")
+      ShowCreateTableCommand(name.asTableIdentifier)
 
     case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
       val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
@@ -449,19 +438,26 @@ class ResolveSessionCatalog(
         partitionSpec)
 
     case ShowColumnsStatement(tbl, ns) =>
+      if (ns.isDefined && ns.get.length > 1) {
+        throw new AnalysisException(
+          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
+      }
+      // Use namespace only if table name doesn't specify it. If namespace is already specified
+      // in the table name, it's checked against the given namespace below.
+      val nameParts = if (ns.isDefined && tbl.length == 1) {
+        ns.get ++ tbl
+      } else {
+        tbl
+      }
       val sql = "SHOW COLUMNS"
-      val v1TableName = parseV1Table(tbl, sql).asTableIdentifier
+      val v1TableName = parseTempViewOrV1Table(nameParts, sql).asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
-        case Some(db) if (v1TableName.database.exists(!resolver(_, db.head))) =>
+        case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
           throw new AnalysisException(
             s"SHOW COLUMNS with conflicting databases: " +
               s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => ns.map(_.head)
-      }
-      if (ns.isDefined && ns.get.length > 1) {
-        throw new AnalysisException(
-          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
       }
       ShowColumnsCommand(db, v1TableName)
 
@@ -659,14 +655,7 @@ class ResolveSessionCatalog(
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
-        if (nameParts.length == 1) {
-          // If there is only one name part, it means the current catalog is the session catalog.
-          // Here we return the original name part, to keep the error message unchanged for
-          // v1 commands.
-          Some(catalog -> nameParts)
-        } else {
-          Some(catalog -> ident.asMultipartIdentifier)
-        }
+        Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
   }

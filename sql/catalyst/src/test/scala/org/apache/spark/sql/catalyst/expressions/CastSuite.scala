@@ -270,13 +270,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        fromMillis(c.getTimeInMillis))
+        millisToMicros(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        fromMillis(c.getTimeInMillis))
+        millisToMicros(c.getTimeInMillis))
     }
 
     val utcId = Option("UTC")
