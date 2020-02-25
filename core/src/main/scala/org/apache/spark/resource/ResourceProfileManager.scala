@@ -64,8 +64,10 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
     isSupported(rp)
     // force the computation of maxTasks and limitingResource now so we don't have cost later
     rp.limitingResource(sparkConf)
-    logInfo(s"Adding ResourceProfile id: ${rp.id}")
-    resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
+    val res = resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
+    if (res == null) {
+      logInfo(s"Added ResourceProfile id: ${rp.id}")
+    }
   }
 
   /*

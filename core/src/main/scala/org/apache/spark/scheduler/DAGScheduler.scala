@@ -385,13 +385,7 @@ private[spark] class DAGScheduler(
   def createShuffleMapStage[K, V, C](
       shuffleDep: ShuffleDependency[K, V, C], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
-
-    // something we may consider later is do we want to track the merged profile
-    // so we don't recreate it if the user runs the same operation multiple times
     val resourceProfile = mergeResourceProfilesForStage(rdd)
-    // this ResourceProfile could be different if it was merged so we have to add it to
-    // our ResourceProfileManager
-    sc.resourceProfileManager.addResourceProfile(resourceProfile)
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
@@ -475,12 +469,7 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    // something we may consider later is do we want to track the merged profile
-    // so we don't recreate it if the user runs the same operation multiple times
     val resourceProfile = mergeResourceProfilesForStage(rdd)
-    // this ResourceProfile could be different if it was merged so we have to add it to
-    // our ResourceProfileManager.
-    sc.resourceProfileManager.addResourceProfile(resourceProfile)
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
