@@ -70,11 +70,30 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <script>{Unparsed(js)}</script>
   }
 
-  def generateVar(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
+  def generateTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
+    val js = "var timeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"timeTipStrings[$time] = 'batch $batchId ($formattedTime)';"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  def generateFormattedTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
+    val js = "var formattedTimeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"""formattedTimeTipStrings["$formattedTime"] = 'batch $batchId ($formattedTime)';"""
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  def generateTimeToValues(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
     val durationDataPadding = SparkUIUtils.durationDataPadding(values)
-    val js = "var timeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
+    val js = "var formattedTimeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
       val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
-      s"""timeToValues["${SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
+      val formattedTime = SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)
+      s"""formattedTimeToValues["$formattedTime"] = $s;"""
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
@@ -112,8 +131,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   }
 
   def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
-    val batchTimes = withNoProgress(query,
-      query.recentProgress.map(p => df.parse(p.timestamp).getTime), Array.empty[Long])
+    val batchToTimestamps = withNoProgress(query,
+      query.recentProgress.map(p => (p.batchId, df.parse(p.timestamp).getTime)),
+      Array.empty[(Long, Long)])
+    val batchTimes = batchToTimestamps.map(_._2)
     val minBatchTime =
       withNoProgress(query, df.parse(query.recentProgress.head.timestamp).getTime, 0L)
     val maxBatchTime =
@@ -266,6 +287,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       </table>
     // scalastyle:on
 
-    generateVar(operationDurationData) ++ generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeToValues(operationDurationData) ++
+      generateFormattedTimeTipStrings(batchToTimestamps) ++
+      generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchToTimestamps) ++
+      table ++ jsCollector.toHtml
   }
 }
