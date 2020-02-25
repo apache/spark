@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
-abstract class WindowExecBase extends UnaryExecNode {
+trait WindowExecBase extends UnaryExecNode {
   def windowExpression: Seq[NamedExpression]
   def partitionSpec: Seq[Expression]
   def orderSpec: Seq[SortOrder]
