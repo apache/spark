@@ -2136,7 +2136,7 @@ object SQLConf {
         "if the default Maven Central repo is unreachable.")
       .stringConf
       .createWithDefault(
-        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+        "https://maven-central.storage-download.googleapis.com/maven2/")
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
