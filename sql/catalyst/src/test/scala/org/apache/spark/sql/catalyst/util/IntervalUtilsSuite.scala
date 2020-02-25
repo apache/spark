@@ -303,13 +303,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(new CalendarInterval(-2, 0, -MICROS_PER_MINUTE) === func(interval, 0.5))
     }
 
-    assert(divide(new CalendarInterval(Int.MaxValue, Int.MaxValue, 0), 0.9) ===
-      new CalendarInterval(Int.MaxValue, Int.MaxValue,
-        ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
-
-    assert(divide(new CalendarInterval(123, 456, 789), 0) === null)
+    var interval = new CalendarInterval(Int.MaxValue, Int.MaxValue, 0)
+    assert(divide(interval, 0.9) === new CalendarInterval(Int.MaxValue, Int.MaxValue,
+      ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
     try {
-      divideExact(new CalendarInterval(123, 456, 789), 0)
+      divideExact(interval, 0.9)
+      fail("Expected to throw an exception on integer overflow")
+    } catch {
+      case e: ArithmeticException => assert(e.getMessage.contains("integer overflow"))
+    }
+
+    interval = new CalendarInterval(123, 456, 789)
+    assert(divide(interval, 0) === null)
+    try {
+      divideExact(interval, 0)
       fail("Expected to throw an exception on divide by zero")
     } catch {
       case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))

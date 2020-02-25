@@ -204,7 +204,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: String,
         isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
-      val configs = if (isAnsi.isEmpty) { Seq("true", "false") } else isAnsi.map(_.toString).toSeq
+      val configs = if (isAnsi.isEmpty) Seq("true", "false") else isAnsi.map(_.toString).toSeq
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
           val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
@@ -236,7 +236,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: String,
         isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
-      val configs = if (isAnsi.isEmpty) { Seq("true", "false") } else isAnsi.map(_.toString).toSeq
+      val configs = if (isAnsi.isEmpty) Seq("true", "false") else isAnsi.map(_.toString).toSeq
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
           val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
