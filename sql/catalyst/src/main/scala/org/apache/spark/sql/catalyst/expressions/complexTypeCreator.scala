@@ -46,6 +46,8 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
   }
@@ -171,6 +173,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   }
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
