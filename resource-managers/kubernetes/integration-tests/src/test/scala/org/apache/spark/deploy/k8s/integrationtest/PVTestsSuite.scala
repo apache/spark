@@ -176,7 +176,7 @@ private[spark] object PVTestsSuite {
     dir
   }
   val HOST_PATH = sys.env.getOrElse("PVC_TESTS_HOST_PATH", host_temp_dir.toString())
-  val VM_PATH = sys.env.getOrElse("PVC_TESTS_VM_PATH", "/host-tmp")
+  val VM_PATH = sys.env.getOrElse("PVC_TESTS_VM_PATH", "/host-tmp-mount")
   val FILE_CONTENTS = "test PVs"
   val PV_TESTS_INTERVAL = PatienceConfiguration.Interval(Span(10, Milliseconds))
 }
