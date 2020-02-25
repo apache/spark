@@ -208,14 +208,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         0L,
         "ms")
 
-    val table =
-    // scalastyle:off
+    val table = if (query.lastProgress != null) {
+      // scalastyle:off
       <table id="stat-table" class="table table-bordered" style="width: auto">
         <thead>
           <tr>
             <th style="width: 160px;"></th>
             <th style="width: 492px;">Timelines</th>
-            <th style="width: 350px;">Histograms</th></tr>
+            <th style="width: 350px;">Histograms</th>
+          </tr>
         </thead>
         <tbody>
           <tr>
@@ -264,7 +265,12 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           </tr>
         </tbody>
       </table>
-    // scalastyle:on
+    } else {
+      <div id="empty-streaming-query-message">
+        <b>No visualization information available because there is no batch.</b>
+      </div>
+      // scalastyle:on
+    }
 
     generateVar(operationDurationData) ++ generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
   }
