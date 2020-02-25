@@ -302,8 +302,12 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(new CalendarInterval(0, 0, -15 * MICROS_PER_SECOND) === func(interval, 2))
       assert(new CalendarInterval(-2, 0, -MICROS_PER_MINUTE) === func(interval, 0.5))
     }
-    assert(divide(new CalendarInterval(123, 456, 789), 0) === null)
 
+    assert(divide(new CalendarInterval(Int.MaxValue, Int.MaxValue, 0), 0.9) ===
+      new CalendarInterval(Int.MaxValue, Int.MaxValue,
+        ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
+
+    assert(divide(new CalendarInterval(123, 456, 789), 0) === null)
     try {
       divideExact(new CalendarInterval(123, 456, 789), 0)
       fail("Expected to throw an exception on divide by zero")

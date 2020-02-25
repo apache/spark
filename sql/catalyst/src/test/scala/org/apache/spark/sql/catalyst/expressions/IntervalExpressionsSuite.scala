@@ -202,8 +202,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         interval: String,
         num: Double,
         expected: String,
-        configs: Seq[String] = Seq("true", "false")): Unit = {
+        isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
+      val configs = if (isAnsi.isEmpty) { Seq("true", "false") } else isAnsi.map(_.toString).toSeq
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
           val expr = MultiplyInterval(Literal(stringToInterval(interval)), Literal(num))
@@ -224,8 +225,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
     check("1 month 2 microseconds", 1.5, "1 months 3 microseconds")
-    check("2 months", Int.MaxValue, "integer overflow", Seq("true"))
-    check("2 months", Int.MaxValue, Int.MaxValue + " months", Seq("false"))
+    check("2 months", Int.MaxValue, "integer overflow", Some(true))
+    check("2 months", Int.MaxValue, Int.MaxValue + " months", Some(false))
   }
 
   test("divide") {
@@ -233,8 +234,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         interval: String,
         num: Double,
         expected: String,
-        configs: Seq[String] = Seq("true", "false")): Unit = {
+        isAnsi: Option[Boolean] = None): Unit = {
       val expectedRes = safeStringToInterval(expected)
+      val configs = if (isAnsi.isEmpty) { Seq("true", "false") } else isAnsi.map(_.toString).toSeq
       configs.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
           val expr = DivideInterval(Literal(stringToInterval(interval)), Literal(num))
@@ -254,10 +256,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("2 years -8 seconds", 0.5, "4 years -16 seconds")
     check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
     check("1 month 3 microsecond", 1.5, "2 microseconds")
-    check("1 second", 0, "divide by zero", Seq("true"))
-    check("1 second", 0, null, Seq("false"))
-    check(s"${Int.MaxValue} months", 0.9, "integer overflow", Seq("true"))
-    check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Seq("false"))
+    check("1 second", 0, "divide by zero", Some(true))
+    check("1 second", 0, null, Some(false))
+    check(s"${Int.MaxValue} months", 0.9, "integer overflow", Some(true))
+    check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Some(false))
   }
 
   test("make interval") {
