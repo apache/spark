@@ -47,6 +47,7 @@ import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream,
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.monitor.JVMQuake
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -212,6 +213,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
+  private var _jvmQuake: JVMQuake = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -562,6 +564,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
+
+    // JVM Quake
+    _jvmQuake = JVMQuake.create(_conf)
+    _jvmQuake.start()
 
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
@@ -1900,6 +1906,9 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
+    Utils.tryLogNonFatalError {
+      _jvmQuake.stop()
+    }
     Utils.tryLogNonFatalError {
       postApplicationEnd()
     }

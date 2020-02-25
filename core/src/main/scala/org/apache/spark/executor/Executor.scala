@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.monitor.JVMQuake
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskDescription}
 import org.apache.spark.shuffle.FetchFailedException
@@ -167,6 +168,9 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
+  private val jvmQuake = JVMQuake.create(conf)
+  jvmQuake.start()
+
   startDriverHeartbeater()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
@@ -216,6 +220,7 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
+    jvmQuake.stop()
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
     threadPool.shutdown()
