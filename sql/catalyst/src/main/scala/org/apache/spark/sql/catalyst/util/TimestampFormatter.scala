@@ -141,7 +141,7 @@ class LegacyFastTimestampFormatter(
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    Math.addExact(fromMillis(cal.getTimeInMillis), micros)
+    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
   }
 
   def format(timestamp: SQLTimestamp): String = {
@@ -164,7 +164,7 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    fromMillis(sdf.parse(s).getTime)
+    millisToMicros(sdf.parse(s).getTime)
   }
 
   override def format(us: Long): String = {
