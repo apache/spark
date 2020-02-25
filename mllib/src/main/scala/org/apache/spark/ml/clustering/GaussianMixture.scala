@@ -560,9 +560,7 @@ class GaussianMixture @Since("2.0.0") (
         val diagVec = Vectors.fromBreeze(ss)
         BLAS.scal(1.0 / localWeightSum, diagVec)
         val covVec = new DenseVector(Array.ofDim[Double](numFeatures * (numFeatures + 1) / 2))
-        diagVec.toArray.zipWithIndex.foreach { case (v: Double, i: Int) =>
-          covVec.values(i + i * (i + 1) / 2) = v
-        }
+        diagVec.foreach { (i, v) => covVec.values(i + i * (i + 1) / 2) = v }
         covVec
       }
       (mean, cov)
