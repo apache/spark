@@ -244,7 +244,7 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.resources.discovery.plugin</code></td>
+ <td><code>spark.resources.discoveryPlugin</code></td>
   <td>org.apache.spark.resource.ResourceDiscoveryScriptPlugin</td>
   <td>
     Comma-separated list of class names implementing
