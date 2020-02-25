@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.Collections
-import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
@@ -40,6 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -79,8 +78,6 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   val allocatedHostToContainersMapPerRPId =
     new HashMap[Int, HashMap[String, collection.mutable.Set[ContainerId]]]
-  allocatedHostToContainersMapPerRPId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-    new HashMap[String, mutable.Set[ContainerId]]()
 
   @GuardedBy("this")
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
@@ -88,44 +85,17 @@ private[yarn] class YarnAllocator(
   // Containers that we no longer care about. We've either already told the RM to release them or
   // will on the next heartbeat. Containers get removed from this map after the RM tells us they've
   // completed.
-  private val releasedContainers = Collections.newSetFromMap[ContainerId](
-    new ConcurrentHashMap[ContainerId, java.lang.Boolean])
+  @GuardedBy("this")
+  private val releasedContainers = collection.mutable.HashSet[ContainerId]()
 
-  private val runningExecutorsPerResourceProfileId =
-    new ConcurrentHashMap[Int, java.util.Set[String]]()
-  runningExecutorsPerResourceProfileId.put(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
-    Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
+  @GuardedBy("this")
+  private val runningExecutorsPerResourceProfileId = new HashMap[Int, mutable.Set[String]]()
 
   @GuardedBy("this")
   private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
-  numExecutorsStartingPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-    new AtomicInteger(0)
-
-  /**
-   * Used to generate a unique ID per executor
-   *
-   * Init `executorIdCounter`. when AM restart, `executorIdCounter` will reset to 0. Then
-   * the id of new executor will start from 1, this will conflict with the executor has
-   * already created before. So, we should initialize the `executorIdCounter` by getting
-   * the max executorId from driver.
-   *
-   * And this situation of executorId conflict is just in yarn client mode, so this is an issue
-   * in yarn client mode. For more details, can check in jira.
-   *
-   * @see SPARK-12864
-   */
-  private var executorIdCounter: Int =
-    driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
-
-  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
-
-  private val allocatorBlacklistTracker =
-    new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
   @GuardedBy("this")
   private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
-  targetNumExecutorsPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-    SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -149,6 +119,45 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   private val containerIdToExecutorIdAndResourceProfileId = new HashMap[ContainerId, (String, Int)]
 
+  @GuardedBy("this")
+  private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
+
+  // note currently we don't remove ResourceProfiles
+  @GuardedBy("this")
+  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+
+  // A map of ResourceProfile id to a map of preferred hostname and possible
+  // task numbers running on it.
+  @GuardedBy("this")
+  private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
+    Map(DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
+
+  // ResourceProfile Id to number of tasks that have locality preferences in active stages
+  @GuardedBy("this")
+  private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
+    Map(DEFAULT_RESOURCE_PROFILE_ID -> 0)
+
+  /**
+   * Used to generate a unique ID per executor
+   *
+   * Init `executorIdCounter`. when AM restart, `executorIdCounter` will reset to 0. Then
+   * the id of new executor will start from 1, this will conflict with the executor has
+   * already created before. So, we should initialize the `executorIdCounter` by getting
+   * the max executorId from driver.
+   *
+   * And this situation of executorId conflict is just in yarn client mode, so this is an issue
+   * in yarn client mode. For more details, can check in jira.
+   *
+   * @see SPARK-12864
+   */
+  private var executorIdCounter: Int =
+    driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
+
+  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
+
+  private val allocatorBlacklistTracker =
+    new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
+
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Executor offHeap memory in MiB.
@@ -169,7 +178,7 @@ private[yarn] class YarnAllocator(
     getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
 
   // Resource capability requested for each executor for the default profile
-  private[yarn] val resource: Resource = {
+  private[yarn] val defaultResource: Resource = {
     val resource: Resource = Resource.newInstance(
       executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory,
       defaultExecutorCores)
@@ -177,16 +186,6 @@ private[yarn] class YarnAllocator(
     logDebug(s"Created resource capability: $resource")
     resource
   }
-
-  @GuardedBy("this")
-  private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
-  rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
-
-  // note currently we don't remove ResourceProfiles
-  @GuardedBy("this")
-  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
-  rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-    ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
@@ -196,23 +195,29 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
-  // A map of ResourceProfile id to a map of preferred hostname and possible
-  // task numbers running on it.
-  @GuardedBy("this")
-  private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
-    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
-
-  // ResourceProfile Id to number of tasks that have locality preferences in active stages
-  @GuardedBy("this")
-  private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
-    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
-
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
 
-  def getNumExecutorsRunning: Int = {
-    runningExecutorsPerResourceProfileId.values.stream.mapToInt(s => s.size).sum()
+  // The default profile is always present so we need to initialize the datastructures keyed by
+  // ResourceProfile id to ensure its present if things start running before a request for
+  // executors could add it. This approach is easier then going and special casing everywhere.
+  private def initDefaultProfile(): Unit = synchronized {
+    allocatedHostToContainersMapPerRPId(DEFAULT_RESOURCE_PROFILE_ID) =
+      new HashMap[String, mutable.Set[ContainerId]]()
+    runningExecutorsPerResourceProfileId.put(DEFAULT_RESOURCE_PROFILE_ID, mutable.HashSet[String]())
+    numExecutorsStartingPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = new AtomicInteger(0)
+    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) =
+      SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
+    rpIdToYarnResource(DEFAULT_RESOURCE_PROFILE_ID) = defaultResource
+    rpIdToResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) =
+      ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  }
+
+  initDefaultProfile()
+
+  def getNumExecutorsRunning: Int = synchronized {
+    runningExecutorsPerResourceProfileId.values.map(_.size).sum
   }
 
   def getNumLocalityAwareTasks: Int = synchronized {
@@ -223,7 +228,9 @@ private[yarn] class YarnAllocator(
     numExecutorsStartingPerResourceProfileId.values.map(_.get()).sum
   }
 
-  def getNumReleasedContainers: Int = releasedContainers.size()
+  def getNumReleasedContainers: Int = synchronized {
+    releasedContainers.size
+  }
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
@@ -261,16 +268,15 @@ private[yarn] class YarnAllocator(
       new HashMap[String, mutable.Set[ContainerId]]())
   }
 
-  private def getOrUpdateRunningExecutorForRPId(rpId: Int): java.util.Set[String] = {
-    runningExecutorsPerResourceProfileId.putIfAbsent(rpId,
-      Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
+  private def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = {
+    runningExecutorsPerResourceProfileId.getOrElseUpdate(rpId, mutable.HashSet[String]())
   }
 
   private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = {
     numExecutorsStartingPerResourceProfileId.getOrElseUpdate(rpId, new AtomicInteger(0))
   }
 
-  private def getTargetNumExecutorsForRPId(rpId: Int): Int = {
+  private def getOrUpdateTargetNumExecutorsForRPId(rpId: Int): Int = {
     targetNumExecutorsPerResourceProfileId.getOrElseUpdate(rpId,
       SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf))
   }
@@ -360,7 +366,7 @@ private[yarn] class YarnAllocator(
     createYarnResourceForResourceProfile(resourceProfileToTotalExecs)
 
     val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
-      if (numExecs != getTargetNumExecutorsForRPId(rp.id)) {
+      if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
         logInfo(s"Driver requested a total number of $numExecs executor(s) " +
           s"for resource profile id: ${rp.id}.")
         targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
@@ -438,7 +444,7 @@ private[yarn] class YarnAllocator(
     val missingPerProfile = targetNumExecutorsPerResourceProfileId.map { case (rpId, targetNum) =>
       val starting = getOrUpdateNumExecutorsStartingForRPId(rpId).get
       val pending = pendingAllocatePerResourceProfileId.getOrElse(rpId, Seq.empty).size
-      val running = getOrUpdateRunningExecutorForRPId(rpId).size()
+      val running = getOrUpdateRunningExecutorForRPId(rpId).size
       logDebug(s"Updating resource requests for ResourceProfile id: $rpId, target: " +
         s"$targetNum, pending: $pending, running: $running, executorsStarting: $starting")
       (rpId, targetNum - pending - running - starting)
@@ -533,7 +539,7 @@ private[yarn] class YarnAllocator(
       } else if (numPendingAllocate > 0 && missing < 0) {
         val numToCancel = math.min(numPendingAllocate, -missing)
         logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new " +
-          s"desired total ${getTargetNumExecutorsForRPId(rpId)} executors.")
+          s"desired total ${getOrUpdateTargetNumExecutorsForRPId(rpId)} executors.")
         // cancel pending allocate requests by taking locality preference into account
         val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
         cancelRequests.foreach(amClient.removeContainerRequest)
@@ -716,8 +722,8 @@ private[yarn] class YarnAllocator(
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
         map(_.amount.toInt).getOrElse(executorMemory)
       val containerCores = rp.getExecutorCores.getOrElse(defaultExecutorCores)
-      val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size()
-      if (rpRunningExecs < getTargetNumExecutorsForRPId(rpId)) {
+      val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
+      if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
         if (launchContainers) {
           launcherPool.execute(() => {
@@ -757,7 +763,7 @@ private[yarn] class YarnAllocator(
       } else {
         logInfo(("Skip launching executorRunnable as running executors count: %d " +
           "reached target executors count: %d.").format(rpRunningExecs,
-          getTargetNumExecutorsForRPId(rpId)))
+          getOrUpdateTargetNumExecutorsForRPId(rpId)))
       }
     }
   }
@@ -767,7 +773,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val (_, rpId) = containerIdToExecutorIdAndResourceProfileId.getOrElse(containerId,
-        ("", ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        ("", DEFAULT_RESOURCE_PROFILE_ID))
       val alreadyReleased = releasedContainers.remove(containerId)
       val hostOpt = allocatedContainerToHostMap.get(containerId)
       val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
@@ -912,7 +918,9 @@ private[yarn] class YarnAllocator(
     amClient.releaseAssignedContainer(container.getId())
   }
 
-  private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
+  private[yarn] def getNumUnexpectedContainerRelease: Long = synchronized {
+    numUnexpectedContainerRelease
+  }
 
   private[yarn] def getNumPendingLossReasonRequests: Int = synchronized {
     pendingLossReasonRequests.size
