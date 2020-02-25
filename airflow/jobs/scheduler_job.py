@@ -1075,7 +1075,7 @@ class SchedulerJob(BaseJob):
         return dag_map, task_map
 
     @provide_session
-    def _find_executable_task_instances(self, simple_dag_bag, states, session=None):
+    def _find_executable_task_instances(self, simple_dag_bag, session=None):
         """
         Finds TIs that are ready for execution with respect to pool limits,
         dag concurrency, executor state, and priority.
@@ -1083,10 +1083,6 @@ class SchedulerJob(BaseJob):
         :param simple_dag_bag: TaskInstances associated with DAGs in the
             simple_dag_bag will be fetched from the DB and executed
         :type simple_dag_bag: airflow.utils.dag_processing.SimpleDagBag
-        :param executor: the executor that runs task instances
-        :type executor: BaseExecutor
-        :param states: Execute TaskInstances in these states
-        :type states: tuple[airflow.utils.state.State]
         :return: list[airflow.models.TaskInstance]
         """
         from airflow.jobs.backfill_job import BackfillJob  # Avoid circular import
@@ -1098,36 +1094,19 @@ class SchedulerJob(BaseJob):
         TI = models.TaskInstance
         DR = models.DagRun
         DM = models.DagModel
-        ti_query = (
+        task_instances_to_examine = (
             session
             .query(TI)
             .filter(TI.dag_id.in_(simple_dag_bag.dag_ids))
             .outerjoin(
-                DR,
-                and_(DR.dag_id == TI.dag_id, DR.execution_date == TI.execution_date)
+                DR, and_(DR.dag_id == TI.dag_id, DR.execution_date == TI.execution_date)
             )
-            .filter(or_(DR.run_id == None,  # noqa: E711 pylint: disable=singleton-comparison
-                    not_(DR.run_id.like(BackfillJob.ID_PREFIX + '%'))))
+            .filter(or_(DR.run_id.is_(None), not_(DR.run_id.like(BackfillJob.ID_PREFIX + '%'))))
             .outerjoin(DM, DM.dag_id == TI.dag_id)
-            .filter(or_(DM.dag_id == None,  # noqa: E711 pylint: disable=singleton-comparison
-                    not_(DM.is_paused)))
+            .filter(or_(DM.dag_id.is_(None), not_(DM.is_paused)))
+            .filter(TI.state == State.SCHEDULED)
+            .all()
         )
-
-        # Additional filters on task instance state
-        if states:
-            if None in states:
-                if all(x is None for x in states):
-                    ti_query = ti_query.filter(TI.state == None)  # noqa pylint: disable=singleton-comparison
-                else:
-                    not_none_states = [state for state in states if state]
-                    ti_query = ti_query.filter(
-                        or_(TI.state == None,  # noqa: E711 pylint: disable=singleton-comparison
-                            TI.state.in_(not_none_states))
-                    )
-            else:
-                ti_query = ti_query.filter(TI.state.in_(states))
-
-        task_instances_to_examine = ti_query.all()
 
         if len(task_instances_to_examine) == 0:
             self.log.debug("No tasks to consider for execution.")
@@ -1260,16 +1239,13 @@ class SchedulerJob(BaseJob):
         return executable_tis
 
     @provide_session
-    def _change_state_for_executable_task_instances(self, task_instances,
-                                                    acceptable_states, session=None):
+    def _change_state_for_executable_task_instances(self, task_instances, session=None):
         """
         Changes the state of task instances in the list with one of the given states
         to QUEUED atomically, and returns the TIs changed in SimpleTaskInstance format.
 
         :param task_instances: TaskInstances to change the state of
         :type task_instances: list[airflow.models.TaskInstance]
-        :param acceptable_states: Filters the TaskInstances updated to be in these states
-        :type acceptable_states: Iterable[State]
         :rtype: list[airflow.models.taskinstance.SimpleTaskInstance]
         """
         if len(task_instances) == 0:
@@ -1277,34 +1253,15 @@ class SchedulerJob(BaseJob):
             return []
 
         TI = models.TaskInstance
-        filter_for_ti_state_change = (
-            [and_(
-                TI.dag_id == ti.dag_id,
-                TI.task_id == ti.task_id,
-                TI.execution_date == ti.execution_date)
-                for ti in task_instances])
-        ti_query = (
-            session
-            .query(TI)
-            .filter(or_(*filter_for_ti_state_change)))
-
-        if acceptable_states:
-            if None in acceptable_states:
-                if all(x is None for x in acceptable_states):
-                    ti_query = ti_query.filter(TI.state == None)  # noqa pylint: disable=singleton-comparison
-                else:
-                    not_none_acceptable_states = [state for state in acceptable_states if state]
-                    ti_query = ti_query.filter(
-                        or_(TI.state == None,  # noqa pylint: disable=singleton-comparison
-                            TI.state.in_(not_none_acceptable_states))
-                    )
-            else:
-                ti_query = ti_query.filter(TI.state.in_(acceptable_states))
 
         tis_to_set_to_queued = (
-            ti_query
+            session
+            .query(TI)
+            .filter(TI.filter_for_tis(task_instances))
+            .filter(TI.state == State.SCHEDULED)
             .with_for_update()
-            .all())
+            .all()
+        )
 
         if len(tis_to_set_to_queued) == 0:
             self.log.info("No tasks were able to have their state changed to queued.")
@@ -1372,7 +1329,6 @@ class SchedulerJob(BaseJob):
     @provide_session
     def _execute_task_instances(self,
                                 simple_dag_bag,
-                                states,
                                 session=None):
         """
         Attempts to execute TaskInstances that should be executed by the scheduler.
@@ -1386,17 +1342,14 @@ class SchedulerJob(BaseJob):
         :param simple_dag_bag: TaskInstances associated with DAGs in the
             simple_dag_bag will be fetched from the DB and executed
         :type simple_dag_bag: airflow.utils.dag_processing.SimpleDagBag
-        :param states: Execute TaskInstances in these states
-        :type states: tuple[airflow.utils.state.State]
         :return: Number of task instance with state changed.
         """
-        executable_tis = self._find_executable_task_instances(simple_dag_bag, states,
+        executable_tis = self._find_executable_task_instances(simple_dag_bag,
                                                               session=session)
 
         def query(result, items):
             simple_tis_with_state_changed = \
                 self._change_state_for_executable_task_instances(items,
-                                                                 states,
                                                                  session=session)
             self._enqueue_task_instances_with_queued_state(
                 simple_dag_bag,
@@ -1673,8 +1626,7 @@ class SchedulerJob(BaseJob):
                                                    State.SCHEDULED,
                                                    State.UP_FOR_RESCHEDULE],
                                                   State.NONE)
-        self._execute_task_instances(simple_dag_bag,
-                                     (State.SCHEDULED,))
+        self._execute_task_instances(simple_dag_bag)
 
     @provide_session
     def heartbeat_callback(self, session=None):
