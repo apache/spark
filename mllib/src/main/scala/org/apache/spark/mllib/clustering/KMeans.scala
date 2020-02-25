@@ -266,6 +266,7 @@ class KMeans private (
     var converged = false
     var cost = 0.0
     var iteration = 0
+    var totalRadiiTime = 0L
 
     val iterationStartTime = System.nanoTime()
 
@@ -273,23 +274,27 @@ class KMeans private (
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
+      val radiiStartTime = System.nanoTime()
+      val radii = distanceMeasureInstance.computeRadii(centers)
+      totalRadiiTime += System.nanoTime() - radiiStartTime
+
       val costAccum = sc.doubleAccumulator
-      val bcCenters = sc.broadcast(centers)
+      val bcCenters = sc.broadcast((centers, radii))
 
       // Find the new centers
       val collected = data.mapPartitions { points =>
-        val thisCenters = bcCenters.value
-        val dims = thisCenters.head.vector.size
+        val (centers, radii) = bcCenters.value
+        val dims = centers.head.vector.size
 
-        val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
+        val sums = Array.fill(centers.length)(Vectors.zeros(dims))
 
         // clusterWeightSum is needed to calculate cluster center
         // cluster center =
         //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
-        val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
+        val clusterWeightSum = Array.ofDim[Double](centers.length)
 
         points.foreach { point =>
-          val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(centers, radii, point)
           costAccum.add(cost * point.weight)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
           clusterWeightSum(bestCenter) += point.weight
@@ -307,15 +312,12 @@ class KMeans private (
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
-      val newCenters = collected.mapValues { case (sum, weightSum) =>
-        distanceMeasureInstance.centroid(sum, weightSum)
-      }
-
       bcCenters.destroy()
 
       // Update the cluster centers and costs
       converged = true
-      newCenters.foreach { case (j, newCenter) =>
+      collected.foreach { case (j, (sum, weightSum)) =>
+        val newCenter = distanceMeasureInstance.centroid(sum, weightSum)
         if (converged &&
           !distanceMeasureInstance.isCenterConverged(centers(j), newCenter, epsilon)) {
           converged = false
@@ -324,8 +326,10 @@ class KMeans private (
       }
 
       cost = costAccum.value
+      instr.foreach(_.logNamedValue(s"Cost@iter=$iteration", s"$cost"))
       iteration += 1
     }
+    logInfo(f"Radii computation took ${totalRadiiTime / 1e9}%.3f seconds.")
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
     logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
@@ -372,7 +376,7 @@ class KMeans private (
     require(sample.nonEmpty, s"No samples available from $data")
 
     val centers = ArrayBuffer[VectorWithNorm]()
-    var newCenters = Seq(sample.head.toDense)
+    var newCenters = Array(sample.head.toDense)
     centers ++= newCenters
 
     // On each step, sample 2 * k points on average with probability proportional
@@ -404,10 +408,10 @@ class KMeans private (
     costs.unpersist()
     bcNewCentersList.foreach(_.destroy())
 
-    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
+    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_)).toArray
 
-    if (distinctCenters.size <= k) {
-      distinctCenters.toArray
+    if (distinctCenters.length <= k) {
+      distinctCenters
     } else {
       // Finally, we might have a set of more than k distinct candidate centers; weight each
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
@@ -420,7 +424,7 @@ class KMeans private (
       bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-      LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30)
     }
   }
 }
