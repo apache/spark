@@ -934,17 +934,8 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              // Note that SessionCatalogAndIdentifier doesn't update the namespace if the resolved
-              // identifier has a single-part name because it could reference a temp view which does
-              // not belong to any namespaces. For v1 tables, namespace is resolved in
-              // `SessionCatalog.getRelation`.
-              val ns = if (ident.namespace.isEmpty) {
-                catalogManager.currentNamespace
-              } else {
-                ident.namespace
-              }
               SubqueryAlias(
-                ns :+ ident.name,
+                ident.asMultipartIdentifier,
                 DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
