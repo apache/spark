@@ -103,7 +103,7 @@ class TypedColumn[-T, U](
    */
   private[sql] def needInputType: Boolean = {
     expr.find {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
+      case ta: TypedAggregateExpression => ta.inputDeserializer.isEmpty
       case _ => false
     }.isDefined
   }
