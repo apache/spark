@@ -43,8 +43,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 trait DataSourceScanExec extends LeafExecNode {
-  val relation: BaseRelation
-  val tableIdentifier: Option[TableIdentifier]
+  def relation: BaseRelation
+  def tableIdentifier: Option[TableIdentifier]
 
   protected val nodeNamePrefix: String = ""
 
@@ -102,8 +102,8 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
-    @transient override val relation: BaseRelation,
-    override val tableIdentifier: Option[TableIdentifier])
+    @transient relation: BaseRelation,
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
@@ -158,13 +158,13 @@ case class RowDataSourceScanExec(
  * @param tableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
-    @transient override val relation: HadoopFsRelation,
+    @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
-    override val tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
