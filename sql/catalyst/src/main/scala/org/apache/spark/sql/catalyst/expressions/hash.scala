@@ -255,12 +255,13 @@ abstract class HashExpression[E] extends Expression {
     if (children.length < 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least one argument")
-    } else if (children.forall(child => hasMapType(child.dataType)) &&
+    } else if (children.exists(child => hasMapType(child.dataType)) &&
       !SQLConf.get.getConf(SQLConf.LEGACY_USE_HASH_ON_MAPTYPE)) {
       TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName cannot contain elements of MapType. Logically same maps " +
+        s"input to function $prettyName cannot contain elements of MapType. In Spark, same maps " +
           "may have different hashcode, thus hash expressions are prohibited on MapType " +
-          "elements. To restore previous behavior set spark.sql.legacy.useHashOnMapType to true.")
+          s"elements. To restore previous behavior set ${SQLConf.LEGACY_USE_HASH_ON_MAPTYPE.key} " +
+          "to true.")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
