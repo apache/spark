@@ -260,6 +260,8 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     3
     >>> summary.clusterSizes
     [2, 2, 2]
+    >>> summary.logLikelihood
+    8.14636...
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -269,18 +271,18 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gaussians[0].mean
     DenseVector([0.825, 0.8675])
     >>> gaussians[0].cov.toArray()
-    array([[ 0.00562..., -0.00506...],
-           [-0.00506...,  0.00455...]])
+    array([[ 0.005625  , -0.0050625 ],
+           [-0.0050625 ,  0.00455625]])
     >>> gaussians[1].mean
     DenseVector([-0.4777, -0.4096])
     >>> gaussians[1].cov.toArray()
-    array([[ 0.16796...,  0.13181...],
-           [ 0.13181...,  0.10524...]])
+    array([[ 0.1679695 ,  0.13181786],
+           [ 0.13181786,  0.10524592]])
     >>> gaussians[2].mean
     DenseVector([-0.4473, -0.3853])
     >>> gaussians[2].cov.toArray()
-    array([[ 0.16730...,  0.13112...],
-           [ 0.13112...,  0.10469...]])
+    array([[ 0.16730412,  0.13112435],
+           [ 0.13112435,  0.10469614]])
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()

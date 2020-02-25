@@ -53,18 +53,14 @@ class MultivariateGaussian @Since("2.0.0") (
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  @transient private lazy val tuple3 = {
+  @transient private lazy val tuple = {
     val (rootSigmaInv, u) = calculateCovarianceConstants
     val rootSigmaInvMat = Matrices.fromBreeze(rootSigmaInv)
-    val rootSigmaInvMulMu = rootSigmaInvMat.multiply(mean)
-    (rootSigmaInvMat, u, rootSigmaInvMulMu)
+    (rootSigmaInvMat, u)
   }
-
-  @transient private lazy val rootSigmaInvMat = tuple3._1
-
-  @transient private lazy val u = tuple3._2
-
-  @transient private lazy val rootSigmaInvMulMu = tuple3._3
+  @transient private lazy val rootSigmaInvMat = tuple._1
+  @transient private lazy val u = tuple._2
+  @transient private lazy val mu = mean.toDense
 
   /**
    * Returns density of this multivariate Gaussian at given point, x
@@ -79,8 +75,9 @@ class MultivariateGaussian @Since("2.0.0") (
    */
   @Since("2.0.0")
   def logpdf(x: Vector): Double = {
-    val v = rootSigmaInvMulMu.copy
-    BLAS.gemv(-1.0, rootSigmaInvMat, x, 1.0, v)
+    val delta = mu.copy
+    BLAS.axpy(-1.0, x, delta)
+    val v = rootSigmaInvMat.multiply(delta)
     u - 0.5 * BLAS.dot(v, v)
   }
 
