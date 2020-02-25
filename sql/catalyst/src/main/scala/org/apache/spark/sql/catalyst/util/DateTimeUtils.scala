@@ -708,7 +708,7 @@ object DateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => t
       case TRUNC_TO_MILLISECOND =>
-        millisToMicros(microsToMillis(t))
+        t - Math.floorMod(t, MICROS_PER_MILLIS)
       case TRUNC_TO_SECOND =>
         t - Math.floorMod(t, MICROS_PER_SECOND)
       case TRUNC_TO_MINUTE =>
