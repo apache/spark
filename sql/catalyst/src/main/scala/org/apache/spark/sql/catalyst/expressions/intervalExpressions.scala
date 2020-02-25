@@ -113,8 +113,7 @@ object ExtractIntervalPart {
 
 abstract class IntervalNumOperation(
     interval: Expression,
-    num: Expression,
-    val checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
@@ -141,7 +140,8 @@ abstract class IntervalNumOperation(
 
 case class MultiplyInterval(
     interval: Expression,
-    num: Expression)
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
@@ -152,7 +152,8 @@ case class MultiplyInterval(
 
 case class DivideInterval(
     interval: Expression,
-    num: Expression)
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
