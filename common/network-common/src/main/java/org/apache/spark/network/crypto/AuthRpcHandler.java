@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
@@ -124,6 +125,7 @@ class AuthRpcHandler extends RpcHandler {
       response.encode(responseData);
       callback.onSuccess(responseData.nioBuffer());
       engine.sessionCipher().addToChannel(channel);
+      client.setClientId(challenge.appId);
     } catch (Exception e) {
       // This is a fatal error: authentication has failed. Close the channel explicitly.
       LOG.debug("Authentication failed for client {}, closing channel.", channel.remoteAddress());
@@ -147,6 +149,14 @@ class AuthRpcHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, ByteBuffer message) {
     delegate.receive(client, message);
+  }
+
+  @Override
+  public StreamCallbackWithID receiveStream(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
+    return delegate.receiveStream(client, message, callback);
   }
 
   @Override

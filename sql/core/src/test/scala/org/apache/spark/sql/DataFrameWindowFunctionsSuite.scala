@@ -17,22 +17,25 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
-
-import scala.collection.mutable
+import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper{
+
   import testImplicits._
 
   test("reuse window partitionBy") {
@@ -75,9 +78,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         cume_dist().over(Window.partitionBy("value").orderBy("key")),
         percent_rank().over(Window.partitionBy("value").orderBy("key"))),
       Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
-      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
-      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
+        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
+        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
   }
 
   test("window function should fail if order by clause is not specified") {
@@ -165,12 +168,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(
         Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
         Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
-        Row("c", 0.0, 0.0, 0.0, 0.0, 0.0 ),
-        Row("d", 0.0, 0.0, 0.0, 0.0, 0.0 ),
-        Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544 ),
-        Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544 ),
-        Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544 ),
-        Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544 ),
+        Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
+        Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
+        Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+        Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+        Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+        Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
         Row("i", Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)))
   }
 
@@ -329,7 +332,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         var_samp($"value").over(window),
         approx_count_distinct($"value").over(window)),
       Seq.fill(4)(Row("a", 1.0d / 4.0d, 1.0d / 3.0d, 2))
-      ++ Seq.fill(3)(Row("b", 2.0d / 3.0d, 1.0d, 3)))
+        ++ Seq.fill(3)(Row("b", 2.0d / 3.0d, 1.0d, 3)))
   }
 
   test("window function with aggregates") {
@@ -402,6 +405,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         $"a",
         $"b",
         udaf($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
+  }
+
+  test("window function with aggregator") {
+    val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
+      def zero: Long = 0L
+      def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
+      def merge(b1: Long, b2: Long): Long = b1 + b2
+      def finish(r: Long): Long = r
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    })
+
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        agg($"a", $"b").over(window)),
       Seq(
         Row("a", 1, 1, 6),
         Row("a", 1, 5, 6),
@@ -623,5 +662,123 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
       }
     }
+  }
+
+  test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
+    def checkAnalysisError(df: => DataFrame): Unit = {
+      val thrownException = the[AnalysisException] thrownBy {
+        df.queryExecution.analyzed
+      }
+      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+    }
+
+    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1))
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
+
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+    checkAnalysisError(
+      sql(
+        s"""SELECT a, MAX(b)
+           |FROM testData2
+           |GROUP BY a
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
+  }
+
+  test("window functions in multiple selects") {
+    val df = Seq(
+      ("S1", "P1", 100),
+      ("S1", "P1", 700),
+      ("S2", "P1", 200),
+      ("S2", "P2", 300)
+    ).toDF("sno", "pno", "qty")
+
+    Seq(true, false).foreach { transposeWindowEnabled =>
+      val excludedRules = if (transposeWindowEnabled) "" else TransposeWindow.ruleName
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+        val w1 = Window.partitionBy("sno")
+        val w2 = Window.partitionBy("sno", "pno")
+
+        val select = df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
+          .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
+
+        val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
+        val actualNumExchanges = stripAQEPlan(select.queryExecution.executedPlan).collect {
+          case e: Exchange => e
+        }.length
+        assert(actualNumExchanges == expectedNumExchanges)
+
+        checkAnswer(
+          select,
+          Seq(
+            Row("S1", "P1", 100, 800, 800),
+            Row("S1", "P1", 700, 800, 800),
+            Row("S2", "P1", 200, 200, 500),
+            Row("S2", "P2", 300, 300, 500)))
+      }
+    }
+  }
+
+  test("NaN and -0.0 in window partition keys") {
+    val df = Seq(
+      (Float.NaN, Double.NaN),
+      (0.0f/0.0f, 0.0/0.0),
+      (0.0f, 0.0),
+      (-0.0f, -0.0)).toDF("f", "d")
+
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(Window.partitionBy("f", "d"))),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    // test with complicated window partition keys.
+    val windowSpec1 = Window.partitionBy(array("f"), struct("d"))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec1)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    val windowSpec2 = Window.partitionBy(array(struct("f")), struct(array("d")))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec2)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    // test with df with complicated-type columns.
+    val df2 = Seq(
+      (Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))),
+      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0/0.0)))
+    ).toDF("arr", "stru", "arrOfStru")
+    val windowSpec3 = Window.partitionBy("arr", "stru", "arrOfStru")
+    checkAnswer(
+      df2.select($"arr", $"stru", $"arrOfStru", count(lit(1)).over(windowSpec3)),
+      Seq(
+        Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
+        Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
   }
 }

@@ -18,18 +18,19 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
-import java.net.URI
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSQLContext {
+class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
@@ -48,14 +49,38 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException](df.write.bucketBy(2, "k").saveAsTable("tt"))
   }
 
-  test("numBuckets be greater than 0 but less than 100000") {
+  test("numBuckets be greater than 0 but less/eq than default bucketing.maxBuckets (100000)") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 
-    Seq(-1, 0, 100000).foreach(numBuckets => {
+    Seq(-1, 0, 100001).foreach(numBuckets => {
       val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
       assert(
-        e.getMessage.contains("Number of buckets should be greater than 0 but less than 100000"))
+        e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
     })
+  }
+
+  test("numBuckets be greater than 0 but less/eq than overridden bucketing.maxBuckets (200000)") {
+    val maxNrBuckets: Int = 200000
+    val catalog = spark.sessionState.catalog
+
+    withSQLConf(SQLConf.BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
+      // within the new limit
+      Seq(100001, maxNrBuckets).foreach(numBuckets => {
+        withTable("t") {
+          df.write.bucketBy(numBuckets, "i").saveAsTable("t")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("i"), Seq())))
+        }
+      })
+
+      // over the new limit
+      withTable("t") {
+        val e = intercept[AnalysisException](
+          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
+        assert(
+          e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+      }
+    }
   }
 
   test("specify sorting columns without bucketing columns") {

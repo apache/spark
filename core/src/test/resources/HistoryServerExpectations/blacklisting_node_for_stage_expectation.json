@@ -8,21 +8,34 @@
   "numFailedTasks" : 4,
   "numKilledTasks" : 0,
   "numCompletedIndices" : 10,
-  "executorRunTime" : 5080,
-  "executorCpuTime" : 1163210819,
   "submissionTime" : "2018-01-18T18:33:12.658GMT",
   "firstTaskLaunchedTime" : "2018-01-18T18:33:12.816GMT",
   "completionTime" : "2018-01-18T18:33:15.279GMT",
+  "executorDeserializeTime" : 3679,
+  "executorDeserializeCpuTime" : 1029819716,
+  "executorRunTime" : 5080,
+  "executorCpuTime" : 1163210819,
+  "resultSize" : 10824,
+  "jvmGcTime" : 370,
+  "resultSerializationTime" : 5,
+  "memoryBytesSpilled" : 0,
+  "diskBytesSpilled" : 0,
+  "peakExecutionMemory" : 0,
   "inputBytes" : 0,
   "inputRecords" : 0,
   "outputBytes" : 0,
   "outputRecords" : 0,
+  "shuffleRemoteBlocksFetched" : 0,
+  "shuffleLocalBlocksFetched" : 0,
+  "shuffleFetchWaitTime" : 0,
+  "shuffleRemoteBytesRead" : 0,
+  "shuffleRemoteBytesReadToDisk" : 0,
+  "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 1461,
+  "shuffleWriteTime" : 33251697,
   "shuffleWriteRecords" : 30,
-  "memoryBytesSpilled" : 0,
-  "diskBytesSpilled" : 0,
   "name" : "map at <console>:27",
   "details" : "org.apache.spark.rdd.RDD.map(RDD.scala:370)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:27)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:35)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:37)\n$line15.$read$$iw$$iw$$iw$$iw$$iw.<init>(<console>:39)\n$line15.$read$$iw$$iw$$iw$$iw.<init>(<console>:41)\n$line15.$read$$iw$$iw$$iw.<init>(<console>:43)\n$line15.$read$$iw$$iw.<init>(<console>:45)\n$line15.$read$$iw.<init>(<console>:47)\n$line15.$read.<init>(<console>:49)\n$line15.$read$.<init>(<console>:53)\n$line15.$read$.<clinit>(<console>)\n$line15.$eval$.$print$lzycompute(<console>:7)\n$line15.$eval$.$print(<console>:6)\n$line15.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:498)\nscala.tools.nsc.interpreter.IMain$ReadEvalPrint.call(IMain.scala:786)",
   "schedulingPool" : "default",
@@ -74,7 +87,13 @@
           "writeTime" : 3662221,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 68,
+      "gettingResultTime" : 0
     },
     "5" : {
       "taskId" : 5,
@@ -122,7 +141,13 @@
           "writeTime" : 191901,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 46,
+      "gettingResultTime" : 0
     },
     "10" : {
       "taskId" : 10,
@@ -169,7 +194,13 @@
           "writeTime" : 301705,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 50,
+      "gettingResultTime" : 0
     },
     "1" : {
       "taskId" : 1,
@@ -217,7 +248,13 @@
           "writeTime" : 3075188,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 174,
+      "gettingResultTime" : 0
     },
     "6" : {
       "taskId" : 6,
@@ -265,7 +302,13 @@
           "writeTime" : 183718,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 16,
+      "gettingResultTime" : 0
     },
     "9" : {
       "taskId" : 9,
@@ -312,7 +355,13 @@
           "writeTime" : 366050,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 42,
+      "gettingResultTime" : 0
     },
     "13" : {
       "taskId" : 13,
@@ -359,7 +408,13 @@
           "writeTime" : 369513,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 26,
+      "gettingResultTime" : 0
     },
     "2" : {
       "taskId" : 2,
@@ -406,7 +461,13 @@
           "writeTime" : 3322956,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 74,
+      "gettingResultTime" : 0
     },
     "12" : {
       "taskId" : 12,
@@ -453,7 +514,13 @@
           "writeTime" : 319101,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 22,
+      "gettingResultTime" : 0
     },
     "7" : {
       "taskId" : 7,
@@ -500,7 +567,13 @@
           "writeTime" : 377601,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 20,
+      "gettingResultTime" : 0
     },
     "3" : {
       "taskId" : 3,
@@ -547,7 +620,13 @@
           "writeTime" : 3587839,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 63,
+      "gettingResultTime" : 0
     },
     "11" : {
       "taskId" : 11,
@@ -594,7 +673,13 @@
           "writeTime" : 323898,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 12,
+      "gettingResultTime" : 0
     },
     "8" : {
       "taskId" : 8,
@@ -641,7 +726,13 @@
           "writeTime" : 311940,
           "recordsWritten" : 3
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 84,
+      "gettingResultTime" : 0
     },
     "4" : {
       "taskId" : 4,
@@ -689,7 +780,13 @@
           "writeTime" : 16858066,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 338,
+      "gettingResultTime" : 0
     }
   },
   "executorSummary" : {

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,19 +29,24 @@ object ProcessUtils extends Logging {
    * executeProcess is used to run a command and return the output if it
    * completes within timeout seconds.
    */
-  def executeProcess(fullCommand: Array[String], timeout: Long): Seq[String] = {
+  def executeProcess(
+      fullCommand: Array[String],
+      timeout: Long,
+      dumpErrors: Boolean = false): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
     pb.redirectErrorStream(true)
     val proc = pb.start()
     val outputLines = new ArrayBuffer[String]
     Utils.tryWithResource(proc.getInputStream)(
-      Source.fromInputStream(_, "UTF-8").getLines().foreach { line =>
+      Source.fromInputStream(_, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
         logInfo(line)
         outputLines += line
       })
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
-    assert(proc.exitValue == 0, s"Failed to execute ${fullCommand.mkString(" ")}")
+    assert(proc.exitValue == 0,
+      s"Failed to execute ${fullCommand.mkString(" ")}" +
+        s"${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
     outputLines
   }
 }

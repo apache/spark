@@ -20,6 +20,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
+function shouldRenderPlanViz() {
+  return planVizContainer().selectAll("svg").empty();
+}
+
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
@@ -42,7 +46,7 @@ function renderPlanViz() {
     setupTooltipForSparkPlanNode(i);
   }
 
-  resizeSvg(svg)
+  resizeSvg(svg);
 }
 
 /* -------------------- *
@@ -61,7 +65,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
     .on('mouseover', function(d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "right"
+        title: nodeTooltip, trigger: "manual", container: "body", placement: "top"
       });
       $(domNode).tooltip("show");
     })
@@ -77,6 +81,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
  * and sizes of graph elements, e.g. padding, font style, shape.
  */
 function preprocessGraphLayout(g) {
+  g.graph().ranksep = "70";
   var nodes = g.nodes();
   for (var i = 0; i < nodes.length; i++) {
       var node = g.node(nodes[i]);

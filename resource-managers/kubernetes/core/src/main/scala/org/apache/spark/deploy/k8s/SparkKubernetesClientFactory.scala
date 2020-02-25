@@ -21,11 +21,14 @@ import java.io.File
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -33,12 +36,13 @@ import org.apache.spark.util.ThreadUtils
  * parse configuration keys, similar to the manner in which Spark's SecurityManager parses SSL
  * options for different components.
  */
-private[spark] object SparkKubernetesClientFactory {
+private[spark] object SparkKubernetesClientFactory extends Logging {
 
   def createKubernetesClient(
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
+      clientType: ClientType.Value,
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
@@ -63,10 +67,22 @@ private[spark] object SparkKubernetesClientFactory {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
-    val config = new ConfigBuilder()
+
+    // Allow for specifying a context used to auto-configure from the users K8S config file
+    val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
+    logInfo("Auto-configuring K8S client using " +
+      kubeContext.map("context " + _).getOrElse("current context") +
+      " from users K8S config file")
+
+    // Start from an auto-configured config with the desired context
+    // Fabric 8 uses null to indicate that the users current context should be used so if no
+    // explicit setting pass null
+    val config = new ConfigBuilder(autoConfigure(kubeContext.getOrElse(null)))
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withWebsocketPingInterval(0)
+      .withRequestTimeout(clientType.requestTimeout(sparkConf))
+      .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
@@ -98,5 +114,21 @@ private[spark] object SparkKubernetesClientFactory {
         configurator(opt, configBuilder)
       }.getOrElse(configBuilder)
     }
+  }
+
+  object ClientType extends Enumeration {
+    import scala.language.implicitConversions
+    val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
+    val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
+
+    protected case class Val(
+        requestTimeoutEntry: ConfigEntry[Int],
+        connectionTimeoutEntry: ConfigEntry[Int])
+      extends super.Val {
+      def requestTimeout(conf: SparkConf): Int = conf.get(requestTimeoutEntry)
+      def connectionTimeout(conf: SparkConf): Int = conf.get(connectionTimeoutEntry)
+    }
+
+    implicit def convert(value: Value): Val = value.asInstanceOf[Val]
   }
 }

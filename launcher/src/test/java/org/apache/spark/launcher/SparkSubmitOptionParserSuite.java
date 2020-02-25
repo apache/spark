@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 public class SparkSubmitOptionParserSuite extends BaseSuite {
@@ -48,14 +49,17 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
       }
     }
 
+    int nullCount = 0;
     for (String[] switchNames : parser.switches) {
       int switchCount = 0;
       for (String name : switchNames) {
         parser.parse(Arrays.asList(name));
         count++;
+        nullCount++;
         switchCount++;
         verify(parser, times(switchCount)).handle(eq(switchNames[0]), same(null));
-        verify(parser, times(count)).handle(anyString(), any(String.class));
+        verify(parser, times(nullCount)).handle(anyString(), isNull());
+        verify(parser, times(count - nullCount)).handle(anyString(), any(String.class));
         verify(parser, times(count)).handleExtraArgs(eq(Collections.emptyList()));
       }
     }

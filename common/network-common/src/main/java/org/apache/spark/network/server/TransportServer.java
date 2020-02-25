@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -53,6 +54,7 @@ public class TransportServer implements Closeable {
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
+  private final PooledByteBufAllocator pooledAllocator;
   private NettyMemoryMetrics metrics;
 
   /**
@@ -68,13 +70,23 @@ public class TransportServer implements Closeable {
     this.context = context;
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), true /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
+    }
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
 
+    boolean shouldClose = true;
     try {
       init(hostToBind, portToBind);
-    } catch (RuntimeException e) {
-      JavaUtils.closeQuietly(this);
-      throw e;
+      shouldClose = false;
+    } finally {
+      if (shouldClose) {
+        JavaUtils.closeQuietly(this);
+      }
     }
   }
 
@@ -88,22 +100,20 @@ public class TransportServer implements Closeable {
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
-    EventLoopGroup bossGroup =
-      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), conf.getModuleName() + "-server");
-    EventLoopGroup workerGroup = bossGroup;
-
-    PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
+    EventLoopGroup bossGroup = NettyUtils.createEventLoop(ioMode, 1,
+      conf.getModuleName() + "-boss");
+    EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
+      conf.getModuleName() + "-server");
 
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
-      .option(ChannelOption.ALLOCATOR, allocator)
+      .option(ChannelOption.ALLOCATOR, pooledAllocator)
       .option(ChannelOption.SO_REUSEADDR, !SystemUtils.IS_OS_WINDOWS)
-      .childOption(ChannelOption.ALLOCATOR, allocator);
+      .childOption(ChannelOption.ALLOCATOR, pooledAllocator);
 
     this.metrics = new NettyMemoryMetrics(
-      allocator, conf.getModuleName() + "-server", conf);
+      pooledAllocator, conf.getModuleName() + "-server", conf);
 
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());
@@ -117,9 +127,15 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+    if (conf.enableTcpKeepAlive()) {
+      bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+    }
+
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {
+        logger.debug("New connection accepted for remote address {}.", ch.remoteAddress());
+
         RpcHandler rpcHandler = appRpcHandler;
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
@@ -148,12 +164,16 @@ public class TransportServer implements Closeable {
       channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS);
       channelFuture = null;
     }
-    if (bootstrap != null && bootstrap.group() != null) {
-      bootstrap.group().shutdownGracefully();
+    if (bootstrap != null && bootstrap.config().group() != null) {
+      bootstrap.config().group().shutdownGracefully();
     }
-    if (bootstrap != null && bootstrap.childGroup() != null) {
-      bootstrap.childGroup().shutdownGracefully();
+    if (bootstrap != null && bootstrap.config().childGroup() != null) {
+      bootstrap.config().childGroup().shutdownGracefully();
     }
     bootstrap = null;
+  }
+
+  public Counter getRegisteredConnections() {
+    return context.getRegisteredConnections();
   }
 }

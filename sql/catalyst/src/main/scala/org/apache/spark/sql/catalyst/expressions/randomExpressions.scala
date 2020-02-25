@@ -57,6 +57,14 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegerType, LongType))
 }
 
+/**
+ * Represents the behavior of expressions which have a random seed and can renew the seed.
+ * Usually the random seed needs to be renewed at each execution under streaming queries.
+ */
+trait ExpressionWithRandomSeed {
+  def withNewSeed(seed: Long): Expression
+}
+
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -70,11 +78,16 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
       > SELECT _FUNC_(null);
        0.8446490682263027
   """,
-  note = "The function is non-deterministic in general case.")
+  note = """
+    The function is non-deterministic in general case.
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression) extends RDG {
+case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
   def this() = this(Literal(Utils.random.nextLong(), LongType))
+
+  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -108,11 +121,16 @@ object Rand {
       > SELECT _FUNC_(null);
        1.1164209726833079
   """,
-  note = "The function is non-deterministic in general case.")
+  note = """
+    The function is non-deterministic in general case.
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression) extends RDG {
+case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
   def this() = this(Literal(Utils.random.nextLong(), LongType))
+
+  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 

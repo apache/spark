@@ -21,7 +21,10 @@ import java.util.Arrays
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]]. A post-shuffle partition
@@ -112,8 +115,14 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
+    metrics: Map[String, SQLMetric],
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
+
+  if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
+    dependency.rdd.context.setLocalProperty(
+      SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
+  }
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
@@ -154,6 +163,10 @@ class ShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val shuffledRowPartition = split.asInstanceOf[ShuffledRowRDDPartition]
+    val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
+    // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
+    // as well as the `tempMetrics` for basic shuffle metrics.
+    val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =
@@ -161,11 +174,12 @@ class ShuffledRowRDD(
         dependency.shuffleHandle,
         shuffledRowPartition.startPreShufflePartitionIndex,
         shuffledRowPartition.endPreShufflePartitionIndex,
-        context)
+        context,
+        sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     dependency = null
   }

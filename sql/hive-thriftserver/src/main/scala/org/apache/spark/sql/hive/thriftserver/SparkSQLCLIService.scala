@@ -33,15 +33,17 @@ import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
+import org.slf4j.Logger
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
 private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "hiveConf", hiveConf)
 
     val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sqlContext)
@@ -103,7 +105,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
-  def initCompositeService(hiveConf: HiveConf) {
+  def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`
     val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
     serviceList.asScala.foreach(_.init(hiveConf))
@@ -112,6 +114,10 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.NOTINITED)
     setAncestorField(this, 3, "hiveConf", hiveConf)
     invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.INITED)
-    getAncestorField[Log](this, 3, "LOG").info(s"Service: $getName is inited.")
+    if (HiveUtils.isHive23) {
+      getAncestorField[Logger](this, 3, "LOG").info(s"Service: $getName is inited.")
+    } else {
+      getAncestorField[Log](this, 3, "LOG").info(s"Service: $getName is inited.")
+    }
   }
 }

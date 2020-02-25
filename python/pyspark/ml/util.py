@@ -63,7 +63,7 @@ class Identifiable(object):
         Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -77,14 +77,6 @@ class BaseReadWrite(object):
 
     def __init__(self):
         self._sparkSession = None
-
-    def context(self, sqlContext):
-        """
-        Sets the Spark SQLContext to use for saving/loading.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        raise NotImplementedError("Read/Write is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
         """
@@ -127,7 +119,7 @@ class MLWriter(BaseReadWrite):
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java("handleOverwrite", path, True, self.sc._jsc.sc())
+        wrapper._call_java("handleOverwrite", path, True, self.sparkSession._jsparkSession)
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -145,6 +137,23 @@ class MLWriter(BaseReadWrite):
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self.shouldOverwrite = True
+        return self
+
+
+@inherit_doc
+class GeneralMLWriter(MLWriter):
+    """
+    Utility class that can save ML instances in different formats.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self.source = source
         return self
 
 
@@ -174,21 +183,27 @@ class JavaMLWriter(MLWriter):
         self._jwrite.option(key, value)
         return self
 
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for saving.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
-            DeprecationWarning)
-        self._jwrite.context(sqlContext._ssql_ctx)
-        return self
-
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
         self._jwrite.session(sparkSession._jsparkSession)
+        return self
+
+
+@inherit_doc
+class GeneralJavaMLWriter(JavaMLWriter):
+    """
+    (Private) Specialization of :py:class:`GeneralMLWriter` for :py:class:`JavaParams` types
+    """
+
+    def __init__(self, instance):
+        super(GeneralJavaMLWriter, self).__init__(instance)
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self._jwrite.format(source)
         return self
 
 
@@ -218,6 +233,17 @@ class JavaMLWritable(MLWritable):
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
+
+
+@inherit_doc
+class GeneralJavaMLWritable(JavaMLWritable):
+    """
+    (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
+    """
+
+    def write(self):
+        """Returns an GeneralMLWriter instance for this ML instance."""
+        return GeneralJavaMLWriter(self)
 
 
 @inherit_doc
@@ -256,18 +282,6 @@ class JavaMLReader(MLReader):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
                                       % self._clazz)
         return self._clazz._from_java(java_obj)
-
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for loading.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
-            DeprecationWarning)
-        self._jread.context(sqlContext._ssql_ctx)
-        return self
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""
@@ -329,22 +343,6 @@ class JavaMLReadable(MLReadable):
 
 
 @inherit_doc
-class JavaPredictionModel():
-    """
-    (Private) Java Model for prediction tasks (regression and classification).
-    To be mixed in with class:`pyspark.ml.JavaModel`
-    """
-
-    @property
-    @since("2.1.0")
-    def numFeatures(self):
-        """
-        Returns the number of features the model was trained on. If unknown, returns -1
-        """
-        return self._call_java("numFeatures")
-
-
-@inherit_doc
 class DefaultParamsWritable(MLWritable):
     """
     .. note:: DeveloperApi
@@ -392,6 +390,7 @@ class DefaultParamsWriter(MLWriter):
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
+
         - class
         - timestamp
         - sparkVersion
@@ -399,6 +398,7 @@ class DefaultParamsWriter(MLWriter):
         - paramMap
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
+
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
         """
@@ -565,3 +565,29 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
+
+
+@inherit_doc
+class HasTrainingSummary(object):
+    """
+    Base class for models that provides Training summary.
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of the model trained on the training set. An exception is thrown if
+        no summary exists.
+        """
+        return (self._call_java("summary"))

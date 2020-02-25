@@ -79,16 +79,16 @@ class SparkConf(object):
     parameters as key-value pairs.
 
     Most of the time, you would create a SparkConf object with
-    C{SparkConf()}, which will load values from C{spark.*} Java system
+    ``SparkConf()``, which will load values from `spark.*` Java system
     properties as well. In this case, any parameters you set directly on
-    the C{SparkConf} object take priority over system properties.
+    the :class:`SparkConf` object take priority over system properties.
 
-    For unit tests, you can also call C{SparkConf(false)} to skip
+    For unit tests, you can also call ``SparkConf(false)`` to skip
     loading external settings and get the same configuration no matter
     what the system properties are.
 
     All setter methods in this class support chaining. For example,
-    you can write C{conf.setMaster("local").setAppName("My app")}.
+    you can write ``conf.setMaster("local").setAppName("My app")``.
 
     .. note:: Once a SparkConf object is passed to Spark, it is cloned
         and can no longer be modified by the user.

@@ -21,24 +21,26 @@ import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZkUtils
+import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -49,17 +51,18 @@ import org.apache.spark.util.Utils
 private[kafka010] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
-  private val zkHost = "localhost"
+  private val zkHost = "127.0.0.1"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
-  private val zkSessionTimeout = 6000
+  private val zkSessionTimeout = 10000
 
   private var zookeeper: EmbeddedZookeeper = _
 
-  private var zkUtils: ZkUtils = _
+  private var zkClient: KafkaZkClient = _
+  private var admClient: AdminZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = "localhost"
+  private val brokerHost = "127.0.0.1"
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -72,6 +75,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   // Flag to test whether the system is correctly started
   private var zkReady = false
   private var brokerReady = false
+  private var leakDetector: AnyRef = null
 
   def zkAddress: String = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
@@ -83,10 +87,16 @@ private[kafka010] class KafkaTestUtils extends Logging {
     s"$brokerHost:$brokerPort"
   }
 
-  def zookeeperClient: ZkUtils = {
+  def zookeeperClient: KafkaZkClient = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
-    Option(zkUtils).getOrElse(
+    Option(zkClient).getOrElse(
       throw new IllegalStateException("Zookeeper client is not yet initialized"))
+  }
+
+  def adminClient: AdminZkClient = {
+    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
+    Option(admClient).getOrElse(
+      throw new IllegalStateException("Admin client is not yet initialized"))
   }
 
   // Set up the Embedded Zookeeper server and get the proper Zookeeper port
@@ -95,7 +105,9 @@ private[kafka010] class KafkaTestUtils extends Logging {
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkUtils = ZkUtils(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout, false)
+    zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
+      zkConnectionTimeout, 1, KTime.SYSTEM)
+    admClient = new AdminZkClient(zkClient)
     zkReady = true
   }
 
@@ -109,7 +121,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
       brokerConf = new KafkaConfig(brokerConfiguration, doLog = false)
       server = new KafkaServer(brokerConf)
       server.startup()
-      brokerPort = server.boundPort()
+      brokerPort = server.boundPort(new ListenerName("PLAINTEXT"))
       (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
@@ -118,12 +130,22 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
   def setup(): Unit = {
+    // Set up a KafkaTestUtils leak detector so that we can see where the leak KafkaTestUtils is
+    // created.
+    val exception = new SparkException("It was created at: ")
+    leakDetector = ShutdownHookManager.addShutdownHook { () =>
+      logError("Found a leak KafkaTestUtils.", exception)
+    }
+
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
   }
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
+    if (leakDetector != null) {
+      ShutdownHookManager.removeShutdownHook(leakDetector)
+    }
     brokerReady = false
     zkReady = false
 
@@ -150,9 +172,9 @@ private[kafka010] class KafkaTestUtils extends Logging {
       }
     }
 
-    if (zkUtils != null) {
-      zkUtils.close()
-      zkUtils = null
+    if (zkClient != null) {
+      zkClient.close()
+      zkClient = null
     }
 
     if (zookeeper != null) {
@@ -163,7 +185,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String, partitions: Int, config: Properties): Unit = {
-    AdminUtils.createTopic(zkUtils, topic, partitions, 1, config)
+    adminClient.createTopic(topic, partitions, 1, config)
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -216,12 +238,18 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", "localhost")
+    props.put("host.name", "127.0.0.1")
+    props.put("advertised.host.name", "127.0.0.1")
     props.put("port", brokerPort.toString)
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
+    props.put("zookeeper.connection.timeout.ms", "60000")
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
+    props.put("delete.topic.enable", "true")
+    props.put("offsets.topic.num.partitions", "1")
+    props.put("offsets.topic.replication.factor", "1")
+    props.put("group.initial.rebalance.delay.ms", "10")
     props
   }
 
@@ -247,14 +275,14 @@ private[kafka010] class KafkaTestUtils extends Logging {
       }
     }
 
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     @tailrec
     def tryAgain(attempt: Int): T = {
       makeAttempt() match {
         case Right(result) => result
         case Left(e) =>
-          val duration = System.currentTimeMillis() - startTime
-          if (duration < timeout.milliseconds) {
+          val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+          if (durationMs < timeout.milliseconds) {
             Thread.sleep(interval.milliseconds)
           } else {
             throw new TimeoutException(e.getMessage)
@@ -268,14 +296,13 @@ private[kafka010] class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+    def isPropagated = server.dataPlaneRequestProcessor.metadataCache
+        .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
-        val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
-
-        zkUtils.getLeaderForPartition(topic, partition).isDefined &&
-          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
-          leaderAndInSyncReplicas.isr.nonEmpty
-
+        val leader = partitionState.leader
+        val isr = partitionState.isr
+        zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
+          Request.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }
@@ -299,7 +326,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures

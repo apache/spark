@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.mesos
 
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -24,6 +25,7 @@ import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.util.{CommandLineUtils, ShutdownHookManager, SparkUncaughtExceptionHandler, Utils}
 
@@ -51,8 +53,16 @@ private[mesos] class MesosClusterDispatcher(
     conf: SparkConf)
   extends Logging {
 
+  {
+    // This doesn't support authentication because the RestSubmissionServer doesn't support it.
+    val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
+    require(conf.getOption(authKey).isEmpty,
+      s"The MesosClusterDispatcher does not support authentication via ${authKey}.  It is not " +
+        s"currently possible to run jobs in cluster mode with authentication on.")
+  }
+
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
-  private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase()
+  private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase(Locale.ROOT)
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {
@@ -96,7 +106,7 @@ private[mesos] object MesosClusterDispatcher
   extends Logging
   with CommandLineUtils {
 
-  override def main(args: Array[String]) {
+  override def main(args: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf

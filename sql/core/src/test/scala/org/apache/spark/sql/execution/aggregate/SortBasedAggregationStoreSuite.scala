@@ -39,7 +39,11 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       new TaskContextImpl(0, 0, 0, 0, 0, taskManager, new Properties, null))
   }
 
-  override def afterAll(): Unit = TaskContext.unset()
+  override def afterAll(): Unit = try {
+    TaskContext.unset()
+  } finally {
+    super.afterAll()
+  }
 
   private val rand = new java.util.Random()
 
@@ -136,7 +140,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       }
       override def getKey(): UnsafeRow = key
       override def getValue(): UnsafeRow = value
-      override def close(): Unit = Unit
+      override def close(): Unit = ()
     }
   }
 }

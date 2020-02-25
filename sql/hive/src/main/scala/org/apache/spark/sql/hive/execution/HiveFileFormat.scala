@@ -30,6 +30,7 @@ import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
@@ -69,7 +70,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = sparkSession.sparkContext.conf.getBoolean("spark.speculation", false)
+    val speculationEnabled = sparkSession.sparkContext.conf.get(SPECULATION_ENABLED)
     val outputCommitterClass = conf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =
@@ -115,7 +116,8 @@ class HiveOutputWriter(
   private def tableDesc = fileSinkConf.getTableInfo
 
   private val serializer = {
-    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
+    val serializer = tableDesc.getDeserializerClass.getConstructor().
+      newInstance().asInstanceOf[Serializer]
     serializer.initialize(jobConf, tableDesc.getProperties)
     serializer
   }
@@ -128,10 +130,15 @@ class HiveOutputWriter(
     new Path(path),
     Reporter.NULL)
 
+  /**
+   * Since SPARK-30201 ObjectInspectorCopyOption.JAVA change to ObjectInspectorCopyOption.DEFAULT.
+   * The reason is DEFAULT option can convert `UTF8String` to `Text` with bytes and
+   * we can compatible with non UTF-8 code bytes during write.
+   */
   private val standardOI = ObjectInspectorUtils
     .getStandardObjectInspector(
       tableDesc.getDeserializer(jobConf).getObjectInspector,
-      ObjectInspectorCopyOption.JAVA)
+      ObjectInspectorCopyOption.DEFAULT)
     .asInstanceOf[StructObjectInspector]
 
   private val fieldOIs =

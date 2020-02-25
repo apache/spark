@@ -124,6 +124,42 @@ public class AuthIntegrationSuite {
     }
   }
 
+  @Test
+  public void testLargeMessageEncryption() throws Exception {
+    // Use a big length to create a message that cannot be put into the encryption buffer completely
+    final int testErrorMessageLength = TransportCipher.STREAM_BUFFER_SIZE;
+    ctx = new AuthTestCtx(new RpcHandler() {
+      @Override
+      public void receive(
+          TransportClient client,
+          ByteBuffer message,
+          RpcResponseCallback callback) {
+        char[] longMessage = new char[testErrorMessageLength];
+        Arrays.fill(longMessage, 'D');
+        callback.onFailure(new RuntimeException(new String(longMessage)));
+      }
+
+      @Override
+      public StreamManager getStreamManager() {
+        return null;
+      }
+    });
+    ctx.createServer("secret");
+    ctx.createClient("secret");
+
+    try {
+      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
+      fail("Should have failed unencrypted RPC.");
+    } catch (Exception e) {
+      assertTrue(ctx.authRpcHandler.doDelegate);
+      assertTrue(e.getMessage() + " is not an expected error", e.getMessage().contains("DDDDD"));
+      // Verify we receive the complete error message
+      int messageStart = e.getMessage().indexOf("DDDDD");
+      int messageEnd = e.getMessage().lastIndexOf("DDDDD") + 5;
+      assertEquals(testErrorMessageLength, messageEnd - messageStart);
+    }
+  }
+
   private class AuthTestCtx {
 
     private final String appId = "testAppId";
@@ -136,10 +172,7 @@ public class AuthIntegrationSuite {
     volatile AuthRpcHandler authRpcHandler;
 
     AuthTestCtx() throws Exception {
-      Map<String, String> testConf = ImmutableMap.of("spark.network.crypto.enabled", "true");
-      this.conf = new TransportConf("rpc", new MapConfigProvider(testConf));
-
-      RpcHandler rpcHandler = new RpcHandler() {
+      this(new RpcHandler() {
         @Override
         public void receive(
             TransportClient client,
@@ -153,8 +186,12 @@ public class AuthIntegrationSuite {
         public StreamManager getStreamManager() {
           return null;
         }
-      };
+      });
+    }
 
+    AuthTestCtx(RpcHandler rpcHandler) throws Exception {
+      Map<String, String> testConf = ImmutableMap.of("spark.network.crypto.enabled", "true");
+      this.conf = new TransportConf("rpc", new MapConfigProvider(testConf));
       this.ctx = new TransportContext(conf, rpcHandler);
     }
 
@@ -195,6 +232,9 @@ public class AuthIntegrationSuite {
       }
       if (server != null) {
         server.close();
+      }
+      if (ctx != null) {
+        ctx.close();
       }
     }
 

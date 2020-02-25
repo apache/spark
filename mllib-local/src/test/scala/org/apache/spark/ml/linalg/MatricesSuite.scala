@@ -21,7 +21,7 @@ import java.util.Random
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar._
+import org.scalatestplus.mockito.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.ml.SparkMLFunSuite
@@ -862,10 +862,10 @@ class MatricesSuite extends SparkMLFunSuite {
     mat.toString(0, 0)
     mat.toString(Int.MinValue, Int.MinValue)
     mat.toString(Int.MaxValue, Int.MaxValue)
-    var lines = mat.toString(6, 50).lines.toArray
+    var lines = mat.toString(6, 50).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 50))
 
-    lines = mat.toString(5, 100).lines.toArray
+    lines = mat.toString(5, 100).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
 

@@ -37,7 +37,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.11/unidoc"
+    source = "../target/scala-2.12/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest
@@ -96,9 +96,9 @@ if not (ENV['SKIP_API'] == '1')
     end
     # End updating JavaDoc files for badge post-processing
 
-    puts "Copying jquery.js from Scala API to Java API for page post-processing of badges"
-    jquery_src_file = "./api/scala/lib/jquery.js"
-    jquery_dest_file = "./api/java/lib/jquery.js"
+    puts "Copying jquery.min.js from Scala API to Java API for page post-processing of badges"
+    jquery_src_file = "./api/scala/lib/jquery.min.js"
+    jquery_dest_file = "./api/java/lib/jquery.min.js"
     mkdir_p("./api/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 

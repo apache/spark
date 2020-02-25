@@ -25,8 +25,10 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourcesDetails}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -38,10 +40,25 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     JsonProtocol.writeWorkerState(workerState)
   }
 
+  private def formatWorkerResourcesDetails(workerState: WorkerStateResponse): String = {
+    val totalInfo = workerState.resources
+    val usedInfo = workerState.resourcesUsed
+    val freeInfo = totalInfo.map { case (rName, rInfo) =>
+      val freeAddresses = if (usedInfo.contains(rName)) {
+        rInfo.addresses.diff(usedInfo(rName).addresses)
+      } else {
+        rInfo.addresses
+      }
+      rName -> new ResourceInformation(rName, freeAddresses)
+    }
+    formatResourcesDetails(usedInfo, freeInfo)
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
+    val executorHeaders = Seq("ExecutorID", "State", "Cores", "Memory", "Resources",
+      "Job Details", "Logs")
     val runningExecutors = workerState.executors
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, runningExecutors)
@@ -49,7 +66,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
+    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Resources",
+      "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
     val runningDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
       driverRow(workerState.workerId, _), runningDrivers)
@@ -71,6 +89,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
+            <li><strong>Resources:</strong>
+              {formatWorkerResourcesDetails(workerState)}</li>
           </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
@@ -147,11 +167,12 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
 
     <tr>
       <td>{executor.execId}</td>
-      <td>{executor.cores}</td>
       <td>{executor.state}</td>
+      <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
         {Utils.megabytesToString(executor.memory)}
       </td>
+      <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
@@ -189,6 +210,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.driverDesc.mem.toString}>
         {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>
         <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
         <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>

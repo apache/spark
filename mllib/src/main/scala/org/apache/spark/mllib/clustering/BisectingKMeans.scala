@@ -25,7 +25,9 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -151,26 +153,34 @@ class BisectingKMeans private (
     this
   }
 
-  /**
-   * Runs the bisecting k-means algorithm.
-   * @param input RDD of vectors
-   * @return model for the bisecting kmeans
-   */
-  @Since("1.6.0")
-  def run(input: RDD[Vector]): BisectingKMeansModel = {
-    if (input.getStorageLevel == StorageLevel.NONE) {
-      logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
-        + " its parent RDDs are also not cached.")
+  private[spark] def run(
+      input: RDD[Vector],
+      instr: Option[Instrumentation]): BisectingKMeansModel = {
+    val instances: RDD[(Vector, Double)] = input.map {
+      case (point) => (point, 1.0)
     }
-    val d = input.map(_.size).first()
+    runWithWeight(instances, None)
+  }
+
+  private[spark] def runWithWeight(
+      input: RDD[(Vector, Double)],
+      instr: Option[Instrumentation]): BisectingKMeansModel = {
+    val d = input.map(_._1.size).first
     logInfo(s"Feature dimension: $d.")
 
     val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
     // Compute and cache vector norms for fast distance computation.
-    val norms = input.map(v => Vectors.norm(v, 2.0)).persist(StorageLevel.MEMORY_AND_DISK)
-    val vectors = input.zip(norms).map { case (x, norm) => new VectorWithNorm(x, norm) }
+    val norms = input.map(d => Vectors.norm(d._1, 2.0))
+    val vectors = input.zip(norms).map {
+      case ((x, weight), norm) => new VectorWithNorm(x, norm, weight)
+    }
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      vectors.persist(StorageLevel.MEMORY_AND_DISK)
+    }
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
+    instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
+    instr.foreach(_.logSumOfWeights(activeClusters.values.map(_.weightSum).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
     logInfo(s"Number of points: $n.")
@@ -218,7 +228,7 @@ class BisectingKMeans private (
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
         if (preIndices != null) {
-          preIndices.unpersist(false)
+          preIndices.unpersist()
         }
         preIndices = indices
         indices = updateAssignments(assignments, divisibleIndices, newClusterCenters, dMeasure).keys
@@ -235,15 +245,26 @@ class BisectingKMeans private (
       level += 1
     }
     if (preIndices != null) {
-      preIndices.unpersist(false)
+      preIndices.unpersist()
     }
     if (indices != null) {
-      indices.unpersist(false)
+      indices.unpersist()
     }
-    norms.unpersist(false)
+    vectors.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
-    new BisectingKMeansModel(root, this.distanceMeasure)
+    val totalCost = root.leafNodes.map(_.cost).sum
+    new BisectingKMeansModel(root, this.distanceMeasure, totalCost)
+  }
+
+  /**
+   * Runs the bisecting k-means algorithm.
+   * @param input RDD of vectors
+   * @return model for the bisecting kmeans
+   */
+  @Since("1.6.0")
+  def run(input: RDD[Vector]): BisectingKMeansModel = {
+    run(input, None)
   }
 
   /**
@@ -302,14 +323,16 @@ private object BisectingKMeans extends Serializable {
   private class ClusterSummaryAggregator(val d: Int, val distanceMeasure: DistanceMeasure)
       extends Serializable {
     private var n: Long = 0L
+    private var weightSum: Double = 0.0
     private val sum: Vector = Vectors.zeros(d)
     private var sumSq: Double = 0.0
 
     /** Adds a point. */
     def add(v: VectorWithNorm): this.type = {
       n += 1L
+      weightSum += v.weight
       // TODO: use a numerically stable approach to estimate cost
-      sumSq += v.norm * v.norm
+      sumSq += v.norm * v.norm  * v.weight
       distanceMeasure.updateClusterSum(v, sum)
       this
     }
@@ -317,16 +340,18 @@ private object BisectingKMeans extends Serializable {
     /** Merges another aggregator. */
     def merge(other: ClusterSummaryAggregator): this.type = {
       n += other.n
+      weightSum += other.weightSum
       sumSq += other.sumSq
-      distanceMeasure.updateClusterSum(new VectorWithNorm(other.sum), sum)
+      axpy(1.0, other.sum, sum)
       this
     }
 
     /** Returns the summary. */
     def summary: ClusterSummary = {
-      val center = distanceMeasure.centroid(sum.copy, n)
-      val cost = distanceMeasure.clusterCost(center, new VectorWithNorm(sum), n, sumSq)
-      ClusterSummary(n, center, cost)
+      val center = distanceMeasure.centroid(sum.copy, weightSum)
+      val cost = distanceMeasure.clusterCost(center, new VectorWithNorm(sum), weightSum,
+        sumSq)
+      ClusterSummary(n, weightSum, center, cost)
     }
   }
 
@@ -427,10 +452,15 @@ private object BisectingKMeans extends Serializable {
    * Summary of a cluster.
    *
    * @param size the number of points within this cluster
+   * @param weightSum the weightSum within this cluster
    * @param center the center of the points within this cluster
    * @param cost the sum of squared distances to the center
    */
-  private case class ClusterSummary(size: Long, center: VectorWithNorm, cost: Double)
+  private case class ClusterSummary(
+      size: Long,
+      weightSum: Double,
+      center: VectorWithNorm,
+      cost: Double)
 }
 
 /**

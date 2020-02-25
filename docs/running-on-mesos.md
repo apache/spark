@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Running Spark on Mesos
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -12,6 +27,11 @@ The advantages of deploying Spark with Mesos include:
 - dynamic partitioning between Spark and other
   [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
+
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # How it Works
 
@@ -103,6 +123,19 @@ Please note that if you specify multiple ways to obtain the credentials then the
 
 An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
 
+### Deploy to a Mesos running on Secure Sockets
+
+If you want to deploy a Spark Application into a Mesos cluster that is running in a secure mode there are some environment variables that need to be set.
+
+- `LIBPROCESS_SSL_ENABLED=true` enables SSL communication
+- `LIBPROCESS_SSL_VERIFY_CERT=false` verifies the ssl certificate 
+- `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key 
+- `LIBPROCESS_SSL_CERT_FILE=pathToCRTFile.crt` the certificate file to be used
+
+All options can be found at http://mesos.apache.org/documentation/latest/ssl/
+
+Then submit happens as described in Client mode or Cluster mode below
+
 ## Uploading Spark Package
 
 When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
@@ -174,10 +207,12 @@ can find the results of the driver from the Mesos Web UI.
 
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
+Note that the `MesosClusterDispatcher` does not support authentication.  You should ensure that all network access to it is
+protected (port 7077 by default).
 
 By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
 
-If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
+If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `./bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
 For more information about these configurations please refer to the configurations [doc](configuration.html#deploy).
@@ -327,7 +362,7 @@ The External Shuffle Service to use is the Mesos Shuffle Service. It provides sh
 on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
 termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
 
-This can also be achieved through Marathon, using a unique host constraint, and the following command: `bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
+This can also be achieved through Marathon, using a unique host constraint, and the following command: `./bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
 # Configuration
 
@@ -430,7 +465,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.memoryOverhead</code></td>
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
-    The amount of additional memory, specified in MB, to be allocated per executor. By default,
+    The amount of additional memory, specified in MiB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
@@ -670,7 +705,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    Set the URL of the <a href="monitoring.html#viewing-after-the-fact">history
     server</a>.  The dispatcher will then link each driver to its entry
     in the history server.
   </td>
@@ -680,7 +715,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0</code></td>
   <td>
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    since this configuration is just an upper limit and not a guaranteed amount.
   </td>
   </tr>
 <tr>

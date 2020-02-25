@@ -16,6 +16,10 @@
 #
 
 .First <- function() {
+  if (utils::compareVersion(paste0(R.version$major, ".", R.version$minor), "3.4.0") == -1) {
+    warning("Support for R prior to version 3.4 is deprecated since Spark 3.0.0")
+  }
+
   home <- Sys.getenv("SPARK_HOME")
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
   Sys.setenv(NOAWT = 1)
@@ -29,19 +33,19 @@
   sc <- SparkR:::callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", spark)
   assign("sc", sc, envir = .GlobalEnv)
   sparkVer <- SparkR:::callJMethod(sc, "version")
-  cat("\n Welcome to")
+  cat("\nWelcome to")
   cat("\n")
-  cat("    ____              __", "\n")
-  cat("   / __/__  ___ _____/ /__", "\n")
-  cat("  _\\ \\/ _ \\/ _ `/ __/  '_/", "\n")
-  cat(" /___/ .__/\\_,_/_/ /_/\\_\\")
+  cat("      ____              __", "\n")
+  cat("     / __/__  ___ _____/ /__", "\n")
+  cat("    _\\ \\/ _ \\/ _ `/ __/  '_/", "\n")
+  cat("   /___/ .__/\\_,_/_/ /_/\\_\\")
   if (nchar(sparkVer) == 0) {
     cat("\n")
   } else {
-    cat("   version ", sparkVer, "\n")
+    cat("   version", sparkVer, "\n")
   }
-  cat("    /_/", "\n")
+  cat("      /_/", "\n")
   cat("\n")
 
-  cat("\n SparkSession available as 'spark'.\n")
+  cat("\nSparkSession available as 'spark'.\n")
 }

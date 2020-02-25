@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 case class Cases(lower: String, UPPER: String)
 
@@ -73,6 +74,35 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
           sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
           checkAnswer(sql("SELECT * FROM p"), sql("SELECT * FROM t").collect().toSeq)
         }
+      }
+    }
+  }
+
+  test("SPARK-25206: wrong records are returned by filter pushdown " +
+    "when Hive metastore schema and parquet schema are in different letter cases") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString) {
+      withTempPath { path =>
+        val data = spark.range(1, 10).toDF("id")
+        data.write.parquet(path.getCanonicalPath)
+        withTable("SPARK_25206") {
+          sql("CREATE TABLE SPARK_25206 (ID LONG) USING parquet LOCATION " +
+            s"'${path.getCanonicalPath}'")
+          checkAnswer(sql("select id from SPARK_25206 where id > 0"), data)
+        }
+      }
+    }
+  }
+
+  test("SPARK-25271: write empty map into hive parquet table") {
+    import testImplicits._
+
+    Seq(Map(1 -> "a"), Map.empty[Int, String]).toDF("m").createOrReplaceTempView("p")
+    withTempView("p") {
+      val targetTable = "targetTable"
+      withTable(targetTable) {
+        sql(s"CREATE TABLE $targetTable STORED AS PARQUET AS SELECT m FROM p")
+        checkAnswer(sql(s"SELECT m FROM $targetTable"),
+          Row(Map(1 -> "a")) :: Row(Map.empty[Int, String]) :: Nil)
       }
     }
   }

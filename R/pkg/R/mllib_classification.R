@@ -50,7 +50,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', '-', '*', and '^'.
 #' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.

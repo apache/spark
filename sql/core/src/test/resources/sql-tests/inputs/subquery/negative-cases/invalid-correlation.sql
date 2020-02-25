@@ -46,9 +46,10 @@ WHERE  t1a IN (SELECT   min(t2a)
 SELECT t1a 
 FROM   t1
 GROUP  BY 1
-HAVING EXISTS (SELECT 1 
+HAVING EXISTS (SELECT t2a
                FROM  t2
-               WHERE t2a < min(t1a + t2a));
+               GROUP BY 1
+               HAVING t2a < min(t1a + t2a));
 
 -- TC 01.04
 -- Invalid due to mixure of outer and local references under an AggegatedExpression 

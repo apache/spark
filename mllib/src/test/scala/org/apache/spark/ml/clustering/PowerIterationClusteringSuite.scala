@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -32,9 +34,9 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
   @transient var data: Dataset[_] = _
   final val r1 = 1.0
-  final val n1 = 10
+  final val n1 = 80
   final val r2 = 4.0
-  final val n2 = 40
+  final val n2 = 80
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -76,12 +78,15 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setMaxIter(40)
       .setWeightCol("weight")
       .assignClusters(data)
-    val localAssignments = assignments
-      .select('id, 'cluster)
-      .as[(Long, Int)].collect().toSet
-    val expectedResult = (0 until n1).map(x => (x, 1)).toSet ++
-      (n1 until n).map(x => (x, 0)).toSet
-    assert(localAssignments === expectedResult)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+
+    val predictions = Array.fill(2)(mutable.Set.empty[Long])
+    assignments.foreach {
+      case (id, cluster) => predictions(cluster) += id
+    }
+    assert(predictions.toSet === Set((0 until n1).toSet, (n1 until n).toSet))
 
     val assignments2 = new PowerIterationClustering()
       .setK(2)
@@ -89,10 +94,15 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .setWeightCol("weight")
       .assignClusters(data)
-    val localAssignments2 = assignments2
-      .select('id, 'cluster)
-      .as[(Long, Int)].collect().toSet
-    assert(localAssignments2 === expectedResult)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+
+    val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments2.foreach {
+      case (id, cluster) => predictions2(cluster) += id
+    }
+    assert(predictions2.toSet === Set((0 until n1).toSet, (n1 until n).toSet))
   }
 
   test("supported input types") {
@@ -135,15 +145,30 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(msg.contains("Similarity must be nonnegative"))
   }
 
+  test("check for invalid input types of weight") {
+    val invalidWeightData = spark.createDataFrame(Seq(
+      (0L, 1L, "a"),
+      (2L, 3L, "b")
+    )).toDF("src", "dst", "weight")
+
+    val msg = intercept[IllegalArgumentException] {
+      new PowerIterationClustering()
+        .setWeightCol("weight")
+        .assignClusters(invalidWeightData)
+    }.getMessage
+    assert(msg.contains("requirement failed: Column weight must be of type numeric" +
+      " but was actually of type string."))
+  }
+
   test("test default weight") {
-    val dataWithoutWeight = data.sample(0.5, 1L).select('src, 'dst)
+    val dataWithoutWeight = data.sample(0.5, 1L).select("src", "dst")
 
     val assignments = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
       .assignClusters(dataWithoutWeight)
     val localAssignments = assignments
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     val dataWithWeightOne = dataWithoutWeight.withColumn("weight", lit(1.0))
@@ -153,10 +178,78 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setMaxIter(40)
       .assignClusters(dataWithWeightOne)
     val localAssignments2 = assignments2
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     assert(localAssignments === localAssignments2)
+  }
+
+  test("power iteration clustering gives incorrect results due to failed to converge") {
+    /*
+         Graph:
+            1
+           /
+          /
+         0      2 -- 3
+     */
+    val data1 = spark.createDataFrame(Seq(
+      (0, 1),
+      (2, 3)
+    )).toDF("src", "dst")
+
+    val assignments1 = new PowerIterationClustering()
+      .setInitMode("random")
+      .setK(2)
+      .assignClusters(data1)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions1 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments1.foreach {
+      case (id, cluster) => predictions1(cluster) += id
+    }
+    assert(Set(predictions1(0).size, predictions1(1).size) !== Set(2, 2))
+
+
+    /*
+         Graph:
+            1
+           /
+          /
+         0 - - 2     3 -- 4
+     */
+    val data2 = spark.createDataFrame(Seq(
+      (0, 1),
+      (0, 2),
+      (3, 4)
+    )).toDF("src", "dst").repartition(1)
+
+    var assignments2 = new PowerIterationClustering()
+      .setInitMode("random")
+      .setK(2)
+      .assignClusters(data2)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments2.foreach {
+      case (id, cluster) => predictions2(cluster) += id
+    }
+    assert(Set(predictions2(0).size, predictions2(1).size) !== Set(2, 3))
+
+
+    var assignments3 = new PowerIterationClustering()
+      .setInitMode("degree")
+      .setK(2)
+      .assignClusters(data2)
+      .select("id", "cluster")
+      .as[(Long, Int)]
+      .collect()
+    val predictions3 = Array.fill(2)(mutable.Set.empty[Long])
+    assignments3.foreach {
+      case (id, cluster) => predictions3(cluster) += id
+    }
+    assert(Set(predictions3(0).size, predictions3(1).size) !== Set(2, 3))
   }
 
   test("read/write") {

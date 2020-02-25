@@ -34,6 +34,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
@@ -117,7 +118,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
+  override def fit(dataset: Dataset[_]): TrainValidationSplitModel = instrumented { instr =>
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val est = $(estimator)
@@ -127,8 +128,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Create execution context based on $(parallelism)
     val executionContext = getExecutionContext
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(trainRatio, seed, parallelism)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, trainRatio, seed, parallelism)
     logTuningParams(instr)
 
     val Array(trainingDataset, validationDataset) =
@@ -138,8 +140,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
-      Some(Array.fill[Model[_]](epm.length)(null))
+    val subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
+      Some(Array.ofDim[Model[_]](epm.length))
     } else None
 
     // Fit models in a Future for training in parallel
@@ -172,7 +174,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     instr.logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    instr.logSuccess(bestModel)
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))
   }
@@ -313,6 +314,11 @@ class TrainValidationSplitModel private[ml] (
   override def write: TrainValidationSplitModel.TrainValidationSplitModelWriter = {
     new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"TrainValidationSplitModel: uid=$uid, bestModel=$bestModel, trainRatio=${$(trainRatio)}"
+  }
 }
 
 @Since("2.0.0")
@@ -392,7 +398,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
       val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill[Model[_]](estimatorParamMaps.length)(null)
+        val _subModels = Array.ofDim[Model[_]](estimatorParamMaps.length)
         for (paramIndex <- 0 until estimatorParamMaps.length) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =

@@ -17,9 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
@@ -27,9 +36,10 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
  * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
@@ -53,8 +63,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 
-public final class UnsafeArrayData extends ArrayData {
-
+public final class UnsafeArrayData extends ArrayData implements Externalizable, KryoSerializable {
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
   }
@@ -83,7 +92,7 @@ public final class UnsafeArrayData extends ArrayData {
   private long elementOffset;
 
   private long getElementOffset(int ordinal, int elementSize) {
-    return elementOffset + ordinal * elementSize;
+    return elementOffset + ordinal * (long)elementSize;
   }
 
   public Object getBaseObject() { return baseObject; }
@@ -138,46 +147,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal) || dataType instanceof NullType) {
-      return null;
-    } else if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
-      return getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof UserDefinedType) {
-      return get(ordinal, ((UserDefinedType)dataType).sqlType());
-    } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
@@ -241,8 +211,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = MemoryBlock.allocateFromObject(baseObject, baseOffset + offset, size);
-    return new UTF8String(mb);
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override
@@ -261,9 +230,10 @@ public final class UnsafeArrayData extends ArrayData {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+    final int months = Platform.getInt(baseObject, baseOffset + offset);
+    final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   @Override
@@ -302,6 +272,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
 
+  @Override
   public void setNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
     BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
@@ -310,43 +281,44 @@ public final class UnsafeArrayData extends ArrayData {
        will be set to 0 later by the caller side */
   }
 
+  @Override
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     Platform.putBoolean(baseObject, getElementOffset(ordinal, 1), value);
   }
 
+  @Override
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     Platform.putByte(baseObject, getElementOffset(ordinal, 1), value);
   }
 
+  @Override
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     Platform.putShort(baseObject, getElementOffset(ordinal, 2), value);
   }
 
+  @Override
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     Platform.putInt(baseObject, getElementOffset(ordinal, 4), value);
   }
 
+  @Override
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     Platform.putLong(baseObject, getElementOffset(ordinal, 8), value);
   }
 
+  @Override
   public void setFloat(int ordinal, float value) {
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     assertIndexIsValid(ordinal);
     Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
   }
 
+  @Override
   public void setDouble(int ordinal, double value) {
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     assertIndexIsValid(ordinal);
     Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);
   }
@@ -414,7 +386,7 @@ public final class UnsafeArrayData extends ArrayData {
   public short[] toShortArray() {
     short[] values = new short[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
+      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2L);
     return values;
   }
 
@@ -422,7 +394,7 @@ public final class UnsafeArrayData extends ArrayData {
   public int[] toIntArray() {
     int[] values = new int[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -430,7 +402,7 @@ public final class UnsafeArrayData extends ArrayData {
   public long[] toLongArray() {
     long[] values = new long[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
@@ -438,7 +410,7 @@ public final class UnsafeArrayData extends ArrayData {
   public float[] toFloatArray() {
     float[] values = new float[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -446,14 +418,14 @@ public final class UnsafeArrayData extends ArrayData {
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
-  private static UnsafeArrayData fromPrimitiveArray(
+  public static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = elementSize * length;
+    final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
@@ -463,12 +435,39 @@ public final class UnsafeArrayData extends ArrayData {
     final long[] data = new long[(int)totalSizeInLongs];
 
     Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
-    Platform.copyMemory(arr, offset, data,
-      Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    if (arr != null) {
+      Platform.copyMemory(arr, offset, data,
+        Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    }
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
+  }
+
+  public static UnsafeArrayData createFreshArray(int length, int elementSize) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = (long)elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final long[] data = new long[(int)totalSizeInLongs];
+
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
+    return result;
+  }
+
+  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    return totalSizeInLongs > Integer.MAX_VALUE / 8;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {
@@ -497,5 +496,41 @@ public final class UnsafeArrayData extends ArrayData {
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
     return fromPrimitiveArray(arr, Platform.DOUBLE_ARRAY_OFFSET, arr.length, 8);
+  }
+
+  @Override
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
+    out.writeInt(bytes.length);
+    out.writeInt(this.numElements);
+    out.write(bytes);
+  }
+
+  @Override
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = in.readInt();
+    this.numElements = in.readInt();
+    this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
+    this.baseObject = new byte[sizeInBytes];
+    in.readFully((byte[]) baseObject);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output output) {
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
+    output.writeInt(bytes.length);
+    output.writeInt(this.numElements);
+    output.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input input) {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = input.readInt();
+    this.numElements = input.readInt();
+    this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
+    this.baseObject = new byte[sizeInBytes];
+    input.read((byte[]) baseObject);
   }
 }

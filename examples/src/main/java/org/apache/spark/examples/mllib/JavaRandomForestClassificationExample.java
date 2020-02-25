@@ -48,14 +48,14 @@ public class JavaRandomForestClassificationExample {
 
     // Train a RandomForest model.
     // Empty categoricalFeaturesInfo indicates all features are continuous.
-    Integer numClasses = 2;
+    int numClasses = 2;
     Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
-    Integer numTrees = 3; // Use more in practice.
+    int numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
     String impurity = "gini";
-    Integer maxDepth = 5;
-    Integer maxBins = 32;
-    Integer seed = 12345;
+    int maxDepth = 5;
+    int maxBins = 32;
+    int seed = 12345;
 
     RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
       categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,

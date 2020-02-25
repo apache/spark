@@ -90,7 +90,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   final List<String> userArgs;
   private final List<String> parsedArgs;
-  private final boolean requiresAppResource;
+  // Special command means no appResource and no mainClass required
+  private final boolean isSpecialCommand;
   private final boolean isExample;
 
   /**
@@ -105,7 +106,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * spark-submit argument list to be modified after creation.
    */
   SparkSubmitCommandBuilder() {
-    this.requiresAppResource = true;
+    this.isSpecialCommand = false;
     this.isExample = false;
     this.parsedArgs = new ArrayList<>();
     this.userArgs = new ArrayList<>();
@@ -138,25 +139,26 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case RUN_EXAMPLE:
           isExample = true;
+          appResource = SparkLauncher.NO_RESOURCE;
           submitArgs = args.subList(1, args.size());
       }
 
       this.isExample = isExample;
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
-      this.requiresAppResource = parser.requiresAppResource;
+      this.isSpecialCommand = parser.isSpecialCommand;
     } else {
       this.isExample = isExample;
-      this.requiresAppResource = false;
+      this.isSpecialCommand = true;
     }
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL.equals(appResource) && requiresAppResource) {
+    if (PYSPARK_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && requiresAppResource) {
+    } else if (SPARKR_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -166,18 +168,18 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<>();
     OptionParser parser = new OptionParser(false);
-    final boolean requiresAppResource;
+    final boolean isSpecialCommand;
 
     // If the user args array is not empty, we need to parse it to detect exactly what
     // the user is trying to run, so that checks below are correct.
     if (!userArgs.isEmpty()) {
       parser.parse(userArgs);
-      requiresAppResource = parser.requiresAppResource;
+      isSpecialCommand = parser.isSpecialCommand;
     } else {
-      requiresAppResource = this.requiresAppResource;
+      isSpecialCommand = this.isSpecialCommand;
     }
 
-    if (!allowsMixedArguments && requiresAppResource) {
+    if (!allowsMixedArguments && !isSpecialCommand) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
@@ -229,7 +231,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (isExample) {
+    if (isExample && !isSpecialCommand) {
       checkArgument(mainClass != null, "Missing example class name.");
     }
 
@@ -265,13 +267,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // We don't want the client to specify Xmx. These have to be set by their corresponding
     // memory flag --driver-memory or configuration entry spark.driver.memory
+    String driverDefaultJavaOptions = config.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS);
+    checkJavaOptions(driverDefaultJavaOptions);
     String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
-    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
-      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-                   "java options (was %s). Use the corresponding --driver-memory or " +
-                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
-      throw new IllegalArgumentException(msg);
-    }
+    checkJavaOptions(driverExtraJavaOptions);
 
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
@@ -287,6 +286,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
+      addOptionString(cmd, driverDefaultJavaOptions);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
@@ -295,6 +295,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
+  }
+
+  private void checkJavaOptions(String javaOptions) {
+    if (!isEmpty(javaOptions) && javaOptions.contains("Xmx")) {
+      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+        "java options (was %s). Use the corresponding --driver-memory or " +
+        "spark.driver.memory configuration instead.", javaOptions);
+      throw new IllegalArgumentException(msg);
+    }
   }
 
   private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {
@@ -339,7 +348,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
-    if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
+    if (!appArgs.isEmpty() && (appArgs.get(0).endsWith(".R") || appArgs.get(0).endsWith(".r"))) {
       System.err.println(
         "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <R file>");
@@ -381,9 +390,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case
-    return userMaster == null ||
-      "client".equals(userDeployMode) ||
-      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
+    return userMaster == null || userDeployMode == null || "client".equals(userDeployMode);
   }
 
   /**
@@ -421,7 +428,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean requiresAppResource = true;
+    boolean isSpecialCommand = false;
     private final boolean errorOnUnknownArgs;
 
     OptionParser(boolean errorOnUnknownArgs) {
@@ -453,6 +460,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
           break;
         case CONF:
+          checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);
@@ -470,17 +478,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           break;
         case KILL_SUBMISSION:
         case STATUS:
-          requiresAppResource = false;
+          isSpecialCommand = true;
           parsedArgs.add(opt);
           parsedArgs.add(value);
           break;
         case HELP:
         case USAGE_ERROR:
-          requiresAppResource = false;
-          parsedArgs.add(opt);
-          break;
         case VERSION:
-          requiresAppResource = false;
+          isSpecialCommand = true;
           parsedArgs.add(opt);
           break;
         default:

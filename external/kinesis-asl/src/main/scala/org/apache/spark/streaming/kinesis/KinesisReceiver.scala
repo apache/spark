@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
@@ -92,7 +93,9 @@ private[kinesis] class KinesisReceiver[T](
     messageHandler: Record => T,
     kinesisCreds: SparkAWSCredentials,
     dynamoDBCreds: Option[SparkAWSCredentials],
-    cloudWatchCreds: Option[SparkAWSCredentials])
+    cloudWatchCreds: Option[SparkAWSCredentials],
+    metricsLevel: MetricsLevel,
+    metricsEnabledDimensions: Set[String])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -143,7 +146,7 @@ private[kinesis] class KinesisReceiver[T](
    * This is called when the KinesisReceiver starts and must be non-blocking.
    * The KCL creates and manages the receiving/processing thread pool through Worker.run().
    */
-  override def onStart() {
+  override def onStart(): Unit = {
     blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
@@ -160,16 +163,18 @@ private[kinesis] class KinesisReceiver[T](
         cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
         workerId)
         .withKinesisEndpoint(endpointUrl)
-        .withInitialPositionInStream(initialPosition.getPosition)
         .withTaskBackoffTimeMillis(500)
         .withRegionName(regionName)
+        .withMetricsLevel(metricsLevel)
+        .withMetricsEnabledDimensions(metricsEnabledDimensions.asJava)
 
       // Update the Kinesis client lib config with timestamp
       // if InitialPositionInStream.AT_TIMESTAMP is passed
       initialPosition match {
         case ts: AtTimestamp =>
           baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
-        case _ => baseClientLibConfiguration
+        case _ =>
+          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
       }
     }
 
@@ -211,7 +216,7 @@ private[kinesis] class KinesisReceiver[T](
    * The KCL worker.shutdown() method stops the receiving/processing threads.
    * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
    */
-  override def onStop() {
+  override def onStop(): Unit = {
     if (workerThread != null) {
       if (worker != null) {
         worker.shutdown()

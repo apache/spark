@@ -30,14 +30,16 @@ import org.apache.spark.storage.RDDInfo
 @DeveloperApi
 class StageInfo(
     val stageId: Int,
-    @deprecated("Use attemptNumber instead", "2.3.0") val attemptId: Int,
+    private val attemptId: Int,
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
     val details: String,
     val taskMetrics: TaskMetrics = null,
-    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
+    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+    private[spark] val shuffleDepId: Option[Int] = None,
+    val resourceProfileId: Int) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
@@ -51,11 +53,13 @@ class StageInfo(
    */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
-  def stageFailed(reason: String) {
+  def stageFailed(reason: String): Unit = {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
   }
 
+  // This would just be the second constructor arg, except we need to maintain this method
+  // with parentheses for compatibility
   def attemptNumber(): Int = attemptId
 
   private[spark] def getStatusString: String = {
@@ -84,10 +88,15 @@ private[spark] object StageInfo {
       attemptId: Int,
       numTasks: Option[Int] = None,
       taskMetrics: TaskMetrics = null,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+      resourceProfileId: Int
     ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
+    val shuffleDepId = stage match {
+      case sms: ShuffleMapStage => Option(sms.shuffleDep).map(_.shuffleId)
+      case _ => None
+    }
     new StageInfo(
       stage.id,
       attemptId,
@@ -97,6 +106,8 @@ private[spark] object StageInfo {
       stage.parents.map(_.id),
       stage.details,
       taskMetrics,
-      taskLocalityPreferences)
+      taskLocalityPreferences,
+      shuffleDepId,
+      resourceProfileId)
   }
 }

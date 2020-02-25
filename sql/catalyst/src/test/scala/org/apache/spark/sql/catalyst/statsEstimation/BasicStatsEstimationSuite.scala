@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
+import org.mockito.Mockito.mock
+
+import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -37,24 +41,6 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     rowCount = 10,
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
-
-  test("BroadcastHint estimation") {
-    val filter = Filter(Literal(true), plan)
-    val filterStatsCboOn = Statistics(sizeInBytes = 10 * (8 +4),
-      rowCount = Some(10), attributeStats = AttributeMap(Seq(attribute -> colStat)))
-    val filterStatsCboOff = Statistics(sizeInBytes = 10 * (8 +4))
-    checkStats(
-      filter,
-      expectedStatsCboOn = filterStatsCboOn,
-      expectedStatsCboOff = filterStatsCboOff)
-
-    val broadcastHint = ResolvedHint(filter, HintInfo(broadcast = true))
-    checkStats(
-      broadcastHint,
-      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(broadcast = true)),
-      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(broadcast = true))
-    )
-  }
 
   test("range") {
     val range = Range(1, 5, 1, None)
@@ -131,6 +117,15 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(
       plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
+  }
+
+  test("command should report a dummy stats") {
+    val plan = CommentOnNamespace(
+      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
+    checkStats(
+      plan,
+      expectedStatsCboOn = Statistics.DUMMY,
+      expectedStatsCboOff = Statistics.DUMMY)
   }
 
   /** Check estimated stats when cbo is turned on/off. */

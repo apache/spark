@@ -21,18 +21,16 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.4.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-hadoop-cloud_2.11</artifactId>
+  <artifactId>spark-hadoop-cloud_2.12</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Cloud Integration through Hadoop Libraries</name>
+  <name>Spark Project Hadoop Cloud Integration</name>
   <description>
-    Contains support for cloud infrastructures, specifically the Hadoop JARs and
-    transitive dependencies needed to interact with the infrastructures,
-    making everything consistent with Spark's other dependencies.
+    Contains Hadoop JARs and transitive dependencies needed to interact with cloud infrastructures.
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
@@ -102,6 +100,11 @@
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-annotations</artifactId>
         </exclusion>
+        <!-- Keep old SDK out of the assembly to avoid conflict with Kinesis module -->
+        <exclusion>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -166,51 +169,79 @@
       <artifactId>httpcore</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-azure</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
   </dependencies>
 
   <profiles>
-
-    <profile>
-      <id>hadoop-2.7</id>
-      <!-- 2.7+ adds the azure Jar to the set of dependencies -->
-      <dependencies>
-
-        <!--
-        Hadoop WASB client only arrived in Hadoop 2.7
-        -->
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-azure</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>${hadoop.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.codehaus.jackson</groupId>
-              <artifactId>jackson-mapper-asl</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>com.fasterxml.jackson.core</groupId>
-              <artifactId>jackson-core</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>com.google.guava</groupId>
-              <artifactId>guava</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-      </dependencies>
-    </profile>
 
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
-      <id>hadoop-3.1</id>
+      <id>hadoop-3.2</id>
+      <properties>
+        <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
+        <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
+      </properties>
+
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-scala-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${extra.source.dir}</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-scala-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${extra.testsource.dir}</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
       <dependencies>
         <!--
         There's now a hadoop-cloud-storage which transitively pulls in the store JARs,

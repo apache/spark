@@ -35,7 +35,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters,
         PropagateEmptyRelation,
         CollapseProject) :: Nil
@@ -48,7 +48,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters,
         CollapseProject) :: Nil
   }
@@ -147,7 +147,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where(false)
       .select('a)
       .where('a > 1)
-      .where('a != 200)
+      .where('a =!= 200)
       .orderBy('a.asc)
 
     val optimized = Optimize.execute(query.analyze)

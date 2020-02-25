@@ -133,4 +133,54 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
       "root mean squared error mismatch")
     assert(metrics.r2 ~== 1.0 absTol eps, "r2 score mismatch")
   }
+
+  test("regression metrics with same (1.0) weight samples") {
+    val predictionAndObservationWithWeight = sc.parallelize(
+      Seq((2.25, 3.0, 1.0), (-0.25, -0.5, 1.0), (1.75, 2.0, 1.0), (7.75, 7.0, 1.0)), 2)
+    val metrics = new RegressionMetrics(predictionAndObservationWithWeight, false)
+    assert(metrics.explainedVariance ~== 8.79687 absTol eps,
+      "explained variance regression score mismatch")
+    assert(metrics.meanAbsoluteError ~== 0.5 absTol eps, "mean absolute error mismatch")
+    assert(metrics.meanSquaredError ~== 0.3125 absTol eps, "mean squared error mismatch")
+    assert(metrics.rootMeanSquaredError ~== 0.55901 absTol eps,
+      "root mean squared error mismatch")
+    assert(metrics.r2 ~== 0.95717 absTol eps, "r2 score mismatch")
+  }
+
+  /**
+   * The following values are hand calculated using the formula:
+   * [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]]
+   * preds = c(2.25, -0.25, 1.75, 7.75)
+   * obs = c(3.0, -0.5, 2.0, 7.0)
+   * weights = c(0.1, 0.2, 0.15, 0.05)
+   * count = 4
+   *
+   * Weighted metrics can be calculated with MultivariateStatisticalSummary.
+   *             (observations, observations - predictions)
+   * mean        (1.7, 0.05)
+   * variance    (7.3, 0.3)
+   * numNonZeros (0.5, 0.5)
+   * max         (7.0, 0.75)
+   * min         (-0.5, -0.75)
+   * normL2      (2.0, 0.32596)
+   * normL1      (1.05, 0.2)
+   *
+   * explainedVariance: sum(pow((preds - 1.7),2)*weight) / weightedCount = 5.2425
+   * meanAbsoluteError: normL1(1) / weightedCount = 0.4
+   * meanSquaredError: pow(normL2(1),2) / weightedCount = 0.2125
+   * rootMeanSquaredError: sqrt(meanSquaredError) = 0.46098
+   * r2: 1 - pow(normL2(1),2) / (variance(0) * (weightedCount - 1)) = 1.02910
+   */
+  test("regression metrics with weighted samples") {
+    val predictionAndObservationWithWeight = sc.parallelize(
+      Seq((2.25, 3.0, 0.1), (-0.25, -0.5, 0.2), (1.75, 2.0, 0.15), (7.75, 7.0, 0.05)), 2)
+    val metrics = new RegressionMetrics(predictionAndObservationWithWeight, false)
+    assert(metrics.explainedVariance ~== 5.2425 absTol eps,
+      "explained variance regression score mismatch")
+    assert(metrics.meanAbsoluteError ~== 0.4 absTol eps, "mean absolute error mismatch")
+    assert(metrics.meanSquaredError ~== 0.2125 absTol eps, "mean squared error mismatch")
+    assert(metrics.rootMeanSquaredError ~== 0.46098 absTol eps,
+      "root mean squared error mismatch")
+    assert(metrics.r2 ~== 1.02910 absTol eps, "r2 score mismatch")
+  }
 }

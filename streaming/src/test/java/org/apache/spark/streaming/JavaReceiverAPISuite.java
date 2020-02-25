@@ -39,6 +39,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
@@ -71,15 +72,15 @@ public class JavaReceiverAPISuite implements Serializable {
       });
 
       ssc.start();
-      long startTime = System.currentTimeMillis();
-      long timeout = 10000;
+      long startTimeNs = System.nanoTime();
+      long timeout = TimeUnit.SECONDS.toNanos(10);
 
       Thread.sleep(200);
       for (int i = 0; i < 6; i++) {
         server.send(i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(100);
       }
-      while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.nanoTime() - startTimeNs < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();

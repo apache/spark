@@ -62,7 +62,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testOptionsAPI() {
-    HashMap<String, String> map = new HashMap<String, String>();
+    HashMap<String, String> map = new HashMap<>();
     map.put("e", "1");
     spark
         .read()

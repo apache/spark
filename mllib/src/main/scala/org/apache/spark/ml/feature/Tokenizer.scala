@@ -36,11 +36,14 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
+    // scalastyle:off caselocale
     _.toLowerCase.split("\\s")
+    // scalastyle:on caselocale
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType == StringType, s"Input type must be string type but got $inputType.")
+    require(inputType == StringType,
+      s"Input type must be ${StringType.catalogString} type but got ${inputType.catalogString}.")
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
@@ -139,7 +142,9 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
+    // scalastyle:off caselocale
     val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
+    // scalastyle:on caselocale
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
@@ -153,6 +158,12 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RegexTokenizer: uid=$uid, minTokenLength=${$(minTokenLength)}, gaps=${$(gaps)}, " +
+      s"pattern=${$(pattern)}, toLowercase=${$(toLowercase)}"
+  }
 }
 
 @Since("1.6.0")

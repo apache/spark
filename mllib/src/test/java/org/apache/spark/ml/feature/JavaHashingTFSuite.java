@@ -64,7 +64,7 @@ public class JavaHashingTFSuite extends SharedSparkSession {
     Dataset<Row> rescaledData = idfModel.transform(featurizedData);
     for (Row r : rescaledData.select("features", "label").takeAsList(3)) {
       Vector features = r.getAs(0);
-      Assert.assertEquals(features.size(), numFeatures);
+      Assert.assertEquals(numFeatures, features.size());
     }
   }
 }

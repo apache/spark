@@ -121,7 +121,7 @@ sealed abstract class Attribute extends Serializable {
 private[attribute] trait AttributeFactory {
 
   /**
-   * Creates an [[Attribute]] from a [[Metadata]] instance.
+   * Creates an [[Attribute]] from a `Metadata` instance.
    */
   private[attribute] def fromMetadata(metadata: Metadata): Attribute
 

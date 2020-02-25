@@ -33,6 +33,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -118,7 +119,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): CrossValidatorModel = {
+  override def fit(dataset: Dataset[_]): CrossValidatorModel = instrumented { instr =>
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sparkSession = dataset.sparkSession
@@ -129,14 +130,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     // Create execution context based on $(parallelism)
     val executionContext = getExecutionContext
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(numFolds, seed, parallelism)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, numFolds, seed, parallelism)
     logTuningParams(instr)
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
-      Some(Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null)))
+    val subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
+      Some(Array.fill($(numFolds))(Array.ofDim[Model[_]](epm.length)))
     } else None
 
     // Compute metrics for each model over each split
@@ -176,7 +178,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     instr.logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))
   }
@@ -322,6 +323,11 @@ class CrossValidatorModel private[ml] (
   override def write: CrossValidatorModel.CrossValidatorModelWriter = {
     new CrossValidatorModel.CrossValidatorModelWriter(this)
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"CrossValidatorModel: uid=$uid, bestModel=$bestModel, numFolds=${$(numFolds)}"
+  }
 }
 
 @Since("1.6.0")
@@ -405,8 +411,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
       val subModels: Option[Array[Array[Model[_]]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
-          estimatorParamMaps.length)(null))
+        val _subModels = Array.fill(numFolds)(
+          Array.ofDim[Model[_]](estimatorParamMaps.length))
         for (splitIndex <- 0 until numFolds) {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- 0 until estimatorParamMaps.length) {

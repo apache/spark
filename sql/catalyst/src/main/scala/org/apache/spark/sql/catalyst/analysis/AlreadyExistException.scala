@@ -19,19 +19,34 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.Identifier
 
 /**
  * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
 class DatabaseAlreadyExistsException(db: String)
-  extends AnalysisException(s"Database '$db' already exists")
+  extends NamespaceAlreadyExistsException(s"Database '$db' already exists")
 
-class TableAlreadyExistsException(db: String, table: String)
-  extends AnalysisException(s"Table or view '$table' already exists in database '$db'")
+class NamespaceAlreadyExistsException(message: String) extends AnalysisException(message) {
+  def this(namespace: Array[String]) = {
+    this(s"Namespace '${namespace.quoted}' already exists")
+  }
+}
+
+class TableAlreadyExistsException(message: String) extends AnalysisException(message) {
+  def this(db: String, table: String) = {
+    this(s"Table or view '$table' already exists in database '$db'")
+  }
+
+  def this(tableIdent: Identifier) = {
+    this(s"Table ${tableIdent.quoted} already exists")
+  }
+}
 
 class TempTableAlreadyExistsException(table: String)
-  extends AnalysisException(s"Temporary view '$table' already exists")
+  extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
 
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(

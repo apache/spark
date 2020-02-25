@@ -29,7 +29,11 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   private val random = new java.util.Random()
   private var taskContext: TaskContext = _
 
-  override def afterAll(): Unit = TaskContext.unset()
+  override def afterAll(): Unit = try {
+    TaskContext.unset()
+  } finally {
+    super.afterAll()
+  }
 
   private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int)
                                (f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {

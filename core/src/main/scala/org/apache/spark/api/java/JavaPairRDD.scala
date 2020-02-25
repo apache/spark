@@ -34,7 +34,8 @@ import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, PairFunction}
+import org.apache.spark.api.java.function.{FlatMapFunction, Function => JFunction,
+  Function2 => JFunction2, PairFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
@@ -674,8 +675,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
-  def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairRDD[K, U] = {
-    def fn: (V) => Iterable[U] = (x: V) => f.call(x).asScala
+  def flatMapValues[U](f: FlatMapFunction[V, U]): JavaPairRDD[K, U] = {
+    def fn: (V) => Iterator[U] = (x: V) => f.call(x).asScala
     implicit val ctag: ClassTag[U] = fakeClassTag
     fromRDD(rdd.flatMapValues(fn))
   }
@@ -790,7 +791,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: JobConf) {
+      conf: JobConf): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -799,7 +800,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -809,7 +810,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      codec: Class[_ <: CompressionCodec]) {
+      codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
@@ -819,7 +820,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration) {
+      conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -827,7 +828,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported storage system, using
    * a Configuration object for that storage system.
    */
-  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
@@ -836,7 +837,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -846,7 +847,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsHadoopDataset(conf: JobConf) {
+  def saveAsHadoopDataset(conf: JobConf): Unit = {
     rdd.saveAsHadoopDataset(conf)
   }
 
@@ -951,7 +952,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -968,7 +969,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -984,7 +985,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.

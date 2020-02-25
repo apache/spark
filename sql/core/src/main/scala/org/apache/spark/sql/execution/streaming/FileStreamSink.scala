@@ -20,13 +20,15 @@ package org.apache.spark.sql.execution.streaming
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
 
 object FileStreamSink extends Logging {
@@ -37,23 +39,54 @@ object FileStreamSink extends Logging {
    * Returns true if there is a single path that has a metadata log indicating which files should
    * be read.
    */
-  def hasMetadata(path: Seq[String], hadoopConf: Configuration): Boolean = {
+  def hasMetadata(path: Seq[String], hadoopConf: Configuration, sqlConf: SQLConf): Boolean = {
     path match {
       case Seq(singlePath) =>
-        try {
-          val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(hadoopConf)
-          if (fs.isDirectory(hdfsPath)) {
-            fs.exists(new Path(hdfsPath, metadataDir))
-          } else {
-            false
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Error while looking for metadata directory.")
-            false
+        val hdfsPath = new Path(singlePath)
+        val fs = hdfsPath.getFileSystem(hadoopConf)
+        if (fs.isDirectory(hdfsPath)) {
+          val metadataPath = new Path(hdfsPath, metadataDir)
+          checkEscapedMetadataPath(fs, metadataPath, sqlConf)
+          fs.exists(metadataPath)
+        } else {
+          false
         }
       case _ => false
+    }
+  }
+
+  def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {
+    if (sqlConf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
+        && StreamExecution.containsSpecialCharsInPath(metadataPath)) {
+      val legacyMetadataPath = new Path(metadataPath.toUri.toString)
+      val legacyMetadataPathExists =
+        try {
+          fs.exists(legacyMetadataPath)
+        } catch {
+          case NonFatal(e) =>
+            // We may not have access to this directory. Don't fail the query if that happens.
+            logWarning(e.getMessage, e)
+            false
+        }
+      if (legacyMetadataPathExists) {
+        throw new SparkException(
+          s"""Error: we detected a possible problem with the location of your "_spark_metadata"
+             |directory and you likely need to move it before restarting this query.
+             |
+             |Earlier version of Spark incorrectly escaped paths when writing out the
+             |"_spark_metadata" directory for structured streaming. While this was corrected in
+             |Spark 3.0, it appears that your query was started using an earlier version that
+             |incorrectly handled the "_spark_metadata" path.
+             |
+             |Correct "_spark_metadata" Directory: $metadataPath
+             |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
+             |
+             |Please move the data from the incorrect directory to the correct one, delete the
+             |incorrect directory, and then restart this query. If you believe you are receiving
+             |this message in error, you can disable it with the SQL conf
+             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
+            .stripMargin)
+      }
     }
   }
 
@@ -92,11 +125,16 @@ class FileStreamSink(
     partitionColumnNames: Seq[String],
     options: Map[String, String]) extends Sink with Logging {
 
-  private val basePath = new Path(path)
-  private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog =
-    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val basePath = new Path(path)
+  private val logPath = {
+    val metadataDir = new Path(basePath, FileStreamSink.metadataDir)
+    val fs = metadataDir.getFileSystem(hadoopConf)
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
+    metadataDir
+  }
+  private val fileLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString)
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)

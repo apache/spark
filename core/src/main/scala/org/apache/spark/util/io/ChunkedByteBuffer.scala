@@ -17,17 +17,21 @@
 
 package org.apache.spark.util.io
 
-import java.io.InputStream
+import java.io.{File, FileInputStream, InputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
+import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
-import io.netty.buffer.{ByteBuf, Unpooled}
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
-import org.apache.spark.network.util.ByteArrayWritableChannel
-import org.apache.spark.storage.StorageUtils
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
+import org.apache.spark.storage.{EncryptedManagedBuffer, StorageUtils}
+import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.Utils
 
 /**
  * Read-only byte buffer which is physically stored as multiple chunks rather than a single
@@ -81,10 +85,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Wrap this buffer to view it as a Netty ByteBuf.
+   * Wrap this in a custom "FileRegion" which allows us to transfer over 2 GB.
    */
-  def toNetty: ByteBuf = {
-    Unpooled.wrappedBuffer(chunks.length, getChunks(): _*)
+  def toNetty: ChunkedByteBufferFileRegion = {
+    new ChunkedByteBufferFileRegion(this, bufferWriteChunkSize)
   }
 
   /**
@@ -93,7 +97,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
    */
   def toArray: Array[Byte] = {
-    if (size >= Integer.MAX_VALUE) {
+    if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw new UnsupportedOperationException(
         s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
     }
@@ -166,6 +170,45 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 }
 
+private[spark] object ChunkedByteBuffer {
+
+  def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
+    data match {
+      case f: FileSegmentManagedBuffer =>
+        fromFile(f.getFile, f.getOffset, f.getLength)
+      case e: EncryptedManagedBuffer =>
+        e.blockData.toChunkedByteBuffer(ByteBuffer.allocate _)
+      case other =>
+        new ChunkedByteBuffer(other.nioByteBuffer())
+    }
+  }
+
+  def fromFile(file: File): ChunkedByteBuffer = {
+    fromFile(file, 0, file.length())
+  }
+
+  private def fromFile(
+      file: File,
+      offset: Long,
+      length: Long): ChunkedByteBuffer = {
+    // We do *not* memory map the file, because we may end up putting this into the memory store,
+    // and spark currently is not expecting memory-mapped buffers in the memory store, it conflicts
+    // with other parts that manage the lifecyle of buffers and dispose them.  See SPARK-25422.
+    val is = new FileInputStream(file)
+    ByteStreams.skipFully(is, offset)
+    val in = new LimitedInputStream(is, length)
+    val chunkSize = math.min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, length).toInt
+    val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
+    Utils.tryWithSafeFinally {
+      IOUtils.copy(in, out)
+    } {
+      in.close()
+      out.close()
+    }
+    out.toChunkedByteBuffer
+  }
+}
+
 /**
  * Reads data from a ChunkedByteBuffer.
  *
@@ -177,7 +220,8 @@ private[spark] class ChunkedByteBufferInputStream(
     dispose: Boolean)
   extends InputStream {
 
-  private[this] var chunks = chunkedByteBuffer.getChunks().iterator
+  // Filter out empty chunks since `read()` assumes all chunks are non-empty.
+  private[this] var chunks = chunkedByteBuffer.getChunks().filter(_.hasRemaining).iterator
   private[this] var currentChunk: ByteBuffer = {
     if (chunks.hasNext) {
       chunks.next()

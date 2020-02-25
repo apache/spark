@@ -30,11 +30,11 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
   def createContainerRequest(nodes: Array[String]): ContainerRequest =
     new ContainerRequest(containerResource, nodes, null, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     yarnAllocatorSuite.beforeEach()
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     yarnAllocatorSuite.afterEach()
   }
 

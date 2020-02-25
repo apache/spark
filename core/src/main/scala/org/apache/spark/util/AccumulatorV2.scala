@@ -200,10 +200,12 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   }
 
   override def toString: String = {
+    // getClass.getSimpleName can cause Malformed class name error,
+    // call safer `Utils.getSimpleName` instead
     if (metadata == null) {
-      "Un-registered Accumulator: " + getClass.getSimpleName
+      "Un-registered Accumulator: " + Utils.getSimpleName(getClass)
     } else {
-      getClass.getSimpleName + s"(id: $id, name: $name, value: $value)"
+      Utils.getSimpleName(getClass) + s"(id: $id, name: $name, value: $value)"
     }
   }
 }
@@ -482,35 +484,4 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
     _list.clear()
     _list.addAll(newValue)
   }
-}
-
-
-class LegacyAccumulatorWrapper[R, T](
-    initialValue: R,
-    param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
-  private[spark] var _value = initialValue  // Current value on driver
-
-  @transient private lazy val _zero = param.zero(initialValue)
-
-  override def isZero: Boolean = _value.asInstanceOf[AnyRef].eq(_zero.asInstanceOf[AnyRef])
-
-  override def copy(): LegacyAccumulatorWrapper[R, T] = {
-    val acc = new LegacyAccumulatorWrapper(initialValue, param)
-    acc._value = _value
-    acc
-  }
-
-  override def reset(): Unit = {
-    _value = _zero
-  }
-
-  override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
-
-  override def merge(other: AccumulatorV2[T, R]): Unit = other match {
-    case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.value)
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-  }
-
-  override def value: R = _value
 }

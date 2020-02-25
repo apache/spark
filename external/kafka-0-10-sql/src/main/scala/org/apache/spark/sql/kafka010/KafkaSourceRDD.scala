@@ -19,33 +19,17 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NextIterator
 
-
-/** Offset range that one partition of the KafkaSourceRDD has to read */
-private[kafka010] case class KafkaSourceRDDOffsetRange(
-    topicPartition: TopicPartition,
-    fromOffset: Long,
-    untilOffset: Long,
-    preferredLoc: Option[String]) {
-  def topic: String = topicPartition.topic
-  def partition: Int = topicPartition.partition
-  def size: Long = untilOffset - fromOffset
-}
-
-
 /** Partition of the KafkaSourceRDD */
 private[kafka010] case class KafkaSourceRDDPartition(
-  index: Int, offsetRange: KafkaSourceRDDOffsetRange) extends Partition
+  index: Int, offsetRange: KafkaOffsetRange) extends Partition
 
 
 /**
@@ -61,10 +45,9 @@ private[kafka010] case class KafkaSourceRDDPartition(
 private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
-    offsetRanges: Seq[KafkaSourceRDDOffsetRange],
+    offsetRanges: Seq[KafkaOffsetRange],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean)
+    failOnDataLoss: Boolean)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -77,44 +60,6 @@ private[kafka010] class KafkaSourceRDD(
     offsetRanges.zipWithIndex.map { case (o, i) => new KafkaSourceRDDPartition(i, o) }.toArray
   }
 
-  override def count(): Long = offsetRanges.map(_.size).sum
-
-  override def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] = {
-    val c = count
-    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
-  }
-
-  override def isEmpty(): Boolean = count == 0L
-
-  override def take(num: Int): Array[ConsumerRecord[Array[Byte], Array[Byte]]] = {
-    val nonEmptyPartitions =
-      this.partitions.map(_.asInstanceOf[KafkaSourceRDDPartition]).filter(_.offsetRange.size > 0)
-
-    if (num < 1 || nonEmptyPartitions.isEmpty) {
-      return new Array[ConsumerRecord[Array[Byte], Array[Byte]]](0)
-    }
-
-    // Determine in advance how many messages need to be taken from each partition
-    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
-      val remain = num - result.values.sum
-      if (remain > 0) {
-        val taken = Math.min(remain, part.offsetRange.size)
-        result + (part.index -> taken.toInt)
-      } else {
-        result
-      }
-    }
-
-    val buf = new ArrayBuffer[ConsumerRecord[Array[Byte], Array[Byte]]]
-    val res = context.runJob(
-      this,
-      (tc: TaskContext, it: Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]) =>
-      it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
-    )
-    res.foreach(buf ++= _)
-    buf.toArray
-  }
-
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val part = split.asInstanceOf[KafkaSourceRDDPartition]
     part.offsetRange.preferredLoc.map(Seq(_)).getOrElse(Seq.empty)
@@ -124,10 +69,8 @@ private[kafka010] class KafkaSourceRDD(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
-    val topic = sourcePartition.offsetRange.topic
-    val kafkaPartition = sourcePartition.offsetRange.partition
     val consumer = KafkaDataConsumer.acquire(
-      sourcePartition.offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
+      sourcePartition.offsetRange.topicPartition, executorKafkaParams)
 
     val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
@@ -138,6 +81,7 @@ private[kafka010] class KafkaSourceRDD(
     if (range.fromOffset == range.untilOffset) {
       logInfo(s"Beginning offset ${range.fromOffset} is the same as ending offset " +
         s"skipping ${range.topic} ${range.partition}")
+      consumer.release()
       Iterator.empty
     } else {
       val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
@@ -166,14 +110,14 @@ private[kafka010] class KafkaSourceRDD(
         }
       }
       // Release consumer, either by removing it or indicating we're no longer using it
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         underlying.closeIfNeeded()
       }
       underlying
     }
   }
 
-  private def resolveRange(consumer: KafkaDataConsumer, range: KafkaSourceRDDOffsetRange) = {
+  private def resolveRange(consumer: KafkaDataConsumer, range: KafkaOffsetRange) = {
     if (range.fromOffset < 0 || range.untilOffset < 0) {
       // Late bind the offset range
       val availableOffsetRange = consumer.getAvailableOffsetRange()
@@ -191,7 +135,7 @@ private[kafka010] class KafkaSourceRDD(
       } else {
         range.untilOffset
       }
-      KafkaSourceRDDOffsetRange(range.topicPartition,
+      KafkaOffsetRange(range.topicPartition,
         fromOffset, untilOffset, range.preferredLoc)
     } else {
       range

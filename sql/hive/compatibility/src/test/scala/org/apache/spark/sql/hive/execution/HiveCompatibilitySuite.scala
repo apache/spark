@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -41,12 +42,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
+  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -59,13 +61,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    // Ensures that the table insertion behaivor is consistent with Hive
+    TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.LEGACY.toString)
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
+    TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
     RuleExecutor.resetMetrics()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
@@ -74,6 +79,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
+      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
@@ -597,14 +604,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer4",
     "multiMapJoin1",
     "orc_dictionary_threshold",
-    "udf_hash"
+    "udf_hash",
+    // Moved to HiveQuerySuite
+    "udf_radians"
   )
 
-  /**
-   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
-   * blacklist are implicitly marked as ignored.
-   */
-  override def whiteList: Seq[String] = Seq(
+  private def commonWhiteList = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
@@ -1061,7 +1066,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_positive",
     "udf_pow",
     "udf_power",
-    "udf_radians",
     "udf_rand",
     "udf_regexp",
     "udf_regexp_extract",
@@ -1141,4 +1145,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view_cast",
     "view_inputs"
   )
+
+  /**
+   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
+   * blacklist are implicitly marked as ignored.
+   */
+  override def whiteList: Seq[String] = if (HiveUtils.isHive23) {
+    commonWhiteList ++ Seq(
+      "decimal_1_1"
+    )
+  } else {
+    commonWhiteList
+  }
 }

@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
@@ -64,7 +64,8 @@ import org.apache.spark.sql.types._
        [10.0,10.0,10.0]
       > SELECT _FUNC_(10.0, 0.5, 100);
        10.0
-  """)
+  """,
+  since = "2.1.0")
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
@@ -82,19 +83,20 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
+  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType and TimestampType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType),
-      TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
-  private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
+  private lazy val (returnPercentileArray, percentages) =
     percentageExpression.eval() match {
       // Rule ImplicitTypeCasts can cast other numeric types to double
+      case null => (false, null)
       case num: Double => (false, Array(num))
       case arrayData: ArrayData => (true, arrayData.toDoubleArray())
     }
@@ -105,9 +107,11 @@ case class ApproximatePercentile(
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
-    } else if (accuracy <= 0) {
-      TypeCheckFailure(
-        s"The accuracy provided must be a positive integer literal (current value = $accuracy)")
+    } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
+      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
+        s" (current value = $accuracy)")
+    } else if (percentages == null) {
+      TypeCheckFailure("Percentage value must not be null")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
         s"All percentage values must be between 0.0 and 1.0 " +
@@ -132,7 +136,7 @@ case class ApproximatePercentile(
         case TimestampType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type ${other.simpleString}")
+          throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
       }
       buffer.add(doubleValue)
     }
@@ -157,7 +161,7 @@ case class ApproximatePercentile(
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
       case other: DataType =>
-        throw new UnsupportedOperationException(s"Unexpected data type ${other.simpleString}")
+        throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
     }
     if (result.length == 0) {
       null
@@ -184,7 +188,8 @@ case class ApproximatePercentile(
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
-  override def prettyName: String = "percentile_approx"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
     ApproximatePercentile.serializer.serialize(obj)
@@ -245,7 +250,7 @@ object ApproximatePercentile {
     def getPercentiles(percentages: Array[Double]): Array[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
-        Array.empty[Double]
+        Array.emptyDoubleArray
       } else {
         val result = new Array[Double](percentages.length)
         var i = 0
@@ -320,4 +325,5 @@ object ApproximatePercentile {
   }
 
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
+
 }

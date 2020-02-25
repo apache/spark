@@ -296,14 +296,12 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-        >>> df.select(df.l[0], df.d["key"]).show()
-        +----+------+
-        |l[0]|d[key]|
-        +----+------+
-        |   1| value|
-        +----+------+
+
+        .. versionchanged:: 3.0
+           If `key` is a `Column` object, the indexing operator should be used instead.
+           For example, `map_col.getItem(col('id'))` should be replaced with `map_col[col('id')]`.
         """
-        return self[key]
+        return _bin_op("getItem")(self, key)
 
     @since(1.3)
     def getField(self, name):
@@ -542,7 +540,8 @@ class Column(object):
 
         :param alias: strings of desired column names (collects all positional arguments passed)
         :param metadata: a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class: `StructField` (optional, keyword only argument)
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
 
         .. versionchanged:: 2.2
            Added optional ``metadata`` argument.
@@ -668,9 +667,18 @@ class Column(object):
         :return: a Column
 
         >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
+        >>> window = Window.partitionBy("name").orderBy("age") \
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
-        >>> # df.select(rank().over(window), min('age').over(window))
+        >>> from pyspark.sql.functions import desc
+        >>> df.withColumn("rank", rank().over(window)) \
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
+        +---+-----+----+---+
+        |age| name|rank|min|
+        +---+-----+----+---+
+        |  5|  Bob|   1|  5|
+        |  2|Alice|   1|  2|
+        +---+-----+----+---+
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):

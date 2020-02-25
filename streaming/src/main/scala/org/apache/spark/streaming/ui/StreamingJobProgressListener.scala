@@ -68,23 +68,23 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
-  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted) {
+  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted): Unit = {
     _startTime = streamingStarted.time
   }
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
     synchronized {
       receiverInfos(receiverStarted.receiverInfo.streamId) = receiverStarted.receiverInfo
     }
   }
 
-  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+  override def onReceiverError(receiverError: StreamingListenerReceiverError): Unit = {
     synchronized {
       receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
     }
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped): Unit = {
     synchronized {
       receiverInfos(receiverStopped.receiverInfo.streamId) = receiverStopped.receiverInfo
     }

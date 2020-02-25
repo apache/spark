@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Script to create SQL API docs. This requires `mkdocs` and to build
+# Script to create SQL API and config docs. This requires `mkdocs` and to build
 # Spark first. After running this script the html docs can be found in
 # $SPARK_HOME/sql/site
 
@@ -39,14 +39,16 @@ fi
 
 pushd "$FWDIR" > /dev/null
 
-# Now create the markdown file
 rm -fr docs
 mkdir docs
-echo "Generating markdown files for SQL documentation."
-"$SPARK_HOME/bin/spark-submit" gen-sql-markdown.py
 
-# Now create the HTML files
-echo "Generating HTML files for SQL documentation."
+echo "Generating SQL API Markdown files."
+"$SPARK_HOME/bin/spark-submit" gen-sql-api-docs.py
+
+echo "Generating SQL configuration table HTML file."
+"$SPARK_HOME/bin/spark-submit" gen-sql-config-docs.py
+
+echo "Generating HTML files for SQL API documentation."
 mkdocs build --clean
 rm -fr docs
 

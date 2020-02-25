@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
@@ -54,16 +55,26 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
+      "spark.ui.port",
+      "spark.blockManager.port",
+      "spark.kubernetes.driver.pod.name",
+      "spark.kubernetes.executor.podNamePrefix",
       "spark.yarn.jars",
       "spark.yarn.keytab",
       "spark.yarn.principal",
-      "spark.ui.filters",
+      "spark.kerberos.keytab",
+      "spark.kerberos.principal",
+      UI_FILTERS.key,
       "spark.mesos.driver.frameworkId")
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
+      .remove("spark.ui.port")
+      .remove("spark.blockManager.port")
+      .remove("spark.kubernetes.driver.pod.name")
+      .remove("spark.kubernetes.executor.podNamePrefix")
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>
@@ -83,7 +94,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     newSparkConf
   }
 
-  def validate() {
+  def validate(): Unit = {
     assert(master != null, "Checkpoint.master is null")
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
@@ -124,8 +135,8 @@ object Checkpoint extends Logging {
     try {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
-        val paths = statuses.map(_.getPath)
-        val filtered = paths.filter(p => REGEX.findFirstIn(p.toString).nonEmpty)
+        val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
+        val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
         filtered.sortWith(sortFunc)
       } else {
         logWarning(s"Listing $path returned null")
@@ -206,12 +217,12 @@ class CheckpointWriter(
       checkpointTime: Time,
       bytes: Array[Byte],
       clearCheckpointDataLater: Boolean) extends Runnable {
-    def run() {
+    def run(): Unit = {
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
       }
       var attempts = 0
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       val tempFile = new Path(checkpointDir, "temp")
       // We will do checkpoint when generating a batch and completing a batch. When the processing
       // time of a batch is greater than the batch interval, checkpointing for completing an old
@@ -265,9 +276,9 @@ class CheckpointWriter(
           }
 
           // All done, print success
-          val finishTime = System.currentTimeMillis()
           logInfo(s"Checkpoint for time $checkpointTime saved to file '$checkpointFile'" +
-            s", took ${bytes.length} bytes and ${finishTime - startTime} ms")
+            s", took ${bytes.length} bytes and " +
+            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
           jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
@@ -281,7 +292,7 @@ class CheckpointWriter(
     }
   }
 
-  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
+  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean): Unit = {
     try {
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
@@ -297,14 +308,13 @@ class CheckpointWriter(
     if (stopped) return
 
     executor.shutdown()
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
     if (!terminated) {
       executor.shutdownNow()
     }
-    val endTime = System.currentTimeMillis()
     logInfo(s"CheckpointWriter executor terminated? $terminated," +
-      s" waited for ${endTime - startTime} ms.")
+      s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }
 }

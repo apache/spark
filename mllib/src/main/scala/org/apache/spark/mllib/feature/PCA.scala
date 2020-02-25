@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -44,12 +45,23 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     require(k <= numFeatures,
       s"source vector size $numFeatures must be no less than k=$k")
 
-    require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
-      "The param k and numFeatures is too large for SVD computation. " +
-      "Try reducing the parameter k for PCA, or reduce the input feature " +
-      "vector dimension to make this tractable.")
+    val mat = if (numFeatures > 65535) {
+      val summary = Statistics.colStats(sources.map((_, 1.0)), Seq("mean"))
+      val mean = Vectors.fromML(summary.mean)
+      val meanCentredRdd = sources.map { row =>
+        BLAS.axpy(-1, mean, row)
+        row
+      }
+      new RowMatrix(meanCentredRdd)
+    } else {
+      require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
+        "The param k and numFeatures is too large for SVD computation. " +
+          "Try reducing the parameter k for PCA, or reduce the input feature " +
+          "vector dimension to make this tractable.")
 
-    val mat = new RowMatrix(sources)
+      new RowMatrix(sources)
+    }
+
     val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
     val densePC = pc match {
       case dm: DenseMatrix =>
@@ -101,18 +113,7 @@ class PCAModel private[spark] (
    */
   @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
-    vector match {
-      case dv: DenseVector =>
-        pc.transpose.multiply(dv)
-      case SparseVector(size, indices, values) =>
-        /* SparseVector -> single row SparseMatrix */
-        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-        val projection = sm.multiply(pc)
-        Vectors.dense(projection.values)
-      case _ =>
-        throw new IllegalArgumentException("Unsupported vector format. Expected " +
-          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
+    pc.transpose.multiply(vector)
   }
 }
 

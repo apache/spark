@@ -26,6 +26,7 @@ import org.apache.zookeeper.KeeperException.NoNodeException
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.util.Utils
 
 /**
@@ -94,13 +95,13 @@ private[spark] class ZookeeperMesosClusterPersistenceEngine(
     zk: CuratorFramework,
     conf: SparkConf)
   extends MesosClusterPersistenceEngine with Logging {
-  private val WORKING_DIR =
-    conf.get("spark.deploy.zookeeper.dir", "/spark_mesos_dispatcher") + "/" + baseDir
+  private val workingDir =
+    conf.get(ZOOKEEPER_DIRECTORY).getOrElse("/spark_mesos_dispatcher") + "/" + baseDir
 
-  SparkCuratorUtil.mkdir(zk, WORKING_DIR)
+  SparkCuratorUtil.mkdir(zk, workingDir)
 
   def path(name: String): String = {
-    WORKING_DIR + "/" + name
+    workingDir + "/" + name
   }
 
   override def expunge(name: String): Unit = {
@@ -129,6 +130,6 @@ private[spark] class ZookeeperMesosClusterPersistenceEngine(
   }
 
   override def fetchAll[T](): Iterable[T] = {
-    zk.getChildren.forPath(WORKING_DIR).asScala.flatMap(fetch[T])
+    zk.getChildren.forPath(workingDir).asScala.flatMap(fetch[T])
   }
 }

@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 
 class DummyClass1 {}
 
@@ -72,11 +73,11 @@ class SizeEstimatorSuite
   with PrivateMethodTester
   with ResetSystemProperties {
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     super.beforeEach()
     System.setProperty("os.arch", "amd64")
-    System.setProperty("spark.test.useCompressedOops", "true")
+    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "true")
   }
 
   override def afterEach(): Unit = {
@@ -92,14 +93,14 @@ class SizeEstimatorSuite
   }
 
   test("primitive wrapper objects") {
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Boolean(true)))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Byte("1")))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Character('1')))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Short("1")))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Integer(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Float(1.0)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Boolean.TRUE))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Byte.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Character.valueOf('1')))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Short.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Integer.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Long.valueOf(1)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Float.valueOf(1.0f)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Double.valueOf(1.0)))
   }
 
   test("class field blocks rounding") {
@@ -179,7 +180,7 @@ class SizeEstimatorSuite
   test("32-bit arch") {
     System.setProperty("os.arch", "x86")
 
-    val initialize = PrivateMethod[Unit]('initialize)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
 
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
@@ -192,8 +193,8 @@ class SizeEstimatorSuite
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
     System.setProperty("os.arch", "amd64")
-    System.setProperty("spark.test.useCompressedOops", "false")
-    val initialize = PrivateMethod[Unit]('initialize)
+    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "false")
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
 
     assertResult(56)(SizeEstimator.estimate(DummyString("")))
@@ -202,14 +203,14 @@ class SizeEstimatorSuite
     assertResult(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     // primitive wrapper classes
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Boolean(true)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Byte("1")))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Character('1')))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Short("1")))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Integer(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Float(1.0)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Boolean.TRUE))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Byte.valueOf("1")))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Character.valueOf('1')))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Short.valueOf("1")))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Integer.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Long.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Float.valueOf(1.0f)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Double.valueOf(1.0)))
   }
 
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {
@@ -219,7 +220,7 @@ class SizeEstimatorSuite
 
   test("check 64-bit detection for s390x arch") {
     System.setProperty("os.arch", "s390x")
-    val initialize = PrivateMethod[Unit]('initialize)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))

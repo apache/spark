@@ -19,8 +19,6 @@ package org.apache.spark.metrics.source
 
 import com.codahale.metrics.MetricRegistry
 
-import org.apache.spark.annotation.Experimental
-
 private[spark] object StaticSources {
   /**
    * The set of all static sources. These sources may be reported to from any class, including
@@ -30,10 +28,8 @@ private[spark] object StaticSources {
 }
 
 /**
- * :: Experimental ::
  * Metrics for code generation.
  */
-@Experimental
 object CodegenMetrics extends Source {
   override val sourceName: String = "CodeGenerator"
   override val metricRegistry: MetricRegistry = new MetricRegistry()
@@ -62,10 +58,8 @@ object CodegenMetrics extends Source {
 }
 
 /**
- * :: Experimental ::
  * Metrics for access to the hive external catalog.
  */
-@Experimental
 object HiveCatalogMetrics extends Source {
   override val sourceName: String = "HiveExternalCatalog"
   override val metricRegistry: MetricRegistry = new MetricRegistry()

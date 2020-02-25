@@ -81,7 +81,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
               childPlans.map { childPlan =>
                 // Replace the placeholder by the child plan
                 candidateWithPlaceholders.transformUp {
-                  case p if p == placeholder => childPlan
+                  case p if p.eq(placeholder) => childPlan
                 }
               }
             }

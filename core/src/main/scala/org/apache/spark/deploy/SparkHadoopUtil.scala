@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.{Arrays, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -30,25 +30,21 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
  */
-@DeveloperApi
-class SparkHadoopUtil extends Logging {
+private[spark] class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
@@ -61,7 +57,7 @@ class SparkHadoopUtil extends Logging {
    * you need to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
-  def runAsSparkUser(func: () => Unit) {
+  def runAsSparkUser(func: () => Unit): Unit = {
     createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
@@ -75,7 +71,7 @@ class SparkHadoopUtil extends Logging {
     ugi
   }
 
-  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation): Unit = {
     dest.addCredentials(source.getCredentials())
   }
 
@@ -83,8 +79,10 @@ class SparkHadoopUtil extends Logging {
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
    */
-  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
-    SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+  def appendS3AndSparkHadoopHiveConfigurations(
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
+    SparkHadoopUtil.appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
   }
 
   /**
@@ -107,8 +105,17 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
+  def appendSparkHiveConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hive.foo=bar" system properties into destMap as "hive.foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hive.")) {
+      destMap.put(key.substring("spark.".length), value)
+    }
+  }
+
   /**
-   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+   * Return an appropriate (subclass) of Configuration. Creating config can initialize some Hadoop
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {
@@ -144,7 +151,7 @@ class SparkHadoopUtil extends Logging {
    * Add or overwrite current user's credentials with serialized delegation tokens,
    * also confirms correct hadoop configuration is set.
    */
-  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf): Unit = {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
     logInfo("Updating delegation tokens for current user.")
@@ -274,11 +281,8 @@ class SparkHadoopUtil extends Logging {
             name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
           }
         })
-      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-        override def compare(o1: FileStatus, o2: FileStatus): Int = {
-          Longs.compare(o1.getModificationTime, o2.getModificationTime)
-        }
-      })
+      Arrays.sort(fileStatuses, (o1: FileStatus, o2: FileStatus) =>
+        Longs.compare(o1.getModificationTime, o2.getModificationTime))
       fileStatuses
     } catch {
       case NonFatal(e) =>
@@ -367,28 +371,6 @@ class SparkHadoopUtil extends Logging {
     buffer.toString
   }
 
-  private[spark] def checkAccessPermission(status: FileStatus, mode: FsAction): Boolean = {
-    val perm = status.getPermission
-    val ugi = UserGroupInformation.getCurrentUser
-
-    if (ugi.getShortUserName == status.getOwner) {
-      if (perm.getUserAction.implies(mode)) {
-        return true
-      }
-    } else if (ugi.getGroupNames.contains(status.getGroup)) {
-      if (perm.getGroupAction.implies(mode)) {
-        return true
-      }
-    } else if (perm.getOtherAction.implies(mode)) {
-      return true
-    }
-
-    logDebug(s"Permission denied: user=${ugi.getShortUserName}, " +
-      s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
-      s"${if (status.isDirectory) "d" else "-"}$perm")
-    false
-  }
-
   def serialize(creds: Credentials): Array[Byte] = {
     val byteStream = new ByteArrayOutputStream
     val dataStream = new DataOutputStream(byteStream)
@@ -410,7 +392,7 @@ class SparkHadoopUtil extends Logging {
 
 }
 
-object SparkHadoopUtil {
+private[spark] object SparkHadoopUtil {
 
   private lazy val instance = new SparkHadoopUtil
 
@@ -436,31 +418,17 @@ object SparkHadoopUtil {
   def get: SparkHadoopUtil = instance
 
   /**
-   * Given an expiration date for the current set of credentials, calculate the time when new
-   * credentials should be created.
-   *
-   * @param expirationDate Drop-dead expiration date
-   * @param conf Spark configuration
-   * @return Timestamp when new credentials should be created.
-   */
-  private[spark] def nextCredentialRenewalTime(expirationDate: Long, conf: SparkConf): Long = {
-    val ct = System.currentTimeMillis
-    val ratio = conf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-    (ct + (ratio * (expirationDate - ct))).toLong
-  }
-
-  /**
    * Returns a Configuration object with Spark configuration applied on top. Unlike
    * the instance method, this will always return a Configuration instance, and not a
    * cluster manager-specific type.
    */
   private[spark] def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()
-    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+    appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
     hadoopConf
   }
 
-  private def appendS3AndSparkHadoopConfigurations(
+  private def appendS3AndSparkHadoopHiveConfigurations(
       conf: SparkConf,
       hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
@@ -483,7 +451,8 @@ object SparkHadoopUtil {
         }
       }
       appendSparkHadoopConfigs(conf, hadoopConf)
-      val bufferSize = conf.get("spark.buffer.size", "65536")
+      appendSparkHiveConfigs(conf, hadoopConf)
+      val bufferSize = conf.get(BUFFER_SIZE).toString
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
   }
@@ -494,4 +463,50 @@ object SparkHadoopUtil {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
+
+  private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
+      hadoopConf.set(key.substring("spark.".length), value)
+    }
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * Create a file on the given file system, optionally making sure erasure coding is disabled.
+   *
+   * Disabling EC can be helpful as HDFS EC doesn't support hflush(), hsync(), or append().
+   * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
+   */
+  // scalastyle:on line.size.limit
+  def createFile(fs: FileSystem, path: Path, allowEC: Boolean): FSDataOutputStream = {
+    if (allowEC) {
+      fs.create(path)
+    } else {
+      try {
+        // Use reflection as this uses APIs only available in Hadoop 3
+        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
+        // the builder api does not resolve relative paths, nor does it create parent dirs, while
+        // the old api does.
+        if (!fs.mkdirs(path.getParent())) {
+          throw new IOException(s"Failed to create parents of $path")
+        }
+        val qualifiedPath = fs.makeQualified(path)
+        val builder = builderMethod.invoke(fs, qualifiedPath)
+        val builderCls = builder.getClass()
+        // this may throw a NoSuchMethodException if the path is not on hdfs
+        val replicateMethod = builderCls.getMethod("replicate")
+        val buildMethod = builderCls.getMethod("build")
+        val b2 = replicateMethod.invoke(builder)
+        buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
+      } catch {
+        case  _: NoSuchMethodException =>
+          // No createFile() method, we're using an older hdfs client, which doesn't give us control
+          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
+          // old apis.
+          fs.create(path)
+      }
+    }
+  }
+
 }

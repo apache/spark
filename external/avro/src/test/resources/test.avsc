@@ -1,0 +1,53 @@
+{
+  "type" : "record",
+  "name" : "test_schema",
+  "fields" : [{
+    "name" : "string",
+    "type" : "string",
+    "doc"  : "Meaningless string of characters"
+  }, {
+    "name" : "simple_map",
+    "type" : {"type": "map", "values": "int"}
+  }, {
+    "name" : "complex_map",
+    "type" : {"type": "map", "values": {"type": "map", "values": "string"}}
+  }, {
+    "name" : "union_string_null",
+    "type" : ["null", "string"]
+  }, {
+    "name" : "union_int_long_null",
+    "type" : ["int", "long", "null"]
+  }, {
+    "name" : "union_float_double",
+    "type" : ["float", "double"]
+  }, {
+    "name": "fixed3",
+    "type": {"type": "fixed", "size": 3, "name": "fixed3"}
+  }, {
+    "name": "fixed2",
+    "type": {"type": "fixed", "size": 2, "name": "fixed2"}
+  }, {
+    "name": "enum",
+    "type": { "type": "enum",
+              "name": "Suit",
+              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+            }
+  }, {
+    "name": "record",
+    "type": {
+      "type": "record", 
+      "name": "record",
+      "aliases": ["RecordAlias"],
+      "fields" : [{
+        "name": "value_field",
+        "type": "string"
+      }]
+    }
+  }, {
+    "name": "array_of_boolean",
+    "type": {"type": "array", "items": "boolean"}
+  }, {
+    "name": "bytes",
+    "type": "bytes"
+  }]
+}

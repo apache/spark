@@ -74,26 +74,6 @@ class ImplicitSuite {
     rdd.stats()
   }
 
-  def testDoubleAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123.4)
-  }
-
-  def testIntAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123)
-  }
-
-  def testLongAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123L)
-  }
-
-  def testFloatAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123F)
-  }
-
   def testIntWritableConverter(): Unit = {
     val sc = mockSparkContext
     sc.sequenceFile[Int, Int]("/a/test/path")

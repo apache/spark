@@ -40,7 +40,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = ArrayType(child.dataType)
+  override def dataType: DataType = ArrayType(child.dataType, false)
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
@@ -86,7 +86,17 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
  * Collect a list of elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
+       [1,2,1]
+  """,
+  note = """
+    The function is non-deterministic because the order of collected results depends
+    on the order of the rows which may be non-deterministic after a shuffle.
+  """,
+  since = "2.0.0")
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -109,7 +119,17 @@ case class CollectList(
  * Collect a set of unique elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
+       [1,2]
+  """,
+  note = """
+    The function is non-deterministic because the order of collected results depends
+    on the order of the rows which may be non-deterministic after a shuffle.
+  """,
+  since = "2.0.0")
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,

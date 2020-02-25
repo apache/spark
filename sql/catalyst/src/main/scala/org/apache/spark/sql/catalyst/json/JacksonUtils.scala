@@ -32,13 +32,9 @@ object JacksonUtils {
     }
   }
 
-  /**
-   * Verify if the schema is supported in JSON parsing.
-   */
-  def verifySchema(schema: StructType): Unit = {
-    def verifyType(name: String, dataType: DataType): Unit = dataType match {
-      case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
+  def verifyType(name: String, dataType: DataType): Unit = {
+    dataType match {
+      case NullType | _: AtomicType | CalendarIntervalType =>
 
       case st: StructType => st.foreach(field => verifyType(field.name, field.dataType))
 
@@ -52,9 +48,14 @@ object JacksonUtils {
 
       case _ =>
         throw new UnsupportedOperationException(
-          s"Unable to convert column $name of type ${dataType.simpleString} to JSON.")
+          s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
     }
+  }
 
+  /**
+   * Verify if the schema is supported in JSON parsing.
+   */
+  def verifySchema(schema: StructType): Unit = {
     schema.foreach(field => verifyType(field.name, field.dataType))
   }
 }

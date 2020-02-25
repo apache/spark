@@ -21,6 +21,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
@@ -42,10 +43,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       maxOnHeapExecutionMemory: Long,
       maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
     val conf = new SparkConf()
-      .set("spark.memory.fraction", "1")
-      .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-      .set(MEMORY_OFFHEAP_SIZE.key, maxOffHeapExecutionMemory.toString)
-      .set("spark.memory.storageFraction", storageFraction.toString)
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, maxOnHeapExecutionMemory)
+      .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory)
+      .set(MEMORY_STORAGE_FRACTION, storageFraction)
     UnifiedMemoryManager(conf, numCores = 1)
   }
 
@@ -218,19 +219,20 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("small heap") {
-    val systemMemory = 1024 * 1024
-    val reservedMemory = 300 * 1024
+    val systemMemory = 1024L * 1024
+    val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
     val conf = new SparkConf()
-      .set("spark.memory.fraction", memoryFraction.toString)
-      .set("spark.testing.memory", systemMemory.toString)
-      .set("spark.testing.reservedMemory", reservedMemory.toString)
+      .set(MEMORY_FRACTION, memoryFraction)
+      .set(TEST_MEMORY, systemMemory)
+      .set(TEST_RESERVED_MEMORY, reservedMemory)
+
     val mm = UnifiedMemoryManager(conf, numCores = 1)
     val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
     assert(mm.maxHeapMemory === expectedMaxMemory)
 
     // Try using a system memory that's too small
-    val conf2 = conf.clone().set("spark.testing.memory", (reservedMemory / 2).toString)
+    val conf2 = conf.clone().set(TEST_MEMORY, reservedMemory / 2)
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
@@ -238,17 +240,18 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("insufficient executor memory") {
-    val systemMemory = 1024 * 1024
-    val reservedMemory = 300 * 1024
+    val systemMemory = 1024L * 1024
+    val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
     val conf = new SparkConf()
-      .set("spark.memory.fraction", memoryFraction.toString)
-      .set("spark.testing.memory", systemMemory.toString)
-      .set("spark.testing.reservedMemory", reservedMemory.toString)
+      .set(MEMORY_FRACTION, memoryFraction)
+      .set(TEST_MEMORY, systemMemory)
+      .set(TEST_RESERVED_MEMORY, reservedMemory)
+
     val mm = UnifiedMemoryManager(conf, numCores = 1)
 
     // Try using an executor memory that's too small
-    val conf2 = conf.clone().set("spark.executor.memory", (reservedMemory / 2).toString)
+    val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
@@ -257,9 +260,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
     val conf = new SparkConf()
-      .set("spark.memory.fraction", "1")
-      .set("spark.memory.storageFraction", "0")
-      .set("spark.testing.memory", "1000")
+      .set(MEMORY_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 0.0)
+      .set(TEST_MEMORY, 1000L)
+
     val mm = UnifiedMemoryManager(conf, numCores = 2)
     val ms = makeMemoryStore(mm)
     val memoryMode = MemoryMode.ON_HEAP
@@ -283,9 +287,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("SPARK-15260: atomically resize memory pools") {
     val conf = new SparkConf()
-      .set("spark.memory.fraction", "1")
-      .set("spark.memory.storageFraction", "0")
-      .set("spark.testing.memory", "1000")
+      .set(MEMORY_FRACTION, 1.0)
+      .set(MEMORY_STORAGE_FRACTION, 0.0)
+      .set(TEST_MEMORY, 1000L)
+
     val mm = UnifiedMemoryManager(conf, numCores = 2)
     makeBadMemoryStore(mm)
     val memoryMode = MemoryMode.ON_HEAP
@@ -300,15 +305,15 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     intercept[RuntimeException] {
       mm.acquireExecutionMemory(1000L, 0, memoryMode)
     }
-    val assertInvariants = PrivateMethod[Unit]('assertInvariants)
+    val assertInvariants = PrivateMethod[Unit](Symbol("assertInvariants"))
     mm.invokePrivate[Unit](assertInvariants())
   }
 
   test("not enough free memory in the storage pool --OFF_HEAP") {
     val conf = new SparkConf()
-      .set(MEMORY_OFFHEAP_SIZE.key, "1000")
-      .set("spark.testing.memory", "1000")
-      .set(MEMORY_OFFHEAP_ENABLED.key, "true")
+      .set(MEMORY_OFFHEAP_SIZE, 1000L)
+      .set(TEST_MEMORY, 1000L)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
     val taskAttemptId = 0L
     val mm = UnifiedMemoryManager(conf, numCores = 1)
     val ms = makeMemoryStore(mm)

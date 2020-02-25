@@ -21,12 +21,14 @@ import java.util.UUID
 
 import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.NextIterator
 
 case class ContinuousShuffleReadPartition(
       index: Int,
+      endpointName: String,
       queueSize: Int,
       numShuffleWriters: Int,
       epochIntervalMs: Long)
@@ -34,9 +36,11 @@ case class ContinuousShuffleReadPartition(
   // Initialized only on the executor, and only once even as we call compute() multiple times.
   lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
-    val receiver = new UnsafeRowReceiver(queueSize, numShuffleWriters, epochIntervalMs, env)
-    val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", receiver)
-    TaskContext.get().addTaskCompletionListener { ctx =>
+    val receiver = new RPCContinuousShuffleReader(
+      queueSize, numShuffleWriters, epochIntervalMs, env)
+    val endpoint = env.setupEndpoint(endpointName, receiver)
+
+    TaskContext.get().addTaskCompletionListener[Unit] { ctx =>
       env.stop(endpoint)
     }
     (receiver, endpoint)
@@ -59,12 +63,14 @@ class ContinuousShuffleReadRDD(
     numPartitions: Int,
     queueSize: Int = 1024,
     numShuffleWriters: Int = 1,
-    epochIntervalMs: Long = 1000)
+    epochIntervalMs: Long = 1000,
+    val endpointNames: Seq[String] = Seq(s"RPCContinuousShuffleReader-${UUID.randomUUID()}"))
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
     (0 until numPartitions).map { partIndex =>
-      ContinuousShuffleReadPartition(partIndex, queueSize, numShuffleWriters, epochIntervalMs)
+      ContinuousShuffleReadPartition(
+        partIndex, endpointNames(partIndex), queueSize, numShuffleWriters, epochIntervalMs)
     }.toArray
   }
 

@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.internal
 
+import scala.language.reflectiveCalls
+
 import org.apache.hadoop.fs.Path
+import org.apache.log4j.Level
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
-class SQLConfSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
+class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -118,12 +119,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
@@ -258,14 +259,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     // check default value
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.INT96)
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
-    // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
-    spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
-    assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
-
-    // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority over PARQUET_INT64_AS_TIMESTAMP_MILLIS
     spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
@@ -290,8 +285,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.sessionState.conf.getConfString(fallback.key, "lzo") === "lzo")
 
     val displayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _) => key == fallback.key }
-      .map { case (_, v, _) => v }
+      .find { case (key, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _) => v }
       .get
     assert(displayValue === fallback.defaultValueString)
 
@@ -302,12 +297,55 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.sessionState.conf.getConfString(fallback.key) === "lzo")
 
     val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _) => key == fallback.key }
-      .map { case (_, v, _) => v }
+      .find { case (key, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _) => v }
       .get
     assert(newDisplayValue === "lzo")
 
     SQLConf.unregister(fallback)
   }
 
+  test("SPARK-24783: spark.sql.shuffle.partitions=0 should throw exception ") {
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 0)
+    }
+    assert(e.getMessage.contains("spark.sql.shuffle.partitions"))
+    val e2 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, -1)
+    }
+    assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
+  }
+
+  test("set removed config to non-default value") {
+    val config = "spark.sql.fromJsonForceNullableSchema"
+    val defaultValue = true
+
+    spark.conf.set(config, defaultValue)
+
+    val e = intercept[AnalysisException] {
+      spark.conf.set(config, !defaultValue)
+    }
+    assert(e.getMessage.contains(config))
+  }
+
+  test("log deprecation warnings") {
+    val logAppender = new LogAppender("deprecated SQL configs")
+    def check(config: String): Unit = {
+      assert(logAppender.loggingEvents.exists(
+        e => e.getLevel == Level.WARN &&
+        e.getRenderedMessage.contains(config)))
+    }
+
+    val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
+    withLogAppender(logAppender) {
+      spark.conf.set(config1, true)
+    }
+    check(config1)
+
+    val config2 = SQLConf.ARROW_EXECUTION_ENABLED.key
+    withLogAppender(logAppender) {
+      spark.conf.unset(config2)
+    }
+    check(config2)
+  }
 }

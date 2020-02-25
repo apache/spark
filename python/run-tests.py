@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,9 +17,8 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import logging
-from optparse import OptionParser
+from argparse import ArgumentParser
 import os
 import re
 import shutil
@@ -33,7 +32,6 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
-from distutils.version import LooseVersion
 from multiprocessing import Manager
 
 
@@ -59,9 +57,8 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
-# Later, add back 2.12 to this list:
-# for scala in ["2.11", "2.12"]:
-for scala in ["2.11"]:
+# TODO: revisit for Scala 2.13
+for scala in ["2.12"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
@@ -77,7 +74,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_TESTING': '1',
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
-        'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+        'PYSPARK_ROW_FIELD_SORTING_ENABLED': 'true'
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -89,9 +87,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     env["TMPDIR"] = tmp_dir
 
     # Also override the JVM's temp directory by setting driver and executor options.
+    java_options = "-Djava.io.tmpdir={0} -Dio.netty.tryReflectionSetAccessible=true".format(tmp_dir)
     spark_args = [
-        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
-        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
+        "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
@@ -101,7 +100,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     try:
         per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
+            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
@@ -119,7 +118,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                     log_file.writelines(per_test_output)
                 per_test_output.seek(0)
                 for line in per_test_output:
-                    decoded_line = line.decode()
+                    decoded_line = line.decode("utf-8", "replace")
                     if not re.match('[0-9]+', decoded_line):
                         print(decoded_line, end='')
                 per_test_output.close()
@@ -136,9 +135,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             per_test_output.seek(0)
             # Here expects skipped test output from unittest when verbosity level is
             # 2 (or --verbose option is enabled).
-            decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
+            decoded_lines = map(lambda line: line.decode("utf-8", "replace"), iter(per_test_output))
             skipped_tests = list(filter(
-                lambda line: re.search('test_.* \(pyspark\..*\) ... skipped ', line),
+                lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKIP)', line),
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
@@ -162,42 +161,59 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
-    if "python2.7" not in python_execs:
-        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
-                       " back to `python` instead")
-        python_execs.insert(0, "python")
+    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
+
+    if "python3.6" not in python_execs:
+        p = which("python3")
+        if not p:
+            LOGGER.error("No python3 executable found.  Exiting!")
+            os._exit(1)
+        else:
+            python_execs.insert(0, p)
     return python_execs
 
 
 def parse_opts():
-    parser = OptionParser(
+    parser = ArgumentParser(
         prog="run-tests"
     )
-    parser.add_option(
-        "--python-executables", type="string", default=','.join(get_default_python_executables()),
-        help="A comma-separated list of Python executables to test against (default: %default)"
+    parser.add_argument(
+        "--python-executables", type=str, default=','.join(get_default_python_executables()),
+        help="A comma-separated list of Python executables to test against (default: %(default)s)"
     )
-    parser.add_option(
-        "--modules", type="string",
+    parser.add_argument(
+        "--modules", type=str,
         default=",".join(sorted(python_modules.keys())),
-        help="A comma-separated list of Python modules to test (default: %default)"
+        help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
-    parser.add_option(
-        "-p", "--parallelism", type="int", default=4,
-        help="The number of suites to test in parallel (default %default)"
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=4,
+        help="The number of suites to test in parallel (default %(default)d)"
     )
-    parser.add_option(
+    parser.add_argument(
         "--verbose", action="store_true",
         help="Enable additional debug logging"
     )
 
-    (opts, args) = parser.parse_args()
-    if args:
-        parser.error("Unsupported arguments: %s" % ' '.join(args))
-    if opts.parallelism < 1:
+    group = parser.add_argument_group("Developer Options")
+    group.add_argument(
+        "--testnames", type=str,
+        default=None,
+        help=(
+            "A comma-separated list of specific modules, classes and functions of doctest "
+            "or unittest to test. "
+            "For example, 'pyspark.sql.foo' to run the module as unittests or doctests, "
+            "'pyspark.sql.tests FooTests' to run the specific class of unittests, "
+            "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
+            "'--modules' option is ignored if they are given.")
+    )
+
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
-    return opts
+    return args
 
 
 def _check_coverage(python_exec):
@@ -215,25 +231,31 @@ def _check_coverage(python_exec):
 
 def main():
     opts = parse_opts()
-    if (opts.verbose):
+    if opts.verbose:
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
+    should_test_modules = opts.testnames is None
     logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
     LOGGER.info("Running PySpark tests. Output is in %s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(',')
-    modules_to_test = []
-    for module_name in opts.modules.split(','):
-        if module_name in python_modules:
-            modules_to_test.append(python_modules[module_name])
-        else:
-            print("Error: unrecognized module '%s'. Supported modules: %s" %
-                  (module_name, ", ".join(python_modules)))
-            sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
-    LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
+
+    if should_test_modules:
+        modules_to_test = []
+        for module_name in opts.modules.split(','):
+            if module_name in python_modules:
+                modules_to_test.append(python_modules[module_name])
+            else:
+                print("Error: unrecognized module '%s'. Supported modules: %s" %
+                      (module_name, ", ".join(python_modules)))
+                sys.exit(-1)
+        LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
+    else:
+        testnames_to_test = opts.testnames.split(',')
+        LOGGER.info("Will test the following Python tests: %s", testnames_to_test)
 
     task_queue = Queue.PriorityQueue()
     for python_exec in python_execs:
@@ -245,18 +267,23 @@ def main():
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
-        LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
-        LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
+        LOGGER.info("%s python_implementation is %s", python_exec, python_implementation)
+        LOGGER.info("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
-        for module in modules_to_test:
-            if python_implementation not in module.blacklisted_python_implementations:
-                for test_goal in module.python_test_goals:
-                    if test_goal in ('pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                     'pyspark.tests', 'pyspark.sql.tests'):
-                        priority = 0
-                    else:
-                        priority = 100
-                    task_queue.put((priority, (python_exec, test_goal)))
+        if should_test_modules:
+            for module in modules_to_test:
+                if python_implementation not in module.blacklisted_python_implementations:
+                    for test_goal in module.python_test_goals:
+                        heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
+                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
+                        if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
+                            priority = 0
+                        else:
+                            priority = 100
+                        task_queue.put((priority, (python_exec, test_goal)))
+        else:
+            for test_goal in testnames_to_test:
+                task_queue.put((0, (python_exec, test_goal)))
 
     # Create the target directory before starting tasks to avoid races.
     target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))
