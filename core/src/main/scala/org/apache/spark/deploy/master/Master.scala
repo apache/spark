@@ -799,7 +799,7 @@ private[deploy] class Master(
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
     val allFreeCores = shuffledAliveWorkers.map(_.coresFree).sum
-    val forDriversFreeCores = math.max(allFreeCores - coresReservedForApps,0)
+    val forDriversFreeCores = math.max(allFreeCores - coresReservedForApps, 0)
     if (forDriversFreeCores > 0) {
       for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
         // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
