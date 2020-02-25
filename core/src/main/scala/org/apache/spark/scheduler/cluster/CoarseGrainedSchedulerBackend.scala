@@ -610,12 +610,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
     val cpusPerTask = rp.getTaskCpus.getOrElse(scheduler.CPUS_PER_TASK)
-    val executorsWithResourceProfile = executorDataMap.filter { case (e, data) =>
-      data.resourceProfileId == rp.id
-    }
-    executorsWithResourceProfile.values.map { executor =>
-      executor.totalCores / cpusPerTask
-    }.sum
+    val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
+    executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
   }
 
   // this function is for testing only

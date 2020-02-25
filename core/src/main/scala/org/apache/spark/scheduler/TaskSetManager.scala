@@ -83,10 +83,14 @@ private[spark] class TaskSetManager(
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
+  // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
+  // number of slots on a single executor, would the task manager speculative run the tasks if
+  // their duration is longer than the given threshold. In this way, we wouldn't speculate too
   // aggressively but still handle basic cases.
   // SPARK-30417: #cores per executor might not be set in spark conf for standalone mode, then
   // the value of the conf would 1 by default. However, the executor would use all the cores on
   // the worker. Therefore, CPUS_PER_TASK is okay to be greater than 1 without setting #cores.
+  // To handle this case, we set slots to 1 when we don't know the executor cores.
   // TODO: use the actual number of slots for standalone mode.
   val speculationTasksLessEqToSlots = {
     val rpId = taskSet.resourceProfileId
@@ -188,6 +192,8 @@ private[spark] class TaskSetManager(
   addPendingTasks()
 
   private def addPendingTasks(): Unit = {
+    // A zombie TaskSetManager may reach here while handling failed task.
+    if (isZombie) return
     val (_, duration) = Utils.timeTakenMs {
       for (i <- (0 until numTasks).reverse) {
         addPendingTask(i, resolveRacks = false)
@@ -1084,6 +1090,8 @@ private[spark] class TaskSetManager(
   }
 
   def recomputeLocality(): Unit = {
+    // A zombie TaskSetManager may reach here while executorLost happens
+    if (isZombie) return
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)

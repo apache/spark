@@ -35,7 +35,6 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
-import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -3096,13 +3095,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("test default resource profiles") {
+  test("test default resource profile") {
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))
     val rp = scheduler.mergeResourceProfilesForStage(rdd)
     assert(rp.id == scheduler.sc.resourceProfileManager.defaultResourceProfile.id)
   }
 
-  test("test 1 resource profiles") {
+  test("test 1 resource profile") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
@@ -3125,7 +3124,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val treqs2 = new TaskResourceRequests().cpus(2)
     val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
-    // TODO - how to test?
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
       scheduler.mergeResourceProfilesForStage(rdd)

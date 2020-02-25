@@ -348,8 +348,9 @@ private[spark] class TaskSchedulerImpl(
           taskResAssignments)) {
         try {
           val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
-            taskResAssignments.toMap)) {
+          val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
+            taskResAssignments.toMap)
+          for (task <- taskDescOption) {
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
@@ -387,9 +388,6 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
-   * The only task resources we look at from global confs are CPUs if not specified in the
-   * ResourceProfile, otherwise global task resources are ignored if a ResourceProfile is
-   * specified.
    */
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
@@ -441,7 +439,7 @@ private[spark] class TaskSchedulerImpl(
     var limitingResource = resourceProfile.limitingResource(sc.getConf)
     val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
 
-    val availSlots = offersForResourceProfile.map { case (o, index) =>
+    offersForResourceProfile.map { case (o, index) =>
       val numTasksPerExecCores = availableCpus(index) / taskCpus
       // when executor cores config isn't set, we can't calculate the real limiting resource
       // and number of tasks per executor ahead of time, so calculate it now.
@@ -467,7 +465,6 @@ private[spark] class TaskSchedulerImpl(
         (availableAddrs / taskLimit).toInt
       }
     }.sum
-    availSlots
   }
 
   /**

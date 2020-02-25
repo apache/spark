@@ -37,7 +37,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
@@ -475,7 +475,6 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    logInfo("creating result stage with profile: " + resourceProfile)
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
       callSite, resourceProfile.id)
     stageIdToStage(id) = stage

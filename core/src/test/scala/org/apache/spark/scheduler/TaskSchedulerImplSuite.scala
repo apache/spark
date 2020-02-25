@@ -1179,7 +1179,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescriptions.length)
   }
 
-
   // barrier scheduling doesn't yet work with dynamic allocation but test it with another
   // ResourceProfile anyway to make sure code path works when it is supported
   test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
@@ -1205,7 +1204,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescriptions.length)
   }
 
-
   test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
     "diff ResourceProfile, but not enough gpus") {
     val taskCpus = 1
@@ -1229,7 +1227,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(0 === taskDescriptions.length)
   }
-
 
   test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
     val taskCpus = 2
