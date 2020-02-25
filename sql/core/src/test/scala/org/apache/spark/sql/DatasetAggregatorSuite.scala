@@ -404,7 +404,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }
 
-  test("SPARK-30590: untyped select should not accept typed column without input type") {
+  test("SPARK-30590: untyped select should not accept typed column that needs input type") {
     val df = Seq((1, 2, 3, 4, 5, 6)).toDF("a", "b", "c", "d", "e", "f")
     val fooAgg = (i: Int) => FooAgg(i).toColumn.name(s"foo_agg_$i")
 
