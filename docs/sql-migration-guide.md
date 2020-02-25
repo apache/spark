@@ -336,8 +336,6 @@ license: |
   - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
 
   - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. The string representation of a decimal can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` syntax in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-  
-  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. The local file system has changed from `org.apache.hadoop.fs.LocalFileSystem` to `org.apache.hadoop.hive.ql.io.ProxyLocalFileSystem` when using Hadoop APIs, e.g. `new Path("file:/").getFileSystem(conf)`, and `fs.rename(Path src, Path dst)` will return `true` and overwrite `dst` in Hive 1.2 but return `false` in Hive 2.3 if `dst` is an existed file. See HIVE-13705 and HDFS-10385 for more details.
 
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
