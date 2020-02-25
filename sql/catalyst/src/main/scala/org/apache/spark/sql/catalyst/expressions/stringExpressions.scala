@@ -719,8 +719,6 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
-
     _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
@@ -750,8 +748,6 @@ object StringTrim {
        SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SL');
-       parkSQ
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
@@ -767,7 +763,7 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -846,8 +842,6 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-
-    _FUNC_(str, trimStr) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,8 +852,6 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SparkSQLS', 'Sp');
-       arkSQLS
   """,
   since = "1.5.0")
 case class StringTrimLeft(
@@ -867,7 +859,7 @@ case class StringTrimLeft(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -948,8 +940,6 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-
-    _FUNC_(str, trimStr) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,8 +950,6 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SQLS');
-       SSpark
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
@@ -970,7 +958,7 @@ case class StringTrimRight(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 

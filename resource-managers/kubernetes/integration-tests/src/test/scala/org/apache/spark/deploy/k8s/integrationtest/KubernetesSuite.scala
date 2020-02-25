@@ -42,7 +42,9 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
+  with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging with Eventually
+  with Matchers {
+
 
   import KubernetesSuite._
 
@@ -254,6 +256,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
+  // scalastyle:off argcount
   protected def runSparkApplicationAndVerifyCompletion(
       appResource: String,
       mainClass: String,
@@ -264,11 +267,78 @@ class KubernetesSuite extends SparkFunSuite
       appLocator: String,
       isJVM: Boolean,
       pyFiles: Option[String] = None,
-      executorPatience: Option[(Option[Interval], Option[Timeout])] = None): Unit = {
+      executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
+      decommissioningTest: Boolean = false): Unit = {
+
+  // scalastyle:on argcount
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
       appArgs = appArgs)
+
+    val execPods = scala.collection.mutable.Map[String, Pod]()
+    val (patienceInterval, patienceTimeout) = {
+      executorPatience match {
+        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
+        case _ => (INTERVAL, TIMEOUT)
+      }
+    }
+    def checkPodReady(namespace: String, name: String) = {
+      val execPod = kubernetesTestComponents.kubernetesClient
+        .pods()
+        .inNamespace(namespace)
+        .withName(name)
+        .get()
+      val resourceStatus = execPod.getStatus
+      val conditions = resourceStatus.getConditions().asScala
+      val conditionTypes = conditions.map(_.getType())
+      val readyConditions = conditions.filter{cond => cond.getType() == "Ready"}
+      val result = readyConditions
+        .map(cond => cond.getStatus() == "True")
+        .headOption.getOrElse(false)
+      result
+    }
+    val execWatcher = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "executor")
+      .watch(new Watcher[Pod] {
+        logDebug("Beginning watch of executors")
+        override def onClose(cause: KubernetesClientException): Unit =
+          logInfo("Ending watch of executors")
+        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          val name = resource.getMetadata.getName
+          val namespace = resource.getMetadata().getNamespace()
+          action match {
+            case Action.MODIFIED =>
+              execPods(name) = resource
+            case Action.ADDED =>
+              logDebug(s"Add event received for $name.")
+              execPods(name) = resource
+              // If testing decommissioning start a thread to simulate
+              // decommissioning.
+              if (decommissioningTest && execPods.size == 1) {
+                // Wait for all the containers in the pod to be running
+                logDebug("Waiting for first pod to become OK prior to deletion")
+                Eventually.eventually(patienceTimeout, patienceInterval) {
+                  val result = checkPodReady(namespace, name)
+                  result shouldBe (true)
+                }
+                // Sleep a small interval to allow execution of job
+                logDebug("Sleeping before killing pod.")
+                Thread.sleep(2000)
+                // Delete the pod to simulate cluster scale down/migration.
+                val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
+                pod.delete()
+                logDebug(s"Triggered pod decom/delete: $name deleted")
+              }
+            case Action.DELETED | Action.ERROR =>
+              execPods.remove(name)
+          }
+        }
+      })
+
+    logDebug("Starting Spark K8s job")
     SparkAppLauncher.launch(
       appArguments,
       sparkAppConf,
@@ -284,40 +354,33 @@ class KubernetesSuite extends SparkFunSuite
       .list()
       .getItems
       .get(0)
+
     driverPodChecker(driverPod)
-    val execPods = scala.collection.mutable.Map[String, Pod]()
-    val execWatcher = kubernetesTestComponents.kubernetesClient
-      .pods()
-      .withLabel("spark-app-locator", appLocator)
-      .withLabel("spark-role", "executor")
-      .watch(new Watcher[Pod] {
-        logInfo("Beginning watch of executors")
-        override def onClose(cause: KubernetesClientException): Unit =
-          logInfo("Ending watch of executors")
-        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
-          val name = resource.getMetadata.getName
-          action match {
-            case Action.ADDED | Action.MODIFIED =>
-              execPods(name) = resource
-            case Action.DELETED | Action.ERROR =>
-              execPods.remove(name)
-          }
-        }
-      })
-
-    val (patienceInterval, patienceTimeout) = {
-      executorPatience match {
-        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
-        case _ => (INTERVAL, TIMEOUT)
-      }
-    }
-
+    // If we're testing decommissioning we delete all the executors, but we should have
+    // an executor at some point.
     Eventually.eventually(patienceTimeout, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
+    // If decommissioning we need to wait and check the executors were removed
+    if (decommissioningTest) {
+      // Sleep a small interval to ensure everything is registered.
+      Thread.sleep(100)
+      // Wait for the executors to become ready
+      Eventually.eventually(patienceTimeout, patienceInterval) {
+        val anyReadyPods = ! execPods.map{
+          case (name, resource) =>
+            (name, resource.getMetadata().getNamespace())
+        }.filter{
+          case (name, namespace) => checkPodReady(namespace, name)
+        }.isEmpty
+        val podsEmpty = execPods.values.isEmpty
+        val podsReadyOrDead = anyReadyPods || podsEmpty
+        podsReadyOrDead shouldBe (true)
+      }
+    }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
-    Eventually.eventually(TIMEOUT, patienceInterval) {
+    Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
@@ -425,5 +488,5 @@ private[spark] object KubernetesSuite {
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
-  val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
+  val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }

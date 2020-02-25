@@ -129,7 +129,9 @@ object NestedColumnAliasing {
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, ColumnPruning rule uses `attr` already.
         if (nestedFieldToAlias.nonEmpty &&
-            nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+            nestedFieldToAlias
+              .map { case (nestedField, _) => totalFieldNum(nestedField.dataType) }
+              .sum < totalFieldNum(attr.dataType)) {
           Some(attr.exprId -> nestedFieldToAlias)
         } else {
           None

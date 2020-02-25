@@ -34,6 +34,8 @@ import java.util.Map;
  * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in the
  * table schema when updating, renaming, or dropping existing columns when catalyst analysis is case
  * insensitive.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface TableCatalog extends CatalogPlugin {

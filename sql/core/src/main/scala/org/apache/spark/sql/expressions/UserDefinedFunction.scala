@@ -90,7 +90,7 @@ sealed abstract class UserDefinedFunction {
   def asNondeterministic(): UserDefinedFunction
 }
 
-private[sql] case class SparkUserDefinedFunction(
+private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
     inputSchemas: Seq[Option[ScalaReflection.Schema]],

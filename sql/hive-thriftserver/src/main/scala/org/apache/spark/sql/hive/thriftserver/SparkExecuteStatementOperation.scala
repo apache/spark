@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
@@ -178,7 +179,14 @@ private[hive] class SparkExecuteStatementOperation(
           }
           curCol += 1
         }
-        resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
+        // Convert date-time instances to types that are acceptable by Hive libs
+        // used in conversions to strings.
+        val resultRow = row.map {
+          case i: Instant => Timestamp.from(i)
+          case ld: LocalDate => Date.valueOf(ld)
+          case other => other
+        }.toArray.asInstanceOf[Array[Object]]
+        resultRowSet.addRow(resultRow)
         curRow += 1
         resultOffset += 1
       }
@@ -295,7 +303,7 @@ private[hive] class SparkExecuteStatementOperation(
           resultList.get.iterator
         }
       }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+      dataTypes = result.schema.fields.map(_.dataType)
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.

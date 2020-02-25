@@ -256,7 +256,7 @@ class RandomForestClassificationModel private[ml] (
     // Classifies using majority votes.
     // Ignore the tree weights since all are 1.0 for now.
     val votes = Array.ofDim[Double](numClasses)
-    _trees.view.foreach { tree =>
+    _trees.foreach { tree =>
       val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
       val total = classCounts.sum
       if (total != 0) {

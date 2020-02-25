@@ -31,6 +31,8 @@ import org.apache.spark.annotation.Evolving;
  * {@link PartitionReaderFactory#createColumnarReader(InputPartition)} on executors to do
  * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
  * doesn't need to be.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface InputPartition extends Serializable {

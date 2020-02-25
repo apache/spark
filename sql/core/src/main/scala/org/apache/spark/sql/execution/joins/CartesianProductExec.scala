@@ -73,7 +73,7 @@ case class CartesianProductExec(
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Join condition: ${joinCondStr}
+       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
      """.stripMargin
   }
 

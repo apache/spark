@@ -25,6 +25,8 @@ import org.apache.spark.sql.sources.Filter;
  * <p>
  * Overwriting data by filter will delete any data that matches the filter and replace it with data
  * that is committed in the write.
+ *
+ * @since 3.0.0
  */
 public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
   /**

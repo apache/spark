@@ -189,8 +189,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           example.split("  > ").toList.foreach(_ match {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(
-                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val actual = unindentAndTrim(hiveResultString(df).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>
@@ -3393,6 +3392,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").collect()
       )
     }
+  }
+
+  test("SPARK-30870: Column pruning shouldn't alias a nested column if it means the whole " +
+    "structure") {
+    val df = sql(
+      """
+        |SELECT explodedvalue.field
+        |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df, Row(Row(1, 2)) :: Nil)
   }
 }
 
