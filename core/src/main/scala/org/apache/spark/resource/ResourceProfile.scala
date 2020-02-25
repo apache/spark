@@ -172,13 +172,6 @@ class ResourceProfile(
           "no corresponding task resource request was specified.")
       }
     }
-    if(!shouldCheckExecCores) {
-      // if we can't rely on the executor cores config throw a warning for user
-      logWarning("Please ensure that the number of slots available on your " +
-        "executors is limited by the number of cores to task cpus and not another " +
-        "custom resource. If cores is not the limiting resource then dynamic " +
-        "allocation will not work properly!")
-    }
     if (taskResourcesToCheck.nonEmpty) {
       throw new SparkException("No executor resource configs were not specified for the " +
         s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
