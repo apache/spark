@@ -2597,22 +2597,25 @@ Spark subsystems.
 ### Deploy
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
     <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
     This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.zookeeper.url</code></td>
     <td>None</td>
     <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.zookeeper.dir</code></td>
     <td>None</td>
     <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 
