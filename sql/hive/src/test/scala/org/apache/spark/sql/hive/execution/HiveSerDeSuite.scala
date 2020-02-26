@@ -82,6 +82,11 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }.head
   }
 
+  // Some tests are failed in Jenkins presumably due to the similar reason described
+  // in SPARK-30798.
+  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
+    SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
+
   test("Test the default fileformat for Hive-serde tables") {
     withSQLConf("hive.default.fileformat" -> "orc",
       SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
