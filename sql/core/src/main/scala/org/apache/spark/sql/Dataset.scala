@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1432,7 +1433,14 @@ class Dataset[T] private[sql](
   def select(cols: Column*): DataFrame = withPlan {
     val untypedCols = cols.map {
       case typedCol: TypedColumn[_, _] =>
-        if (!typedCol.needInputType) {
+        // Checks if a `TypedColumn` has been inserted with
+        // specific input type and schema by `withInputType`.
+        val needInputType = typedCol.expr.find {
+          case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
+          case _ => false
+        }.isDefined
+
+        if (!needInputType) {
           typedCol
         } else {
           throw new AnalysisException(s"Typed column $typedCol that needs input type and schema " +

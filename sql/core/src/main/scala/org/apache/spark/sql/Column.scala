@@ -98,17 +98,6 @@ class TypedColumn[-T, U](
   }
 
   /**
-   * This method is used internally in SparkSQL to check if a `TypedColumn` has been inserted with
-   * specific input type and schema by `withInputType`.
-   */
-  private[sql] def needInputType: Boolean = {
-    expr.find {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
-      case _ => false
-    }.isDefined
-  }
-
-  /**
    * Gives the [[TypedColumn]] a name (alias).
    * If the current `TypedColumn` has metadata associated with it, this metadata will be propagated
    * to the new column.
