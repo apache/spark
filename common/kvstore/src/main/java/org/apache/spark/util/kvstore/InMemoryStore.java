@@ -226,7 +226,8 @@ public class InMemoryStore implements KVStore {
       if (!naturalParentIndexName.isEmpty() && naturalParentIndexName.equals(index)) {
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
-          NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+          NaturalKeys children =
+            parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
           int count = 0;
           for (Object key : children.keySet()) {
             data.remove(asKey(key));
@@ -253,7 +254,8 @@ public class InMemoryStore implements KVStore {
       data.put(asKey(naturalKey.get(value)), value);
       if (!naturalParentIndexName.isEmpty()) {
         Comparable<Object> parentKey = asKey(getIndexAccessor(naturalParentIndexName).get(value));
-        NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+        NaturalKeys children =
+          parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
         children.put(asKey(naturalKey.get(value)), true);
       }
     }
@@ -366,7 +368,8 @@ public class InMemoryStore implements KVStore {
         Comparable<Object> parentKey = asKey(parent);
         if (!naturalParentIndexName.isEmpty() &&
           naturalParentIndexName.equals(ti.getParentIndexName(index))) {
-          NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+          NaturalKeys children =
+            parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.computeIfPresent(naturalKey, (k, v) -> {
