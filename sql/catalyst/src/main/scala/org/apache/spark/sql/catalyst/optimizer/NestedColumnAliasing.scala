@@ -104,6 +104,9 @@ object NestedColumnAliasing {
   /**
    * Return two maps in order to replace nested fields to aliases.
    *
+   * If `exclusiveAttrs` is given, any nested field accessors of these attributes
+   * won't be considered in nested fields aliasing.
+   *
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
