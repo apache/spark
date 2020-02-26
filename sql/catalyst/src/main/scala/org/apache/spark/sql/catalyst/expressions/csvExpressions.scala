@@ -64,11 +64,11 @@ case class CsvToStructs(
   // of the user-provided schema to avoid data corruptions.
   val nullableSchema: StructType = schema.asNullable
 
+  // Used in `FunctionRegistry`
   def this(schema: StructType, options: Map[String, String], child: Expression,
-           timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
+      timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
     SQLConf.get.columnNameOfCorruptRecord)
 
-  // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
@@ -140,17 +140,12 @@ case class CsvToStructs(
 }
 
 object CsvToStructs {
-  def apply(
-      schema: StructType,
-      options: Map[String, String],
-      child: Expression,
+  def apply(schema: StructType, options: Map[String, String], child: Expression,
       timeZoneId: Option[String]): CsvToStructs =
     new CsvToStructs(schema, options, child, timeZoneId)
 
-  def apply(
-      schema: StructType,
-      options: Map[String, String],
-      child: Expression): CsvToStructs = new CsvToStructs(schema, options, child, None)
+  def apply(schema: StructType, options: Map[String, String], child: Expression): CsvToStructs =
+    new CsvToStructs(schema, options, child, None)
 }
 
 /**
