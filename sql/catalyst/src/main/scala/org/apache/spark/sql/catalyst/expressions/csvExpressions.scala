@@ -141,17 +141,16 @@ case class CsvToStructs(
 
 object CsvToStructs {
   def apply(
-             schema: StructType,
-             options: Map[String, String],
-             child: Expression,
-             timeZoneId: Option[String]): CsvToStructs =
+      schema: StructType,
+      options: Map[String, String],
+      child: Expression,
+      timeZoneId: Option[String]): CsvToStructs =
     new CsvToStructs(schema, options, child, timeZoneId)
 
   def apply(
-             schema: StructType,
-             options: Map[String, String],
-             child: Expression): CsvToStructs =
-    new CsvToStructs(schema, options, child, None)
+      schema: StructType,
+      options: Map[String, String],
+      child: Expression): CsvToStructs = new CsvToStructs(schema, options, child, None)
 }
 
 /**
