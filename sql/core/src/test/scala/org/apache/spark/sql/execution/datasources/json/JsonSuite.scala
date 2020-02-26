@@ -123,7 +123,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
-    checkTypePromotion(DateTimeUtils.millisToDays(32400000),
+    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L),
       enforceCorrectType(ISO8601Date, DateType))
   }
 
