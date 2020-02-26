@@ -162,6 +162,8 @@ public class InMemoryStore implements KVStore {
     }
   }
 
+  private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
+
   private static class InstanceList<T> {
 
     /**
@@ -206,8 +208,7 @@ public class InMemoryStore implements KVStore {
     private final ConcurrentMap<Comparable<Object>, T> data;
     private final String naturalParentIndexName;
     // A mapping from parent to the natural keys of its children.
-    private final ConcurrentMap<Comparable<Object>, ConcurrentMap<Comparable<Object>, Boolean>>
-      parentToChildrenMap;
+    private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
 
     private InstanceList(Class<?> klass) {
       this.ti = new KVTypeInfo(klass);
@@ -225,8 +226,7 @@ public class InMemoryStore implements KVStore {
       if (!naturalParentIndexName.isEmpty() && naturalParentIndexName.equals(index)) {
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
-          ConcurrentMap<Comparable<Object>, Boolean> children =
-            parentToChildrenMap.computeIfAbsent(parentKey, k -> new ConcurrentHashMap<>());
+          NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
           int count = 0;
           for (Object key : children.keySet()) {
             data.remove(asKey(key));
@@ -253,8 +253,7 @@ public class InMemoryStore implements KVStore {
       data.put(asKey(naturalKey.get(value)), value);
       if (!naturalParentIndexName.isEmpty()) {
         Comparable<Object> parentKey = asKey(getIndexAccessor(naturalParentIndexName).get(value));
-        ConcurrentMap<Comparable<Object>, Boolean> children =
-          parentToChildrenMap.computeIfAbsent(parentKey, k -> new ConcurrentHashMap<>());
+        NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
         children.put(asKey(naturalKey.get(value)), true);
       }
     }
@@ -262,7 +261,7 @@ public class InMemoryStore implements KVStore {
     public void delete(Object key) {
       data.remove(asKey(key));
       if (!naturalParentIndexName.isEmpty()) {
-        for (ConcurrentMap<Comparable<Object>, Boolean> v : parentToChildrenMap.values()) {
+        for (NaturalKeys v : parentToChildrenMap.values()) {
           if (v.remove(asKey(key))) {
             break;
           }
@@ -310,16 +309,14 @@ public class InMemoryStore implements KVStore {
     private final ConcurrentMap<Comparable<Object>, T> data;
     private final KVTypeInfo ti;
     private final KVTypeInfo.Accessor natural;
-    private final ConcurrentMap<Comparable<Object>, ConcurrentMap<Comparable<Object>, Boolean>>
-      parentToChildrenMap;
+    private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
     private final String naturalParentIndexName;
 
     InMemoryView(
       ConcurrentMap<Comparable<Object>, T> data,
       KVTypeInfo ti,
       String naturalParentIndexName,
-      ConcurrentMap<Comparable<Object>, ConcurrentMap<Comparable<Object>, Boolean>>
-              parentToChildrenMap) {
+      ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap) {
       this.data = data;
       this.ti = ti;
       this.natural = ti != null ? ti.getAccessor(KVIndex.NATURAL_INDEX_NAME) : null;
@@ -369,8 +366,7 @@ public class InMemoryStore implements KVStore {
         Comparable<Object> parentKey = asKey(parent);
         if (!naturalParentIndexName.isEmpty() &&
           naturalParentIndexName.equals(ti.getParentIndexName(index))) {
-          ConcurrentMap<Comparable<Object>, Boolean> children =
-            parentToChildrenMap.computeIfAbsent(parentKey, k -> new ConcurrentHashMap<>());
+          NaturalKeys children = parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.computeIfPresent(naturalKey, (k, v) -> {
