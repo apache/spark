@@ -17,13 +17,17 @@
 
 package org.apache.spark.status
 
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.{Millis, Span}
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
-class AppStatusStoreSuite extends SparkFunSuite {
+class AppStatusStoreSuite extends SparkFunSuite with TimeLimits {
 
   private val uiQuantiles = Array(0.0, 0.25, 0.5, 0.75, 1.0)
   private val stageId = 1
@@ -76,6 +80,26 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
 
     assert(store.count(classOf[CachedQuantile]) === 2)
+  }
+
+  test("InMemoryStore should build index from Stage ID to Task data") {
+    val store = new InMemoryStore()
+    (0 until 1000).map { sId =>
+       (0 until 1000).map { taskId =>
+         val task = newTaskData(sId * 1000 + taskId, "SUCCESS", sId)
+         store.write(task)
+       }
+    }
+    val appStatusStore = new AppStatusStore(store)
+    failAfter(Span(200, Millis)) {
+      appStatusStore.taskSummary(1, attemptId, Array(0, 0.25, 0.5, 0.75, 1))
+    }
+    val stageIds = Seq(1, 11, 66, 88)
+    val stageKeys = stageIds.map(Array(_, attemptId))
+    failAfter(Span(10, Millis)) {
+      store.removeAllByIndexValues(classOf[TaskDataWrapper], TaskIndexNames.STAGE,
+       stageKeys.asJavaCollection)
+    }
   }
 
   private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
@@ -152,12 +176,13 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
+  private def newTaskData(i: Int, status: String = "SUCCESS",
+                          sId: Int = stageId): TaskDataWrapper = {
     new TaskDataWrapper(
       i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None, true,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
-      i, i, i, i, stageId, attemptId)
+      i, i, i, i, sId, attemptId)
   }
 
   private def writeTaskDataToStore(i: Int, store: KVStore, status: String): Unit = {
