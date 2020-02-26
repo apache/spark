@@ -39,6 +39,7 @@ NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
 function exit_with_usage {
+  set +x
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
