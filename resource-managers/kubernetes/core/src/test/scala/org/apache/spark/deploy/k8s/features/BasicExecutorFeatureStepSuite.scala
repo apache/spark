@@ -226,7 +226,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
-    assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
+    assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450")
   }
 
   test("auth secret propagation") {

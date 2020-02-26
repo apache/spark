@@ -36,13 +36,13 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.mainAppResource match {
       case JavaMainAppResource(res) =>
-        configureForJava(pod, res.getOrElse(SparkLauncher.NO_RESOURCE))
+        configureForDriverPod(pod, res.getOrElse(SparkLauncher.NO_RESOURCE), javaEnvs)
 
       case PythonMainAppResource(res) =>
-        configureForPython(pod, res)
+        configureForDriverPod(pod, res, pythonEnvs)
 
       case RMainAppResource(res) =>
-        configureForR(pod, res)
+        configureForDriverPod(pod, res)
     }
   }
 
@@ -61,39 +61,30 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     Map(APP_RESOURCE_TYPE.key -> appType)
   }
 
-  private def configureForJava(pod: SparkPod, res: String): SparkPod = {
-    val javaEnvs = if (conf.get(IS_PYTHON_APP)) {
-      Seq(new EnvVarBuilder()
-        .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
-        .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
-        .build())
+  private def javaEnvs: Seq[EnvVar] = {
+    if (conf.get(IS_PYTHON_APP)) {
+      pythonEnvs
     } else {
-      Seq[EnvVar]()
+      Seq.empty[EnvVar]
     }
-
-    val driverContainer = baseDriverContainer(pod, res)
-      .addAllToEnv(javaEnvs.asJava)
-      .build()
-    SparkPod(pod.pod, driverContainer)
   }
 
-  private def configureForPython(pod: SparkPod, res: String): SparkPod = {
-    val pythonEnvs =
-      Seq(new EnvVarBuilder()
-          .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
-          .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
-        .build())
-
-    val pythonContainer = baseDriverContainer(pod, res)
-      .addAllToEnv(pythonEnvs.asJava)
-      .build()
-
-    SparkPod(pod.pod, pythonContainer)
+  private def pythonEnvs: Seq[EnvVar] = {
+    Seq(new EnvVarBuilder()
+      .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
+      .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
+      .build())
   }
 
-  private def configureForR(pod: SparkPod, res: String): SparkPod = {
-    val rContainer = baseDriverContainer(pod, res).build()
-    SparkPod(pod.pod, rContainer)
+  private def configureForDriverPod(
+      pod: SparkPod,
+      res: String,
+      envs: Seq[EnvVar] = Seq.empty[EnvVar]): SparkPod = {
+    val driverCntainer = baseDriverContainer(pod, res)
+      .addAllToEnv(envs.asJava)
+      .build()
+
+    SparkPod(pod.pod, driverCntainer)
   }
 
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
