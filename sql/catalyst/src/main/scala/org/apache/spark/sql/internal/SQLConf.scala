@@ -2200,6 +2200,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_USE_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.useHashOnMapType")
+    .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
+      "an analysis exception will be thrown.")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
