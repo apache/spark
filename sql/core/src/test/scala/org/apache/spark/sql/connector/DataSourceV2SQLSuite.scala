@@ -712,6 +712,7 @@ class DataSourceV2SQLSuite
     Seq(true, false).foreach { useV1Table =>
       val format = if (useV1Table) "json" else v2Format
       if (useV1Table) {
+        // unset this config to use the default v2 session catalog.
         spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
       } else {
         spark.conf.set(
@@ -726,7 +727,7 @@ class DataSourceV2SQLSuite
         checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
         checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
 
-        // catalog name cannot be used for v1 tables.
+        // catalog name cannot be used for tables in the session catalog.
         val ex = intercept[AnalysisException] {
           sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
         }
