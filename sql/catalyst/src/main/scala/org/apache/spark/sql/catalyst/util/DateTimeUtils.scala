@@ -50,12 +50,12 @@ object DateTimeUtils {
     TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
 
-  def microsToDays(timestamp: Long): Int = {
-    microsToDays(timestamp, ZoneId.systemDefault())
+  def microsToDays(micros: Long): Int = {
+    microsToDays(micros, ZoneId.systemDefault())
   }
 
-  def microsToDays(timestamp: Long, zoneId: ZoneId): Int = {
-    val instant = microsToInstant(timestamp)
+  def microsToDays(micros: Long, zoneId: ZoneId): Int = {
+    val instant = microsToInstant(micros)
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
@@ -83,8 +83,8 @@ object DateTimeUtils {
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
-  def toJavaDate(daysSinceEpoch: Int): Date = {
-    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+  def toJavaDate(days: Int): Date = {
+    new Date(microsToMillis(daysToMicros(days)))
   }
 
   /**
@@ -553,22 +553,22 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.
+   * Returns number of months between micros1 and micros2. micros1 and micros2 are expressed in
+   * microseconds since 1.1.1970. If micros1 is later than micros2, the result is positive.
    *
-   * If time1 and time2 are on the same day of month, or both are the last day of month,
+   * If micros1 and micros2 are on the same day of month, or both are the last day of month,
    * returns, time of day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month.
    * The result is rounded to 8 decimal places if `roundOff` is set to true.
    */
   def monthsBetween(
-      time1: Long,
-      time2: Long,
+      micros1: Long,
+      micros2: Long,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
-    val date1 = microsToDays(time1, zoneId)
-    val date2 = microsToDays(time2, zoneId)
+    val date1 = microsToDays(micros1, zoneId)
+    val date2 = microsToDays(micros2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -582,8 +582,8 @@ object DateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = MICROSECONDS.toSeconds(time1 - daysToMicros(date1, zoneId))
-    val secondsInDay2 = MICROSECONDS.toSeconds(time2 - daysToMicros(date2, zoneId))
+    val secondsInDay1 = MICROSECONDS.toSeconds(micros1 - daysToMicros(date1, zoneId))
+    val secondsInDay2 = MICROSECONDS.toSeconds(micros2 - daysToMicros(date2, zoneId))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
     val secondsInMonth = DAYS.toSeconds(31)
     val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
