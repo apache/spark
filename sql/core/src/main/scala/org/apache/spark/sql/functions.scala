@@ -2769,17 +2769,17 @@ object functions {
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
-   * format given by the second argument.
+   * format given by the second argument and time zone given by the third argument.
    *
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
    *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   * @param format A pattern `HH:mm:ss Z` would return a string like `22:34:56 +0200`
    * @param tz A string detailing the time zone that the input should be adjusted to, such as
-   *           `Europe/London`, `PST` or `GMT+5`
+   *           `Europe/Berlin`, `PST` or `GMT+5`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
-   * @note Use specialized functions like [[year]] whenever possible as they benefit from a
+   * @note Use specialized functions like [[hour]] whenever possible as they benefit from a
    * specialized implementation.
    * @throws IllegalArgumentException if the `format` pattern is invalid
    * @group datetime_funcs

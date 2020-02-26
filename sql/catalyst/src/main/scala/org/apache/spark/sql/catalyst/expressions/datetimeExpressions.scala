@@ -691,9 +691,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
       * timeZone - The time zone to format the timestamp for.
   """,
   examples = """
-    Examples:
-      > SELECT _FUNC_('2016-04-08', 'y', 'Europe/Berlin');
-       2016
+    Examples (with spark.sql.session.timeZone='America/Los_Angeles'):
+      > SELECT _FUNC_('2016-04-08 12:34:56', 'HH:mm:ss Z', 'Europe/Berlin');
+       21:34:56 +0200
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
