@@ -899,4 +899,5 @@ class AdaptiveQueryExecSuite
         checkPlanDescription(mode, expected)
     }
   }
+  
 }
