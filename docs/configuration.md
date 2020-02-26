@@ -2533,13 +2533,14 @@ Spark subsystems.
 ### SparkR
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.r.numRBackendThreads</code></td>
   <td>2</td>
   <td>
     Number of threads used by RBackend to handle RPC calls from SparkR package.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.r.command</code></td>
@@ -2547,6 +2548,7 @@ Spark subsystems.
   <td>
     Executable for executing R scripts in cluster modes for both driver and workers.
   </td>
+  <td>1.5.3</td>
 </tr>
 <tr>
   <td><code>spark.r.driver.command</code></td>
@@ -2554,6 +2556,7 @@ Spark subsystems.
   <td>
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.r.shell.command</code></td>
@@ -2562,6 +2565,7 @@ Spark subsystems.
     Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.r.backendConnectionTimeout</code></td>
@@ -2569,6 +2573,7 @@ Spark subsystems.
   <td>
     Connection timeout set by R process on its connection to RBackend in seconds.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.r.heartBeatInterval</code></td>
@@ -2576,6 +2581,7 @@ Spark subsystems.
   <td>
     Interval for heartbeats sent from SparkR backend to R process to prevent connection timeout.
   </td>
+  <td>2.1.0</td>
 </tr>
 
 </table>
