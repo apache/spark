@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{ convertSpecialTimestamp, SQLTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 
@@ -141,7 +141,7 @@ class LegacyFastTimestampFormatter(
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
   }
 
   def format(timestamp: SQLTimestamp): String = {
@@ -164,7 +164,7 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    sdf.parse(s).getTime * MICROS_PER_MILLIS
+    millisToMicros(sdf.parse(s).getTime)
   }
 
   override def format(us: Long): String = {

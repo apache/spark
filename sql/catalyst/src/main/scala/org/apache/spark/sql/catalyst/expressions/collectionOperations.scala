@@ -90,9 +90,10 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(NULL);
        NULL
   """)
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Size(child: Expression, legacySizeOfNull: Boolean)
+  extends UnaryExpression with ExpectsInputTypes {
 
-  val legacySizeOfNull = SQLConf.get.legacySizeOfNull
+  def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -122,6 +123,10 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       defineCodeGen(ctx, ev, c => s"($c).numElements()")
     }
   }
+}
+
+object Size {
+  def apply(child: Expression): Size = new Size(child)
 }
 
 /**
@@ -516,8 +521,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
   examples = """
     Examples:
-      > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       {1:"a",2:"c",3:"d"}
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(3, 'c'));
+       {1:"a",2:"b",3:"c"}
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 

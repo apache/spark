@@ -23,7 +23,8 @@ import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, localDateToDays}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 
 sealed trait DateFormatter extends Serializable {
@@ -57,8 +58,8 @@ trait LegacyDateFormatter extends DateFormatter {
   def formatDate(d: Date): String
 
   override def parse(s: String): Int = {
-    val milliseconds = parseToDate(s).getTime
-    DateTimeUtils.millisToDays(milliseconds)
+    val micros = DateTimeUtils.millisToMicros(parseToDate(s).getTime)
+    DateTimeUtils.microsToDays(micros)
   }
 
   override def format(days: Int): String = {

@@ -3310,6 +3310,34 @@ class Dataset[T] private[sql](
     files.toSet.toArray
   }
 
+  /**
+   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and
+   * therefore return same results.
+   *
+   * @note The equality comparison here is simplified by tolerating the cosmetic differences
+   *       such as attribute names.
+   * @note This API can compare both [[Dataset]]s very fast but can still return `false` on
+   *       the [[Dataset]] that return the same results, for instance, from different plans. Such
+   *       false negative semantic can be useful when caching as an example.
+   * @since 3.1.0
+   */
+  @DeveloperApi
+  def sameSemantics(other: Dataset[T]): Boolean = {
+    queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
+  }
+
+  /**
+   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
+   *
+   * @note Unlike the standard `hashCode`, the hash is calculated against the query plan
+   *       simplified by tolerating the cosmetic differences such as attribute names.
+   * @since 3.1.0
+   */
+  @DeveloperApi
+  def semanticHash(): Int = {
+    queryExecution.analyzed.semanticHash()
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////

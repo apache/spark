@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.DataType;
  *       deleteColumn("c")
  *     )
  * </pre>
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface TableChange {
