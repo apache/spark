@@ -205,7 +205,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(amountAndFormat(executor.container.getResources.getRequests.get("memory")) === "1450Mi")
   }
 
-  test("SPARK-30514: test executor pyspark memory " +
+  test("SPARK-30514: test executor pyspark.memory " +
       "with java resource and spark.kubernetes.isPython=true") {
     baseConf.set("spark.kubernetes.resource.type", "java")
     baseConf.set("spark.kubernetes.isPython", "true")
