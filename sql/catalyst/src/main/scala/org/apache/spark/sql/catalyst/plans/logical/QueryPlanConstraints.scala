@@ -143,10 +143,8 @@ trait ConstraintHelper {
         inferredConstraints ++= inferInequalityConstraints(lessThans - lt, r, l, lt)
       case _ => // No inference
     }
-    (inferredConstraints -- constraints -- greaterThans -- lessThans).foldLeft(Set[Expression]()) {
-      case (acc, e) if acc.exists(_.semanticEquals(e)) => acc.dropWhile(_.semanticEquals(e))
-      case (acc, e) => acc + e
-    }
+    (inferredConstraints -- constraints -- greaterThans -- lessThans)
+      .filterNot(i => constraints.exists(_.semanticEquals(i)))
   }
 
   private def replaceConstraints(
@@ -167,8 +165,8 @@ trait ConstraintHelper {
       binaryComparison.makeCopy(Array(destination, l))
     case gt @ GreaterThan(l, r) if l.semanticEquals(source) =>
       gt.makeCopy(Array(destination, r))
-    case gt @ LessThan(l, r) if l.semanticEquals(source) =>
-      gt.makeCopy(Array(destination, r))
+    case lt @ LessThan(l, r) if l.semanticEquals(source) =>
+      lt.makeCopy(Array(destination, r))
     case BinaryComparison(l, r) if l.semanticEquals(source) =>
       binaryComparison.makeCopy(Array(destination, r))
     case other => other
