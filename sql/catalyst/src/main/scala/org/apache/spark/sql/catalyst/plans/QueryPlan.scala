@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -189,9 +188,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     val codegenIdStr =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
     val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
-    s"""
-       |($operatorId) $nodeName $codegenIdStr
-     """.stripMargin
+    val baseStr = s"($operatorId) $nodeName $codegenIdStr"
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$baseStr
+         |Arguments: $argumentString
+      """.stripMargin
+    } else {
+      s"""
+         |$baseStr
+      """.stripMargin
+    }
   }
 
   /**

@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -431,28 +432,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold")
-      .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
-        "partition in adaptive skewed join.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("64MB")
-
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")
+    buildConf("spark.sql.adaptive.skewedJoinOptimization.skewedPartitionFactor")
       .doc("A partition is considered as a skewed partition if its size is larger than" +
         " this factor multiple the median partition size and also larger than " +
-        s" ${ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key}")
+        s" ${SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key}")
       .intConf
+      .checkValue(_ > 0, "The skew factor must be positive.")
       .createWithDefault(10)
-
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionMaxSplits")
-      .doc("Configures the maximum number of task to handle a skewed partition in adaptive skewed" +
-        "join.")
-      .intConf
-      .checkValue( _ >= 1, "The split size at least be 1")
-      .createWithDefault(5)
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -878,8 +865,8 @@ object SQLConf {
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
         "of detected paths exceeds this value during partition discovery, it tries to list the " +
-        "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
-        "LibSVM data sources.")
+        "files with another Spark distributed job. This configuration is effective only when " +
+        "using file-based sources such as Parquet, JSON and ORC.")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
@@ -2016,6 +2003,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_UNTYPED_SCALA_UDF =
+    buildConf("spark.sql.legacy.allowUntypedScalaUDF")
+      .internal()
+      .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
+        "udf(f: AnyRef, dataType: DataType). Otherwise, exception will be throw.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -2135,7 +2130,7 @@ object SQLConf {
         "if the default Maven Central repo is unreachable.")
       .stringConf
       .createWithDefault(
-        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+        "https://maven-central.storage-download.googleapis.com/maven2/")
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
@@ -2253,6 +2248,10 @@ object SQLConf {
    * The map contains info about removed SQL configs. Keys are SQL config names,
    * map values contain extra information like the version in which the config was removed,
    * config's default value and a comment.
+   *
+   * Please, add a removed SQL configuration property here only when it affects behaviours.
+   * For example, `spark.sql.variable.substitute.depth` was not added as it virtually
+   * became no-op later. By this, it makes migrations to new Spark versions painless.
    */
   val removedSQLConfigs: Map[String, RemovedConfig] = {
     val configs = Seq(
@@ -2263,8 +2262,6 @@ object SQLConf {
         "It was removed to prevent loosing of users data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
-      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
-        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
         "The config was deprecated since Spark 2.3." +
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
@@ -2874,10 +2871,10 @@ class SQLConf extends Serializable with Logging {
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
    * definition contains key, defaultValue and doc.
    */
-  def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
+  def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
-      (entry.key, displayValue, entry.doc)
+      (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
   }
 
@@ -2899,16 +2896,41 @@ class SQLConf extends Serializable with Logging {
     settings.containsKey(key)
   }
 
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach {
+      case RemovedConfig(configName, version, defaultValue, comment) =>
+        if (value != defaultValue) {
+          throw new AnalysisException(
+            s"The SQL config '$configName' was removed in the version $version. $comment")
+        }
+    }
+  }
+
   protected def setConfWithCheck(key: String, value: String): Unit = {
+    logDeprecationWarning(key)
+    requireDefaultValueOfRemovedConf(key, value)
     settings.put(key, value)
   }
 
   def unsetConf(key: String): Unit = {
+    logDeprecationWarning(key)
     settings.remove(key)
   }
 
   def unsetConf(entry: ConfigEntry[_]): Unit = {
-    settings.remove(entry.key)
+    unsetConf(entry.key)
   }
 
   def clear(): Unit = {

@@ -131,10 +131,12 @@ case class CurrentBatchTimestamp(
    */
   override protected def evalInternal(input: InternalRow): Any = toLiteral.value
 
-  def toLiteral: Literal = dataType match {
-    case _: TimestampType =>
-      Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
-    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs, zoneId), DateType)
+  def toLiteral: Literal = {
+    val timestampUs = millisToMicros(timestampMs)
+    dataType match {
+      case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
+    }
   }
 }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
@@ -79,7 +80,7 @@ abstract class Transformer extends PipelineStage {
  * result as a new column.
  */
 @DeveloperApi
-abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
+abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   /** @group setParam */
@@ -118,7 +119,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    val transformUDF = udf(this.createTransformFunc)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))),
       outputSchema($(outputCol)).metadata)
   }

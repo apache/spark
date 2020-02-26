@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -169,15 +168,8 @@ class LinearSVC @Since("2.2.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
-    val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
-      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
-        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
-      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
-                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = $(aggregationDepth)
-    )
+    val (summarizer, labelSummarizer) =
+      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth))
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)

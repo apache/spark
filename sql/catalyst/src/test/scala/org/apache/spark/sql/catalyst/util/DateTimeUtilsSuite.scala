@@ -90,7 +90,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-6785: java date conversion before and after epoch") {
     def format(d: Date): String = {
       TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
-        .format(d.getTime * MICROS_PER_MILLIS)
+        .format(millisToMicros(d.getTime))
     }
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
@@ -583,17 +583,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("daysToMillis and millisToDays") {
-    val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, zid = zonePST))
-    assert(millisToDays(input, zonePST) === 16800)
-    assert(millisToDays(input, ZoneOffset.UTC) === 16801)
-    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, ZoneOffset.UTC) == -1)
+  test("daysToMicros and microsToDays") {
+    val input = date(2015, 12, 31, 16, zid = zonePST)
+    assert(microsToDays(input, zonePST) === 16800)
+    assert(microsToDays(input, ZoneOffset.UTC) === 16801)
+    assert(microsToDays(-1 * MILLIS_PER_DAY + 1, ZoneOffset.UTC) == -1)
 
-    var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, zid = zonePST))
-    assert(daysToMillis(16800, zonePST) === expected)
+    var expected = date(2015, 12, 31, zid = zonePST)
+    assert(daysToMicros(16800, zonePST) === expected)
 
-    expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, zid = zoneGMT))
-    assert(daysToMillis(16800, ZoneOffset.UTC) === expected)
+    expected = date(2015, 12, 31, zid = zoneGMT)
+    assert(daysToMicros(16800, ZoneOffset.UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
@@ -608,16 +608,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
         if (!skipped.contains(d)) {
-          assert(millisToDays(daysToMillis(d, tz.toZoneId), tz.toZoneId) === d,
+          assert(microsToDays(daysToMicros(d, tz.toZoneId), tz.toZoneId) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }
       }
     }
   }
 
-  test("toMillis") {
-    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
-    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
+  test("microsToMillis") {
+    assert(DateTimeUtils.microsToMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
 
   test("special timestamp values") {

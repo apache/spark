@@ -21,6 +21,8 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+
 /**
  * Helper functions for testing date and time functionality.
  */
@@ -94,5 +96,12 @@ object DateTimeTestUtils {
     val localTime = LocalTime.of(hour, minute, sec, nanos)
     val localDateTime = LocalDateTime.of(localDate, localTime)
     localDateTimeToMicros(localDateTime, zid)
+  }
+
+  def secFrac(seconds: Int, milliseconds: Int, microseconds: Int): Long = {
+    var result: Long = microseconds
+    result = Math.addExact(result, Math.multiplyExact(milliseconds, MICROS_PER_MILLIS))
+    result = Math.addExact(result, Math.multiplyExact(seconds, MICROS_PER_SECOND))
+    result
   }
 }

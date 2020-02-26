@@ -3394,6 +3394,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-30870: Column pruning shouldn't alias a nested column if it means the whole " +
+    "structure") {
+    val df = sql(
+      """
+        |SELECT explodedvalue.field
+        |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df, Row(Row(1, 2)) :: Nil)
+  }
+
   test("SPARK-30872: Constraints inferred from inferred attributes") {
     withTable("t1") {
       spark.range(20).selectExpr("id as a", "id as b", "id as c").write.saveAsTable("t1")

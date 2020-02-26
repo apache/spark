@@ -35,6 +35,8 @@ import java.util.Map;
  * and uses Java packages as namespaces is not required to support the methods to create, alter, or
  * drop a namespace. Implementations are allowed to discover the existence of objects or namespaces
  * without throwing {@link NoSuchNamespaceException} when no namespace is found.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface SupportsNamespaces extends CatalogPlugin {

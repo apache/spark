@@ -96,6 +96,23 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("StringIndexer.transformSchema)") {
+    val idxToStr = new StringIndexer().setInputCol("input").setOutputCol("output")
+    val inSchema = StructType(Seq(StructField("input", StringType)))
+    val outSchema = idxToStr.transformSchema(inSchema)
+    assert(outSchema("output").dataType === DoubleType)
+  }
+
+  test("StringIndexer.transformSchema multi col") {
+    val idxToStr = new StringIndexer().setInputCols(Array("input", "input2")).
+      setOutputCols(Array("output", "output2"))
+    val inSchema = StructType(Seq(StructField("input", StringType),
+      StructField("input2", StringType)))
+    val outSchema = idxToStr.transformSchema(inSchema)
+    assert(outSchema("output").dataType === DoubleType)
+    assert(outSchema("output2").dataType === DoubleType)
+  }
+
   test("StringIndexerUnseen") {
     val data = Seq((0, "a"), (1, "b"), (4, "b"))
     val data2 = Seq((0, "a"), (1, "b"), (2, "c"), (3, "d"))
