@@ -20,26 +20,26 @@ package org.apache.spark.sql.catalyst.util
 import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
-import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
+import java.time.temporal.{ChronoField, TemporalAccessor}
+import java.time.temporal.ChronoField.{DAY_OF_MONTH, ERA, MONTH_OF_YEAR, YEAR, YEAR_OF_ERA}
 import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
-
 trait DateTimeFormatterHelper {
-  // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
-  // if they does not exist in the parsed object.
-  protected def toZonedDateTime(
-      temporalAccessor: TemporalAccessor,
-      zoneId: ZoneId): ZonedDateTime = {
-    // Parsed input might not have time related part. In that case, time component is set to zeros.
-    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-    // Parsed input must have date component. At least, year must present in temporalAccessor.
-    val localDate = temporalAccessor.query(TemporalQueries.localDate)
+  import DateTimeFormatterHelper._
 
-    ZonedDateTime.of(localDate, localTime, zoneId)
+  protected def getLocalDate(str: String, parsed: TemporalAccessor): LocalDate = {
+    val year = if (parsed.isSupported(YEAR)) {
+      parsed.get(YEAR)
+    } else if (parsed.isSupported(YEAR_OF_ERA) && !parsed.isSupported(ERA)) {
+      // This can happen when the year pattern is "yyyy" without "G" to specify era. We assume the
+      // era is AC, and just treat YEAR_OF_ERA as YEAR.
+      parsed.get(YEAR_OF_ERA)
+    } else {
+      throw new DateTimeException("Cannot obtain year from timestamp string " + str)
+    }
+    LocalDate.of(year, parsed.get(MONTH_OF_YEAR), parsed.get(DAY_OF_MONTH))
   }
 
   // Gets a formatter from the cache or creates new one. The buildFormatter method can be called
@@ -81,14 +81,7 @@ private object DateTimeFormatterHelper {
 
   def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val builder = createBuilder().appendPattern(pattern)
-    if (pattern.contains("y")) {
-      // "y" is a commonly used pattern for year, and it's annoying to force users to specify the
-      // era.
-      toFormatter(builder.parseDefaulting(ChronoField.ERA, 1), locale)
-    } else {
-      // By default we use "uuuu" as the year pattern, and we can't set a default era.
-      toFormatter(builder, locale)
-    }
+    toFormatter(builder, locale)
   }
 
   lazy val fractionFormatter: DateTimeFormatter = {

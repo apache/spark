@@ -119,8 +119,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     val formatter1 = DateFormatter("uuuu-MM-dd", ZoneOffset.UTC)
     assert(formatter1.parse("-0123-02-22") === localDateToDays(LocalDate.of(-123, 2, 22)))
 
-    // "yyyy" can't parse negative year
+    // "yyyy" can't parse negative year or year 0000.
     val formatter2 = DateFormatter("yyyy-MM-dd", ZoneOffset.UTC)
     intercept[DateTimeException](formatter2.parse("-0123-02-22"))
+    intercept[DateTimeException](formatter2.parse("0000-02-22"))
   }
 }

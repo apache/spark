@@ -239,8 +239,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     assert(formatter1.parse("-0123-02-22 02:22:22") === instantToMicros(
       LocalDateTime.of(-123, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
 
-    // "yyyy" can't parse negative year
+    // "yyyy" can't parse negative year or year 0000.
     val formatter2 = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
     intercept[DateTimeException](formatter2.parse("-0123-02-22 02:22:22"))
+    intercept[DateTimeException](formatter2.parse("0000-02-22 02:22:22"))
   }
 }
