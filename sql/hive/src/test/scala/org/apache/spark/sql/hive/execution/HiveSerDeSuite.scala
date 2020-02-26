@@ -82,8 +82,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }.head
   }
 
-  // Some tests are failed in Jenkins presumably due to the similar reason described
-  // in SPARK-30798.
+  // Make sure we set the config values to TestHive.conf.
   override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
     SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
 
