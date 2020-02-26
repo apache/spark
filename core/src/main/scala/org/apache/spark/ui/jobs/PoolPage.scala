@@ -39,12 +39,14 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       throw new IllegalArgumentException(s"Unknown pool: $poolName")
     }
 
+    val metrics = StagePagedTable.selectedMetrics(request)
+
     val uiPool = parent.store.asOption(parent.store.pool(poolName)).getOrElse(
       new PoolData(poolName, Set()))
     val activeStages = uiPool.stageIds.toSeq.map(parent.store.lastStageAttempt(_))
     val activeStagesTable =
       new StageTableBase(parent.store, request, activeStages, "", "activeStage", parent.basePath,
-        "stages/pool", parent.isFairScheduler, parent.killEnabled, false)
+        "stages/pool", metrics, parent.isFairScheduler, parent.killEnabled, false)
 
     val poolTable = new PoolTable(Map(pool -> uiPool), parent)
     var content = <h4>Summary </h4> ++ poolTable.toNodeSeq(request)
@@ -58,6 +60,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
             <a>Active Stages ({activeStages.size})</a>
           </h4>
         </span> ++
+        StagePagedTable.additionalMetrics(metrics, request) ++
         <div class="aggregated-poolActiveStages collapsible-table">
           {activeStagesTable.toNodeSeq}
         </div>

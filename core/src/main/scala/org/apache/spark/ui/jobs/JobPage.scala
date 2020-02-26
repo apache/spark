@@ -274,6 +274,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         activeStages += stage
       }
     }
+    val metrics = StagePagedTable.selectedMetrics(request)
 
     val basePath = "jobs/job"
 
@@ -286,19 +287,19 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val activeStagesTable =
       new StageTableBase(store, request, activeStages, "active", "activeStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+        basePath, metrics, parent.isFairScheduler,
         killEnabled = parent.killEnabled, isFailedStage = false)
     val pendingOrSkippedStagesTable =
       new StageTableBase(store, request, pendingOrSkippedStages, pendingOrSkippedTableId,
-        "pendingStage", parent.basePath, basePath, parent.isFairScheduler,
+        "pendingStage", parent.basePath, basePath, metrics, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val completedStagesTable =
       new StageTableBase(store, request, completedStages, "completed", "completedStage",
-        parent.basePath, basePath, parent.isFairScheduler,
+        parent.basePath, basePath, metrics, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val failedStagesTable =
       new StageTableBase(store, request, failedStages, "failed", "failedStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+        basePath, metrics, parent.isFairScheduler,
         killEnabled = false, isFailedStage = true)
 
     val shouldShowActiveStages = activeStages.nonEmpty
@@ -377,7 +378,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         </ul>
       </div>
 
-    var content = summary
+    var content = summary ++ StagePagedTable.additionalMetrics(metrics, request)
     val appStartTime = store.applicationInfo().attempts.head.startTime.getTime()
 
     content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,

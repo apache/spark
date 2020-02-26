@@ -36,18 +36,6 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val subPath = "stages"
 
-  private val optionalMetrics = ListSet(
-    "Input", "Output",
-    "Shuffle Read", "Shuffle Write",
-    "Peak Execution Memory",
-    "Spill (Memory)", "Spill (Disk)",
-    "GC Time"
-  )
-  private val defaultMetrics = ListSet(
-    "Input", "Output",
-    "Shuffle Read", "Shuffle Write"
-  )
-
   def render(request: HttpServletRequest): Seq[Node] = {
     // For now, pool information is only accessible in live UIs
     val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
@@ -63,17 +51,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val allStages = parent.store.stageList(null)
     val appSummary = parent.store.appSummary()
 
-    val parameterMetrics = optionalMetrics.map(m => m -> request.getParameter(s"metric.$m"))
-    val metrics = parameterMetrics.filter(m => Option(m._2).isDefined).toSeq match {
-      case Seq() => defaultMetrics
-      case seq => seq.filter(_._2.equalsIgnoreCase("true")).toMap.keySet
-    }
-
-    val parameterExceptMetrics = request.getParameterMap().asScala
-      .filterNot(_._1.startsWith("metric."))
-      .map(para => para._1 + "=" + para._2(0))
-    val parameterPath = UIUtils.prependBaseUri(request, parent.basePath) + s"/$subPath/?" +
-      parameterExceptMetrics.mkString("&")
+    val metrics = StagePagedTable.selectedMetrics(request)
 
     val (summaries, tables) = allStatuses.map(
       summaryAndTableForStatus(allStages, metrics, appSummary, _, request)).unzip
@@ -100,49 +78,17 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         Seq.empty[Node]
       }
 
-    val content = summary ++ additionalMetrics(metrics, parameterPath) ++
+    val content = summary ++
+      StagePagedTable.additionalMetrics(metrics, request) ++
       poolsDescription ++
-      <div id="parent-container">
-        <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
-        <script src={UIUtils.prependBaseUri(request, "/static/allstagespage.js")}></script>
-      </div> ++
       tables.flatten.flatten
 
     UIUtils.headerSparkPage(request, "Stages for All Jobs", content, parent)
   }
 
-  private def additionalMetrics(shownMetrics: Set[String], parameterPath: String): Seq[Node] = {
-        <div><a id='additionalMetrics'>
-        <span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>
-         Show Additional Metrics
-        </a></div>
-        <div class='container-fluid container-fluid-div' id='toggle-metrics' hidden="true">
-        <div id='select_all' class='select-all-checkbox-div'>
-          <input type='checkbox' class='toggle-vis'> Select All</input>
-        </div>
-        {optionalMetrics.map{metric =>
-          val checked = Option(shownMetrics.contains(metric)).filter(identity).map(_ => "checked")
-          def toggleMetric(m: String): Boolean = shownMetrics.contains(m) ^ metric == m
-          val metricLink =
-            Unparsed(
-              parameterPath +
-                optionalMetrics.map(m =>
-                  s"&metric.${URLEncoder.encode(m, UTF_8.name())}=${toggleMetric(m)}"
-                ).mkString("&")
-            )
-          val id = metric.toLowerCase(Locale.ROOT).replaceAll(" ", "_")
-          <div id={id}>
-            <a href={metricLink}>
-              <input type='checkbox' class='toggle-vis' checked={checked.orNull}> {metric}</input>
-            </a>
-          </div>
-        }}
-        </div>
-  }
-
   private def summaryAndTableForStatus(
       allStages: Seq[StageData],
-      metrics: Set[String],
+      metrics: ListSet[StageTableMetric],
       appSummary: AppSummary,
       status: StageStatus,
       request: HttpServletRequest): (Option[Elem], Option[NodeSeq]) = {

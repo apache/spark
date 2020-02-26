@@ -19,18 +19,18 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Date
+import java.util.{Date, Locale}
+
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.ListMap
+import scala.collection.immutable.{ListMap, ListSet}
 import scala.xml._
-
 import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
+import org.apache.spark.ui.jobs.StagePagedTable._
 import org.apache.spark.util.Utils
 
 private[ui] class StageTableBase(
@@ -41,7 +41,7 @@ private[ui] class StageTableBase(
     stageTag: String,
     basePath: String,
     subPath: String,
-    metrics: Set[String],
+    metrics: ListSet[StageTableMetric],
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
@@ -142,7 +142,7 @@ private[ui] class StagePagedTable(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     currentTime: Long,
-    metrics: Set[String],
+    metrics: ListSet[StageTableMetric],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -188,20 +188,9 @@ private[ui] class StagePagedTable(
   }
 
   override def headers: Seq[Node] = {
-    // must be in the same order than rowContent
-    val optionalHeaders = ListMap(
-      "Input" -> ("Input", ToolTips.INPUT, true),
-      "Output"-> ("Output", ToolTips.OUTPUT, true),
-      "Shuffle Read"-> ("Shuffle Read", ToolTips.SHUFFLE_READ, true),
-      "Shuffle Write" -> ("Shuffle Write", ToolTips.SHUFFLE_WRITE, true),
-      "Peak Execution Memory" -> ("Peak Execution Memory", ToolTips.PEAK_EXECUTION_MEMORY, true),
-      "Spill (Memory)" -> ("Spill (Memory)", ToolTips.SHUFFLE_READ, true),  // TODO
-      "Spill (Disk)" -> ("Spill (Disk)", ToolTips.SHUFFLE_WRITE, true),  // TODO
-      "GC Time" -> ("GC Time", ToolTips.GC_TIME, true)
-    )
-    if(metrics.exists(!optionalHeaders.contains(_))) {
+    if (metrics.exists(m => !optionalMetricsMap.contains(m.name))) {
       throw new IllegalArgumentException(
-        s"Unknown metric: ${metrics.diff(optionalHeaders.keys.toSet).mkString(", ")}"
+        s"Unknown metric: ${metrics.map(_.name).diff(optionalMetricsMap.keySet).mkString(", ")}"
       )
     }
 
@@ -217,7 +206,7 @@ private[ui] class StagePagedTable(
         ("Duration", ToolTips.DURATION, true),
         ("Tasks: Succeeded/Total", null, false)
       ) ++
-      optionalHeaders.filterKeys(metrics.contains).values ++
+        metrics.map(metric => (metric.name, metric.tooltip, metric.sortable)) ++
       {if (isFailedStage) {Seq(("Failure Reason", null, false))} else Seq.empty}
 
     if (!stageHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -311,46 +300,9 @@ private[ui] class StagePagedTable(
           completed = stageData.numCompleteTasks, failed = stageData.numFailedTasks,
           skipped = 0, reasonToNumKilled = stageData.killedTasksSummary, total = info.numTasks)}
         </td> ++
-        {if (metrics.contains("Input")) {
-          <td>{data.inputReadWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Output")) {
-          <td>{data.outputWriteWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Shuffle Read")) {
-          <td>{data.shuffleReadWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Shuffle Write")) {
-          <td>{data.shuffleWriteWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Peak Execution Memory")) {
-          <td>{data.peakExecutionMemoryWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Spill (Memory)")) {
-          <td>{data.memoryBytesSpilledWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("Spill (Disk)")) {
-          <td>{data.diskBytesSpilledWithUnit}</td>
-        } else {
-          Seq.empty
-        }} ++
-        {if (metrics.contains("GC Time")) {
-          <td>{data.formattedJvmGcTime}</td>
-        } else {
-          Seq.empty
-        }} ++
+        metrics.toSeq.map( metric =>
+          <td>{metric.value(data)}</td>
+        ) ++
         {if (isFailedStage) {
           failureReasonHtml(info)
         } else {
@@ -442,6 +394,95 @@ private[ui] class StagePagedTable(
     )}
   }
 }
+
+private[ui] object StagePagedTable {
+
+  val inputMetric = StageTableMetric("Input", ToolTips.INPUT, true, _.inputReadWithUnit)
+  val outputMetric = StageTableMetric("Output", ToolTips.OUTPUT, true, _.outputWriteWithUnit)
+  val shuffleReadMetric = StageTableMetric("Shuffle Read",
+    ToolTips.SHUFFLE_READ, true, _.shuffleReadWithUnit)
+  val shuffleWriteMetric = StageTableMetric("Shuffle Write",
+    ToolTips.SHUFFLE_WRITE, true, _.shuffleWriteWithUnit)
+  val peakExecutionMemoryMetric = StageTableMetric("Peak Execution Memory",
+    ToolTips.PEAK_EXECUTION_MEMORY, true, _.peakExecutionMemoryWithUnit)
+  val spillMemoryMetric = StageTableMetric("Spill (Memory)",
+    ToolTips.SHUFFLE_READ, true, _.memoryBytesSpilledWithUnit)  // TODO
+  val spillDiskMetric = StageTableMetric("Spill (Disk)",
+    ToolTips.SHUFFLE_WRITE, true, _.diskBytesSpilledWithUnit)  // TODO
+  val gcTimeMetric = StageTableMetric("GC Time", ToolTips.GC_TIME, true, _.formattedJvmGcTime)
+
+  val optionalMetrics = ListSet(
+    inputMetric, outputMetric,
+    shuffleReadMetric, shuffleWriteMetric,
+    peakExecutionMemoryMetric,
+    spillMemoryMetric, spillDiskMetric,
+    gcTimeMetric
+  )
+
+  val optionalMetricsMap = ListMap(optionalMetrics.toSeq.map(m => m.name -> m): _*)
+
+  val defaultMetrics = ListSet(
+    inputMetric, outputMetric,
+    shuffleReadMetric, shuffleWriteMetric
+  )
+
+  def selectedMetrics(request: HttpServletRequest): ListSet[StageTableMetric] = {
+    // this must reserve order of optionalMetrics
+    val parameterMetrics = optionalMetrics.map(m => m -> request.getParameter(s"metric.${m.name}"))
+    parameterMetrics.filter(m => Option(m._2).isDefined) match {
+      case Seq() => defaultMetrics
+      case seq => seq.filter(_._2.equalsIgnoreCase("true")).map(_._1)
+    }
+  }
+
+  def additionalMetrics(shownMetrics: ListSet[StageTableMetric],
+                        request: HttpServletRequest): Seq[Node] = {
+
+    val parameterExceptMetrics = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith("metric."))
+      .map(para => para._1 + "=" + para._2(0))
+    val parameterPath = "?" + parameterExceptMetrics.mkString("&")
+
+    val shownMetricNames = shownMetrics.map(_.name)
+    <div id="parent-container">
+      <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
+      <script src={UIUtils.prependBaseUri(request, "/static/stagetable.js")}></script>
+    </div>
+    <div><a id='additionalMetrics'>
+      <span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>
+      Show Additional Metrics
+    </a></div>
+    <div class='container-fluid container-fluid-div' id='toggle-metrics' hidden="true">
+      <div id='select_all' class='select-all-checkbox-div'>
+        <input type='checkbox' class='toggle-vis'> Select All</input>
+      </div>
+      {StagePagedTable.optionalMetrics.map{metric =>
+      val checked = Option(shownMetricNames.contains(metric.name))
+        .filter(identity).map(_ => "checked")
+      def toggleMetric(m: StageTableMetric): Boolean =
+        shownMetricNames.contains(m.name) ^ metric.name == m.name
+      val metricLink =
+        Unparsed(
+          parameterPath +
+            StagePagedTable.optionalMetrics.map(m =>
+              s"&metric.${URLEncoder.encode(m.name, UTF_8.name())}=${toggleMetric(m)}"
+            ).mkString("")
+        )
+      val id = metric.name.toLowerCase(Locale.ROOT).replaceAll(" ", "_")
+      <div id={id}>
+        <a href={metricLink}>
+          <input type='checkbox' class='toggle-vis' checked={checked.orNull}> {metric.name}</input>
+        </a>
+      </div>
+    }}
+    </div>
+  }
+}
+
+private[ui] case class StageTableMetric(name: String,
+                                        tooltip: String,
+                                        sortable: Boolean,
+                                        value: StageTableRowData => Any)
 
 private[ui] class StageDataSource(
     store: AppStatusStore,
