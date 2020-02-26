@@ -522,9 +522,9 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(expression == expected)
   }
 
-  val row0 = create_row(null)
-
   test("isunknown and isnotunknown") {
+    val row0 = create_row(null)
+
     checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
     checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
     IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
