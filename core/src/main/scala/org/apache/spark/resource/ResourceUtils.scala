@@ -362,9 +362,13 @@ private[spark] object ResourceUtils extends Logging {
 
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
-    if (resources.isEmpty) return
+    val resourceInfo = if (resources.isEmpty) {
+      s"No extra accelerate resources configured for $componentName."
+    } else {
+      s"Accelerate Resources for $componentName:\n${resources.mkString("\n")}"
+    }
     logInfo("==============================================================")
-    logInfo(s"Accelerate Resources for $componentName:\n${resources.mkString("\n")}")
+    logInfo(resourceInfo)
     logInfo("==============================================================")
   }
 
