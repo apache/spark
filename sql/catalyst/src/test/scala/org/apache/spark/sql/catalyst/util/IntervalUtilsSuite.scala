@@ -73,7 +73,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidString(null, "cannot be null")
 
     for (input <- Seq("", "interval", "foo", "foo 1 day")) {
-      (input, "Error parsing")
+      checkFromInvalidString(input, "Error parsing")
     }
   }
 
