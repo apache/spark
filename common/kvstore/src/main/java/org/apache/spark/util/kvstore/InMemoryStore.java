@@ -373,7 +373,10 @@ public class InMemoryStore implements KVStore {
             parentToChildrenMap.computeIfAbsent(parentKey, k -> new ConcurrentHashMap<>());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
-            data.computeIfPresent(naturalKey, (k, v) -> {elements.add(v); return v;});
+            data.computeIfPresent(naturalKey, (k, v) -> {
+              elements.add(v);
+              return v;
+            });
           }
           return elements;
         } else {
