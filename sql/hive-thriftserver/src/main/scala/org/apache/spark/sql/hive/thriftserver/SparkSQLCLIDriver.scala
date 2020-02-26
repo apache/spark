@@ -540,10 +540,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           insideComment = true
           // ignore eol
           endIndex = index
-        } else {
-          // continue
         }
-
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
