@@ -70,7 +70,6 @@ private object DateTimeFormatterHelper {
 
   def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
     builder
-      .parseDefaulting(ChronoField.ERA, 1)
       .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
       .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
       .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
@@ -82,7 +81,14 @@ private object DateTimeFormatterHelper {
 
   def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val builder = createBuilder().appendPattern(pattern)
-    toFormatter(builder, locale)
+    if (pattern.contains("y")) {
+      // "y" is a commonly used pattern for year, and it's annoying to force users to specify the
+      // era.
+      toFormatter(builder.parseDefaulting(ChronoField.ERA, 1), locale)
+    } else {
+      // By default we use "uuuu" as the year pattern, and we can't set a default era.
+      toFormatter(builder, locale)
+    }
   }
 
   lazy val fractionFormatter: DateTimeFormatter = {

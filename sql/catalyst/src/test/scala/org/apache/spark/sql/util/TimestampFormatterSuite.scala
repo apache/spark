@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.util
 
-import java.time.{Instant, LocalDateTime, LocalTime, ZoneOffset}
+import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -112,7 +112,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     }
   }
 
-  test(" case insensitive parsing of am and pm") {
+  test("case insensitive parsing of am and pm") {
     val formatter = TimestampFormatter("yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC)
     val micros = formatter.parse("2009 Mar 20 11:30:01 am")
     assert(micros === TimeUnit.SECONDS.toMicros(
@@ -232,5 +232,15 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         "yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456",
         "2019-10-14 09:39:07")
     }
+  }
+
+  test("SPARK-30958: parse timestamp with negative year") {
+    val formatter1 = TimestampFormatter("uuuu-MM-dd HH:mm:ss", ZoneOffset.UTC)
+    assert(formatter1.parse("-0123-02-22 02:22:22") === instantToMicros(
+      LocalDateTime.of(-123, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+
+    // "yyyy" can't parse negative year
+    val formatter2 = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
+    intercept[DateTimeException](formatter2.parse("-0123-02-22 02:22:22"))
   }
 }

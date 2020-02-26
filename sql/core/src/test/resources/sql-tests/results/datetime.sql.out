@@ -19,11 +19,11 @@ NULL	2016-12-31	2016-12-31
 
 
 -- !query
-select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd')
+select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd'), to_timestamp('-2016-12-31', 'uuuu-MM-dd')
 -- !query schema
-struct<to_timestamp(NULL):timestamp,to_timestamp('2016-12-31 00:12:00'):timestamp,to_timestamp('2016-12-31', 'yyyy-MM-dd'):timestamp>
+struct<to_timestamp(NULL):timestamp,to_timestamp('2016-12-31 00:12:00'):timestamp,to_timestamp('2016-12-31', 'yyyy-MM-dd'):timestamp,to_timestamp('-2016-12-31', 'uuuu-MM-dd'):timestamp>
 -- !query output
-NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
+NULL	2016-12-31 00:12:00	2016-12-31 00:00:00	-2016-12-31 00:00:00
 
 
 -- !query
