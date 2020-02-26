@@ -40,7 +40,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
-    case Literal(value: String, StringType) => compile(value)
+    case Literal(value: UTF8String, StringType) => compile(value.toString)
     case _ => null
   }
 
