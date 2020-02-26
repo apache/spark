@@ -48,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
  * right: [R1, R2, R3, R4]
  *
  * Let's say L2, L4 and R3, R4 are skewed, and each of them get split into 2 sub-partitions. This
- * is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L2, R2), (L2, R2).
+ * is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L3, R3), (L4, R4).
  * This rule expands it to 9 tasks to increase parallelism:
  * (L1, R1),
  * (L2-1, R2), (L2-2, R2),
