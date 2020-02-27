@@ -163,6 +163,10 @@ public class InMemoryStore implements KVStore {
     }
   }
 
+  /**
+   * An alias class for the type "ConcurrentHashMap<Comparable<Object>, Boolean>", which is used
+   * as a concurrent hashset for storing natural keys.
+   */
   private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
 
   private static class InstanceList<T> {
@@ -316,10 +320,10 @@ public class InMemoryStore implements KVStore {
     private final String naturalParentIndexName;
 
     InMemoryView(
-      ConcurrentMap<Comparable<Object>, T> data,
-      KVTypeInfo ti,
-      String naturalParentIndexName,
-      ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap) {
+        ConcurrentMap<Comparable<Object>, T> data,
+        KVTypeInfo ti,
+        String naturalParentIndexName,
+        ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap) {
       this.data = data;
       this.ti = ti;
       this.natural = ti != null ? ti.getAccessor(KVIndex.NATURAL_INDEX_NAME) : null;
