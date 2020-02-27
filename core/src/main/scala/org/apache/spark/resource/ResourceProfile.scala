@@ -194,8 +194,9 @@ class ResourceProfile(
       throw new SparkException("No executor resource configs were not specified for the " +
         s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
     }
-    val limiting = if (taskLimit == -1) "None" else limitingResource
-    logInfo(s"Limiting resource is $limiting at $taskLimit tasks per executor")
+    val limiting =
+      if (taskLimit == -1) "cpu" else s"$limitingResource at $taskLimit tasks per executor"
+    logInfo(s"Limiting resource is $limiting")
     _executorResourceSlotsPerAddr = Some(numPartsPerResourceMap.toMap)
     _maxTasksPerExecutor = if (taskLimit == -1) Some(1) else Some(taskLimit)
     _limitingResource = Some(limitingResource)
