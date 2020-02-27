@@ -120,6 +120,8 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   private val containerIdToExecutorIdAndResourceProfileId = new HashMap[ContainerId, (String, Int)]
 
+  // use a ConcurrentHashMap because this is used in matchContainerToRequest, which is called
+  // from the rack resolver thread where synchronize(this) on this would cause a deadlock
   @GuardedBy("ConcurrentHashMap")
   private[yarn] val rpIdToYarnResource = new ConcurrentHashMap[Int, Resource]()
 
@@ -586,34 +588,28 @@ private[yarn] class YarnAllocator(
    *
    * Visible for testing.
    */
-  def handleAllocatedContainers(allocatedContainers: Seq[Container]): Unit = synchronized {
+  def handleAllocatedContainers(allocatedContainers: Seq[Container]): Unit = {
     val containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
 
     // Match incoming requests by host
-    val remainingAfterHostMatches = new ArrayBuffer[(Container, Resource)]
-    val allocatedContainerAndResource = allocatedContainers.map { case container =>
-      val rpId = getResourceProfileIdFromPriority(container.getPriority)
-      val resourceForRP = rpIdToYarnResource.get(rpId)
-      (container, resourceForRP)
-    }
-
-    for ((allocatedContainer, resource) <- allocatedContainerAndResource) {
-      matchContainerToRequest(allocatedContainer, resource, allocatedContainer.getNodeId.getHost,
+    val remainingAfterHostMatches = new ArrayBuffer[Container]
+    for (allocatedContainer <- allocatedContainers) {
+      matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
         containersToUse, remainingAfterHostMatches)
     }
 
     // Match remaining by rack. Because YARN's RackResolver swallows thread interrupts
     // (see SPARK-27094), which can cause this code to miss interrupts from the AM, use
     // a separate thread to perform the operation.
-    val remainingAfterRackMatches = new ArrayBuffer[(Container, Resource)]
+    val remainingAfterRackMatches = new ArrayBuffer[Container]
     if (remainingAfterHostMatches.nonEmpty) {
       var exception: Option[Throwable] = None
       val thread = new Thread("spark-rack-resolver") {
         override def run(): Unit = {
           try {
-            for ((allocatedContainer, resource) <- remainingAfterHostMatches) {
+            for (allocatedContainer <- remainingAfterHostMatches) {
               val rack = resolver.resolve(allocatedContainer.getNodeId.getHost)
-              matchContainerToRequest(allocatedContainer, resource, rack, containersToUse,
+              matchContainerToRequest(allocatedContainer, rack, containersToUse,
                 remainingAfterRackMatches)
             }
           } catch {
@@ -639,16 +635,16 @@ private[yarn] class YarnAllocator(
     }
 
     // Assign remaining that are neither node-local nor rack-local
-    val remainingAfterOffRackMatches = new ArrayBuffer[(Container, Resource)]
-    for ((allocatedContainer, resource) <- remainingAfterRackMatches) {
-      matchContainerToRequest(allocatedContainer, resource, ANY_HOST, containersToUse,
+    val remainingAfterOffRackMatches = new ArrayBuffer[Container]
+    for (allocatedContainer <- remainingAfterRackMatches) {
+      matchContainerToRequest(allocatedContainer, ANY_HOST, containersToUse,
         remainingAfterOffRackMatches)
     }
 
     if (remainingAfterOffRackMatches.nonEmpty) {
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
         s"allocated to us")
-      for ((container, _) <- remainingAfterOffRackMatches) {
+      for (container <- remainingAfterOffRackMatches) {
         internalReleaseContainer(container)
       }
     }
@@ -659,37 +655,32 @@ private[yarn] class YarnAllocator(
       .format(allocatedContainers.size, containersToUse.size))
   }
 
-  /* private def validateYarnContainerResources(
-      allocatedContainer: Container,
-      resource:Resource): Boolean = {
-
-  } */
-
   /**
    * Looks for requests for the given location that match the given container allocation. If it
    * finds one, removes the request so that it won't be submitted again. Places the container into
    * containersToUse or remaining.
    *
    * @param allocatedContainer container that was given to us by YARN
-   * @param resource yarn resource used to request the container
    * @param location resource name, either a node, rack, or *
    * @param containersToUse list of containers that will be used
-   * @param remaining list of containers and their corresponding resource that will not be used
+   * @param remaining list of containers that will not be used
    */
   private def matchContainerToRequest(
       allocatedContainer: Container,
-      resource: Resource,
       location: String,
       containersToUse: ArrayBuffer[Container],
-      remaining: ArrayBuffer[(Container, Resource)]): Unit = {
+      remaining: ArrayBuffer[Container]): Unit = {
+    // Match on the exact resource we requested so there shouldn't be a mismatch,
+    // we are relying on YARN to return a container with resources no less then we requested.
+    // If we change this, or starting validating the container, be sure the logic covers SPARK-6050.
     val rpId = getResourceProfileIdFromPriority(allocatedContainer.getPriority)
     val resourceForRP = rpIdToYarnResource.get(rpId)
 
     logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
         s"priority: ${allocatedContainer.getPriority}, " +
-        s"location: $location, resource: $resource")
+        s"location: $location, resource: $resourceForRP")
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
-      resource)
+      resourceForRP)
 
     // Match the allocation to a request
     if (!matchingRequests.isEmpty) {
@@ -698,7 +689,7 @@ private[yarn] class YarnAllocator(
       amClient.removeContainerRequest(containerRequest)
       containersToUse += allocatedContainer
     } else {
-      remaining += ((allocatedContainer, resource))
+      remaining += allocatedContainer
     }
   }
 
