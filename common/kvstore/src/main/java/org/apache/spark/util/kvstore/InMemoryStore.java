@@ -165,7 +165,7 @@ public class InMemoryStore implements KVStore {
 
   /**
    * An alias class for the type "ConcurrentHashMap<Comparable<Object>, Boolean>", which is used
-   * as a concurrent hashset for storing natural keys.
+   * as a concurrent hashset for storing natural keys and the boolean value doesn't matter.
    */
   private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
 
@@ -233,8 +233,7 @@ public class InMemoryStore implements KVStore {
         int count = 0;
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
-          NaturalKeys children =
-            parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.remove(naturalKey);
             count ++;
@@ -373,8 +372,7 @@ public class InMemoryStore implements KVStore {
         Comparable<Object> parentKey = asKey(parent);
         if (!naturalParentIndexName.isEmpty() &&
           naturalParentIndexName.equals(ti.getParentIndexName(index))) {
-          NaturalKeys children =
-            parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.computeIfPresent(naturalKey, (k, v) -> {
