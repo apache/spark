@@ -3415,6 +3415,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(aliases.length == 0)
     }
   }
+
+  test("SPARK-30955: Exclude Generate output when aliasing in nested column pruning") {
+    val df1 = sql(
+      """
+        |SELECT explodedvalue.*
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df1, Row(Row(1, 2)) :: Nil)
+
+    val df2 = sql(
+      """
+        |SELECT explodedvalue.nested.a
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df2, Row(1) :: Nil)
+  }
 }
 
 case class Foo(bar: Option[String])
