@@ -74,6 +74,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateOuterJoin,
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
+        PushDownByteShortWithoutCasting,
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         ColumnPruning,
@@ -1800,5 +1801,87 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Removes Cast expressions from predicates to push down the filters. This will allow filter push
+ * down for byte and short columns without explicitly casting literals.
+ */
+object PushDownByteShortWithoutCasting extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    case Filter(EqualTo(Cast(c, dt, tz), Literal(v, d)), child) => (c.dataType, dt) match {
+      case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+        val shortLiteral = Cast(Literal(v, d), ShortType)
+        Filter(EqualTo(c, shortLiteral), child)
+
+      case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+        val byteLiteral = Cast(Literal(v, d), ByteType)
+        Filter(EqualTo(c, byteLiteral), child)
+
+      case _ => Filter(EqualTo(Cast(c, dt, tz), Literal(v, d)), child)
+    }
+
+    case Filter(EqualNullSafe(Cast(c, dt, tz), Literal(v, d)), child) => (c.dataType, dt) match {
+      case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+        val shortLiteral = Cast(Literal(v, d), ShortType)
+        Filter(EqualNullSafe(c, shortLiteral), child)
+
+      case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+        val byteLiteral = Cast(Literal(v, d), ByteType)
+        Filter(EqualNullSafe(c, byteLiteral), child)
+
+      case _ => Filter(EqualNullSafe(Cast(c, dt, tz), Literal(v, d)), child)
+    }
+
+    case Filter(GreaterThan(Cast(c, dt, tz), Literal(v, d)), child) => (c.dataType, dt) match {
+      case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+        val shortLiteral = Cast(Literal(v, d), ShortType)
+        Filter(GreaterThan(c, shortLiteral), child)
+
+      case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+        val byteLiteral = Cast(Literal(v, d), ByteType)
+        Filter(GreaterThan(c, byteLiteral), child)
+
+      case _ => Filter(GreaterThan(Cast(c, dt, tz), Literal(v, d)), child)
+    }
+
+    case Filter(GreaterThanOrEqual(Cast(c, dt, tz), Literal(v, d)), child) =>
+      (c.dataType, dt) match {
+        case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+          val shortLiteral = Cast(Literal(v, d), ShortType)
+          Filter(GreaterThanOrEqual(c, shortLiteral), child)
+
+        case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+          val byteLiteral = Cast(Literal(v, d), ByteType)
+          Filter(GreaterThanOrEqual(c, byteLiteral), child)
+
+        case _ => Filter(GreaterThanOrEqual(Cast(c, dt, tz), Literal(v, d)), child)
+    }
+
+    case Filter(LessThan(Cast(c, dt, tz), Literal(v, d)), child) => (c.dataType, dt) match {
+      case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+        val shortLiteral = Cast(Literal(v, d), ShortType)
+        Filter(LessThan(c, shortLiteral), child)
+
+      case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+        val byteLiteral = Cast(Literal(v, d), ByteType)
+        Filter(LessThan(c, byteLiteral), child)
+
+      case _ => Filter(LessThan(Cast(c, dt, tz), Literal(v, d)), child)
+    }
+
+    case Filter(LessThanOrEqual(Cast(c, dt, tz), Literal(v, d)), child) => (c.dataType, dt) match {
+      case (ShortType, IntegerType) if v.toString.toInt <= Short.MaxValue =>
+        val shortLiteral = Cast(Literal(v, d), ShortType)
+        Filter(LessThanOrEqual(c, shortLiteral), child)
+
+      case (ByteType, IntegerType) if v.toString.toInt <= Byte.MaxValue =>
+        val byteLiteral = Cast(Literal(v, d), ByteType)
+        Filter(LessThanOrEqual(c, byteLiteral), child)
+
+      case _ => Filter(LessThanOrEqual(Cast(c, dt, tz), Literal(v, d)), child)
+    }
   }
 }
