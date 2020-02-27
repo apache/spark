@@ -268,7 +268,7 @@ class DataSourceV2SQLSuite
 
     sql("CREATE TABLE t2 (id int)")
     val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-      .loadTable(Identifier.of(Array(), "t2")).asInstanceOf[V1Table]
+      .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
     // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
@@ -624,7 +624,7 @@ class DataSourceV2SQLSuite
 
     sql("CREATE TABLE t2 AS SELECT 1 i")
     val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-      .loadTable(Identifier.of(Array(), "t2")).asInstanceOf[V1Table]
+      .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
     // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
