@@ -188,7 +188,7 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
 
 ## Adaptive Query Execution
-Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. As of Spark 3.0, there are three major features in AQE, including coalescing post-shuffle partition number, optimizing local shuffle reader and optimizing skewed join.
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. As of Spark 3.0, there are three major features in AQE, including coalescing post-shuffle partitions, local shuffle reader optimization and skewed join optimization.
  ### Coalescing Post Shuffle Partition Number
  This feature coalesces the post shuffle partitions based on the map output statistics when `spark.sql.adaptive.enabled` and `spark.sql.adaptive.shuffle.reducePostShufflePartitions` configuration properties are both enabled. There are four following sub-configurations in this optimization rule. This feature simplifies the tuning of shuffle partitions number when running queries. You don't need to set a proper shuffle partition number to fit your dataset. You just need to set a large enough number and Spark can pick the proper shuffle partition number at runtime.
  <table class="table">
