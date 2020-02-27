@@ -254,7 +254,7 @@ license: |
         </tr>
     </table>
     
-  - Since Spark 3.0, CREATE TABLE without a specific provider will use the value of `spark.sql.sources.default` as its provider. In Spark version 2.4 and earlier, it was hive. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.createHiveTableByDefault.enabled` to `true`.
+  - Since Spark 3.0, `CREATE TABLE` without a specific provider will use the value of `spark.sql.sources.default` as its provider. In Spark version 2.4 and earlier, it was hive. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.createHiveTableByDefault.enabled` to `true`.
 
   - Since Spark 3.0, the unary arithmetic operator plus(`+`) only accepts string, numeric and interval type values as inputs. Besides, `+` with a integral string representation will be coerced to double value, e.g. `+'1'` results `1.0`. In Spark version 2.4 and earlier, this operator is ignored. There is no type checking for it, thus, all type values with a `+` prefix are valid, e.g. `+ array(1, 2)` is valid and results `[1, 2]`. Besides, there is no type coercion for it at all, e.g. in Spark 2.4, the result of `+'1'` is string `1`.
 
@@ -332,10 +332,14 @@ license: |
 
   - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For generating Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
 
-  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. This may need to set `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars` according to the version of the Hive metastore.
+  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3 and it brings following impacts:
+  
+    - You may need to set `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars` according to the version of the Hive metastore you want to connect to.
   For example: set `spark.sql.hive.metastore.version` to `1.2.1` and `spark.sql.hive.metastore.jars` to `maven` if your Hive metastore version is 1.2.1.
   
-  - Since Spark 3.0, we upgraded the built-in Hive from 1.2 to 2.3. You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
+    - You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
+
+    - The decimal string representation can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` operator in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
 
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
