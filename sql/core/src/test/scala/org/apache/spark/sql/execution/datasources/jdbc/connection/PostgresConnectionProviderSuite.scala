@@ -28,7 +28,7 @@ class PostgresConnectionProviderSuite extends SparkFunSuite with BeforeAndAfterE
   private val options = new JDBCOptions(Map[String, String](
     JDBCOptions.JDBC_URL -> "jdbc:postgresql://localhost/postgres",
     JDBCOptions.JDBC_TABLE_NAME -> "table",
-    JDBCOptions.JDBC_KEYTAB -> "keytab",
+    JDBCOptions.JDBC_KEYTAB -> "/path/to/keytab",
     JDBCOptions.JDBC_PRINCIPAL -> "principal"
   ))
 
