@@ -29,13 +29,13 @@ import org.apache.spark.sql.types.{IntegralType, LongType}
 trait HashJoin {
   self: SparkPlan =>
 
-  val leftKeys: Seq[Expression]
-  val rightKeys: Seq[Expression]
-  val joinType: JoinType
-  val buildSide: BuildSide
-  val condition: Option[Expression]
-  val left: SparkPlan
-  val right: SparkPlan
+  def leftKeys: Seq[Expression]
+  def rightKeys: Seq[Expression]
+  def joinType: JoinType
+  def buildSide: BuildSide
+  def condition: Option[Expression]
+  def left: SparkPlan
+  def right: SparkPlan
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
