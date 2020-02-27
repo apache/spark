@@ -150,6 +150,7 @@ private[yarn] class YarnAllocator(
    *
    * @see SPARK-12864
    */
+  @GuardedBy("this")
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
@@ -224,7 +225,7 @@ private[yarn] class YarnAllocator(
     numLocalityAwareTasksPerResourceProfileId.values.sum
   }
 
-  def getNumExecutorsStarting: Int = {
+  def getNumExecutorsStarting: Int = synchronized {
     numExecutorsStartingPerResourceProfileId.values.map(_.get()).sum
   }
 
@@ -263,20 +264,20 @@ private[yarn] class YarnAllocator(
   }
 
   private def getOrUpdateAllocatedHostToContainersMapForRPId(
-      rpId: Int): HashMap[String, collection.mutable.Set[ContainerId]] = {
+      rpId: Int): HashMap[String, collection.mutable.Set[ContainerId]] = synchronized {
     allocatedHostToContainersMapPerRPId.getOrElseUpdate(rpId,
       new HashMap[String, mutable.Set[ContainerId]]())
   }
 
-  private def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = {
+  private def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = synchronized {
     runningExecutorsPerResourceProfileId.getOrElseUpdate(rpId, mutable.HashSet[String]())
   }
 
-  private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = {
+  private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = synchronized {
     numExecutorsStartingPerResourceProfileId.getOrElseUpdate(rpId, new AtomicInteger(0))
   }
 
-  private def getOrUpdateTargetNumExecutorsForRPId(rpId: Int): Int = {
+  private def getOrUpdateTargetNumExecutorsForRPId(rpId: Int): Int = synchronized {
     targetNumExecutorsPerResourceProfileId.getOrElseUpdate(rpId,
       SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf))
   }
@@ -285,7 +286,8 @@ private[yarn] class YarnAllocator(
    * A sequence of pending container requests at the given location for each ResourceProfile id
    * that have not yet been fulfilled.
    */
-  private def getPendingAtLocation(location: String): Map[Int, Seq[ContainerRequest]] = {
+  private def getPendingAtLocation(
+      location: String): Map[Int, Seq[ContainerRequest]] = synchronized {
     val allContainerRequests = new mutable.HashMap[Int, Seq[ContainerRequest]]
     rpIdToYarnResource.map { case (id, profResource) =>
       val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
@@ -297,7 +299,7 @@ private[yarn] class YarnAllocator(
 
   // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
   private def createYarnResourceForResourceProfile(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = synchronized {
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
         // Start with the application or default settings
@@ -439,7 +441,7 @@ private[yarn] class YarnAllocator(
    *
    * Visible for testing.
    */
-  def updateResourceRequests(): Unit = {
+  def updateResourceRequests(): Unit = synchronized {
     val pendingAllocatePerResourceProfileId = getPendingAllocate
     val missingPerProfile = targetNumExecutorsPerResourceProfileId.map { case (rpId, targetNum) =>
       val starting = getOrUpdateNumExecutorsStartingForRPId(rpId).get
@@ -663,7 +665,7 @@ private[yarn] class YarnAllocator(
       allocatedContainer: Container,
       location: String,
       containersToUse: ArrayBuffer[Container],
-      remaining: ArrayBuffer[Container]): Unit = {
+      remaining: ArrayBuffer[Container]): Unit = synchronized {
     val rpId = getResourceProfileIdFromPriority(allocatedContainer.getPriority)
     // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
     // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
@@ -693,7 +695,7 @@ private[yarn] class YarnAllocator(
   /**
    * Launches executors in the allocated containers.
    */
-  private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
+  private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = synchronized {
     for (container <- containersToUse) {
       val rpId = getResourceProfileIdFromPriority(container.getPriority)
       executorIdCounter += 1
@@ -769,7 +771,8 @@ private[yarn] class YarnAllocator(
   }
 
   // Visible for testing.
-  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
+  private[yarn] def processCompletedContainers(
+      completedContainers: Seq[ContainerStatus]): Unit = synchronized {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val (_, rpId) = containerIdToExecutorIdAndResourceProfileId.getOrElse(containerId,
@@ -913,7 +916,7 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  private def internalReleaseContainer(container: Container): Unit = {
+  private def internalReleaseContainer(container: Container): Unit = synchronized {
     releasedContainers.add(container.getId())
     amClient.releaseAssignedContainer(container.getId())
   }
