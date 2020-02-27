@@ -2210,13 +2210,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ADD_DIRECTORY_USING_RECURSIVE =
-    buildConf("spark.sql.legacy.addDirectory.recursive.enabled")
+  val LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE =
+    buildConf("spark.sql.legacy.addSingleFileInAddFile")
       .internal()
-      .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
-        "command of SQL. If false, then only a single file can be added.")
+      .doc("When true, only a single file can be added using ADD FILE. If false, then users " +
+        "can add directory by passing directory path to ADD FILE.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
@@ -2549,7 +2549,7 @@ class SQLConf extends Serializable with Logging {
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
-  def addDirectoryRecursiveEnabled: Boolean = getConf(LEGACY_ADD_DIRECTORY_USING_RECURSIVE)
+  def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
