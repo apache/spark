@@ -99,8 +99,7 @@ object DateFormatter {
   val defaultLocale: Locale = Locale.US
 
   def defaultPattern(): String = {
-    // if (SQLConf.get.legacyTimeParserPolicy == LEGACY) "yyyy-MM-dd" else "uuuu-MM-dd"
-    "yyyy-MM-dd"
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) "yyyy-MM-dd" else "uuuu-MM-dd"
   }
 
   private def getFormatter(
