@@ -663,14 +663,9 @@ class ResolveSessionCatalog(
   object TempViewOrV1Table {
     def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
       case _ if isTempView(nameParts) => Some(nameParts)
-      case SessionCatalogAndTable(_, tbl) =>
-        if (nameParts.head == CatalogManager.SESSION_CATALOG_NAME && tbl.length == 1) {
-          // For name parts like `spark_catalog.t`, we need to fill in the default database so
-          // that the caller side won't treat it as a temp view.
-          Some(Seq(catalogManager.v1SessionCatalog.getCurrentDatabase, tbl.head))
-        } else {
-          Some(tbl)
-        }
+      case Seq(CatalogManager.SESSION_CATALOG_NAME, viewName @ _*) if isTempView(viewName) =>
+        throw new AnalysisException("Temp view name cannot contain catalog name")
+      case SessionCatalogAndTable(_, tbl) => Some(tbl)
       case _ => None
     }
   }

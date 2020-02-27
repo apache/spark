@@ -2300,7 +2300,7 @@ class DataSourceV2SQLSuite
       val e1 = intercept[AnalysisException](
         sql(s"CACHE TABLE $sessionCatalogName.v")
       )
-      assert(e1.message.contains("Table or view not found: default.v"))
+      assert(e1.message.contains("Temp view name cannot contain catalog name"))
     }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
