@@ -136,7 +136,7 @@ of the most common options to set are:
 ### Application Properties
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.app.name</code></td>
   <td>(none)</td>
@@ -278,6 +278,7 @@ of the most common options to set are:
     limitations are inherited. For instance, Windows does not support resource limiting and actual 
     resource is not limited on MacOS.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
  <td><code>spark.executor.memoryOverhead</code></td>
@@ -440,7 +441,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Runtime Environment
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.driver.extraClassPath</code></td>
   <td>(none)</td>
@@ -679,6 +680,7 @@ Apart from these, the following properties are also available, and may be useful
     if there is a large broadcast, then the broadcast will not need to be transferred
     from JVM to Python worker for every task.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.files</code></td>

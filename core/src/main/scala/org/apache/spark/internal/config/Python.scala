@@ -22,26 +22,32 @@ import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Python {
   val PYTHON_WORKER_REUSE = ConfigBuilder("spark.python.worker.reuse")
+    .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
 
   val PYTHON_TASK_KILL_TIMEOUT = ConfigBuilder("spark.python.task.killTimeout")
+    .version("2.2.2")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("2s")
 
   val PYTHON_USE_DAEMON = ConfigBuilder("spark.python.use.daemon")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(true)
 
   val PYTHON_DAEMON_MODULE = ConfigBuilder("spark.python.daemon.module")
+    .version("2.4.0")
     .stringConf
     .createOptional
 
   val PYTHON_WORKER_MODULE = ConfigBuilder("spark.python.worker.module")
+    .version("2.4.0")
     .stringConf
     .createOptional
 
   val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
+    .version("2.4.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 }
