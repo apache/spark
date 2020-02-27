@@ -214,8 +214,8 @@ public class InMemoryStore implements KVStore {
       this.ti = new KVTypeInfo(klass);
       this.naturalKey = ti.getAccessor(KVIndex.NATURAL_INDEX_NAME);
       this.data = new ConcurrentHashMap<>();
-      this.parentToChildrenMap = new ConcurrentHashMap<>();
       this.naturalParentIndexName = ti.getParentIndexName(KVIndex.NATURAL_INDEX_NAME);
+      this.parentToChildrenMap = new ConcurrentHashMap<>();
     }
 
     KVTypeInfo.Accessor getIndexAccessor(String indexName) {
@@ -224,18 +224,18 @@ public class InMemoryStore implements KVStore {
 
     int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
       if (!naturalParentIndexName.isEmpty() && naturalParentIndexName.equals(index)) {
+        int count = 0;
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
           NaturalKeys children =
             parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
-          int count = 0;
           for (Object key : children.keySet()) {
             data.remove(asKey(key));
             count ++;
           }
           parentToChildrenMap.remove(parentKey);
-          return count;
         }
+        return count;
       } else {
         Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
         CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
@@ -243,7 +243,6 @@ public class InMemoryStore implements KVStore {
         data.forEach(callback);
         return callback.count();
       }
-      return 0;
     }
 
     public T get(Object key) {
