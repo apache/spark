@@ -200,12 +200,7 @@ object TimestampFormatter {
     locale: Locale = defaultLocale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
 
-    val pattern = if (format.nonEmpty) {
-      DateFormatter.checkIncompatiblePattern(format.get)
-      format.get
-    } else {
-      defaultPattern()
-    }
+    val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       legacyFormat match {
         case FAST_DATE_FORMAT =>

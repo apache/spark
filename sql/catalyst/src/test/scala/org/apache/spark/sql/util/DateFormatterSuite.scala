@@ -114,16 +114,4 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       assert(formatter.parse("tomorrow UTC") === today + 1)
     }
   }
-
-  test("check incompatible pattern") {
-    assertThrows[RuntimeException](DateFormatter.checkIncompatiblePattern("MM-DD-u"))
-    assertThrows[RuntimeException](
-      DateFormatter.checkIncompatiblePattern("uuuu-MM-dd'T'HH:mm:ss.SSSz"))
-    assertThrows[RuntimeException](
-      DateFormatter.checkIncompatiblePattern("uuuu-MM'u contains in quoted text'HH:mm:ss"))
-
-    // Pass the check
-    DateFormatter.checkIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-    DateFormatter.checkIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
-  }
 }
