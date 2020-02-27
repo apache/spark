@@ -182,7 +182,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(datum)
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
       }
@@ -195,7 +195,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(datum)
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
             DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
         }
       }

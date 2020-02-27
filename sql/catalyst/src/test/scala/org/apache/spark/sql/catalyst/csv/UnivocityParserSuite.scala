@@ -341,6 +341,15 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         days(2020, 1, 12, 0, 0, 0))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12 xyz") ==
         days(2020, 1, 12, 0, 0, 0))
+      // The legacy format ignores the "GMT" from the string
+      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45GMT") ==
+        date(2020, 1, 12, 12, 3, 45, 0))
+      assert(parser.makeConverter("t", TimestampType).apply("GMT2020-1-12 12:3:45") ==
+        date(2020, 1, 12, 12, 3, 45, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12GMT") ==
+        days(2020, 1, 12, 0, 0, 0))
+      assert(parser.makeConverter("t", DateType).apply("GMT2020-1-12") ==
+        days(2020, 1, 12, 0, 0, 0))
     }
 
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")

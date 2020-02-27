@@ -235,7 +235,7 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
-              val str = UTF8String.fromString(parser.getText)
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
               DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
           }
 
@@ -252,7 +252,7 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
-              val str = UTF8String.fromString(parser.getText)
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
               DateTimeUtils.stringToDate(str, options.zoneId).getOrElse {
                 // In Spark 1.5.0, we store the data as number of days since epoch in string.
                 // So, we just convert it to Int.
