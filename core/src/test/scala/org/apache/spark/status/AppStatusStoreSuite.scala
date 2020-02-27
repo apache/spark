@@ -176,8 +176,10 @@ class AppStatusStoreSuite extends SparkFunSuite with TimeLimits {
     }
   }
 
-  private def newTaskData(i: Int, status: String = "SUCCESS",
-                          sId: Int = stageId): TaskDataWrapper = {
+  private def newTaskData(
+      i: Int,
+      status: String = "SUCCESS",
+      sId: Int = stageId): TaskDataWrapper = {
     new TaskDataWrapper(
       i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None, true,
       i, i, i, i, i, i, i, i, i, i,
