@@ -2989,7 +2989,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
-  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} not set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {
     withTempDir { testDir =>
       withSQLConf(SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key -> "true") {
         val msg = intercept[SparkException] {
