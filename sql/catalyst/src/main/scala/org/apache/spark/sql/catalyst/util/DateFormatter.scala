@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
+import java.time.format.DateTimeParseException
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -26,6 +27,8 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
@@ -43,7 +46,15 @@ class Iso8601DateFormatter(
   override def parse(s: String): Int = {
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
-      val localDate = LocalDate.parse(s, formatter)
+      val localDate = try {
+        LocalDate.parse(s, formatter)
+      } catch {
+        case e: DateTimeParseException if DateFormatter.hasDiffResult(s, pattern, zoneId) =>
+          throw new RuntimeException(e.getMessage + ", set " +
+            s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
+            "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
+            "this record. See more details in SPARK-30668.")
+      }
       localDateToDays(localDate)
     }
   }
@@ -88,7 +99,7 @@ object DateFormatter {
   val defaultLocale: Locale = Locale.US
 
   def defaultPattern(): String = {
-    if (SQLConf.get.legacyTimeParserEnabled) "yyyy-MM-dd" else "uuuu-MM-dd"
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) "yyyy-MM-dd" else "uuuu-MM-dd"
   }
 
   private def getFormatter(
@@ -97,8 +108,13 @@ object DateFormatter {
     locale: Locale = defaultLocale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
 
-    val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserEnabled) {
+    val pattern = if (format.nonEmpty) {
+      checkIncompatiblePattern(format.get)
+      format.get
+    } else {
+      defaultPattern()
+    }
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       legacyFormat match {
         case FAST_DATE_FORMAT =>
           new LegacyFastDateFormatter(pattern, locale)
@@ -124,5 +140,45 @@ object DateFormatter {
 
   def apply(zoneId: ZoneId): DateFormatter = {
     getFormatter(None, zoneId)
+  }
+
+  def hasDiffResult(s: String, format: String, zoneId: ZoneId): Boolean = {
+    // Only check whether we will get different results between legacy format and new format, while
+    // legacy time parser policy set to EXCEPTION. For legacy parser, DateTimeParseException will
+    // not be thrown. On the contrary, if the legacy policy set to CORRECTED,
+    // DateTimeParseException will address by the caller side.
+    if (LegacyBehaviorPolicy.withName(
+        SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == EXCEPTION) {
+      val formatter = new LegacySimpleTimestampFormatter(
+        format, zoneId, defaultLocale, lenient = false)
+      val res = try {
+        Some(formatter.parse(s))
+      } catch {
+        case _: Throwable => None
+      }
+      res.nonEmpty
+    } else {
+      false
+    }
+  }
+
+  def checkIncompatiblePattern(pattern: String): Unit = {
+    // Only check whether we have incompatible pattern for user provided pattern string.
+    // Currently, the only incompatible pattern string is 'u', which represents
+    // 'Day number of week' in legacy parser but 'Year' in new parser.
+    if (LegacyBehaviorPolicy.withName(
+      SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == EXCEPTION) {
+      // Text can be quoted using single quotes, we only check the non-quote parts.
+      val isIncompatible = pattern.split("'").zipWithIndex.exists {
+        case (patternPart, index) =>
+          index % 2 == 0 && patternPart.contains("u")
+      }
+      if (isIncompatible) {
+        throw new RuntimeException(s"The pattern $pattern provided is incompatible between " +
+          "legacy parser and new parser after Spark 3.0. Please change the pattern or set " +
+          s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY or CORRECTED to explicitly choose " +
+          "the parser.")
+      }
+    }
   }
 }

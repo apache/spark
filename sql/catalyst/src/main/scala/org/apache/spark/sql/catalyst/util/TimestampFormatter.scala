@@ -30,7 +30,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
 
 sealed trait TimestampFormatter extends Serializable {
@@ -60,7 +60,15 @@ class Iso8601TimestampFormatter(
   override def parse(s: String): Long = {
     val specialDate = convertSpecialTimestamp(s.trim, zoneId)
     specialDate.getOrElse {
-      val parsed = formatter.parse(s)
+      val parsed = try {
+        formatter.parse(s)
+      } catch {
+        case e: DateTimeParseException if DateFormatter.hasDiffResult(s, pattern, zoneId) =>
+          throw new RuntimeException(e.getMessage + ", set " +
+            s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
+            "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
+            "this record. See more details in SPARK-30668.")
+      }
       val parsedZoneId = parsed.query(TemporalQueries.zone())
       val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
       val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
@@ -192,8 +200,13 @@ object TimestampFormatter {
     locale: Locale = defaultLocale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
 
-    val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserEnabled) {
+    val pattern = if (format.nonEmpty) {
+      DateFormatter.checkIncompatiblePattern(format.get)
+      format.get
+    } else {
+      defaultPattern()
+    }
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       legacyFormat match {
         case FAST_DATE_FORMAT =>
           new LegacyFastTimestampFormatter(pattern, zoneId, locale)
@@ -229,28 +242,5 @@ object TimestampFormatter {
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
     new FractionTimestampFormatter(zoneId)
-  }
-
-  def checkLegacyFormatter(
-      e: DateTimeParseException, s: String, format: String, zoneId: ZoneId): Unit = {
-    // Only check legacy formatter while legacy time parser policy is exception. For legacy parser,
-    // DateTimeParseException will not be thrown. On the contrary, if the legacy policy set to
-    // corrected, Spark will return null.
-    if (LegacyBehaviorPolicy.withName(
-      SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == LegacyBehaviorPolicy.EXCEPTION) {
-      val formatter = new LegacySimpleTimestampFormatter(
-        format, zoneId, defaultLocale, lenient = false)
-      val res = try {
-        Some(formatter.parse(s))
-      } catch {
-        case _: Throwable => None
-      }
-      if (res.nonEmpty) {
-        throw new RuntimeException(e.getMessage + ", set " +
-          s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
-          "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for this " +
-          "record. See more details in SPARK-30668.")
-      }
-    }
   }
 }
