@@ -2772,17 +2772,13 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
-      case "https" =>
+
+    val resolvedURL = Option(masterScheme).map(_.toLowerCase(Locale.ROOT)) match {
+      case Some("https") =>
         masterWithoutK8sPrefix
-      case "http" =>
+      case Some("http") =>
         logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
         masterWithoutK8sPrefix
-      case null =>
-        val resolvedURL = s"https://$masterWithoutK8sPrefix"
-        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-          s"URL is $resolvedURL.")
-        resolvedURL
       case _ =>
         throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
     }
