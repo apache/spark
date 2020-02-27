@@ -36,7 +36,6 @@ object BlobStorageUtils {
     supportedBlobSchemes.toLowerCase(Locale.ROOT)
       .split(",")
       .map(_.trim)
-      .toList
       .contains(scheme.toLowerCase(Locale.ROOT))
   }
 
