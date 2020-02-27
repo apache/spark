@@ -39,7 +39,7 @@ from airflow.exceptions import AirflowException, TaskNotFound
 from airflow.executors.local_executor import LocalExecutor
 from airflow.executors.sequential_executor import SequentialExecutor
 from airflow.jobs.base_job import BaseJob
-from airflow.models import DAG, DagBag, SlaMiss, errors
+from airflow.models import DAG, SlaMiss, errors
 from airflow.models.dagrun import DagRun
 from airflow.models.taskinstance import SimpleTaskInstance, TaskInstanceKeyType
 from airflow.stats import Stats
@@ -680,7 +680,7 @@ class DagFileProcessor(LoggingMixin):
                     self.log.debug('Queuing task: %s', ti)
                     task_instances_list.append(ti.key)
 
-    def _process_dags(self, dagbag: DagBag, dags: List[DAG], tis_out: List[TaskInstanceKeyType]):
+    def _process_dags(self, dags: List[DAG], tis_out: List[TaskInstanceKeyType]):
         """
         Iterates over the dags and processes them. Processing includes:
 
@@ -688,8 +688,6 @@ class DagFileProcessor(LoggingMixin):
         2. Create appropriate TaskInstance(s) in the DB.
         3. Send emails for tasks that have missed SLAs (if CHECK_SLAS config enabled).
 
-        :param dagbag: a collection of DAGs to process
-        :type dagbag: airflow.models.DagBag
         :param dags: the DAGs from the DagBag to process
         :type dags: List[airflow.models.DAG]
         :param tis_out: A list to add generated TaskInstance objects
@@ -699,10 +697,6 @@ class DagFileProcessor(LoggingMixin):
         check_slas = conf.getboolean('core', 'CHECK_SLAS', fallback=True)
         # pylint: disable=too-many-nested-blocks
         for dag in dags:
-            dag = dagbag.get_dag(dag.dag_id)
-            if not dag:
-                self.log.error("DAG ID %s was not found in the DagBag", dag.dag_id)
-                continue
 
             if dag.is_paused:
                 self.log.info("Not processing DAG %s since it's paused", dag.dag_id)
@@ -825,10 +819,9 @@ class DagFileProcessor(LoggingMixin):
         paused_dag_ids = {dag.dag_id for dag in dagbag.dags.values() if dag.is_paused}
 
         # Pickle the DAGs (if necessary) and put them into a SimpleDag
-        for dag_id in dagbag.dags:
+        for dag_id, dag in dagbag.dags.items():
             # Only return DAGs that are not paused
             if dag_id not in paused_dag_ids:
-                dag = dagbag.get_dag(dag_id)
                 pickle_id = None
                 if pickle_dags:
                     pickle_id = dag.pickle(session).id
@@ -842,7 +835,7 @@ class DagFileProcessor(LoggingMixin):
         ti_keys_to_schedule = []
         refreshed_tis = []
 
-        self._process_dags(dagbag, dags, ti_keys_to_schedule)
+        self._process_dags(dags, ti_keys_to_schedule)
 
         # Refresh all task instances that will be scheduled
         TI = models.TaskInstance
