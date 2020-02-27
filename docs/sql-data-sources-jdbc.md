@@ -201,7 +201,7 @@ the following case-insensitive options:
   <tr>
     <td><code>keytab</code></td>
     <td>
-     Location of the kerberos keytab file (which must be pre-uploaded to all nodes either by <code>--files</code> option of spark-submit or manually) for the JDBC client. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
+     Location of the kerberos keytab file (which must be pre-uploaded to all nodes either by <code>--files</code> option of spark-submit or manually) for the JDBC client. When path information found then Spark considers the keytab distributed manually, otherwise <code>--files</code> assumed. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
     </td>
   </tr>
 

@@ -20,15 +20,18 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import org.apache.commons.io.FilenameUtils
+
+import org.apache.spark.SparkFiles
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.types.StructType
 
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
     @transient val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+  extends Serializable with Logging {
 
   import JDBCOptions._
 
@@ -190,7 +193,17 @@ class JDBCOptions(
 
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
-  val keytab = parameters.getOrElse(JDBC_KEYTAB, null)
+  val keytab = {
+    val keytabParam = parameters.getOrElse(JDBC_KEYTAB, null)
+    if (keytabParam != null && FilenameUtils.getPath(keytabParam).isEmpty) {
+      val result = SparkFiles.get(keytabParam)
+      logDebug(s"Keytab path found, assuming --files, file name used on executor: $result")
+      result
+    } else {
+      logDebug("No keytab path found, assuming manual upload")
+      keytabParam
+    }
+  }
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
 }
