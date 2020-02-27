@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.HashSet;
 import java.util.List;
@@ -208,6 +209,7 @@ public class InMemoryStore implements KVStore {
     private final ConcurrentMap<Comparable<Object>, T> data;
     private final String naturalParentIndexName;
     // A mapping from parent to the natural keys of its children.
+    // For example, a mapping from a stage ID to all the task IDs in the stage.
     private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
 
     private InstanceList(Class<?> klass) {
@@ -229,8 +231,8 @@ public class InMemoryStore implements KVStore {
           Comparable<Object> parentKey = asKey(indexValue);
           NaturalKeys children =
             parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
-          for (Object key : children.keySet()) {
-            data.remove(asKey(key));
+          for (Comparable<Object> naturalKey : children.keySet()) {
+            data.remove(naturalKey);
             count ++;
           }
           parentToChildrenMap.remove(parentKey);
@@ -328,7 +330,7 @@ public class InMemoryStore implements KVStore {
     @Override
     public Iterator<T> iterator() {
       if (data.isEmpty()) {
-        return new InMemoryIterator<>(data.values().iterator());
+        return new InMemoryIterator<>(Collections.emptyIterator());
       }
 
       KVTypeInfo.Accessor getter = index != null ? ti.getAccessor(index) : null;
