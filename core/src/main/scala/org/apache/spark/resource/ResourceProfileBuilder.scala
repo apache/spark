@@ -29,9 +29,12 @@ import org.apache.spark.annotation.Evolving
  * A ResourceProfile allows the user to specify executor and task requirements for an RDD
  * that will get applied during a stage. This allows the user to change the resource
  * requirements between stages.
+ *
+ * This api is currently private until the rest of the pieces are in place and then it
+ * will become public.
  */
 @Evolving
-class ResourceProfileBuilder() {
+private[spark] class ResourceProfileBuilder() {
 
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
