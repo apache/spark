@@ -339,14 +339,6 @@ object MimaExcludes {
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
         !cls.fullName.startsWith("org.apache.spark.sql.sources.v2")
-      case MissingTypesProblem(newCls, _) =>
-        !newCls.fullName.startsWith("org.apache.spark.sql.sources.v2")
-      case InheritedNewAbstractMethodProblem(cls, _) =>
-        !cls.fullName.startsWith("org.apache.spark.sql.sources.v2")
-      case DirectMissingMethodProblem(meth) =>
-        !meth.owner.fullName.startsWith("org.apache.spark.sql.sources.v2")
-      case ReversedMissingMethodProblem(meth) =>
-        !meth.owner.fullName.startsWith("org.apache.spark.sql.sources.v2")
       case _ => true
     },
 
