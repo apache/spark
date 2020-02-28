@@ -2164,10 +2164,19 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      def hasUnsupportedInnerGenerator(g: Generator): Boolean = g match {
+        case go: GeneratorOuter => // The only case that can have an inner generator
+          hasUnsupportedInnerGenerator(go.child)
+        case _ =>
+          g.children.exists { _.find {
+            case _: Generator => true
+            case _ => false
+          }.isDefined }
+      }
       CleanupAliases.trimNonTopLevelAliases(expr) match {
-        case UnresolvedAlias(_: Generator, _) => false
-        case Alias(_: Generator, _) => false
-        case MultiAlias(_: Generator, _) => false
+        case UnresolvedAlias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
+        case Alias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
+        case MultiAlias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
         case other => hasGenerator(other)
       }
     }
