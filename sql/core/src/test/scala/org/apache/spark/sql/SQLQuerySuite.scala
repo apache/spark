@@ -28,7 +28,8 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3413,15 +3414,43 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-30870: Column pruning shouldn't alias a nested column if it means the whole " +
-    "structure") {
-    val df = sql(
+  test("SPARK-30870: Column pruning shouldn't alias a nested column for the whole structure") {
+    withTable("t") {
+      val df = sql(
+        """
+          |SELECT value
+          |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
+        """.stripMargin)
+      df.write.format("parquet").saveAsTable("t")
+
+      val df2 = spark.table("t")
+        .limit(100)
+        .select(size(col("value.field")))
+      val projects = df2.queryExecution.optimizedPlan.collect {
+        case p: Project => p
+      }
+      assert(projects.length == 1)
+      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(projects(0))
+      assert(aliases.length == 0)
+    }
+  }
+
+  test("SPARK-30955: Exclude Generate output when aliasing in nested column pruning") {
+    val df1 = sql(
       """
-        |SELECT explodedvalue.field
-        |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
+        |SELECT explodedvalue.*
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
         |LATERAL VIEW explode(value) AS explodedvalue
       """.stripMargin)
-    checkAnswer(df, Row(Row(1, 2)) :: Nil)
+    checkAnswer(df1, Row(Row(1, 2)) :: Nil)
+
+    val df2 = sql(
+      """
+        |SELECT explodedvalue.nested.a
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df2, Row(1) :: Nil)
   }
 }
 
