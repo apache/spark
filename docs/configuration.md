@@ -1335,6 +1335,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
+  <th>0.5.0</th>
 </tr>
 <tr>
   <td><code>spark.kryo.unsafe</code></td>
@@ -1343,6 +1344,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to use unsafe based Kryo serializer. Can be
     substantially faster by using Unsafe Based IO.
   </td>
+  <th>2.1.0</th>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer.max</code></td>
@@ -1352,6 +1354,7 @@ Apart from these, the following properties are also available, and may be useful
     This must be larger than any object you attempt to serialize and must be less than 2048m.
     Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
+  <th>1.4.0</th>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer</code></td>
@@ -1361,6 +1364,7 @@ Apart from these, the following properties are also available, and may be useful
     Note that there will be one buffer <i>per core</i> on each worker. This buffer will grow up to
     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
+  <th>1.4.0</th>
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
