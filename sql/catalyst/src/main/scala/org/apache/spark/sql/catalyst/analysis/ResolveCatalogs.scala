@@ -153,7 +153,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.tableSchema,
         // convert the bucket spec and add it as a transform
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, Some(c.provider)),
         orCreate = c.orCreate)
 
     case c @ ReplaceTableAsSelectStatement(
@@ -164,7 +164,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         // convert the bucket spec and add it as a transform
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, Some(c.provider)),
         writeOptions = c.options,
         orCreate = c.orCreate)
 
