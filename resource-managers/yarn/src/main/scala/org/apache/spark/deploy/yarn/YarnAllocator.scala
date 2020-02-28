@@ -120,8 +120,8 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   private val containerIdToExecutorIdAndResourceProfileId = new HashMap[ContainerId, (String, Int)]
 
-  // use a ConcurrentHashMap because this is used in matchContainerToRequest, which is called
-  // from the rack resolver thread where synchronize(this) on this would cause a deadlock
+  // Use a ConcurrentHashMap because this is used in matchContainerToRequest, which is called
+  // from the rack resolver thread where synchronize(this) on this would cause a deadlock.
   @GuardedBy("ConcurrentHashMap")
   private[yarn] val rpIdToYarnResource = new ConcurrentHashMap[Int, Resource]()
 
