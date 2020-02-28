@@ -34,7 +34,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
-  val TimeZonePST = TimeZone.getTimeZone("PST")
+  val zonePST = getZoneId("PST")
+  val zoneGMT = getZoneId("GMT")
+
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
@@ -86,9 +88,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
+    def format(d: Date): String = {
+      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
+        .format(millisToMicros(d.getTime))
+    }
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
-      assert(d2.toString === d1.toString)
+      assert(format(d2) === format(d1))
     }
 
     val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -159,87 +165,88 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
         assert(toTimestamp(str, tz.toZoneId) === expected)
       }
+      val zid = tz.toZoneId
 
-      checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, tz = tz)))
-      checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, tz = tz)))
-      checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, tz = tz)))
+      checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
+      checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
+      checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, zid = zid)))
       Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
-        checkStringToTimestamp(s, Option(date(2015, 3, 18, tz = tz)))
+        checkStringToTimestamp(s, Option(date(2015, 3, 18, zid = zid)))
       }
 
-      var expected = Option(date(2015, 3, 18, 12, 3, 17, tz = tz))
+      var expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zid))
       checkStringToTimestamp("2015-03-18 12:03:17", expected)
       checkStringToTimestamp("2015-03-18T12:03:17", expected)
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the tz parameter.
-      var timeZone = TimeZone.getTimeZone("GMT-13:53")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
+      var zoneId = getZoneId("GMT-13:53")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17-13:53", expected)
 
-      timeZone = TimeZone.getTimeZone("UTC")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
+      zoneId = getZoneId("UTC")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17Z", expected)
       checkStringToTimestamp("2015-03-18 12:03:17Z", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT-01:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
+      zoneId = getZoneId("GMT-01:00")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17-1:0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17-01:00", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17+07:30", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:03")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, tz = timeZone))
+      zoneId = getZoneId("GMT+07:03")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17+07:03", expected)
 
       // tests for the string including milliseconds.
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = tz))
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zid))
       checkStringToTimestamp("2015-03-18 12:03:17.123", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123", expected)
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the tz parameter.
-      timeZone = TimeZone.getTimeZone("UTC")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 456000, tz = timeZone))
+      zoneId = getZoneId("UTC")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 456000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.456Z", expected)
       checkStringToTimestamp("2015-03-18 12:03:17.456Z", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT-01:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
+      zoneId = getZoneId("GMT-01:00")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123121+7:30", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.12312+7:30", expected)
 
-      expected = Option(time(18, 12, 15, tz = tz))
+      expected = Option(time(18, 12, 15, zid = zid))
       checkStringToTimestamp("18:12:15", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(time(18, 12, 15, 123120, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("T18:12:15.12312+7:30", expected)
 
-      timeZone = TimeZone.getTimeZone("GMT+07:30")
-      expected = Option(time(18, 12, 15, 123120, tz = timeZone))
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("18:12:15.12312+7:30", expected)
 
-      expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, tz = tz))
+      expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
 
       checkStringToTimestamp("238", None)
@@ -261,8 +268,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1999 08", None)
 
       // Truncating the fractional seconds
-      timeZone = TimeZone.getTimeZone("GMT+00:00")
-      expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, tz = timeZone))
+      zoneId = getZoneId("GMT+00:00")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp(
         "2015-03-18T12:03:17.123456789+0:00", expected)
     }
@@ -286,32 +293,38 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("hours") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getHours(input, TimeZonePST) === 13)
-    assert(getHours(input, TimeZoneGMT) === 20)
-    input = date(2015, 12, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getHours(input, TimeZonePST) === 2)
-    assert(getHours(input, TimeZoneGMT) === 10)
+    var input = date(2015, 3, 18, 13, 2, 11, 0, zonePST)
+    assert(getHours(input, zonePST) === 13)
+    assert(getHours(input, zoneGMT) === 20)
+    input = date(2015, 12, 8, 2, 7, 9, 0, zonePST)
+    assert(getHours(input, zonePST) === 2)
+    assert(getHours(input, zoneGMT) === 10)
+    input = date(10, 1, 1, 0, 0, 0, 0, zonePST)
+    assert(getHours(input, zonePST) === 0)
   }
 
   test("minutes") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getMinutes(input, TimeZonePST) === 2)
-    assert(getMinutes(input, TimeZoneGMT) === 2)
-    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 32)
-    input = date(2015, 3, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getMinutes(input, TimeZonePST) === 7)
-    assert(getMinutes(input, TimeZoneGMT) === 7)
-    assert(getMinutes(input, TimeZone.getTimeZone("Australia/North")) === 37)
+    var input = date(2015, 3, 18, 13, 2, 11, 0, zonePST)
+    assert(getMinutes(input, zonePST) === 2)
+    assert(getMinutes(input, zoneGMT) === 2)
+    assert(getMinutes(input, getZoneId("Australia/North")) === 32)
+    input = date(2015, 3, 8, 2, 7, 9, 0, zonePST)
+    assert(getMinutes(input, zonePST) === 7)
+    assert(getMinutes(input, zoneGMT) === 7)
+    assert(getMinutes(input, getZoneId("Australia/North")) === 37)
+    input = date(10, 1, 1, 0, 0, 0, 0, zonePST)
+    assert(getMinutes(input, zonePST) === 0)
   }
 
   test("seconds") {
-    var input = date(2015, 3, 18, 13, 2, 11, 0, TimeZonePST)
-    assert(getSeconds(input, TimeZonePST) === 11)
-    assert(getSeconds(input, TimeZoneGMT) === 11)
-    input = date(2015, 3, 8, 2, 7, 9, 0, TimeZonePST)
-    assert(getSeconds(input, TimeZonePST) === 9)
-    assert(getSeconds(input, TimeZoneGMT) === 9)
+    var input = date(2015, 3, 18, 13, 2, 11, 0, zonePST)
+    assert(getSeconds(input, zonePST) === 11)
+    assert(getSeconds(input, zoneGMT) === 11)
+    input = date(2015, 3, 8, 2, 7, 9, 0, zonePST)
+    assert(getSeconds(input, zonePST) === 9)
+    assert(getSeconds(input, zoneGMT) === 9)
+    input = date(10, 1, 1, 0, 0, 0, 0, zonePST)
+    assert(getSeconds(input, zonePST) === 0)
   }
 
   test("hours / minutes / seconds") {
@@ -377,58 +390,58 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
     assert(timestampAddInterval(ts1, 36, 0, 123000, defaultZoneId) === ts2)
 
-    val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
-    val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
-    val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, TimeZoneGMT)
-    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZonePST.toZoneId) === ts4)
-    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZoneGMT.toZoneId) === ts5)
+    val ts3 = date(1997, 2, 27, 16, 0, 0, 0, zonePST)
+    val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, zonePST)
+    val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, zoneGMT)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, zonePST) === ts4)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, zoneGMT) === ts5)
   }
 
   test("timestamp add days") {
     // 2019-3-9 is the end of Pacific Standard Time
-    val ts1 = date(2019, 3, 9, 12, 0, 0, 123000, TimeZonePST)
+    val ts1 = date(2019, 3, 9, 12, 0, 0, 123000, zonePST)
     // 2019-3-10 is the start of Pacific Daylight Time
-    val ts2 = date(2019, 3, 10, 12, 0, 0, 123000, TimeZonePST)
-    val ts3 = date(2019, 5, 9, 12, 0, 0, 123000, TimeZonePST)
-    val ts4 = date(2019, 5, 10, 12, 0, 0, 123000, TimeZonePST)
+    val ts2 = date(2019, 3, 10, 12, 0, 0, 123000, zonePST)
+    val ts3 = date(2019, 5, 9, 12, 0, 0, 123000, zonePST)
+    val ts4 = date(2019, 5, 10, 12, 0, 0, 123000, zonePST)
     // 2019-11-2 is the end of Pacific Daylight Time
-    val ts5 = date(2019, 11, 2, 12, 0, 0, 123000, TimeZonePST)
+    val ts5 = date(2019, 11, 2, 12, 0, 0, 123000, zonePST)
     // 2019-11-3 is the start of Pacific Standard Time
-    val ts6 = date(2019, 11, 3, 12, 0, 0, 123000, TimeZonePST)
+    val ts6 = date(2019, 11, 3, 12, 0, 0, 123000, zonePST)
 
     // transit from Pacific Standard Time to Pacific Daylight Time
     assert(timestampAddInterval(
-      ts1, 0, 0, 23 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts2)
-    assert(timestampAddInterval(ts1, 0, 1, 0, TimeZonePST.toZoneId) === ts2)
+      ts1, 0, 0, 23 * MICROS_PER_HOUR, zonePST) === ts2)
+    assert(timestampAddInterval(ts1, 0, 1, 0, zonePST) === ts2)
     // just a normal day
     assert(timestampAddInterval(
-      ts3, 0, 0, 24 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts4)
-    assert(timestampAddInterval(ts3, 0, 1, 0, TimeZonePST.toZoneId) === ts4)
+      ts3, 0, 0, 24 * MICROS_PER_HOUR, zonePST) === ts4)
+    assert(timestampAddInterval(ts3, 0, 1, 0, zonePST) === ts4)
     // transit from Pacific Daylight Time to Pacific Standard Time
     assert(timestampAddInterval(
-      ts5, 0, 0, 25 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts6)
-    assert(timestampAddInterval(ts5, 0, 1, 0, TimeZonePST.toZoneId) === ts6)
+      ts5, 0, 0, 25 * MICROS_PER_HOUR, zonePST) === ts6)
+    assert(timestampAddInterval(ts5, 0, 1, 0, zonePST) === ts6)
   }
 
   test("monthsBetween") {
     val date1 = date(1997, 2, 28, 10, 30, 0)
     var date2 = date(1996, 10, 30)
-    assert(monthsBetween(date1, date2, true, TimeZoneUTC) === 3.94959677)
-    assert(monthsBetween(date1, date2, false, TimeZoneUTC) === 3.9495967741935485)
+    assert(monthsBetween(date1, date2, true, ZoneOffset.UTC) === 3.94959677)
+    assert(monthsBetween(date1, date2, false, ZoneOffset.UTC) === 3.9495967741935485)
     Seq(true, false).foreach { roundOff =>
       date2 = date(2000, 2, 28)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === -36)
       date2 = date(2000, 2, 29)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === -36)
       date2 = date(1996, 3, 31)
-      assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === 11)
+      assert(monthsBetween(date1, date2, roundOff, ZoneOffset.UTC) === 11)
     }
 
-    val date3 = date(2000, 2, 28, 16, tz = TimeZonePST)
-    val date4 = date(1997, 2, 28, 16, tz = TimeZonePST)
-    assert(monthsBetween(date3, date4, true, TimeZonePST) === 36.0)
-    assert(monthsBetween(date3, date4, true, TimeZoneGMT) === 35.90322581)
-    assert(monthsBetween(date3, date4, false, TimeZoneGMT) === 35.903225806451616)
+    val date3 = date(2000, 2, 28, 16, zid = zonePST)
+    val date4 = date(1997, 2, 28, 16, zid = zonePST)
+    assert(monthsBetween(date3, date4, true, zonePST) === 36.0)
+    assert(monthsBetween(date3, date4, true, ZoneOffset.UTC) === 35.90322581)
+    assert(monthsBetween(date3, date4, false, ZoneOffset.UTC) === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
@@ -495,9 +508,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         level: Int,
         expected: String,
         inputTS: SQLTimestamp,
-        timezone: TimeZone = DateTimeUtils.defaultTimeZone()): Unit = {
+        zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
-        DateTimeUtils.truncTimestamp(inputTS, level, timezone)
+        DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
       val expectedTS = toTimestamp(expected, defaultZoneId)
       assert(truncated === expectedTS.get)
     }
@@ -535,6 +548,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     for (tz <- ALL_TIMEZONES) {
       withDefaultTimeZone(tz) {
+        val zid = tz.toZoneId
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("2015-03-05T09:32:05.359"), defaultZoneId)
         val inputTS1 = DateTimeUtils.stringToTimestamp(
@@ -548,38 +562,38 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         val inputTS5 = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("1999-03-29T01:02:03.456789"), defaultZoneId)
 
-        testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_DAY, "2015-03-05T00:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T09:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:32:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:05", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-02T00:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS1.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS2.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS3.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-23T00:00:00", inputTS4.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "1990-01-01", inputTS5.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "1901-01-01", inputTS5.get, tz)
-        testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_DAY, "2015-03-05T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T09:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:32:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:05", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-02T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS1.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS2.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS3.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-23T00:00:00", inputTS4.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "1990-01-01", inputTS5.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "1901-01-01", inputTS5.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", inputTS.get, zid)
       }
     }
   }
 
-  test("daysToMillis and millisToDays") {
-    val input = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, 16, tz = TimeZonePST))
-    assert(millisToDays(input, TimeZonePST) === 16800)
-    assert(millisToDays(input, TimeZoneGMT) === 16801)
-    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, TimeZoneGMT) == -1)
+  test("daysToMicros and microsToDays") {
+    val input = date(2015, 12, 31, 16, zid = zonePST)
+    assert(microsToDays(input, zonePST) === 16800)
+    assert(microsToDays(input, ZoneOffset.UTC) === 16801)
+    assert(microsToDays(-1 * MILLIS_PER_DAY + 1, ZoneOffset.UTC) == -1)
 
-    var expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZonePST))
-    assert(daysToMillis(16800, TimeZonePST) === expected)
+    var expected = date(2015, 12, 31, zid = zonePST)
+    assert(daysToMicros(16800, zonePST) === expected)
 
-    expected = TimeUnit.MICROSECONDS.toMillis(date(2015, 12, 31, tz = TimeZoneGMT))
-    assert(daysToMillis(16800, TimeZoneGMT) === expected)
+    expected = date(2015, 12, 31, zid = zoneGMT)
+    assert(daysToMicros(16800, ZoneOffset.UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
@@ -594,16 +608,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
         if (!skipped.contains(d)) {
-          assert(millisToDays(daysToMillis(d, tz), tz) === d,
+          assert(microsToDays(daysToMicros(d, tz.toZoneId), tz.toZoneId) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }
       }
     }
   }
 
-  test("toMillis") {
-    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
-    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
+  test("microsToMillis") {
+    assert(DateTimeUtils.microsToMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
 
   test("special timestamp values") {

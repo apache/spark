@@ -306,7 +306,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
+        safecheck = runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely",
                                     "false").lower() == 'true'
         # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
         assign_cols_by_name = runner_conf.get(

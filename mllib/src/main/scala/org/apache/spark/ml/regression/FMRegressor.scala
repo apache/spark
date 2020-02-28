@@ -40,7 +40,6 @@ import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, SquaredL2
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.col
 import org.apache.spark.storage.StorageLevel
 
 /**

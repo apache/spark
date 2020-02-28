@@ -337,6 +337,29 @@ class FunctionsTests(ReusedSQLTestCase):
 
         self.assertListEqual(actual, expected)
 
+    def test_higher_order_function_failures(self):
+        from pyspark.sql.functions import col, exists, transform
+
+        # Should fail with varargs
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda *x: lit(1))
+
+        # Should fail with kwargs
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda **x: lit(1))
+
+        # Should fail with nullary function
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda: lit(1))
+
+        # Should fail with quaternary function
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
+
+        # Should fail if function doesn't return Column
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda x: 1)
+
 
 if __name__ == "__main__":
     import unittest

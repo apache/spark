@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since

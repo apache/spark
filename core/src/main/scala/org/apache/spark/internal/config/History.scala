@@ -162,7 +162,7 @@ private[spark] object History {
   val APPLY_CUSTOM_EXECUTOR_LOG_URL_TO_INCOMPLETE_APP =
     ConfigBuilder("spark.history.custom.executor.log.url.applyIncompleteApplication")
       .doc("Whether to apply custom executor log url, as specified by " +
-        "`spark.history.custom.executor.log.url`, to incomplete application as well. " +
+        s"${CUSTOM_EXECUTOR_LOG_URL.key}, to incomplete application as well. " +
         "Even if this is true, this still only affects the behavior of the history server, " +
         "not running spark applications.")
       .booleanConf

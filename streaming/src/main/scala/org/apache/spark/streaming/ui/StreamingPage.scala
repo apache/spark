@@ -140,6 +140,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <script>{Unparsed(js)}</script>
   }
 
+  private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    // We leverage timeFormat as the value would be same as timeFormat. This means it is
+    // sensitive to the order - generateTimeMap should be called earlier than this.
+    val js = "var timeTipStrings = {};\n" + times.map { time =>
+      s"timeTipStrings[$time] = timeFormat[$time];"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
   private def generateStatTable(): Seq[Node] = {
     val batches = listener.retainedBatches
 
@@ -313,7 +323,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchTimes) ++ table ++
+      jsCollector.toHtml
   }
 
   private def generateInputDStreamsTable(

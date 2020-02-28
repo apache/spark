@@ -238,7 +238,7 @@ notes, then it should be treated as a bug to be fixed.
 
 This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
-([Scala](api/scala/index.html#org.apache.spark.ml.package),
+([Scala](api/scala/org/apache/spark/ml/package.html),
 [Java](api/java/org/apache/spark/ml/package-summary.html),
 and [Python](api/python/pyspark.ml.html)).
 
@@ -250,9 +250,9 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [`Estimator` Scala docs](api/scala/index.html#org.apache.spark.ml.Estimator),
-the [`Transformer` Scala docs](api/scala/index.html#org.apache.spark.ml.Transformer) and
-the [`Params` Scala docs](api/scala/index.html#org.apache.spark.ml.param.Params) for details on the API.
+Refer to the [`Estimator` Scala docs](api/scala/org/apache/spark/ml/Estimator.html),
+the [`Transformer` Scala docs](api/scala/org/apache/spark/ml/Transformer.html) and
+the [`Params` Scala docs](api/scala/org/apache/spark/ml/param/Params.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala %}
 </div>
@@ -285,7 +285,7 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [`Pipeline` Scala docs](api/scala/index.html#org.apache.spark.ml.Pipeline) for details on the API.
+Refer to the [`Pipeline` Scala docs](api/scala/org/apache/spark/ml/Pipeline.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
 </div>

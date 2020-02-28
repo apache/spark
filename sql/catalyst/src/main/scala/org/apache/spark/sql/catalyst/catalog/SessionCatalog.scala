@@ -1344,6 +1344,10 @@ class SessionCatalog(
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
+  def isTempFunction(name: String): Boolean = {
+    isTemporaryFunction(FunctionIdentifier(name))
+  }
+
   /**
    * Return whether this function has been registered in the function registry of the current
    * session. If not existed, return false.

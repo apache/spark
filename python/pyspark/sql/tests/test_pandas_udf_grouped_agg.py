@@ -357,7 +357,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                         plus_one(sum_udf(col('v1'))),
                         sum_udf(plus_one(col('v2'))))
                    .sort(['id', '(v % 2)'])
-                   .toPandas().sort_index(by=['id', '(v % 2)']))
+                   .toPandas().sort_values(by=['id', '(v % 2)']))
 
         expected1 = (df.withColumn('v1', df.v + 1)
                      .withColumn('v2', df.v + 2)
@@ -368,7 +368,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                           plus_one(sum(col('v1'))),
                           sum(plus_one(col('v2'))))
                      .sort(['id', '(v % 2)'])
-                     .toPandas().sort_index(by=['id', '(v % 2)']))
+                     .toPandas().sort_values(by=['id', '(v % 2)']))
 
         # Test complex expressions with sql expression, scala pandas UDF and
         # group aggregate pandas UDF
@@ -381,7 +381,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                         plus_two(sum_udf(col('v1'))),
                         sum_udf(plus_two(col('v2'))))
                    .sort(['id', '(v % 2)'])
-                   .toPandas().sort_index(by=['id', '(v % 2)']))
+                   .toPandas().sort_values(by=['id', '(v % 2)']))
 
         expected2 = (df.withColumn('v1', df.v + 1)
                      .withColumn('v2', df.v + 2)
@@ -392,7 +392,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                           plus_two(sum(col('v1'))),
                           sum(plus_two(col('v2'))))
                      .sort(['id', '(v % 2)'])
-                     .toPandas().sort_index(by=['id', '(v % 2)']))
+                     .toPandas().sort_values(by=['id', '(v % 2)']))
 
         # Test sequential groupby aggregate
         result3 = (df.groupby('id')
