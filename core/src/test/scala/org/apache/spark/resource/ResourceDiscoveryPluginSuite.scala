@@ -56,7 +56,7 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(EXECUTOR_FPGA_ID.amountConf, "1")
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -84,7 +84,7 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -111,7 +111,7 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -137,7 +137,7 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
