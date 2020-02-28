@@ -22,21 +22,16 @@ import java.util.Locale
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.util.Utils
+
 object BlobStorageUtils {
-  def isBlobStoragePath(
-      hadoopConf: Configuration,
-      path: Path): Boolean = {
+  def isBlobStoragePath(hadoopConf: Configuration, path: Path): Boolean = {
     path != null && isBlobStorageScheme(hadoopConf, Option(path.toUri.getScheme).getOrElse(""))
   }
 
-  def isBlobStorageScheme(
-      hadoopConf: Configuration,
-      scheme: String): Boolean = {
+  def isBlobStorageScheme(hadoopConf: Configuration, scheme: String): Boolean = {
     val supportedBlobSchemes = hadoopConf.get("hive.blobstore.supported.schemes", "s3,s3a,s3n")
-    supportedBlobSchemes.toLowerCase(Locale.ROOT)
-      .split(",")
-      .map(_.trim)
-      .contains(scheme.toLowerCase(Locale.ROOT))
+    Utils.stringToSeq(supportedBlobSchemes).contains(scheme.toLowerCase(Locale.ROOT))
   }
 
   def useBlobStorageAsScratchDir(hadoopConf: Configuration): Boolean = {

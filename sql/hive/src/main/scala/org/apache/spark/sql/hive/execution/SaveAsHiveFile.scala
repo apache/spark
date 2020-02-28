@@ -147,14 +147,12 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val hiveVersion = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.version
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
-    logDebug(s"path '${path.toString}' is used")
-    logDebug(s"staging dir '$stagingDir' is used")
-    logDebug(s"scratch dir '$scratchDir' is used")
 
     // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
     val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
       .client.getConf("_hive.hdfs.session.path", "")
-    logDebug(s"session scratch dir '$sessionScratchDir' is used")
+    logDebug(s"path '${path.toString}', staging dir '$stagingDir', " +
+      s"scratch dir '$scratchDir', session scratch dir '$sessionScratchDir' are used")
 
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
