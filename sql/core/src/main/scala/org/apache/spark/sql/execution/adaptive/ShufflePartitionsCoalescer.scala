@@ -21,11 +21,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsCoalescer extends Logging {
 
   /**
-   * Coalesce the same range of partitions (`firstPartitionIndex`` to `lastPartitionIndex`, the
+   * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
    * start is inclusive and the end is exclusive) from multiple shuffles. This method assumes that
    * all the shuffles have the same number of partitions, and the partitions of same index will be
    * read together by one task.
@@ -54,7 +55,7 @@ object ShufflePartitionsCoalescer extends Logging {
       firstPartitionIndex: Int,
       lastPartitionIndex: Int,
       advisoryTargetSize: Long,
-      minNumPartitions: Int = 1): Array[Int] = {
+      minNumPartitions: Int = 1): Array[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
@@ -82,8 +83,8 @@ object ShufflePartitionsCoalescer extends Logging {
       "There should be only one distinct value of the number of shuffle partitions " +
         "among registered Exchange operators.")
 
-    val splitPoints = ArrayBuffer[Int]()
-    splitPoints += firstPartitionIndex
+    val partitionSpecs = ArrayBuffer[CoalescedPartitionSpec]()
+    var latestSplitPoint = firstPartitionIndex
     var coalescedSize = 0L
     var i = firstPartitionIndex
     while (i < lastPartitionIndex) {
@@ -97,8 +98,9 @@ object ShufflePartitionsCoalescer extends Logging {
 
       // If including the `totalSizeOfCurrentPartition` would exceed the target size, then start a
       // new coalesced partition.
-      if (i > firstPartitionIndex && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
-        splitPoints += i
+      if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
+        partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
+        latestSplitPoint = i
         // reset postShuffleInputSize.
         coalescedSize = totalSizeOfCurrentPartition
       } else {
@@ -106,7 +108,8 @@ object ShufflePartitionsCoalescer extends Logging {
       }
       i += 1
     }
+    partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
 
-    splitPoints.toArray
+    partitionSpecs.toArray
   }
 }
