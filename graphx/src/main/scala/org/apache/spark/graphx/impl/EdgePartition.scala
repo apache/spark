@@ -465,7 +465,7 @@ class EdgePartition[
           if (edgeIsActive) {
             val dstAttr =
               if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
-            ctx.setRest(dstId, localDstId, dstAttr, data(pos))
+            ctx.setDest(dstId, localDstId, dstAttr, data(pos))
             sendMsg(ctx)
           }
           pos += 1
@@ -511,7 +511,7 @@ private class AggregatingEdgeContext[VD, ED, A](
     _srcAttr = srcAttr
   }
 
-  def setRest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED): Unit = {
+  def setDest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED): Unit = {
     _dstId = dstId
     _localDstId = localDstId
     _dstAttr = dstAttr

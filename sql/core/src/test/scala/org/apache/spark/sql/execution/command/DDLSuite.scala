@@ -473,17 +473,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withEmptyDirInTablePath("tab1") { tableLoc =>
         val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
         hiddenGarbageFile.createNewFile()
-        val exMsg = "Can not create the managed table('`tab1`'). The associated location"
         val exMsgWithDefaultDB =
           "Can not create the managed table('`default`.`tab1`'). The associated location"
         var ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
         }.getMessage
-        if (isUsingHiveMetastore) {
-          assert(ex.contains(exMsgWithDefaultDB))
-        } else {
-          assert(ex.contains(exMsg))
-        }
+        assert(ex.contains(exMsgWithDefaultDB))
 
         ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
@@ -509,8 +504,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val ex = intercept[AnalysisException] {
           sql("ALTER TABLE tab1 RENAME TO tab2")
         }.getMessage
-        val expectedMsg = "Can not rename the managed table('`tab1`'). The associated location"
-        assert(ex.contains(expectedMsg))
+        assert(ex.contains(
+          "Can not rename the managed table('`default`.`tab1`'). The associated location"))
       }
     }
   }
@@ -640,7 +635,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val errMsg = intercept[AnalysisException] {
           sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
         }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
+        assert(errMsg.contains(
+          "Found duplicate column(s) in the table definition of `default`.`t`"))
       }
     }
   }
@@ -649,7 +645,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table tbl, " +
+    assert(e.message == "partition column c is not defined in table default.tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -657,7 +653,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table tbl, " +
+    assert(e.message == "bucket column c is not defined in table default.tbl, " +
       "defined table columns are: a, b")
   }
 

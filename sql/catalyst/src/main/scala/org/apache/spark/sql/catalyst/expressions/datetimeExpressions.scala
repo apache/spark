@@ -51,7 +51,6 @@ trait TimeZoneAwareExpression extends Expression {
   /** Returns a copy of this expression with the specified timeZoneId. */
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
-  @transient lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId.get)
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
@@ -132,10 +131,12 @@ case class CurrentBatchTimestamp(
    */
   override protected def evalInternal(input: InternalRow): Any = toLiteral.value
 
-  def toLiteral: Literal = dataType match {
-    case _: TimestampType =>
-      Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
-    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs, zoneId), DateType)
+  def toLiteral: Literal = {
+    val timestampUs = millisToMicros(timestampMs)
+    dataType match {
+      case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
+    }
   }
 }
 
@@ -229,13 +230,13 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getHours(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getHours(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $zid)")
   }
 }
 
@@ -260,13 +261,13 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $zid)")
   }
 }
 
@@ -291,13 +292,13 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $zid)")
   }
 }
 
@@ -315,13 +316,13 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSecondsWithFraction(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getSecondsWithFraction(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $zid)")
   }
 }
 
@@ -338,13 +339,13 @@ case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMilliseconds(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getMilliseconds(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMilliseconds($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMilliseconds($c, $zid)")
   }
 }
 
@@ -357,13 +358,13 @@ case class Microseconds(child: Expression, timeZoneId: Option[String] = None)
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMicroseconds(timestamp.asInstanceOf[Long], timeZone)
+    DateTimeUtils.getMicroseconds(timestamp.asInstanceOf[Long], zoneId)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMicroseconds($c, $tz)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMicroseconds($c, $zid)")
   }
 }
 
@@ -1690,15 +1691,15 @@ case class TruncTimestamp(
 
   override def eval(input: InternalRow): Any = {
     evalHelper(input, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC) { (t: Any, level: Int) =>
-      DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, timeZone)
+      DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, zoneId)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     codeGenHelper(ctx, ev, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC, true) {
       (date: String, fmt: String) =>
-        s"truncTimestamp($date, $fmt, $tz);"
+        s"truncTimestamp($date, $fmt, $zid);"
     }
   }
 }

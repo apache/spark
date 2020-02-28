@@ -410,10 +410,6 @@ abstract class OffsetWindowFunction
  * the window. Offsets start at 0, which is the current row. The offset must be constant
  * integer value. The default offset is 1. When the value of `input` is null at the `offset`th row,
  * null is returned. If there is no such offset row, the `default` expression is evaluated.
- *
- * @param input expression to evaluate `offset` rows after the current row.
- * @param offset rows to jump ahead in the partition.
- * @param default to use when the offset is larger than the window. The default value is null.
  */
 @ExpressionDescription(
   usage = """
@@ -422,7 +418,15 @@ abstract class OffsetWindowFunction
       value of `default` is null. If the value of `input` at the `offset`th row is null,
       null is returned. If there is no such an offset row (e.g., when the offset is 1, the last
       row of the window does not have any subsequent row), `default` is returned.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * input - a string expression to evaluate `offset` rows after the current row.
+      * offset - an int expression which is rows to jump ahead in the partition.
+      * default - a string expression which is to use when the offset is larger than the window.
+          The default value is null.
+  """,
+  since = "2.0.0")
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -440,10 +444,6 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
  * the window. Offsets start at 0, which is the current row. The offset must be constant
  * integer value. The default offset is 1. When the value of `input` is null at the `offset`th row,
  * null is returned. If there is no such offset row, the `default` expression is evaluated.
- *
- * @param input expression to evaluate `offset` rows before the current row.
- * @param offset rows to jump back in the partition.
- * @param default to use when the offset row does not exist.
  */
 @ExpressionDescription(
   usage = """
@@ -452,7 +452,14 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
       value of `default` is null. If the value of `input` at the `offset`th row is null,
       null is returned. If there is no such offset row (e.g., when the offset is 1, the first
       row of the window does not have any previous row), `default` is returned.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * input - a string expression to evaluate `offset` rows before the current row.
+      * offset - an int expression which is rows to jump back in the partition.
+      * default - a string expression which is to use when the offset row does not exist.
+  """,
+  since = "2.0.0")
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -509,7 +516,8 @@ object SizeBasedWindowFunction {
   usage = """
     _FUNC_() - Assigns a unique, sequential number to each row, starting with one,
       according to the ordering of rows within the window partition.
-  """)
+  """,
+  since = "2.0.0")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
   override def prettyName: String = "row_number"
@@ -526,7 +534,8 @@ case class RowNumber() extends RowNumberLike {
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the position of a value relative to all values in the partition.
-  """)
+  """,
+  since = "2.0.0")
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
@@ -554,14 +563,18 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param buckets number of buckets to divide the rows in. Default value is 1.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(n) - Divides the rows for each window partition into `n` buckets ranging
       from 1 to at most `n`.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * buckets - an int expression which is number of buckets to divide the rows in.
+          Default value is 1.
+  """,
+  since = "2.0.0")
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
@@ -674,17 +687,20 @@ abstract class RankLike extends AggregateWindowFunction {
  * will produce gaps in the sequence.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the rank of a value in a group of values. The result is one plus the number
       of rows preceding or equal to the current row in the ordering of the partition. The values
       will produce gaps in the sequence.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  since = "2.0.0")
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
@@ -696,17 +712,20 @@ case class Rank(children: Seq[Expression]) extends RankLike {
  * ranking sequence.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the rank of a value in a group of values. The result is one plus the
       previously assigned rank value. Unlike the function rank, dense_rank will not produce gaps
       in the ranking sequence.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  since = "2.0.0")
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
@@ -726,15 +745,18 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  * row counts in the its numerator.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one of the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the percentage ranking of a value in a group of values.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  since = "2.0.0")
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)

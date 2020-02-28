@@ -37,6 +37,9 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 
 {% endhighlight %}
 
+Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
+as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
+
 ### Parameters
 
 <dl>
@@ -77,14 +80,12 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 
 <dl>
   <dt><code><em>COMMENT</em></code></dt>
-  <dd>Table comments are added.</dd>
+  <dd>A string literal to describe the table.</dd>
 </dl>
 
 <dl>
   <dt><code><em>TBLPROPERTIES</em></code></dt>
-  <dd>
-	Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
-  </dd>
+  <dd>A list of key-value pairs that is used to tag the table definition.</dd>
 </dl>
 
 <dl>
@@ -96,21 +97,37 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 ### Examples
 {% highlight sql %}
 
---Using Comment and loading data from another table into the created table
-CREATE TABLE StudentInfo
-  COMMENT 'Table is created using existing data'
-  AS SELECT * FROM Student;
+--Use hive format
+CREATE TABLE student (id INT, name STRING, age INT) STORED AS ORC;
 
---Partitioned table
-CREATE TABLE Student (Id INT,name STRING)
+--Use data from another table
+CREATE TABLE student_copy STORED AS ORC
+  AS SELECT * FROM student;
+
+--Specify table comment and properties
+CREATE TABLE student (id INT, name STRING, age INT)
+  COMMENT 'this is a comment'
+  STORED AS ORC
+  TBLPROPERTIES ('foo'='bar');  
+
+--Specify table comment and properties with different clauses order
+CREATE TABLE student (id INT, name STRING, age INT)
+  STORED AS ORC
+  TBLPROPERTIES ('foo'='bar')
+  COMMENT 'this is a comment';
+
+--Create partitioned table
+CREATE TABLE student (id INT, name STRING)
   PARTITIONED BY (age INT)
-  TBLPROPERTIES ('owner'='xxxx');
+  STORED AS ORC;
 
-CREATE TABLE Student (Id INT,name STRING,age INT)
-  PARTITIONED BY (name,age);
+--Create partitioned table with different clauses order
+CREATE TABLE student (id INT, name STRING)
+  STORED AS ORC
+  PARTITIONED BY (age INT);
 
---Using Row Format and file format
-CREATE TABLE Student (Id INT,name STRING)
+--Use Row Format and file format
+CREATE TABLE student (id INT,name STRING)
   ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
   STORED AS TEXTFILE;
 

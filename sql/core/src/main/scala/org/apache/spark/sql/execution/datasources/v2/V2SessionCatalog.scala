@@ -167,14 +167,15 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   }
 
   implicit class TableIdentifierHelper(ident: Identifier) {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case Array() =>
-          TableIdentifier(ident.name, Some(catalog.getCurrentDatabase))
         case _ =>
-          throw new NoSuchTableException(ident)
+          throw new NoSuchTableException(
+            s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
       }
     }
   }

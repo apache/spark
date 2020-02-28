@@ -460,6 +460,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
       }
     }
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
+      throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
+    }
+    // children being empty means that the condition is not set
+    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
+      throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
+        "the first MATCHED clause must have a condition", ctx)
+    }
+    if (matchedActions.groupBy(_.getClass).mapValues(_.size).exists(_._2 > 1)) {
+      throw new ParseException(
+        "UPDATE and DELETE can appear at most once in MATCHED clauses in a MERGE statement", ctx)
+    }
 
     MergeIntoTable(
       aliasedTarget,
@@ -1402,12 +1414,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL =>
         IsNull(e)
       case SqlBaseParser.TRUE => ctx.NOT match {
-        case null => IsTrue(e)
-        case _ => IsNotTrue(e)
+        case null => EqualNullSafe(e, Literal(true))
+        case _ => Not(EqualNullSafe(e, Literal(true)))
       }
       case SqlBaseParser.FALSE => ctx.NOT match {
-        case null => IsFalse(e)
-        case _ => IsNotFalse(e)
+        case null => EqualNullSafe(e, Literal(false))
+        case _ => Not(EqualNullSafe(e, Literal(false)))
       }
       case SqlBaseParser.UNKNOWN => ctx.NOT match {
         case null => IsUnknown(e)
@@ -3186,7 +3198,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
+        ctx.identifier())
     }
 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())

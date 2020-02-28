@@ -216,16 +216,32 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
+  /**
+   * Flag to prevent launching new tasks while decommissioned. There could be a race condition
+   * accessing this, but decommissioning is only intended to help not be a hard stop.
+   */
+  private var decommissioned = false
+
   heartbeater.start()
 
   metricsPoller.start()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
+  /**
+   * Mark an executor for decommissioning and avoid launching new tasks.
+   */
+  private[spark] def decommission(): Unit = {
+    decommissioned = true
+  }
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
+    if (decommissioned) {
+      log.error(s"Launching a task while in decommissioned state.")
+    }
   }
 
   def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {

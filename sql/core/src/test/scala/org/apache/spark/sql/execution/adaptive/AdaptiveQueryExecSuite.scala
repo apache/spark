@@ -583,7 +583,6 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
       SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
       withTempView("skewData1", "skewData2") {
         spark
@@ -609,8 +608,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
@@ -636,14 +634,15 @@ class AdaptiveQueryExecSuite
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
-        // Partition 0: both left and right sides are skewed, and divide into 5 splits, so
-        //              5 x 5 sub-partitions.
+        // Partition 0: both left and right sides are skewed, left side is divided
+        //              into 2 splits and right side is divided into 4 splits, so
+        //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 5 splits, so
-        //              5 sub-partitions.
-        // So total (25 + 1 + 5) partitions.
+        // Partition 4: only left side is skewed, and divide into 3 splits, so
+        //              3 sub-partitions.
+        // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 25 + 1 + 5)
+        checkSkewJoin(innerSmj, 8 + 1 + 3)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -651,13 +650,13 @@ class AdaptiveQueryExecSuite
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
-        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 5 splits, so
-        //              5 sub-partitions.
-        // So total (5 + 1 + 5) partitions.
+        // Partition 4: only left side is skewed, and divide into 3 splits, so
+        //              3 sub-partitions.
+        // So total (2 + 1 + 3) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 5 + 1 + 5)
+        checkSkewJoin(leftSmj, 2 + 1 + 3)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -665,13 +664,13 @@ class AdaptiveQueryExecSuite
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but right join can't split left side,
-        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        //              so only right side is divided into 4 splits, and thus 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
         // Partition 4: only left side is skewed, but right join can't split left side, so just
         //              1 partition.
-        // So total (5 + 1 + 1) partitions.
+        // So total (4 + 1 + 1) partitions.
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
-        checkSkewJoin(rightSmj, 5 + 1 + 1)
+        checkSkewJoin(rightSmj, 4 + 1 + 1)
       }
     }
   }
