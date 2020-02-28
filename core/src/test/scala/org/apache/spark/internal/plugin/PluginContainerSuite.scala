@@ -139,7 +139,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       .set(NonLocalModeSparkPlugin.TEST_PATH_CONF, path.getAbsolutePath())
 
     sc = new SparkContext(conf)
-    TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     eventually(timeout(10.seconds), interval(100.millis)) {
       val children = path.listFiles()
@@ -169,7 +169,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
 
       var children = Array.empty[File]
       eventually(timeout(10.seconds), interval(100.millis)) {
