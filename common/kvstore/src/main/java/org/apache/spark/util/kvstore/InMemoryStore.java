@@ -230,6 +230,9 @@ public class InMemoryStore implements KVStore {
 
     int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
       if (!naturalParentIndexName.isEmpty() && naturalParentIndexName.equals(index)) {
+        // If there is a parent index for the natural index and `index` happens to be it,
+        // Spark can use the `parentToChildrenMap` to get the related natural keys, and then
+        // delete them from `data`.
         int count = 0;
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
@@ -245,6 +248,8 @@ public class InMemoryStore implements KVStore {
         Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
         CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
 
+        // Go through all the values in `data` and delete objects that meets the predicate `filter`.
+        // This can be slow when there is a large number of entries in `data`.
         data.forEach(callback);
         return callback.count();
       }
@@ -372,6 +377,9 @@ public class InMemoryStore implements KVStore {
         Comparable<Object> parentKey = asKey(parent);
         if (!naturalParentIndexName.isEmpty() &&
           naturalParentIndexName.equals(ti.getParentIndexName(index))) {
+          // If there is a parent index for the natural index and the parent of`index` happens to be
+          // it, Spark can use the `parentToChildrenMap` to get the related natural keys, and then
+          // copy them from `data`.
           NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
@@ -382,6 +390,8 @@ public class InMemoryStore implements KVStore {
           }
           return elements;
         } else {
+          // Go through all the values in `data` and collect all the objects has certain parent
+          // value. This can be slow when there is a large number of entries in `data`.
           KVTypeInfo.Accessor parentGetter = ti.getParentAccessor(index);
           Preconditions.checkArgument(parentGetter != null, "Parent filter for non-child index.");
           return data.values().stream()
