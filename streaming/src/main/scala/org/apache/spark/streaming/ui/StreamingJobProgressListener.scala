@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Queue}
 
 import org.apache.spark.scheduler._
+import org.apache.spark.streaming.StreamingConf.UI_RETAINED_BATCHES
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.scheduler._
 
@@ -33,7 +34,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   private val waitingBatchUIData = new HashMap[Time, BatchUIData]
   private val runningBatchUIData = new HashMap[Time, BatchUIData]
   private val completedBatchUIData = new Queue[BatchUIData]
-  private val batchUIDataLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
+  private val batchUIDataLimit = ssc.conf.get(UI_RETAINED_BATCHES)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
