@@ -48,6 +48,56 @@ object StreamingConf {
       .booleanConf
       .createWithDefault(false)
 
+  private[streaming] val RECEIVER_WAL_CLASS_CONF_KEY =
+    ConfigBuilder("spark.streaming.receiver.writeAheadLog.class")
+      .stringConf
+      .createOptional
+
+  private[streaming] val RECEIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
+    ConfigBuilder("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs")
+      .intConf
+      .createWithDefault(60)
+
+  private[streaming] val RECEIVER_WAL_MAX_FAILURES_CONF_KEY =
+    ConfigBuilder("spark.streaming.receiver.writeAheadLog.maxFailures")
+      .intConf
+      .createWithDefault(3)
+
+  private[streaming] val RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    ConfigBuilder("spark.streaming.receiver.writeAheadLog.closeFileAfterWrite")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[streaming] val DRIVER_WAL_CLASS_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.class")
+      .stringConf
+      .createOptional
+
+  private[streaming] val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.rollingIntervalSecs")
+      .intConf
+      .createWithDefault(60)
+
+  private[streaming] val DRIVER_WAL_MAX_FAILURES_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.maxFailures")
+      .intConf
+      .createWithDefault(3)
+
+  private[streaming] val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.closeFileAfterWrite")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[streaming] val DRIVER_WAL_BATCHING_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.allowBatching")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[streaming] val DRIVER_WAL_BATCHING_TIMEOUT_CONF_KEY =
+    ConfigBuilder("spark.streaming.driver.writeAheadLog.batchingTimeout")
+      .longConf
+      .createWithDefault(5000)
+
   private[streaming] val STREAMING_UNPERSIST =
     ConfigBuilder("spark.streaming.unpersist")
       .booleanConf
@@ -63,14 +113,49 @@ object StreamingConf {
       .intConf
       .createWithDefault(1000)
 
-  private[streaming] val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
-    ConfigBuilder("spark.streaming.driver.writeAheadLog.closeFileAfterWrite")
-      .booleanConf
-      .createWithDefault(false)
+  private[streaming] val SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD =
+    ConfigBuilder("spark.streaming.sessionByKey.deltaChainThreshold")
+      .intConf
+      .createWithDefault(20)
 
-  private[streaming] val RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
-    ConfigBuilder("spark.streaming.receiver.writeAheadLog.closeFileAfterWrite")
-      .booleanConf
-      .createWithDefault(false)
+  private[streaming] val BACKPRESSURE_RATE_ESTIMATOR =
+    ConfigBuilder("spark.streaming.backpressure.rateEstimator")
+      .stringConf
+      .createWithDefault("pid")
+
+  private[streaming] val BACKPRESSURE_PID_PROPORTIONAL =
+    ConfigBuilder("spark.streaming.backpressure.pid.proportional")
+      .doubleConf
+      .createWithDefault(1.0)
+
+  private[streaming] val BACKPRESSURE_PID_INTEGRAL =
+    ConfigBuilder("spark.streaming.backpressure.pid.integral")
+      .doubleConf
+      .createWithDefault(0.2)
+
+  private[streaming] val BACKPRESSURE_PID_DERIVED =
+    ConfigBuilder("spark.streaming.backpressure.pid.derived")
+      .doubleConf
+      .createWithDefault(0.0)
+
+  private[streaming] val BACKPRESSURE_PID_MIN_RATE =
+    ConfigBuilder("spark.streaming.backpressure.pid.minRate")
+      .doubleConf
+      .createWithDefault(100)
+
+  private[streaming] val CONCURRENT_JOBS =
+    ConfigBuilder("spark.streaming.concurrentJobs")
+      .intConf
+      .createWithDefault(1)
+
+  private[streaming] val GRACEFUL_STOP_TIMEOUT =
+    ConfigBuilder("spark.streaming.gracefulStopTimeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[streaming] val MANUAL_CLOCK_JUMP =
+    ConfigBuilder("spark.streaming.manualClock.jump")
+      .longConf
+      .createWithDefault(0)
 
 }
