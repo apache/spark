@@ -212,6 +212,7 @@ public class InMemoryStore implements KVStore {
     private final KVTypeInfo.Accessor naturalKey;
     private final ConcurrentMap<Comparable<Object>, T> data;
     private final String naturalParentIndexName;
+    private final Boolean hasNaturalParentIndex;
     // A mapping from parent to the natural keys of its children.
     // For example, a mapping from a stage ID to all the task IDs in the stage.
     private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
@@ -222,6 +223,7 @@ public class InMemoryStore implements KVStore {
       this.data = new ConcurrentHashMap<>();
       this.naturalParentIndexName = ti.getParentIndexName(KVIndex.NATURAL_INDEX_NAME);
       this.parentToChildrenMap = new ConcurrentHashMap<>();
+      this.hasNaturalParentIndex = naturalParentIndexName.isEmpty();
     }
 
     KVTypeInfo.Accessor getIndexAccessor(String indexName) {
@@ -229,7 +231,7 @@ public class InMemoryStore implements KVStore {
     }
 
     int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
-      if (!naturalParentIndexName.isEmpty() && naturalParentIndexName.equals(index)) {
+      if (hasNaturalParentIndex && naturalParentIndexName.equals(index)) {
         // If there is a parent index for the natural index and `index` happens to be it,
         // Spark can use the `parentToChildrenMap` to get the related natural keys, and then
         // delete them from `data`.
@@ -261,7 +263,7 @@ public class InMemoryStore implements KVStore {
 
     public void put(T value) throws Exception {
       data.put(asKey(naturalKey.get(value)), value);
-      if (!naturalParentIndexName.isEmpty()) {
+      if (hasNaturalParentIndex) {
         Comparable<Object> parentKey = asKey(getIndexAccessor(naturalParentIndexName).get(value));
         NaturalKeys children =
           parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
@@ -271,9 +273,13 @@ public class InMemoryStore implements KVStore {
 
     public void delete(Object key) {
       data.remove(asKey(key));
-      if (!naturalParentIndexName.isEmpty()) {
+      if (hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
           if (v.remove(asKey(key))) {
+            // `v` can be empty after removing the natural key and we can remove it from
+            // `parentToChildrenMap`. However, `parentToChildrenMap` is a ConcurrentMap and such
+            // checking and deleting can be slow.
+            // This method is to delete one object with certain key, let's make it simple here.
             break;
           }
         }
@@ -322,6 +328,7 @@ public class InMemoryStore implements KVStore {
     private final KVTypeInfo.Accessor natural;
     private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
     private final String naturalParentIndexName;
+    private final Boolean hasNaturalParentIndex;
 
     InMemoryView(
         ConcurrentMap<Comparable<Object>, T> data,
@@ -333,6 +340,7 @@ public class InMemoryStore implements KVStore {
       this.natural = ti != null ? ti.getAccessor(KVIndex.NATURAL_INDEX_NAME) : null;
       this.naturalParentIndexName = naturalParentIndexName;
       this.parentToChildrenMap = parentToChildrenMap;
+      this.hasNaturalParentIndex = !naturalParentIndexName.isEmpty();
     }
 
     @Override
@@ -375,9 +383,8 @@ public class InMemoryStore implements KVStore {
     private List<T> copyElements() {
       if (parent != null) {
         Comparable<Object> parentKey = asKey(parent);
-        if (!naturalParentIndexName.isEmpty() &&
-          naturalParentIndexName.equals(ti.getParentIndexName(index))) {
-          // If there is a parent index for the natural index and the parent of`index` happens to be
+        if (hasNaturalParentIndex && naturalParentIndexName.equals(ti.getParentIndexName(index))) {
+          // If there is a parent index for the natural index and the parent of `index` happens to be
           // it, Spark can use the `parentToChildrenMap` to get the related natural keys, and then
           // copy them from `data`.
           NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
