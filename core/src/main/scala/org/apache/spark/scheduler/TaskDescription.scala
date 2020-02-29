@@ -49,6 +49,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
 private[spark] class TaskDescription(
     val taskId: Long,
     val attemptNumber: Int,
+    val isThread: Boolean,
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet
@@ -57,12 +58,16 @@ private[spark] class TaskDescription(
     val addedJars: Map[String, Long],
     val properties: Properties,
     val resources: immutable.Map[String, ResourceInformation],
-    val serializedTask: ByteBuffer) {
+    val serializedTask: ByteBuffer,
+    val serializedOtherTask: ByteBuffer) {
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }
 
 private[spark] object TaskDescription {
+  private final val MASK_LONG_LOWER_16_BITS: Int = 0xFFFF
+  private final val OFFSET_BITS: Int = 16;  // 16
+
   private def serializeStringLongMap(map: Map[String, Long], dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
     map.foreach { case (key, value) =>
@@ -88,6 +93,7 @@ private[spark] object TaskDescription {
 
     dataOut.writeLong(taskDescription.taskId)
     dataOut.writeInt(taskDescription.attemptNumber)
+    dataOut.writeBoolean(taskDescription.isThread)
     dataOut.writeUTF(taskDescription.executorId)
     dataOut.writeUTF(taskDescription.name)
     dataOut.writeInt(taskDescription.index)
@@ -156,6 +162,7 @@ private[spark] object TaskDescription {
     val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
     val taskId = dataIn.readLong()
     val attemptNumber = dataIn.readInt()
+    val isThread = dataIn.readBoolean()
     val executorId = dataIn.readUTF()
     val name = dataIn.readUTF()
     val index = dataIn.readInt()
@@ -183,8 +190,10 @@ private[spark] object TaskDescription {
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
+    val serializedOtherTask =
+      if (isThread) serializedTask.duplicate() else null
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
-      taskJars, properties, resources, serializedTask)
+    new TaskDescription(taskId, attemptNumber, isThread, executorId, name, index, partitionId, taskFiles,
+      taskJars, properties, resources, serializedTask, serializedOtherTask)
   }
 }

@@ -449,13 +449,15 @@ private[spark] class DAGScheduler(
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
       jobId: Int,
+      runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[_]) => _,
+      isThead: Boolean,
       callSite: CallSite): ResultStage = {
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite,
+    val stage = new ResultStage(id, rdd, func, partitions, runBody, isThead, parents, jobId, callSite,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
@@ -687,7 +689,9 @@ private[spark] class DAGScheduler(
       partitions: Seq[Int],
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
-      properties: Properties): JobWaiter[U] = {
+      properties: Properties,
+      runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[T]) => U,
+      isThead: Boolean = false): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
@@ -713,10 +717,11 @@ private[spark] class DAGScheduler(
 
     assert(partitions.nonEmpty)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
-    eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      Utils.cloneProperties(properties)))
+    val conversion2 =
+      runBody.asInstanceOf[(TaskContext, LinkedBlockingQueue[Any], Iterator[_]) => _]
+    val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    eventProcessLoop.post(JobSubmitted(jobId, rdd, func2, partitions.toArray, callSite, waiter,
+      conversion2, isThead, SerializationUtils.clone(properties)))
     waiter
   }
 
@@ -740,9 +745,12 @@ private[spark] class DAGScheduler(
       partitions: Seq[Int],
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
-      properties: Properties): Unit = {
+      properties: Properties,
+      runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[T]) => U,
+      isThead: Boolean = false): Unit = {
     val start = System.nanoTime
-    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    val waiter = submitJob(rdd, func, partitions, callSite,
+      resultHandler, properties, runBody, isThead)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
@@ -981,12 +989,14 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       callSite: CallSite,
       listener: JobListener,
+      runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[_]) => _,
+      isThead: Boolean,
       properties: Properties): Unit = {
     var finalStage: ResultStage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
+      finalStage = createResultStage(finalRDD, func, partitions, jobId, runBody, isThead, callSite)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
@@ -1190,7 +1200,13 @@ private[spark] class DAGScheduler(
             JavaUtils.bufferToArray(
               closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef))
           case stage: ResultStage =>
-            JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
+            if (stage.isThead) {
+              JavaUtils.bufferToArray(
+                closureSerializer.serialize((stage.rdd, stage.runBody, stage.func): AnyRef))
+            } else {
+              JavaUtils.bufferToArray(
+                closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
+            }
         }
 
         partitions = stage.rdd.partitions
@@ -1217,6 +1233,8 @@ private[spark] class DAGScheduler(
         return
     }
 
+    var isThread: Boolean = false
+
     val tasks: Seq[Task[_]] = try {
       val serializedTaskMetrics = closureSerializer.serialize(stage.latestInfo.taskMetrics).array()
       stage match {
@@ -1236,6 +1254,7 @@ private[spark] class DAGScheduler(
             val p: Int = stage.partitions(id)
             val part = partitions(p)
             val locs = taskIdToLocations(id)
+            isThread = stage.isThead
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
@@ -1253,7 +1272,7 @@ private[spark] class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties))
+        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties), isThread)
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
@@ -2156,8 +2175,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, rB, isThrd, properties) =>
+      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, rB, isThrd, properties)
 
     case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
       dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)

@@ -341,6 +341,27 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ENABLE_HIVE_INSERTINTO_ALONE_WRITE_FOR_TASK =
+    buildConf("spark.sql.separateness.write.file.enable")
+      .doc("true, we start separateness task to write hdfs file." +
+        " false, spark computer and write hdfs file in the same task.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val HIVE_INSERTINTO_ALONE_WRITE_TASK_CHUNK_RECORD_SIZE =
+    buildConf("spark.sql.share.task.chunk.record.size")
+      .internal()
+      .doc("share chunk record size for produecer task and consume task.")
+      .intConf
+      .createWithDefault(5000)
+
+  val HIVE_INSERTINTO_ALONE_WRITE_TASK_CHUNK_QUEUE_SIZE =
+    buildConf("spark.sql.share.task.chunk.queue.size")
+      .internal()
+      .doc("for number of share chunk queue size to producer task and consume task.")
+      .intConf
+      .createWithDefault(10)
+
   val AUTO_BROADCASTJOIN_THRESHOLD = buildConf("spark.sql.autoBroadcastJoinThreshold")
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
@@ -2393,6 +2414,15 @@ class SQLConf extends Serializable with Logging {
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
+
+  def shareTaskChunkQueueSize: Int =
+    getConf(HIVE_INSERTINTO_ALONE_WRITE_TASK_CHUNK_QUEUE_SIZE)
+
+  def shareTaskChunkRecordSize: Int =
+    getConf(HIVE_INSERTINTO_ALONE_WRITE_TASK_CHUNK_RECORD_SIZE)
+
+  def aloneWriteFileTaskEnabled: Boolean =
+    getConf(ENABLE_HIVE_INSERTINTO_ALONE_WRITE_FOR_TASK)
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
 

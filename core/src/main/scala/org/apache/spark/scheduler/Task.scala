@@ -1,4 +1,4 @@
-/*
+  /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -166,13 +166,97 @@ private[spark] abstract class Task[T](
     }
   }
 
+
+  /**
+    * Called by [[org.apache.spark.executor.Executor]] to run this task.
+    *
+    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
+    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
+    * @return the result of the task along with updates of Accumulators.
+    */
+  final def consumeRun(
+                        taskAttemptId: Long,
+                        attemptNumber: Int,
+                        metricsSystem: MetricsSystem): T = {
+    context = new TaskContextImpl(
+      stageId,
+      partitionId,
+      taskAttemptId,
+      attemptNumber,
+      taskMemoryManager,
+      localProperties,
+      metricsSystem,
+      metrics)
+    TaskContext.setTaskContext(context)
+    taskThread = Thread.currentThread()
+
+    if (_reasonIfKilled != null) {
+      kill(interruptThread = false, _reasonIfKilled)
+    }
+
+    new CallerContext(
+      "TASK",
+      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
+      appId,
+      appAttemptId,
+      jobId,
+      Option(stageId),
+      Option(stageAttemptId),
+      Option(taskAttemptId),
+      Option(attemptNumber)).setCurrentContext()
+
+    try {
+      runConsumeTask(context)
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure callbacks, and rethrow the exception.
+        throw e
+    } finally {
+      try {
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
+            MemoryMode.OFF_HEAP)
+          // Notify any tasks waiting for execution memory to be freed to wake up and try to
+          // acquire memory again. This makes impossible the scenario where a task sleeps forever
+          // because there are no other tasks left to notify it. Since this is safe to do but may
+          // not be strictly necessary, we should revisit whether we can remove this in the
+          // future.
+          val memoryManager = SparkEnv.get.memoryManager
+          memoryManager.synchronized { memoryManager.notifyAll() }
+        }
+      } finally {
+        // Though we unset the ThreadLocal here, the context member variable itself is still
+        // queried directly in the TaskRunner to check for FetchFailedExceptions.
+        TaskContext.unset()
+      }
+    }
+  }
+
   private var taskMemoryManager: TaskMemoryManager = _
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
   }
 
+  var blockLinkQueue: LinkedBlockingQueue[Executor.produceResult] = null
+
+  var producerContext: TaskContextImpl = null
+
+  def setBlockLinkQueue(linkQueue: LinkedBlockingQueue[Executor.produceResult]): Unit = {
+    this.blockLinkQueue = linkQueue
+  }
+
+  def setProducerContext(value: TaskContextImpl): Unit = {
+    this.producerContext = value
+  }
+
+  def getProducerContext: TaskContextImpl = producerContext
+
   def runTask(context: TaskContext): T
+
+  def runConsumeTask(context: TaskContext): T
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
@@ -214,6 +298,22 @@ private[spark] abstract class Task[T](
         // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
         // filter them out.
         context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+    * Collect the latest values of accumulators used in this task. If the task failed,
+    * filter out the accumulators whose values should not be included on failures.
+    */
+  def collectProducerUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
+    if (producerContext != null) {
+      // Note: internal accumulators representing task metrics always count failed values
+      producerContext.taskMetrics.nonZeroInternalAccums() ++
+        // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
+        // filter them out.
+        producerContext.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }

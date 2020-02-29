@@ -102,6 +102,9 @@ private[spark] class TaskSchedulerImpl(
 
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
+
+  private[scheduler] val consumeTaskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
+
   // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
 
@@ -207,11 +210,11 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
-  override def submitTasks(taskSet: TaskSet): Unit = {
+  override def submitTasks(taskSet: TaskSet, isThread: Boolean): Unit = {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      val manager = createTaskSetManager(taskSet, maxTaskFailures, isThread)
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
@@ -252,8 +255,9 @@ private[spark] class TaskSchedulerImpl(
   // Label as private[scheduler] to allow tests to swap in different task set managers if necessary
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
-      maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
+      maxTaskFailures: Int,
+      isThread: Boolean): TaskSetManager = {
+    new TaskSetManager(this, taskSet, maxTaskFailures, isThread, blacklistTrackerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -594,11 +598,15 @@ private[spark] class TaskSchedulerImpl(
               }
             }
             if (TaskState.isFinished(state)) {
-              cleanupTaskState(tid)
-              taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
+                if (!taskSet.isThread) {
+                  cleanupTaskState(tid)
+                  taskSet.removeRunningTask(tid)
+                }
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                cleanupTaskState(tid)
+                taskSet.removeRunningTask(tid)
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }
@@ -619,6 +627,34 @@ private[spark] class TaskSchedulerImpl(
       dagScheduler.executorLost(failedExecutor.get, reason.get)
       backend.reviveOffers()
     }
+  }
+
+  def otherStatusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    synchronized {
+      try {
+        taskIdToTaskSetManager.get(tid) match {
+          case Some(taskSet) =>
+            if (TaskState.isFinished(state)) {
+              cleanupTaskState(tid)
+              taskSet.removeRunningTask(tid)
+              if (state == TaskState.FINISHED) {
+                taskResultGetter.enqueueConsumeSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                throw new SparkException(s"executor exception by consume task (TID: $tid)")
+              }
+            }
+          case None =>
+            logError(
+              ("[consume] Ignoring update with state %s for TID %s because its task set is gone " +
+                "(this is likely the result of receiving duplicate task finished " +
+                "status updates) or its executor has been marked as failed.")
+                .format(state, tid))
+        }
+      } catch {
+        case e: Exception => logError("Exception in otherStatusUpdate", e)
+      }
+    }
+
   }
 
   /**
@@ -653,6 +689,13 @@ private[spark] class TaskSchedulerImpl(
       tid: Long,
       taskResult: DirectTaskResult[_]): Unit = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
+  }
+
+  def handleConsumeSuccessfulTask(
+                                   taskSetManager: TaskSetManager,
+                                   tid: Long,
+                                   taskResult: DirectTaskResult[_]): Unit = synchronized {
+    taskSetManager.handleConsumeSuccessfulTask(tid, taskResult)
   }
 
   def handleFailedTask(

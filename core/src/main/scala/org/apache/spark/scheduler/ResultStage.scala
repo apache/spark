@@ -32,6 +32,8 @@ private[spark] class ResultStage(
     rdd: RDD[_],
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
+    val runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[_]) => _,
+    val isThead: Boolean,
     parents: List[Stage],
     firstJobId: Int,
     callSite: CallSite,

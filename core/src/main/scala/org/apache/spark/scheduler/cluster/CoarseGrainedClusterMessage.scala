@@ -82,6 +82,17 @@ private[spark] object CoarseGrainedClusterMessages {
     }
   }
 
+  case class OtherStatusUpdate(executorId: String, taskId: Long,
+                               state: TaskState, data: SerializableBuffer) extends CoarseGrainedClusterMessage
+
+  object OtherStatusUpdate {
+    /** Alternate factory method that takes a ByteBuffer directly for the data field */
+    def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer)
+    : OtherStatusUpdate = {
+      OtherStatusUpdate(executorId, taskId, state, new SerializableBuffer(data))
+    }
+  }
+
   // Internal messages in driver
   case object ReviveOffers extends CoarseGrainedClusterMessage
 

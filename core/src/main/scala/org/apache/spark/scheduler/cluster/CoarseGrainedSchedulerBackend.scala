@@ -159,6 +159,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
+      case OtherStatusUpdate(executorId, taskId, state, data) =>
+        scheduler.otherStatusUpdate(taskId, state, data.value)
+
       case ReviveOffers =>
         makeOffers()
 

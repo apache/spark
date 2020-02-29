@@ -751,8 +751,38 @@ private[spark] class TaskSetManager(
     // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates,
-      result.metricPeaks, info)
+    if (!isThread) {
+      sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates,
+        result.metricPeaks, info)
+    }
+    maybeFinishTaskSet()
+  }
+
+  /**
+    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
+    */
+  def handleConsumeSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
+    val info = taskInfos(tid)
+    val index = info.index
+    info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+
+    consumeTasksSuccessful += 1
+
+    logDebug(s"[consume] Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
+      s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
+      s" ($consumeTasksSuccessful/$numTasks)")
+
+    if (consumeTasksSuccessful == numTasks) {
+      isConsumeZombie = true
+    }
+
+    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
+    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
+    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
+    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
+    // Note: "result.value()" only deserializes the value when it's called at the first time, so
+    // here "result.value()" just returns the value and won't block other threads.
+    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
     maybeFinishTaskSet()
   }
 

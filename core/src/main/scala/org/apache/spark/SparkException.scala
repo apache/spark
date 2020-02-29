@@ -43,3 +43,6 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  */
 private[spark] case class ExecutorDeadException(message: String)
   extends SparkException(message)
+
+private[spark] case class SparkProducerTaskException(threadId: Long, msg: String)
+  extends SparkException(s"producer task(TID: $threadId) exception exit[$msg].")

@@ -48,6 +48,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.collection.ExternalChunkedRecordByteStream
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -236,11 +237,20 @@ private[spark] class Executor(
   }
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
-    val tr = new TaskRunner(context, taskDescription)
+    val threadQueue = if (taskDescription.isThread) {
+      new LinkedBlockingQueue[Executor.produceResult]
+    } else null
+
+    val tr = new TaskRunner(context, taskDescription, threadQueue)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
+    }
+
+    if (taskDescription.isThread) {
+      val thrd = new TaskConsumeRunner(context, taskDescription, threadQueue)
+      threadPool.execute(thrd)
     }
   }
 
@@ -315,7 +325,8 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      private val taskDescription: TaskDescription)
+      private val taskDescription: TaskDescription,
+      private val blockLinkQueue: LinkedBlockingQueue[Executor.produceResult])
     extends Runnable {
 
     val taskId = taskDescription.taskId
@@ -352,6 +363,20 @@ private[spark] class Executor(
           if (!finished) {
             task.kill(interruptThread, reason)
           }
+        }
+      }
+    }
+
+    /**
+      * send exception msg to consume task when producer task exception exit
+      */
+    private def sendExceptionMsgToConsumeTask(msg: String): Unit = synchronized {
+      if (taskDescription.isThread && blockLinkQueue != null) {
+        blockLinkQueue.synchronized {
+          blockLinkQueue.put(new Executor.FailProducerException(taskId, msg))
+          // if cosume task recevie first the end of message,
+          // after consume task throw exception, then the task linkQueue.take is ok.
+          blockLinkQueue.put(new Executor.FinishRecordResult(taskId, null, true))
         }
       }
     }
@@ -452,6 +477,7 @@ private[spark] class Executor(
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
         var threwException = true
+        task.setBlockLinkQueue(blockLinkQueue)
         val value = Utils.tryWithSafeFinally {
           val res = task.run(
             taskAttemptId = taskId,
@@ -563,6 +589,9 @@ private[spark] class Executor(
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
+        val taskCtx = if (taskDescription.isThread && blockLinkQueue != null) {
+          task.context
+        } else null
         val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, metricPeaks)
@@ -594,6 +623,14 @@ private[spark] class Executor(
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
+        if (taskDescription.isThread && blockLinkQueue != null) {
+          blockLinkQueue.synchronized {
+            blockLinkQueue.put(new Executor.FinishRecordResult(taskId, taskCtx, true))
+            // if cosume task recevie first the end of message,
+            // after consume task throw exception, then the task linkQueue.take is ok.
+            blockLinkQueue.put(new Executor.FinishRecordResult(taskId, taskCtx, true))
+          }
+        }
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
@@ -604,6 +641,7 @@ private[spark] class Executor(
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
           val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+          sendExceptionMsgToConsumeTask(s"TID ${taskId} encountered other exception: $t")
 
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>
@@ -614,6 +652,7 @@ private[spark] class Executor(
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
           val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+          sendExceptionMsgToConsumeTask(s"killed $taskName (TID $taskId), reason: $killReason")
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
@@ -633,7 +672,7 @@ private[spark] class Executor(
           val reason = cDE.toTaskCommitDeniedReason
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
-
+          sendExceptionMsgToConsumeTask(s"CausedBy $taskName (TID $taskId)")
         case t: Throwable if env.isStopped =>
           // Log the expected exception after executor.stop without stack traces
           // see: SPARK-19147
@@ -672,6 +711,7 @@ private[spark] class Executor(
           } else {
             logInfo("Not reporting error to driver during JVM shutdown.")
           }
+          sendExceptionMsgToConsumeTask(s"inShutdown $taskName (TID $taskId)")
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
@@ -685,6 +725,340 @@ private[spark] class Executor(
           // are known, and metricsPoller.onTaskStart was called.
           metricsPoller.onTaskCompletion(taskId, task.stageId, task.stageAttemptId)
         }
+      }
+    }
+
+    private def hasFetchFailure: Boolean = {
+      task != null && task.context != null && task.context.fetchFailed.isDefined
+    }
+  }
+
+  class TaskConsumeRunner(
+                           execBackend: ExecutorBackend,
+                           private val taskDescription: TaskDescription,
+                           private val blockLinkQueue: LinkedBlockingQueue[Executor.produceResult])
+    extends Runnable {
+
+    val taskId = taskDescription.taskId
+    val threadName = s"produce task launch worker for task $taskId"
+    private val taskName = "consumeTask"
+
+    /** If specified, this task has been killed and this option contains the reason. */
+    @volatile private var reasonIfKilled: Option[String] = None
+
+    @volatile private var threadId: Long = -1
+    @volatile private var stageId: Long = -1
+
+    def getThreadId: Long = threadId
+
+    /** Whether this task has been finished. */
+    @GuardedBy("TaskRunner.this")
+    private var finished = false
+
+    def isFinished: Boolean = synchronized { finished }
+
+    /** How much the JVM process has spent in GC when the task starts to run. */
+    @volatile var startGCTime: Long = _
+
+    /**
+      * The task to run. This will be set in run() by deserializing the task binary coming
+      * from the driver. Once it is set, it will never be changed.
+      */
+    @volatile var task: Task[Any] = _
+
+
+    def kill(interruptThread: Boolean, reason: String): Unit = {
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
+      reasonIfKilled = Some(reason)
+      if (task != null) {
+        synchronized {
+          if (!finished) {
+            task.kill(interruptThread, reason)
+          }
+        }
+      }
+    }
+
+    /**
+      * Set the finished flag to true and clear the current thread's interrupt status
+      */
+    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
+      this.finished = true
+      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
+      // ClosedByInterruptException during execBackend.statusUpdate which causes
+      // Executor to crash
+      Thread.interrupted()
+      // Notify any waiting TaskReapers. Generally there will only be one reaper per task but there
+      // is a rare corner-case where one task can have two reapers in case cancel(interrupt=False)
+      // is followed by cancel(interrupt=True). Thus we use notifyAll() to avoid a lost wakeup:
+      notifyAll()
+    }
+
+    private def execBackendUpdateStatus(isFinish: Boolean, data: ByteBuffer): Unit = {
+      if (isFinish) {
+        logError("[consume] producer task is finish, but consume task is fail.........")
+        execBackend.statusUpdate(taskId, TaskState.FAILED, data)
+      } else {
+        logInfo("[consume] producer task is running, but consume task is throw exception...")
+      }
+    }
+
+    private def consumeTaskExceptionStatus(msg: String): Boolean = synchronized {
+      logInfo(msg)
+      var isFinish: Boolean = false
+      do
+      {
+        var result: Executor.produceResult = null
+        result = blockLinkQueue.take()
+        result match {
+          case f @ Executor.FailProducerException(threadId, msg) =>
+            logInfo(s"[consume] producer task (TID: $threadId) throw exception.........")
+            return false
+          case s @ Executor.SuccessRecordResult(_, value) =>
+            if (value != null) {
+              val currentResult = value.asInstanceOf[ExternalChunkedRecordByteStream[Any]]
+              currentResult.setConsumeKill(true)
+            }
+            isFinish = false
+          case o @ Executor.FinishRecordResult(_, _, overFlag) =>
+            isFinish = overFlag
+        }
+      } while (!isFinish)
+
+      isFinish
+    }
+
+    override def run(): Unit = {
+      threadId = Thread.currentThread.getId
+      Thread.currentThread.setName(threadName)
+      val threadMXBean = ManagementFactory.getThreadMXBean
+      val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
+      Thread.currentThread.setContextClassLoader(replClassLoader)
+      val ser = env.closureSerializer.newInstance()
+      logInfo(s"Running $taskName (TID $taskId)")
+      var taskStart: Long = 0
+      var taskStartCpu: Long = 0
+      startGCTime = computeTotalGcTime()
+
+      try {
+        // Must be set before updateDependencies() is called, in case fetching dependencies
+        // requires access to properties contained within (e.g. for access control).
+        Executor.taskDeserializationProps.set(taskDescription.properties)
+
+        updateDependencies(taskDescription.addedFiles, taskDescription.addedJars)
+        task = ser.deserialize[Task[Any]](
+          taskDescription.serializedOtherTask, Thread.currentThread.getContextClassLoader)
+        task.localProperties = taskDescription.properties
+        task.setTaskMemoryManager(taskMemoryManager)
+
+        // If this task has been killed before we deserialized it, let's quit now. Otherwise,
+        // continue executing the task.
+        val killReason = reasonIfKilled
+        if (killReason.isDefined) {
+          // Throw an exception rather than returning, because returning within a try{} block
+          // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
+          // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
+          // for the task.
+          throw new TaskKilledException(killReason.get)
+        }
+
+        logDebug("Task " + taskId + "'s epoch is " + task.epoch)
+        env.mapOutputTracker.updateEpoch(task.epoch)
+
+        // Run the actual task and measure its runtime.
+        taskStart = System.currentTimeMillis()
+        taskStartCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+          threadMXBean.getCurrentThreadCpuTime
+        } else 0L
+
+        var threwException = true
+        task.setBlockLinkQueue(blockLinkQueue)
+        val value = try {
+          val res = task.consumeRun(
+            taskAttemptId = taskId,
+            attemptNumber = taskDescription.attemptNumber,
+            metricsSystem = env.metricsSystem)
+          threwException = false
+          res
+        } finally {
+          val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
+          if (freedMemory > 0 && !threwException) {
+            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+              throw new SparkException(errMsg)
+            } else {
+              logWarning(errMsg)
+            }
+          }
+        }
+
+        task.context.fetchFailed.foreach { fetchFailure =>
+          // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
+          // other exceptions.  Its *possible* this is what the user meant to do (though highly
+          // unlikely).  So we will log an error and keep going.
+          logError(s"TID ${taskId} completed successfully though internally it encountered " +
+            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
+            s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
+        }
+
+        // If the task has been killed, let's fail it.
+        task.context.killTaskIfInterrupted()
+
+        val resultSer = env.serializer.newInstance()
+        val valueBytes = resultSer.serialize(value)
+
+        // Note: accumulator updates must be collected after TaskMetrics is updated
+        val producerCtx = task.getProducerContext
+        val accumUpdates = if (producerCtx != null) {
+          task.collectProducerUpdates()
+        } else {
+          task.collectAccumulatorUpdates()
+        }
+        // TODO: do not serialize value twice
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates)
+        val serializedDirectResult = ser.serialize(directResult)
+        val resultSize = serializedDirectResult.limit
+
+        // directSend = sending directly back to the driver
+        val serializedResult: ByteBuffer = {
+          if (maxResultSize > 0 && resultSize > maxResultSize) {
+            logWarning(s"[consume] Finished $taskName (TID $taskId). " +
+              s"Result is larger than maxResultSize " +
+              s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
+              s"dropping it.")
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+          } else if (resultSize > maxDirectResultSize) {
+            val blockId = TaskResultBlockId(taskId)
+            env.blockManager.putBytes(
+              blockId,
+              new ChunkedByteBuffer(serializedDirectResult.duplicate()),
+              StorageLevel.MEMORY_AND_DISK_SER)
+            logInfo(
+              s"[consume] Finished $taskName (TID $taskId). $resultSize bytes " +
+                "result sent via BlockManager)")
+            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
+          } else {
+            logInfo(s"[consume] Finished $taskName (TID $taskId). $resultSize " +
+              "bytes result sent to driver")
+            serializedDirectResult
+          }
+        }
+
+        var isSendStatus = true
+        val taskRunner = runningTasks.get(taskId)
+        if (taskRunner != null && !taskRunner.isFinished) {
+          val msg = s"[consume] $taskName is Finished, but produce task is running, " +
+            s"so kill producer task (TID $taskId)"
+          val isFinish = consumeTaskExceptionStatus(msg)
+          val killReason = task.reasonIfKilled.getOrElse(msg)
+          execBackendUpdateStatus(isFinish, ser.serialize(TaskKilled(killReason)))
+          isSendStatus = false
+        }
+
+        setTaskFinishedAndClearInterruptStatus()
+
+        if (isSendStatus) {
+          execBackend.statusConsumeUpdate(taskId, TaskState.FINISHED, serializedResult)
+        }
+      } catch {
+        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+          val reason = task.context.fetchFailed.get.toTaskFailedReason
+          if (!t.isInstanceOf[FetchFailedException]) {
+            // there was a fetch failure in the task, but some user code wrapped that exception
+            // and threw something else.  Regardless, we treat it as a fetch failure.
+            val fetchFailedCls = classOf[FetchFailedException].getName
+            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
+              s"failed, but the ${fetchFailedCls} was hidden by another " +
+              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
+              s"other exception: $t")
+          }
+
+          val msg = s"[consume] Failed Casue By $taskName (TID $taskId)"
+          val isFinish = consumeTaskExceptionStatus(msg)
+          setTaskFinishedAndClearInterruptStatus()
+          execBackendUpdateStatus(isFinish, ser.serialize(reason))
+
+        case p: SparkProducerTaskException =>
+          logInfo(s"[consume] Failed producer exception killed consume $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
+
+        case t: TaskKilledException =>
+          val msg = s"[consume] Failed Executor killed $taskName (TID $taskId), reason: ${t.reason}"
+          val isFinish = consumeTaskExceptionStatus(msg)
+          setTaskFinishedAndClearInterruptStatus()
+          if (isFinish) {
+            logInfo("[consume] producer task is finish, but consume task is fail.........")
+            execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
+          } else {
+            logInfo("[consume] producer task is running, but consume task is throw exception...")
+          }
+
+        case _: InterruptedException | NonFatal(_) if
+        task != null && task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+          val msg = s"[consume] Failed interrupted and killed $taskName (TID $taskId)"
+          val isFinish = consumeTaskExceptionStatus(msg)
+          setTaskFinishedAndClearInterruptStatus()
+          execBackendUpdateStatus(isFinish, ser.serialize(TaskKilled(killReason)))
+
+        case CausedBy(cDE: CommitDeniedException) =>
+          val reason = cDE.toTaskFailedReason
+          val msg = s"[consume] Failed interrupted and caused by $taskName (TID $taskId)"
+          val isFinish = consumeTaskExceptionStatus(msg)
+          setTaskFinishedAndClearInterruptStatus()
+          execBackendUpdateStatus(isFinish, ser.serialize(reason))
+
+        case t: Throwable =>
+          // Attempt to exit cleanly by informing the driver of our failure.
+          // If anything goes wrong (or this was a fatal exception), we will delegate to
+          // the default uncaught exception handler, which will terminate the Executor.
+          logError(s"Failed Exception in $taskName (TID $taskId)", t)
+
+          // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
+          // libraries may set up shutdown hooks that race with running tasks during shutdown,
+          // spurious failures may occur and can result in improper accounting in the driver (e.g.
+          // the task failure would not be ignored if the shutdown happened because of premption,
+          // instead of an app issue).
+          if (!ShutdownHookManager.inShutdown()) {
+            // Collect latest accumulator values to report back to the driver
+            val accums: Seq[AccumulatorV2[_, _]] =
+              if (task != null) {
+                task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+                task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+                task.collectAccumulatorUpdates(taskFailed = true)
+              } else {
+                Seq.empty
+              }
+
+            val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
+            val serializedTaskEndReason = {
+              try {
+                ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
+              } catch {
+                case _: NotSerializableException =>
+                  // t is not serializable so just send the stacktrace
+                  ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
+              }
+            }
+            val msg = s"[consume] Failed ShutdownHookManager.inShutdown $taskName (TID $taskId)"
+            val isFinish = consumeTaskExceptionStatus(msg)
+            setTaskFinishedAndClearInterruptStatus()
+            execBackendUpdateStatus(isFinish, serializedTaskEndReason)
+
+          } else {
+            val msg = s"${taskName} Not reporting error to driver during JVM shutdown."
+            consumeTaskExceptionStatus(msg)
+          }
+
+          // Don't forcibly exit unless the exception was inherently fatal, to avoid
+          // stopping other tasks unnecessarily.
+          if (Utils.isFatalError(t)) {
+            uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
+          }
+      } finally {
+
       }
     }
 
@@ -949,4 +1323,25 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+
+  private[spark] sealed trait produceResult {
+    val threadId: Long
+  }
+
+  private[spark] case class SuccessRecordResult(
+                                                 threadId: Long,
+                                                 value: ExternalChunkedRecordByteStream[Any]) extends produceResult
+
+  private[spark] case class FinishRecordResult(
+                                                threadId: Long,
+                                                value: TaskContextImpl,
+                                                isFinish: Boolean) extends produceResult
+
+  private[spark] case class SuccessStartConsume(
+                                                 threadId: Long,
+                                                 consumeFunc: (TaskContext, Iterator[_]) => _) extends produceResult
+
+  private[spark] case class FailProducerException(
+                                                   threadId: Long,
+                                                   message: String) extends produceResult
 }

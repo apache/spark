@@ -130,6 +130,76 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     })
   }
 
+  def enqueueConsumeSuccessfulTask(
+                                    taskSetManager: TaskSetManager,
+                                    tid: Long,
+                                    serializedData: ByteBuffer): Unit = {
+    getTaskResultExecutor.execute(new Runnable {
+      override def run(): Unit = Utils.logUncaughtExceptions {
+        try {
+          val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
+            case directResult: DirectTaskResult[_] =>
+              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+                return
+              }
+              // deserialize "value" without holding any lock so that it won't block other threads.
+              // We should call it here, so that when it's called again in
+              // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
+              directResult.value(taskResultSerializer.get())
+              (directResult, serializedData.limit())
+            case IndirectTaskResult(blockId, size) =>
+              if (!taskSetManager.canFetchMoreResults(size)) {
+                // dropped by executor if size is larger than maxResultSize
+                sparkEnv.blockManager.master.removeBlock(blockId)
+                return
+              }
+              logDebug("Fetching indirect task result for TID %s".format(tid))
+              scheduler.handleTaskGettingResult(taskSetManager, tid)
+              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
+              if (!serializedTaskResult.isDefined) {
+                /* We won't be able to get the task result if the machine that ran the task failed
+                 * between when the task ended and when we tried to fetch the result, or if the
+                 * block manager had to flush the result. */
+                scheduler.handleFailedTask(
+                  taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
+                return
+              }
+              val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
+                serializedTaskResult.get.toByteBuffer)
+              // force deserialization of referenced value
+              deserializedResult.value(taskResultSerializer.get())
+              sparkEnv.blockManager.master.removeBlock(blockId)
+              (deserializedResult, size)
+          }
+
+          // Set the task result size in the accumulator updates received from the executors.
+          // We need to do this here on the driver because if we did this on the executors then
+          // we would have to serialize the result again after updating the size.
+          result.accumUpdates = result.accumUpdates.map { a =>
+            if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+              val acc = a.asInstanceOf[LongAccumulator]
+              assert(acc.sum == 0L, "task result size should not have been set on the executors")
+              acc.setValue(size.toLong)
+              acc
+            } else {
+              a
+            }
+          }
+
+          scheduler.handleConsumeSuccessfulTask(taskSetManager, tid, result)
+        } catch {
+          case cnf: ClassNotFoundException =>
+            val loader = Thread.currentThread.getContextClassLoader
+            taskSetManager.abort("ClassNotFound with classloader: " + loader)
+          // Matching NonFatal so we don't catch the ControlThrowable from the "return" above.
+          case NonFatal(ex) =>
+            logError("Exception while getting task result", ex)
+            taskSetManager.abort("Exception while getting task result: %s".format(ex))
+        }
+      }
+    })
+  }
+
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer): Unit = {
     var reason : TaskFailedReason = UnknownReason

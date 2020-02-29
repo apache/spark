@@ -39,6 +39,8 @@ private[scheduler] case class JobSubmitted(
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,
+    runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[_]) => _,
+    isThead: Boolean = false,
     properties: Properties = null)
   extends DAGSchedulerEvent
 

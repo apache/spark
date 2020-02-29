@@ -2114,17 +2114,20 @@ class SparkContext(config: SparkConf) extends Logging {
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit): Unit = {
+      resultHandler: (Int, U) => Unit,
+      runBody: (TaskContext, LinkedBlockingQueue[Any], Iterator[T]) => U,
+      isThead: Boolean = false): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
+    val cleanedConver = if (isThead) clean(runBody) else null
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
-    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
+    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get, cleanedConver, isThead)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
   }
@@ -2145,7 +2148,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int]): Array[U] = {
     val results = new Array[U](partitions.size)
-    runJob[T, U](rdd, func, partitions, (index, res) => results(index) = res)
+    runJob[T, U](rdd, func, partitions, (index, res) => results(index) = res, null, false)
     results
   }
 
@@ -2164,7 +2167,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: Iterator[T] => U,
       partitions: Seq[Int]): Array[U] = {
     val cleanedFunc = clean(func)
-    runJob(rdd, (ctx: TaskContext, it: Iterator[T]) => cleanedFunc(it), partitions)
+    runJob(rdd, (ctx: TaskContext, it: Iterator[T]) => cleanedFunc(it), partitions, null, false)
   }
 
   /**
@@ -2204,7 +2207,7 @@ class SparkContext(config: SparkConf) extends Logging {
     rdd: RDD[T],
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit): Unit = {
-    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler, null, false)
   }
 
   /**
@@ -2219,7 +2222,7 @@ class SparkContext(config: SparkConf) extends Logging {
       processPartition: Iterator[T] => U,
       resultHandler: (Int, U) => Unit): Unit = {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler, null, false)
   }
 
   /**
@@ -2277,7 +2280,9 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions,
       callSite,
       resultHandler,
-      localProperties.get)
+      localProperties.get,
+      null,
+      false)
     new SimpleFutureAction(waiter, resultFunc)
   }
 

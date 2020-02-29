@@ -148,6 +148,11 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
+
+    val chunkQueueSize = sparkSession.sessionState.conf.shareTaskChunkQueueSize
+    val chunkRecordSize = sparkSession.sessionState.conf.shareTaskChunkRecordSize
+    val writeTaskEnable = sparkSession.sessionState.conf.aloneWriteFileTaskEnabled
+
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
@@ -189,7 +194,14 @@ object FileFormatWriter extends Logging {
       } else {
         rdd
       }
-
+      val isThread =
+        if (writeTaskEnable &&
+          description.partitionColumns.isEmpty &&
+          description.bucketIdExpression.isEmpty) {
+          true
+        } else {
+          false
+        }
       val jobIdInstant = new Date().getTime
       val ret = new Array[WriteTaskResult](rddWithNonEmptyPartitions.partitions.length)
       sparkSession.sparkContext.runJob(
@@ -208,7 +220,13 @@ object FileFormatWriter extends Logging {
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
-        })
+        },
+        (taskContext: TaskContext,
+         linkQueue: LinkedBlockingQueue[Any],
+         iter: Iterator[InternalRow]) => {
+          runProducerBoby(taskContext, linkQueue, iter, chunkQueueSize, chunkRecordSize)
+        },
+        isThread)
 
       val commitMsgs = ret.map(_.commitMsg)
 
@@ -290,6 +308,91 @@ object FileFormatWriter extends Logging {
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows.", t)
     }
+  }
+
+
+  private def runProducerBoby(taskContext: TaskContext,
+                              linkQ: LinkedBlockingQueue[Any],
+                              iter: Iterator[InternalRow],
+                              chunkQueueSize: Int,
+                              chunkRecordSize: Int): WriteTaskResult = {
+
+    val threadId = Thread.currentThread.getId
+    val linkQueue: LinkedBlockingQueue[Executor.produceResult] =
+      linkQ.asInstanceOf[LinkedBlockingQueue[Executor.produceResult]]
+
+    val maxChunkedArraySize = chunkQueueSize
+    var chunkedArray: Array[ExternalChunkedRecordByteStream[InternalRow]] =
+      new Array(maxChunkedArraySize)
+    (0 until maxChunkedArraySize).foreach { index =>
+      val readRecordOutStream = new ExternalChunkedRecordByteStream[InternalRow](chunkRecordSize)
+      // readRecordOutStream.allocateNeededRecord()
+      readRecordOutStream.setUsed(false)
+      readRecordOutStream.init()
+      chunkedArray(index) = readRecordOutStream
+    }
+
+    def findUnUsedChunkedRecordByteStream(): Int = {
+      while (true) {
+        (0 until maxChunkedArraySize).foreach { index =>
+          val unused = chunkedArray(index).getUsed
+          val isConsumeKill = chunkedArray(index).getConsumeKill
+          if (isConsumeKill) {
+            val msg = s"[Produce] threadID: $threadId is killed by consume task......."
+            throw new SparkException(msg)
+            return -1
+          }
+          if (!unused) {
+            return index
+          }
+        }
+        Thread.sleep(5) // sleep 5ms
+      }
+      0
+    }
+
+    def threadProcess(): Boolean = {
+      var isWriteFinish = true
+      var isFinished = iter.hasNext
+      if (!isFinished) {
+        return false
+      }
+
+      val index = findUnUsedChunkedRecordByteStream()
+      val readRecordOutStream = chunkedArray(index)
+      readRecordOutStream.init()
+
+      do {
+        val value = iter.next().copy()
+        isWriteFinish = readRecordOutStream.write(value)
+
+        // if readRecordOutStream is write full, so not need read next key value,
+        // then isFinished is true, isWriteFinish is false.
+        if (isWriteFinish) {
+          isFinished = iter.hasNext
+        }
+      } while (isFinished && isWriteFinish)
+
+      linkQueue.synchronized {
+        readRecordOutStream.setUsed(true)
+        val chunkedBlock = readRecordOutStream.asInstanceOf[ExternalChunkedRecordByteStream[Any]]
+        linkQueue.put(new Executor.SuccessRecordResult(threadId, chunkedBlock))
+      }
+
+      isFinished
+    }
+
+    def threadRun(): Unit = {
+      while (true) {
+        val isReadFinished = threadProcess()
+        // if read file is finished, so send finished flag is true to consume.
+        if (!isReadFinished) {
+          return
+        }
+      }
+    }
+    threadRun()
+    WriteTaskResult(null, Set.empty)
   }
 
   /**

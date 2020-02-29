@@ -99,6 +99,11 @@ private[spark] class ShuffleMapTask(
     dep.shuffleWriterProcessor.write(rdd, dep, mapId, context, partition)
   }
 
+  override def runConsumeTask(context: TaskContext): MapStatus = {
+    val errMsg = s"${this.getClass} is not support break up thread"
+    throw new SparkException(errMsg)
+  }
+
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)

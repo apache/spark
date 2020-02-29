@@ -234,6 +234,14 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
+  override def statusConsumeUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
+    val msg = OtherStatusUpdate(executorId, taskId, state, data)
+    driver match {
+      case Some(driverRef) => driverRef.send(msg)
+      case None => logWarning(s"Drop $msg because has not yet connected to driver")
+    }
+  }
+
   /**
    * This function can be overloaded by other child classes to handle
    * executor exits differently. For e.g. when an executor goes down,

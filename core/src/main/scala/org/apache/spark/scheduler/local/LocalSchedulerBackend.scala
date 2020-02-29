@@ -36,6 +36,8 @@ private case class ReviveOffers()
 
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
+private case class OtherStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+
 private case class KillTask(taskId: Long, interruptThread: Boolean, reason: String)
 
 private case class StopExecutor()
@@ -73,6 +75,9 @@ private[spark] class LocalEndpoint(
         freeCores += scheduler.CPUS_PER_TASK
         reviveOffers()
       }
+
+    case OtherStatusUpdate(taskId, state, serializedData) =>
+      scheduler.otherStatusUpdate(taskId, state, serializedData)
 
     case KillTask(taskId, interruptThread, reason) =>
       executor.killTask(taskId, interruptThread, reason)
@@ -158,6 +163,10 @@ private[spark] class LocalSchedulerBackend(
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
     localEndpoint.send(StatusUpdate(taskId, state, serializedData))
+  }
+
+  override def statusConsumeUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
+    localEndpoint.send(OtherStatusUpdate(taskId, state, serializedData))
   }
 
   override def applicationId(): String = appId
