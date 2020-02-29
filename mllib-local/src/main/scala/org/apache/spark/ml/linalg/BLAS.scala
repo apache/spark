@@ -234,7 +234,7 @@ private[spark] object BLAS extends Serializable {
   def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
-        getBLAS(sx.size).dscal(sx.values.length, a, sx.values, 1)
+        getBLAS(sx.values.length).dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
         getBLAS(dx.size).dscal(dx.values.length, a, dx.values, 1)
       case _ =>
