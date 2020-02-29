@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -134,10 +135,10 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       dateOptions.dateFormat,
       TimeZone.getTimeZone(dateOptions.zoneId),
       dateOptions.locale)
-    val expectedDate = format.parse(customDate).getTime
+    val expectedDate = DateTimeUtils.millisToMicros(format.parse(customDate).getTime)
     val castedDate = parser.makeConverter("_1", DateType, nullable = true)
         .apply(customDate)
-    assert(castedDate == DateTimeUtils.millisToDays(expectedDate, TimeZone.getTimeZone("GMT")))
+    assert(castedDate == DateTimeUtils.microsToDays(expectedDate, ZoneOffset.UTC))
 
     val timestamp = "2015-01-01 00:00:00"
     timestampsOptions = new CSVOptions(Map(

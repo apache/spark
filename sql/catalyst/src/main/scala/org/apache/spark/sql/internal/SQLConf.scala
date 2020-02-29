@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -174,6 +175,7 @@ object SQLConf {
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
+    .version("3.0.0")
     .intConf
     .createWithDefault(100)
 
@@ -182,12 +184,14 @@ object SQLConf {
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
       "rules in this configuration will eventually be excluded, as some rules are necessary " +
       "for correctness. The optimizer will log the rules that have indeed been excluded.")
+    .version("2.4.0")
     .stringConf
     .createOptional
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer runs.")
+    .version("2.0.0")
     .intConf
     .createWithDefault(100)
 
@@ -195,6 +199,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.inSetConversionThreshold")
       .internal()
       .doc("The threshold of set size for InSet conversion.")
+      .version("2.0.0")
       .intConf
       .createWithDefault(10)
 
@@ -203,6 +208,7 @@ object SQLConf {
       .internal()
       .doc("Configures the max set size in InSet for which Spark will generate code with " +
         "switch statements. This is applicable only to bytes, shorts, ints, dates.")
+      .version("3.0.0")
       .intConf
       .checkValue(threshold => threshold >= 0 && threshold <= 600, "The max set size " +
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
@@ -213,6 +219,7 @@ object SQLConf {
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
       "'warn', or 'error'. The default log level is 'trace'.")
+    .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -224,6 +231,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma.")
+    .version("3.0.0")
     .stringConf
     .createOptional
 
@@ -231,12 +239,14 @@ object SQLConf {
     .internal()
     .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
       "are specified by their batch names and separated by comma.")
+    .version("3.0.0")
     .stringConf
     .createOptional
 
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -246,6 +256,7 @@ object SQLConf {
       .doc("When true, distinct count statistics will be used for computing the data size of the " +
         "partitioned table after dynamic partition pruning, in order to evaluate if it is worth " +
         "adding an extra subquery as the pruning filter if broadcast reuse is not applicable.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -256,26 +267,30 @@ object SQLConf {
       "used as the fallback filter ratio for computing the data size of the partitioned table " +
       "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
       "subquery as the pruning filter if broadcast reuse is not applicable.")
+    .version("3.0.0")
     .doubleConf
     .createWithDefault(0.5)
 
-  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
       .internal()
-      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
-        "a broadcast hash join operation.")
+      .doc("When true, dynamic partition pruning will only apply when the broadcast exchange of " +
+        "a broadcast hash join operation can be reused as the dynamic pruning filter.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
+    .version("1.0.1")
     .booleanConf
     .createWithDefault(true)
 
   val COLUMN_BATCH_SIZE = buildConf("spark.sql.inMemoryColumnarStorage.batchSize")
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
+    .version("1.1.1")
     .intConf
     .createWithDefault(10000)
 
@@ -283,6 +298,7 @@ object SQLConf {
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
       .doc("When true, enable partition pruning for in-memory columnar tables.")
+      .version("1.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -290,12 +306,14 @@ object SQLConf {
     buildConf("spark.sql.inMemoryTableScanStatistics.enable")
       .internal()
       .doc("When true, enable in-memory table scan accumulators.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   val CACHE_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
       .doc("Enables vectorized reader for columnar caching.")
+      .version("2.3.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -303,12 +321,14 @@ object SQLConf {
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
       .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -317,6 +337,7 @@ object SQLConf {
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
       "requires additional memory to be reserved up-front. The memory overhead may be " +
       "significant when sorting very small rows (up to 50% more in this case).")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -327,6 +348,7 @@ object SQLConf {
       "command `ANALYZE TABLE <tableName> COMPUTE STATISTICS noscan` has been " +
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
+    .version("1.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
@@ -335,6 +357,7 @@ object SQLConf {
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
       "on a query. Higher values lead to more partitions read. Lower values might lead to " +
       "longer execution times as more jobs will be run")
+    .version("2.1.1")
     .intConf
     .createWithDefault(4)
 
@@ -342,6 +365,7 @@ object SQLConf {
     buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
       .internal()
       .doc("When true, advanced partition predicate pushdown into Hive metastore is enabled.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -349,12 +373,14 @@ object SQLConf {
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
       "restarts from the same checkpoint location.")
+    .version("1.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
+    .version("1.6.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -364,18 +390,20 @@ object SQLConf {
       "sub-queries. By setting this config to true (together with " +
       s"'${ADAPTIVE_EXECUTION_ENABLED.key}' enabled), Spark will force apply adaptive query " +
       "execution for all supported queries.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
         "the number of post-shuffle partitions based on map output statistics.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
+    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
@@ -383,6 +411,7 @@ object SQLConf {
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
         "on a relocatable serializer, the concatenation support codec in use and the new version " +
         "shuffle fetch protocol.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -391,6 +420,7 @@ object SQLConf {
       .doc("The advisory minimum number of post-shuffle partitions used when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
+      .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The minimum shuffle partition number " +
         "must be a positive integer.")
@@ -401,6 +431,7 @@ object SQLConf {
       .doc("The target post-shuffle input size in bytes of a task. This configuration only has " +
         s"an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
+      .version("1.6.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("64MB")
 
@@ -411,6 +442,7 @@ object SQLConf {
         "spark.sql.shuffle.partitions. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
+      .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The maximum shuffle partition number " +
         "must be a positive integer.")
@@ -421,38 +453,27 @@ object SQLConf {
     .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables the " +
       "optimization of converting the shuffle reader to local shuffle reader for the shuffle " +
       "exchange of the broadcast hash join in probe side.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.enabled")
+    buildConf("spark.sql.adaptive.skewedJoinOptimization.enabled")
     .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
       "runtime.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold")
-      .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
-        "partition in adaptive skewed join.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("64MB")
-
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")
+    buildConf("spark.sql.adaptive.skewedJoinOptimization.skewedPartitionFactor")
       .doc("A partition is considered as a skewed partition if its size is larger than" +
         " this factor multiple the median partition size and also larger than " +
-        s" ${ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key}")
+        s" ${SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key}")
+      .version("3.0.0")
       .intConf
+      .checkValue(_ > 0, "The skew factor must be positive.")
       .createWithDefault(10)
-
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS =
-    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionMaxSplits")
-      .doc("Configures the maximum number of task to handle a skewed partition in adaptive skewed" +
-        "join.")
-      .intConf
-      .checkValue( _ >= 1, "The split size at least be 1")
-      .createWithDefault(5)
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -460,6 +481,7 @@ object SQLConf {
         "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
         "of its size.This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled.")
+      .version("3.0.0")
       .doubleConf
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
       .createWithDefault(0.2)
@@ -468,6 +490,7 @@ object SQLConf {
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
       .doc("When true, common subexpressions will be eliminated.")
+      .version("1.6.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -475,6 +498,7 @@ object SQLConf {
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
+    .version("1.4.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -484,6 +508,7 @@ object SQLConf {
       "plan to optimize them. Constraint propagation can sometimes be computationally expensive " +
       "for certain kinds of query plans (such as those with a large number of predicates and " +
       "aliases) which might negatively impact overall runtime.")
+    .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -492,6 +517,7 @@ object SQLConf {
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
       "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
       "prior to Spark 2.0.")
+    .version("2.2.1")
     .booleanConf
     .createWithDefault(false)
 
@@ -500,6 +526,7 @@ object SQLConf {
     .doc("When estimating the output data size of a table scan, multiply the file size with this " +
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
       " a heavily underestimated result.")
+    .version("2.3.1")
     .doubleConf
     .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
     .createWithDefault(1.0)
@@ -508,6 +535,7 @@ object SQLConf {
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
          "if no summary file is available.")
+    .version("1.5.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -516,6 +544,7 @@ object SQLConf {
          "summary files and we will ignore them when merging schema. Otherwise, if this is " +
          "false, which is the default, we will merge all part-files. This should be considered " +
          "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
+    .version("1.5.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -524,6 +553,7 @@ object SQLConf {
       "Spark SQL, do not differentiate between binary data and strings when writing out the " +
       "Parquet schema. This flag tells Spark SQL to interpret binary data as a string to provide " +
       "compatibility with these systems.")
+    .version("1.1.1")
     .booleanConf
     .createWithDefault(false)
 
@@ -532,6 +562,7 @@ object SQLConf {
       "Spark would also store Timestamp as INT96 because we need to avoid precision lost of the " +
       "nanoseconds field. This flag tells Spark SQL to interpret INT96 data as a timestamp to " +
       "provide compatibility with these systems.")
+    .version("1.3.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -539,6 +570,7 @@ object SQLConf {
     .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
       "converting to timestamps, for data written by Impala.  This is necessary because Impala " +
       "stores INT96 data with a different timezone offset than Hive & Spark.")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -552,6 +584,7 @@ object SQLConf {
       "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
       "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
       "means Spark has to truncate the microsecond portion of its timestamp value.")
+    .version("2.3.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
@@ -563,6 +596,7 @@ object SQLConf {
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
       "snappy, gzip, lzo, brotli, lz4, zstd.")
+    .version("1.1.1")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
@@ -570,6 +604,7 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
+    .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -577,6 +612,7 @@ object SQLConf {
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
       "enabled.")
+    .version("2.4.0")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -586,15 +622,17 @@ object SQLConf {
       .doc("If true, enables Parquet filter push-down optimization for Timestamp. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled and Timestamp stored as TIMESTAMP_MICROS or TIMESTAMP_MILLIS type.")
-    .internal()
-    .booleanConf
-    .createWithDefault(true)
+      .version("2.4.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 
   val PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.decimal")
       .doc("If true, enables Parquet filter push-down optimization for Decimal. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
+      .version("2.4.0")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -604,6 +642,7 @@ object SQLConf {
     .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
       "enabled.")
+    .version("2.4.0")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -616,6 +655,7 @@ object SQLConf {
         "By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
+      .version("2.4.0")
       .internal()
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
@@ -627,6 +667,7 @@ object SQLConf {
       "systems such as Apache Hive and Apache Impala use. If false, the newer format in Parquet " +
       "will be used. For example, decimals will be written in int-based format. If Parquet " +
       "output is intended for use with systems that do not support this newer format, set to true.")
+    .version("1.6.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -636,6 +677,7 @@ object SQLConf {
       "of org.apache.parquet.hadoop.ParquetOutputCommitter. If it is not, then metadata " +
       "summaries will never be created, irrespective of the value of " +
       "parquet.summary.metadata.level")
+    .version("1.5.0")
     .internal()
     .stringConf
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
@@ -643,6 +685,7 @@ object SQLConf {
   val PARQUET_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.parquet.enableVectorizedReader")
       .doc("Enables vectorized parquet decoding.")
+      .version("2.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -652,12 +695,14 @@ object SQLConf {
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
       "is enabled and the vectorized reader is not used. You can ensure the vectorized reader " +
       s"is not used by setting '${PARQUET_VECTORIZED_READER_ENABLED.key}' to false.")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
 
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .version("2.4.0")
     .intConf
     .createWithDefault(4096)
 
@@ -878,8 +923,8 @@ object SQLConf {
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
         "of detected paths exceeds this value during partition discovery, it tries to list the " +
-        "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
-        "LibSVM data sources.")
+        "files with another Spark distributed job. This configuration is effective only when " +
+        "using file-based sources such as Parquet, JSON and ORC.")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
@@ -894,7 +939,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
+    buildConf("spark.sql.sources.ignoreDataLocality")
       .doc("If true, Spark will not fetch the block locations for each file on " +
         "listing files. This speeds up file listing, but the scheduler cannot " +
         "schedule tasks to take advantage of data locality. It can be particularly " +
@@ -913,7 +958,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
-    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin.enabled")
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .internal()
       .booleanConf
@@ -1062,7 +1107,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.subquery.reuse.enabled")
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.reuseSubquery")
     .internal()
     .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
     .booleanConf
@@ -1102,7 +1147,7 @@ object SQLConf {
     .createOptional
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
-    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation.enabled")
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
       .doc("When true, enable temporary checkpoint locations force delete.")
       .booleanConf
       .createWithDefault(false)
@@ -1629,7 +1674,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val PANDAS_ARROW_SAFE_TYPE_CONVERSION =
-    buildConf("spark.sql.execution.pandas.arrowSafeTypeConversion")
+    buildConf("spark.sql.execution.pandas.convertToArrowArraySafely")
       .internal()
       .doc("When true, Arrow will perform safe type conversion when converting " +
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
@@ -1959,7 +2004,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED =
-    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal.enabled")
+    buildConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
       .internal()
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
@@ -2004,6 +2049,23 @@ object SQLConf {
       .internal()
       .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
       "some data types such as `IntegerType`.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE =
+    buildConf("spark.sql.legacy.createEmptyCollectionUsingStringType")
+      .internal()
+      .doc("When set to true, Spark returns an empty collection with `StringType` as element " +
+        "type if the `array`/`map` function is called without any parameters. Otherwise, Spark " +
+        "returns an empty collection with `NullType` as element type.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_UNTYPED_SCALA_UDF =
+    buildConf("spark.sql.legacy.allowUntypedScalaUDF")
+      .internal()
+      .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
+        "udf(f: AnyRef, dataType: DataType). Otherwise, exception will be throw.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2091,22 +2153,29 @@ object SQLConf {
       .stringConf
       .createOptional
 
-  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+  object LegacyBehaviorPolicy extends Enumeration {
+    val EXCEPTION, LEGACY, CORRECTED = Value
+  }
+
+  val LEGACY_CTE_PRECEDENCE_POLICY = buildConf("spark.sql.legacy.ctePrecedencePolicy")
     .internal()
-    .doc("When true, outer CTE definitions takes precedence over inner definitions. If set to " +
-      "false, inner CTE definitions take precedence. The default value is empty, " +
-      "AnalysisException is thrown while name conflict is detected in nested CTE.")
-    .booleanConf
-    .createOptional
+    .doc("When LEGACY, outer CTE definitions takes precedence over inner definitions. If set to " +
+      "CORRECTED, inner CTE definitions take precedence. The default value is EXCEPTION, " +
+      "AnalysisException is thrown while name conflict is detected in nested CTE. This config " +
+      "will be removed in future versions and CORRECTED will be the only behavior.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
-    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+    buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
@@ -2119,7 +2188,7 @@ object SQLConf {
         "if the default Maven Central repo is unreachable.")
       .stringConf
       .createWithDefault(
-        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+        "https://maven-central.storage-download.googleapis.com/maven2/")
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
@@ -2133,7 +2202,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_PROPERTY_NON_RESERVED =
-    buildConf("spark.sql.legacy.property.nonReserved")
+    buildConf("spark.sql.legacy.notReserveProperties")
       .internal()
       .doc("When true, all database and table properties are not reserved and available for " +
         "create/alter syntaxes. But please be aware that the reserved properties will be " +
@@ -2176,6 +2245,22 @@ object SQLConf {
     .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
       "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_ALLOW_DUPLICATED_MAP_KEY =
+    buildConf("spark.sql.legacy.allowDuplicatedMapKeys")
+      .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
+        "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
+        "MapFromEntries, StringToMap, MapConcat and TransformKeys. Otherwise, if this is false, " +
+        "which is the default, Spark will throw an exception when duplicated map keys are " +
+        "detected.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
+    .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
+      "an analysis exception will be thrown.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2227,6 +2312,10 @@ object SQLConf {
    * The map contains info about removed SQL configs. Keys are SQL config names,
    * map values contain extra information like the version in which the config was removed,
    * config's default value and a comment.
+   *
+   * Please, add a removed SQL configuration property here only when it affects behaviours.
+   * For example, `spark.sql.variable.substitute.depth` was not added as it virtually
+   * became no-op later. By this, it makes migrations to new Spark versions painless.
    */
   val removedSQLConfigs: Map[String, RemovedConfig] = {
     val configs = Seq(
@@ -2237,8 +2326,6 @@ object SQLConf {
         "It was removed to prevent loosing of users data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
-      RemovedConfig("spark.sql.variable.substitute.depth", "3.0.0", "40",
-        "It was deprecated since Spark 2.1, and not used in Spark 2.4."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
         "The config was deprecated since Spark 2.3." +
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
@@ -2294,8 +2381,8 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningFallbackFilterRatio: Double =
     getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
 
-  def dynamicPartitionPruningReuseBroadcast: Boolean =
-    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
+  def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -2848,10 +2935,10 @@ class SQLConf extends Serializable with Logging {
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
    * definition contains key, defaultValue and doc.
    */
-  def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
+  def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
-      (entry.key, displayValue, entry.doc)
+      (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
   }
 
@@ -2873,16 +2960,41 @@ class SQLConf extends Serializable with Logging {
     settings.containsKey(key)
   }
 
+  /**
+   * Logs a warning message if the given config key is deprecated.
+   */
+  private def logDeprecationWarning(key: String): Unit = {
+    SQLConf.deprecatedSQLConfigs.get(key).foreach {
+      case DeprecatedConfig(configName, version, comment) =>
+        logWarning(
+          s"The SQL config '$configName' has been deprecated in Spark v$version " +
+          s"and may be removed in the future. $comment")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach {
+      case RemovedConfig(configName, version, defaultValue, comment) =>
+        if (value != defaultValue) {
+          throw new AnalysisException(
+            s"The SQL config '$configName' was removed in the version $version. $comment")
+        }
+    }
+  }
+
   protected def setConfWithCheck(key: String, value: String): Unit = {
+    logDeprecationWarning(key)
+    requireDefaultValueOfRemovedConf(key, value)
     settings.put(key, value)
   }
 
   def unsetConf(key: String): Unit = {
+    logDeprecationWarning(key)
     settings.remove(key)
   }
 
   def unsetConf(entry: ConfigEntry[_]): Unit = {
-    settings.remove(entry.key)
+    unsetConf(entry.key)
   }
 
   def clear(): Unit = {

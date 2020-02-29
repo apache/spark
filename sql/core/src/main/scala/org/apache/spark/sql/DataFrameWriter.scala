@@ -896,7 +896,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
     // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
+    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {

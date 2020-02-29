@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.UUID
+
 import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
@@ -144,17 +146,45 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         }
 
         // set local configuration and assert
-        val confValue1 = "e"
+        val confValue1 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue1).createOrReplaceTempView("m")
         spark.sparkContext.setLocalProperty(confKey, confValue1)
-        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM m)").collect.size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM m)").collect().length == 1)
 
         // change the conf value and assert again
-        val confValue2 = "f"
+        val confValue2 = UUID.randomUUID().toString()
         createDataframe(confKey, confValue2).createOrReplaceTempView("n")
         spark.sparkContext.setLocalProperty(confKey, confValue2)
-        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().size == 1)
+        assert(sql("SELECT * FROM l WHERE EXISTS (SELECT * FROM n)").collect().length == 1)
       }
+    }
+  }
+
+  test("SPARK-22590 propagate local properties to broadcast execution thread") {
+    withSQLConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD.key -> "1") {
+      val df1 = Seq(true).toDF()
+      val confKey = "spark.sql.y"
+      val confValue1 = UUID.randomUUID().toString()
+      val confValue2 = UUID.randomUUID().toString()
+
+      def generateBroadcastDataFrame(confKey: String, confValue: String): Dataset[Boolean] = {
+        val df = spark.range(1).mapPartitions { _ =>
+          Iterator(TaskContext.get.getLocalProperty(confKey) == confValue)
+        }
+        df.hint("broadcast")
+      }
+
+      // set local propert and assert
+      val df2 = generateBroadcastDataFrame(confKey, confValue1)
+      spark.sparkContext.setLocalProperty(confKey, confValue1)
+      val checks = df1.join(df2).collect()
+      assert(checks.forall(_.toSeq == Seq(true, true)))
+
+      // change local property and re-assert
+      val df3 = generateBroadcastDataFrame(confKey, confValue2)
+      spark.sparkContext.setLocalProperty(confKey, confValue2)
+      val checks2 = df1.join(df3).collect()
+      assert(checks2.forall(_.toSeq == Seq(true, true)))
     }
   }
 }

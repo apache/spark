@@ -183,7 +183,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
             (row: SpecializedGetters, ordinal: Int) =>
-              val millis = DateTimeUtils.toMillis(row.getLong(ordinal))
+              val millis = DateTimeUtils.microsToMillis(row.getLong(ordinal))
               recordConsumer.addLong(millis)
         }
 

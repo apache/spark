@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -112,12 +113,13 @@ object ExtractIntervalPart {
 
 abstract class IntervalNumOperation(
     interval: Expression,
-    num: Expression,
-    operation: (CalendarInterval, Double) => CalendarInterval,
-    operationName: String)
+    num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
+
+  protected val operation: (CalendarInterval, Double) => CalendarInterval
+  protected def operationName: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
   override def dataType: DataType = CalendarIntervalType
@@ -136,11 +138,29 @@ abstract class IntervalNumOperation(
   override def prettyName: String = operationName.stripSuffix("Exact") + "_interval"
 }
 
-case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiplyExact, "multiplyExact")
+case class MultiplyInterval(
+    interval: Expression,
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends IntervalNumOperation(interval, num) {
 
-case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divideExact, "divideExact")
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    if (checkOverflow) multiplyExact else multiply
+
+  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
+}
+
+case class DivideInterval(
+    interval: Expression,
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends IntervalNumOperation(interval, num) {
+
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    if (checkOverflow) divideExact else divide
+
+  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(

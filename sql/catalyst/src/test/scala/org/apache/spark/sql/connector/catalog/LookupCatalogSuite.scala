@@ -50,6 +50,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
     })
     when(manager.currentCatalog).thenReturn(sessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(sessionCatalog)
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     manager
   }
 

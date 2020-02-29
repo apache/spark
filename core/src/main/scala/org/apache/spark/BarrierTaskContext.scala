@@ -17,11 +17,19 @@
 
 package org.apache.spark
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Properties, Timer, TimerTask}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
@@ -58,6 +66,97 @@ class BarrierTaskContext private[spark] (
   // Number of tasks of the current barrier stage, a barrier() call must collect enough requests
   // from different tasks within the same barrier stage attempt to succeed.
   private lazy val numTasks = getTaskInfos().size
+
+  private def getRequestToSync(
+    numTasks: Int,
+    stageId: Int,
+    stageAttemptNumber: Int,
+    taskAttemptId: Long,
+    barrierEpoch: Int,
+    partitionId: Int,
+    requestMethod: RequestMethod.Value,
+    allGatherMessage: String
+  ): RequestToSync = {
+    requestMethod match {
+      case RequestMethod.BARRIER =>
+        BarrierRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+          barrierEpoch, partitionId, requestMethod)
+      case RequestMethod.ALL_GATHER =>
+        AllGatherRequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+          barrierEpoch, partitionId, requestMethod, allGatherMessage)
+    }
+  }
+
+  private def runBarrier(
+    requestMethod: RequestMethod.Value,
+    allGatherMessage: String = ""
+  ): String = {
+
+    logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
+      s"the global sync, current barrier epoch is $barrierEpoch.")
+    logTrace("Current callSite: " + Utils.getCallSite())
+
+    val startTime = System.currentTimeMillis()
+    val timerTask = new TimerTask {
+      override def run(): Unit = {
+        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
+          s"under the global sync since $startTime, has been waiting for " +
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
+      }
+    }
+    // Log the update of global sync every 60 seconds.
+    timer.schedule(timerTask, 60000, 60000)
+
+    var json: String = ""
+
+    try {
+      val abortableRpcFuture = barrierCoordinator.askAbortable[String](
+        message = getRequestToSync(numTasks, stageId, stageAttemptNumber,
+          taskAttemptId, barrierEpoch, partitionId, requestMethod, allGatherMessage),
+        // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
+        // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
+        timeout = new RpcTimeout(365.days, "barrierTimeout"))
+
+      // Wait the RPC future to be completed, but every 1 second it will jump out waiting
+      // and check whether current spark task is killed. If killed, then throw
+      // a `TaskKilledException`, otherwise continue wait RPC until it completes.
+      try {
+        while (!abortableRpcFuture.toFuture.isCompleted) {
+          // wait RPC future for at most 1 second
+          try {
+            json = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+          } catch {
+            case _: TimeoutException | _: InterruptedException =>
+              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
+              // If `InterruptedException` thrown, it is possible this task is killed.
+              // So in this two cases, we should check whether task is killed and then
+              // throw `TaskKilledException`
+              taskContext.killTaskIfInterrupted()
+          }
+        }
+      } finally {
+        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
+      }
+
+      barrierEpoch += 1
+      logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
+        "global sync successfully, waited for " +
+        s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+        s"current barrier epoch is $barrierEpoch.")
+    } catch {
+      case e: SparkException =>
+        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
+          "to perform global sync, waited for " +
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
+        throw e
+    } finally {
+      timerTask.cancel()
+      timer.purge()
+    }
+    json
+  }
 
   /**
    * :: Experimental ::
@@ -102,67 +201,27 @@ class BarrierTaskContext private[spark] (
   @Experimental
   @Since("2.4.0")
   def barrier(): Unit = {
-    logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
-      s"the global sync, current barrier epoch is $barrierEpoch.")
-    logTrace("Current callSite: " + Utils.getCallSite())
+    runBarrier(RequestMethod.BARRIER)
+    ()
+  }
 
-    val startTime = System.currentTimeMillis()
-    val timerTask = new TimerTask {
-      override def run(): Unit = {
-        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
-          s"under the global sync since $startTime, has been waiting for " +
-          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
-          s"current barrier epoch is $barrierEpoch.")
-      }
-    }
-    // Log the update of global sync every 60 seconds.
-    timer.schedule(timerTask, 60000, 60000)
-
-    try {
-      val abortableRpcFuture = barrierCoordinator.askAbortable[Unit](
-        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
-          barrierEpoch),
-        // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
-        // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(365.days, "barrierTimeout"))
-
-      // Wait the RPC future to be completed, but every 1 second it will jump out waiting
-      // and check whether current spark task is killed. If killed, then throw
-      // a `TaskKilledException`, otherwise continue wait RPC until it completes.
-      try {
-        while (!abortableRpcFuture.toFuture.isCompleted) {
-          // wait RPC future for at most 1 second
-          try {
-            ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
-          } catch {
-            case _: TimeoutException | _: InterruptedException =>
-              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
-              // If `InterruptedException` thrown, it is possible this task is killed.
-              // So in this two cases, we should check whether task is killed and then
-              // throw `TaskKilledException`
-              taskContext.killTaskIfInterrupted()
-          }
-        }
-      } finally {
-        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
-      }
-
-      barrierEpoch += 1
-      logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
-        "global sync successfully, waited for " +
-        s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
-        s"current barrier epoch is $barrierEpoch.")
-    } catch {
-      case e: SparkException =>
-        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
-          "to perform global sync, waited for " +
-          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
-          s"current barrier epoch is $barrierEpoch.")
-        throw e
-    } finally {
-      timerTask.cancel()
-      timer.purge()
-    }
+  /**
+   * :: Experimental ::
+   * Blocks until all tasks in the same stage have reached this routine. Each task passes in
+   * a message and returns with a list of all the messages passed in by each of those tasks.
+   *
+   * CAUTION! The allGather method requires the same precautions as the barrier method
+   *
+   * The message is type String rather than Array[Byte] because it is more convenient for
+   * the user at the cost of worse performance.
+   */
+  @Experimental
+  @Since("3.0.0")
+  def allGather(message: String): ArrayBuffer[String] = {
+    val json = runBarrier(RequestMethod.ALL_GATHER, message)
+    val jsonArray = parse(json)
+    implicit val formats = DefaultFormats
+    ArrayBuffer(jsonArray.extract[Array[String]]: _*)
   }
 
   /**

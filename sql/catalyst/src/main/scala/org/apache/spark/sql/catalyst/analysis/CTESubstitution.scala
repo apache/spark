@@ -22,21 +22,21 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val isLegacy = SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)
-    if (isLegacy.isEmpty) {
-      assertNoNameConflictsInCTE(plan, inTraverse = false)
-      traverseAndSubstituteCTE(plan, inTraverse = false)
-    } else if (isLegacy.get) {
-      legacyTraverseAndSubstituteCTE(plan)
-    } else {
-      traverseAndSubstituteCTE(plan, inTraverse = false)
+    LegacyBehaviorPolicy.withName(SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
+      case LegacyBehaviorPolicy.EXCEPTION =>
+        assertNoNameConflictsInCTE(plan, inTraverse = false)
+        traverseAndSubstituteCTE(plan, inTraverse = false)
+      case LegacyBehaviorPolicy.LEGACY =>
+        legacyTraverseAndSubstituteCTE(plan)
+      case LegacyBehaviorPolicy.CORRECTED =>
+        traverseAndSubstituteCTE(plan, inTraverse = false)
     }
   }
 
@@ -54,8 +54,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
           case (cteName, _) =>
             if (cteNames.contains(cteName)) {
               throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
-                s"Please set ${LEGACY_CTE_PRECEDENCE_ENABLED.key} to false so that name defined " +
-                "in inner CTE takes precedence. See more details in SPARK-28228.")
+                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+                "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+                "definitions will take precedence. See more details in SPARK-28228.")
             } else {
               cteName
             }

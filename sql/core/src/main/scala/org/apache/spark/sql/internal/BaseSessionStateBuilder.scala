@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -174,7 +175,8 @@ abstract class BaseSessionStateBuilder(
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        new ResolveSessionCatalog(catalogManager, conf, catalog.isView) +:
+        new ResolveSessionCatalog(
+          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -189,6 +191,7 @@ abstract class BaseSessionStateBuilder(
         PreReadCheck +:
         HiveOnlyCheck +:
         TableCapabilityCheck +:
+        CommandCheck(conf) +:
         customCheckRules
   }
 
@@ -229,6 +232,9 @@ abstract class BaseSessionStateBuilder(
    */
   protected def optimizer: Optimizer = {
     new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+      override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+        super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
+
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -243,6 +249,14 @@ abstract class BaseSessionStateBuilder(
   protected def customOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildOptimizerRules(session)
   }
+
+  /**
+   * Custom early scan push down rules to add to the Optimizer. Prefer overriding this instead
+   * of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Planner that converts optimized logical plans to physical plans.

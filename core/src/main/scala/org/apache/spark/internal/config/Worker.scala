@@ -71,4 +71,9 @@ private[spark] object Worker {
     ConfigBuilder("spark.worker.ui.compressedLogFileLengthCacheSize")
     .intConf
     .createWithDefault(100)
+
+  private[spark] val WORKER_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.worker.decommission.enabled")
+      .booleanConf
+      .createWithDefault(false)
 }

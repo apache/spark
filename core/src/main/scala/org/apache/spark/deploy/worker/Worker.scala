@@ -67,6 +67,14 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
+  // If worker decommissioning is enabled register a handler on PWR to shutdown.
+  if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+    logInfo("Registering SIGPWR handler to trigger decommissioning.")
+    SignalUtils.register("PWR")(decommissionSelf)
+  } else {
+    logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
+  }
+
   // A scheduled executor used to send messages at the specified time.
   private val forwardMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
@@ -128,6 +136,7 @@ private[deploy] class Worker(
   private val workerUri = RpcEndpointAddress(rpcEnv.address, endpointName).toString
   private var registered = false
   private var connected = false
+  private var decommissioned = false
   private val workerId = generateWorkerId()
   private val sparkHome =
     if (sys.props.contains(IS_TESTING.key)) {
@@ -549,6 +558,8 @@ private[deploy] class Worker(
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
+      } else if (decommissioned) {
+        logWarning("Asked to launch an executor while decommissioned. Not launching executor.")
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
@@ -672,6 +683,9 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+
+    case DecommissionSelf =>
+      decommissionSelf()
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -769,6 +783,18 @@ private[deploy] class Worker(
         case (driverId, _) => finishedDrivers.remove(driverId)
       }
     }
+  }
+
+  private[deploy] def decommissionSelf(): Boolean = {
+    if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+      logDebug("Decommissioning self")
+      decommissioned = true
+      sendToMaster(WorkerDecommission(workerId, self))
+    } else {
+      logWarning("Asked to decommission self, but decommissioning not enabled")
+    }
+    // Return true since can be called as a signal handler
+    true
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
