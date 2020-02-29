@@ -47,8 +47,10 @@ object ShufflePartitionsCoalescer extends Logging {
    *  - coalesced partition 2: shuffle partition 2 (size 170 MiB)
    *  - coalesced partition 3: shuffle partition 3 and 4 (size 50 MiB)
    *
-   *  @return An array of partition indices which represents the coalesced partitions. For example,
-   *          [0, 2, 3] means 3 coalesced partitions: [0, 2), [2, 3), [3, lastPartitionIndex]
+   *  @return An array of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
+   *          split at indices [0, 2, 3], the returned partition specs will be:
+   *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
+   *          CoalescedPartitionSpec(3, 5).
    */
   def coalescePartitions(
       mapOutputStatistics: Array[MapOutputStatistics],
