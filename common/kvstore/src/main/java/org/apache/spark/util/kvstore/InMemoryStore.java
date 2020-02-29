@@ -384,9 +384,9 @@ public class InMemoryStore implements KVStore {
       if (parent != null) {
         Comparable<Object> parentKey = asKey(parent);
         if (hasNaturalParentIndex && naturalParentIndexName.equals(ti.getParentIndexName(index))) {
-          // If there is a parent index for the natural index and the parent of `index` happens to be
-          // it, Spark can use the `parentToChildrenMap` to get the related natural keys, and then
-          // copy them from `data`.
+          // If there is a parent index for the natural index and the parent of `index` happens to
+          // be it, Spark can use the `parentToChildrenMap` to get the related natural keys, and
+          // then copy them from `data`.
           NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
