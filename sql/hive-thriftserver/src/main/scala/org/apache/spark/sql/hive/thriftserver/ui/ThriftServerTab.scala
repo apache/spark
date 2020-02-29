@@ -19,28 +19,25 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
-import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /**
  * Spark Web UI tab that shows statistics of jobs running in the thrift server.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
-  extends SparkUITab(getSparkUI(sparkContext), "sqlserver") with Logging {
-
+private[thriftserver] class ThriftServerTab(
+   val store: HiveThriftServer2AppStatusStore,
+   sparkUI: SparkUI) extends SparkUITab(sparkUI, "sqlserver") with Logging {
   override val name = "JDBC/ODBC Server"
 
-  val parent = getSparkUI(sparkContext)
-  val listener = HiveThriftServer2.listener
+  val parent = sparkUI
+  val startTime = sparkUI.store.applicationInfo().attempts.head.startTime
 
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
   parent.attachTab(this)
-
   def detach(): Unit = {
-    getSparkUI(sparkContext).detachTab(this)
+    sparkUI.detachTab(this)
   }
 }
 

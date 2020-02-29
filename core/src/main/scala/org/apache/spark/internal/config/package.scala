@@ -35,9 +35,10 @@ package object config {
   private[spark] val SPARK_DRIVER_PREFIX = "spark.driver"
   private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
   private[spark] val SPARK_RESOURCES_COORDINATE =
-    ConfigBuilder("spark.resources.coordinate.enable")
+    ConfigBuilder("spark.resources.coordinateResourcesInStandalone")
       .doc("Whether to coordinate resources automatically among workers/drivers(client only) " +
         "in Standalone. If false, the user is responsible for configuring different resources " +
         "for workers/drivers that run on the same host.")
@@ -52,6 +53,18 @@ package object config {
         "while workers/drivers are still alive to avoid the most likely resources conflict. ")
       .stringConf
       .createOptional
+
+  private[spark] val RESOURCES_DISCOVERY_PLUGIN =
+    ConfigBuilder("spark.resources.discoveryPlugin")
+      .doc("Comma-separated list of class names implementing" +
+        "org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application." +
+        "This is for advanced users to replace the resource discovery class with a " +
+        "custom implementation. Spark will try each class specified until one of them " +
+        "returns the resource information for that resource. It tries the discovery " +
+        "script last if none of the plugins return information for that resource.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
@@ -130,7 +143,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
+    ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -146,12 +159,9 @@ package object config {
     .createWithDefaultString("100k")
 
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
+    ConfigBuilder("spark.eventLog.logStageExecutorMetrics")
+      .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
+        "to the event log.")
       .booleanConf
       .createWithDefault(false)
 
@@ -181,14 +191,15 @@ package object config {
 
   private[spark] val EVENT_LOG_ENABLE_ROLLING =
     ConfigBuilder("spark.eventLog.rolling.enabled")
-      .doc("Whether rolling over event log files is enabled.  If set to true, it cuts down " +
+      .doc("Whether rolling over event log files is enabled. If set to true, it cuts down " +
         "each event log file to the configured size.")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
-      .doc("The max size of event log file to be rolled over.")
+      .doc(s"When ${EVENT_LOG_ENABLE_ROLLING.key}=true, specifies the max size of event log file" +
+        " to be rolled over.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
@@ -214,8 +225,18 @@ package object config {
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
 
+  private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
+    ConfigBuilder("spark.executor.processTreeMetrics.enabled")
+      .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
+        "executor metrics.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")
+      .doc("How often to collect executor metrics (in milliseconds). " +
+        "If 0, the polling is done on executor heartbeats. " +
+        "If positive, the polling is done at this interval.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
@@ -596,6 +617,10 @@ package object config {
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
+      .doc("The default capacity for event queues. Spark will try to initialize " +
+        "an event queue using capacity specified by `spark.scheduler.listenerbus" +
+        ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
+        "use the default capacity specified by this config.")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
@@ -606,6 +631,23 @@ package object config {
       .intConf
       .createWithDefault(128)
 
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent")
+      .internal()
+      .doc("When enabled, log the event that takes too much time to process. This helps us " +
+        "discover the event types that cause performance bottlenecks. The time threshold is " +
+        "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.threshold")
+      .internal()
+      .doc("The time threshold of whether a event is considered to be taking too much time to " +
+        s"process. Log the event if ${LISTENER_BUS_LOG_SLOW_EVENT_ENABLED.key} is true.")
+      .timeConf(TimeUnit.NANOSECONDS)
+      .createWithDefaultString("1s")
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf
@@ -614,6 +656,18 @@ package object config {
   private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
     .stringConf
     .createOptional
+
+  private[spark] val METRICS_EXECUTORMETRICS_SOURCE_ENABLED =
+    ConfigBuilder("spark.metrics.executorMetricsSource.enabled")
+      .doc("Whether to register the ExecutorMetrics source with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val METRICS_STATIC_SOURCES_ENABLED =
+    ConfigBuilder("spark.metrics.staticSources.enabled")
+      .doc("Whether to register static sources with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
@@ -804,7 +858,7 @@ package object config {
       .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
         "Caching preferred locations can relieve query loading to DFS and save the query " +
         "time. The drawback is that the cached locations can be possibly outdated and " +
-        "lose data locality. If this config is not specified or is 0, it will not cache.")
+        "lose data locality. If this config is not specified, it will not cache.")
       .timeConf(TimeUnit.MINUTES)
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
@@ -842,7 +896,7 @@ package object config {
       .createWithDefault(Int.MaxValue)
 
   private[spark] val MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
-    ConfigBuilder("spark.maxRemoteBlockSizeFetchToMem")
+    ConfigBuilder("spark.network.maxRemoteBlockSizeFetchToMem")
       .doc("Remote block will be fetched to disk when size of the block is above this threshold " +
         "in bytes. This is to avoid a giant request takes too much memory. Note this " +
         "configuration will affect both shuffle fetch and block manager remote block fetch. " +
@@ -993,6 +1047,15 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val MAP_STATUS_COMPRESSION_CODEC =
+    ConfigBuilder("spark.shuffle.mapStatus.compression.codec")
+      .internal()
+      .doc("The codec used to compress MapStatus, which is generated by ShuffleMapTask. " +
+        "By default, Spark provides four codecs: lz4, lzf, snappy, and zstd. You can also " +
+        "use fully qualified class names to specify the codec.")
+      .stringConf
+      .createWithDefault("zstd")
+
   private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
     ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
       .internal()
@@ -1087,6 +1150,24 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
+    ConfigBuilder("spark.shuffle.readHostLocalDisk")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
+        "blocks requested from those block managers which are running on the same host are read " +
+        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
+    ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
+      .doc("The max number of executors for which the local dirs are stored. This size is " +
+        "both applied for the driver and both for the executors side to avoid having an " +
+        "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
+        s"persisted RDD blocks or shuffle blocks " +
+        s"(when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` is set) from the same host.")
+      .intConf
+      .createWithDefault(1000)
+
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
       .internal()
@@ -1159,12 +1240,13 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
-  private[spark] val EXECUTOR_PLUGINS =
-    ConfigBuilder("spark.executor.plugins")
-      .doc("Comma-separated list of class names for \"plugins\" implementing " +
-        "org.apache.spark.ExecutorPlugin.  Plugins have the same privileges as any task " +
-        "in a Spark executor.  They can also interfere with task execution and fail in " +
-        "unexpected ways.  So be sure to only use this for trusted plugins.")
+  private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
+
+  private[spark] val PLUGINS =
+    ConfigBuilder("spark.plugins")
+      .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
+      .doc("Comma-separated list of class names implementing " +
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -1269,9 +1351,9 @@ package object config {
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")
       .internal()
-      .doc("When spark loading one single large file, if file size exceed this " +
-        "threshold, then log warning with possible reasons.")
-      .longConf
+      .doc("If the size in bytes of a file loaded by Spark exceeds this threshold, " +
+        "a warning is logged with the possible reasons.")
+      .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1024 * 1024 * 1024)
 
   private[spark] val EVENT_LOG_COMPRESSION_CODEC =
@@ -1436,6 +1518,19 @@ package object config {
     ConfigBuilder("spark.speculation.quantile")
       .doubleConf
       .createWithDefault(0.75)
+
+  private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
+    ConfigBuilder("spark.speculation.task.duration.threshold")
+      .doc("Task duration after which scheduler would try to speculative run the task. If " +
+        "provided, tasks would be speculatively run if current stage contains less tasks " +
+        "than or equal to the number of slots on a single executor and the task is taking " +
+        "longer time than the threshold. This config helps speculate stage with very few " +
+        "tasks. Regular speculation configs may also apply if the executor slots are " +
+        "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
+        "even though the threshold hasn't been reached. The number of slots is computed based " +
+        "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")

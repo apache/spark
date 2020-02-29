@@ -37,7 +37,8 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -267,7 +268,7 @@ private[spark] class DAGScheduler(
       executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
-    blockManagerMaster.driverEndpoint.askSync[Boolean](
+    blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 
@@ -391,7 +392,8 @@ private[spark] class DAGScheduler(
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ShuffleMapStage(
-      id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker)
+      id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     stageIdToStage(id) = stage
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
@@ -453,7 +455,8 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
+    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -695,9 +698,13 @@ private[spark] class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.isEmpty) {
+      val clonedProperties = Utils.cloneProperties(properties)
+      if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) == null) {
+        clonedProperties.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, callSite.shortForm)
+      }
       val time = clock.getTimeMillis()
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
+        SparkListenerJobStart(jobId, time, Seq.empty, clonedProperties))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks

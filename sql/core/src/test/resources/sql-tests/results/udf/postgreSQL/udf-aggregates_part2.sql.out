@@ -2,7 +2,7 @@
 -- Number of queries: 25
 
 
--- !query 0
+-- !query
 create temporary view int4_tbl as select * from values
   (0),
   (123456),
@@ -10,40 +10,40 @@ create temporary view int4_tbl as select * from values
   (2147483647),
   (-2147483647)
   as int4_tbl(f1)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
   (1, 1, 1, 1L),
   (3, 3, 3, null),
   (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4)
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 SELECT BIT_AND(b1) AS n1, BIT_OR(b2)  AS n2 FROM bitwise_test where 1 = 0
--- !query 2 schema
+-- !query schema
 struct<n1:int,n2:int>
--- !query 2 output
+-- !query output
 NULL	NULL
 
 
--- !query 3
+-- !query
 SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2 FROM bitwise_test where b4 is null
--- !query 3 schema
+-- !query schema
 struct<n1:bigint,n2:bigint>
--- !query 3 output
+-- !query output
 NULL	NULL
 
 
--- !query 4
+-- !query
 SELECT
  BIT_AND(cast(b1 as tinyint)) AS a1,
  BIT_AND(cast(b2 as smallint)) AS b1,
@@ -54,13 +54,13 @@ SELECT
  BIT_OR(b3)  AS g7,
  BIT_OR(b4)  AS h3
 FROM bitwise_test
--- !query 4 schema
+-- !query schema
 struct<a1:tinyint,b1:smallint,c1:int,d1:bigint,e7:tinyint,f7:smallint,g7:int,h3:bigint>
--- !query 4 output
+-- !query output
 1	1	1	1	7	7	7	3
 
 
--- !query 5
+-- !query
 SELECT
   (NULL AND NULL) IS NULL AS `t`,
   (TRUE AND NULL) IS NULL AS `t`,
@@ -71,13 +71,13 @@ SELECT
   NOT (TRUE AND FALSE) AS `t`,
   NOT (FALSE AND TRUE) AS `t`,
   NOT (FALSE AND FALSE) AS `t`
--- !query 5 schema
+-- !query schema
 struct<t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean>
--- !query 5 output
+-- !query output
 true	true	false	true	false	true	true	true	true
 
 
--- !query 6
+-- !query
 SELECT
   (NULL OR NULL) IS NULL AS `t`,
   (TRUE OR NULL) IS NULL AS `t`,
@@ -88,32 +88,32 @@ SELECT
   (TRUE OR FALSE) AS `t`,
   (FALSE OR TRUE) AS `t`,
   NOT (FALSE OR FALSE) AS `t`
--- !query 6 schema
+-- !query schema
 struct<t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean,t:boolean>
--- !query 6 output
+-- !query output
 true	false	true	false	true	true	true	true	true
 
 
--- !query 7
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
   (TRUE, null, FALSE, null),
   (FALSE, TRUE, null, null),
   (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4)
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 SELECT BOOL_AND(b1) AS n1, BOOL_OR(b3) AS n2 FROM bool_test WHERE 1 = 0
--- !query 8 schema
+-- !query schema
 struct<n1:boolean,n2:boolean>
--- !query 8 output
+-- !query output
 NULL	NULL
 
 
--- !query 9
+-- !query
 SELECT
   BOOL_AND(b1)     AS f1,
   BOOL_AND(b2)     AS t2,
@@ -122,13 +122,13 @@ SELECT
   BOOL_AND(NOT b2) AS f5,
   BOOL_AND(NOT b3) AS t6
 FROM bool_test
--- !query 9 schema
+-- !query schema
 struct<f1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
--- !query 9 output
+-- !query output
 false	true	false	NULL	false	true
 
 
--- !query 10
+-- !query
 SELECT
   EVERY(b1)     AS f1,
   EVERY(b2)     AS t2,
@@ -137,13 +137,13 @@ SELECT
   EVERY(NOT b2) AS f5,
   EVERY(NOT b3) AS t6
 FROM bool_test
--- !query 10 schema
+-- !query schema
 struct<f1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
--- !query 10 output
+-- !query output
 false	true	false	NULL	false	true
 
 
--- !query 11
+-- !query
 SELECT
   BOOL_OR(b1)      AS t1,
   BOOL_OR(b2)      AS t2,
@@ -152,113 +152,113 @@ SELECT
   BOOL_OR(NOT b2)  AS f5,
   BOOL_OR(NOT b3)  AS t6
 FROM bool_test
--- !query 11 schema
+-- !query schema
 struct<t1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
--- !query 11 output
+-- !query output
 true	true	false	NULL	false	true
 
 
--- !query 12
+-- !query
 select min(udf(unique1)) from tenk1
--- !query 12 schema
-struct<min(CAST(udf(cast(unique1 as string)) AS INT)):int>
--- !query 12 output
+-- !query schema
+struct<min(CAST(udf(ansi_cast(unique1 as string)) AS INT)):int>
+-- !query output
 0
 
 
--- !query 13
+-- !query
 select udf(max(unique1)) from tenk1
--- !query 13 schema
-struct<CAST(udf(cast(max(unique1) as string)) AS INT):int>
--- !query 13 output
+-- !query schema
+struct<CAST(udf(ansi_cast(max(unique1) as string)) AS INT):int>
+-- !query output
 9999
 
 
--- !query 14
+-- !query
 select max(unique1) from tenk1 where udf(unique1) < 42
--- !query 14 schema
+-- !query schema
 struct<max(unique1):int>
--- !query 14 output
+-- !query output
 41
 
 
--- !query 15
+-- !query
 select max(unique1) from tenk1 where unique1 > udf(42)
--- !query 15 schema
+-- !query schema
 struct<max(unique1):int>
--- !query 15 output
+-- !query output
 9999
 
 
--- !query 16
+-- !query
 select max(unique1) from tenk1 where udf(unique1) > 42000
--- !query 16 schema
+-- !query schema
 struct<max(unique1):int>
--- !query 16 output
+-- !query output
 NULL
 
 
--- !query 17
+-- !query
 select max(tenthous) from tenk1 where udf(thousand) = 33
--- !query 17 schema
+-- !query schema
 struct<max(tenthous):int>
--- !query 17 output
+-- !query output
 9033
 
 
--- !query 18
+-- !query
 select min(tenthous) from tenk1 where udf(thousand) = 33
--- !query 18 schema
+-- !query schema
 struct<min(tenthous):int>
--- !query 18 output
+-- !query output
 33
 
 
--- !query 19
+-- !query
 select distinct max(udf(unique2)) from tenk1
--- !query 19 schema
-struct<max(CAST(udf(cast(unique2 as string)) AS INT)):int>
--- !query 19 output
+-- !query schema
+struct<max(CAST(udf(ansi_cast(unique2 as string)) AS INT)):int>
+-- !query output
 9999
 
 
--- !query 20
+-- !query
 select max(unique2) from tenk1 order by udf(1)
--- !query 20 schema
+-- !query schema
 struct<max(unique2):int>
--- !query 20 output
+-- !query output
 9999
 
 
--- !query 21
+-- !query
 select max(unique2) from tenk1 order by max(udf(unique2))
--- !query 21 schema
+-- !query schema
 struct<max(unique2):int>
--- !query 21 output
+-- !query output
 9999
 
 
--- !query 22
+-- !query
 select udf(max(udf(unique2))) from tenk1 order by udf(max(unique2))+1
--- !query 22 schema
-struct<CAST(udf(cast(max(cast(udf(cast(unique2 as string)) as int)) as string)) AS INT):int>
--- !query 22 output
+-- !query schema
+struct<CAST(udf(ansi_cast(max(ansi_cast(udf(ansi_cast(unique2 as string)) as int)) as string)) AS INT):int>
+-- !query output
 9999
 
 
--- !query 23
+-- !query
 select t1.max_unique2, udf(g) from (select max(udf(unique2)) as max_unique2 FROM tenk1) t1 LATERAL VIEW explode(array(1,2,3)) t2 AS g order by g desc
--- !query 23 schema
-struct<max_unique2:int,CAST(udf(cast(g as string)) AS INT):int>
--- !query 23 output
+-- !query schema
+struct<max_unique2:int,CAST(udf(ansi_cast(g as string)) AS INT):int>
+-- !query output
 9999	3
 9999	2
 9999	1
 
 
--- !query 24
+-- !query
 select udf(max(100)) from tenk1
--- !query 24 schema
-struct<CAST(udf(cast(max(100) as string)) AS INT):int>
--- !query 24 output
+-- !query schema
+struct<CAST(udf(ansi_cast(max(100) as string)) AS INT):int>
+-- !query output
 100

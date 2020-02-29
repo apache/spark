@@ -95,6 +95,48 @@ The history server can be configured as follows:
   </tr>
 </table>
 
+### Applying compaction on rolling event log files
+
+A long-running application (e.g. streaming) can bring a huge single event log file which may cost a lot to maintain and
+also requires a bunch of resource to replay per each update in Spark History Server.
+
+Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.rolling.maxFileSize</code> would
+let you have rolling event log files instead of single huge event log file which may help some scenarios on its own,
+but it still doesn't help you reducing the overall size of logs.
+
+Spark History Server can apply compaction on the rolling event log files to reduce the overall size of
+logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
+Spark History Server.
+
+Details will be described below, but please note in prior that compaction is LOSSY operation.
+Compaction will discard some events which will be no longer seen on UI - you may want to check which events will be discarded
+before enabling the option.
+
+When the compaction happens, the History Server lists all the available event log files for the application, and considers
+the event log files having less index than the file with smallest index which will be retained as target of compaction.
+For example, if the application A has 5 event log files and <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, then first 3 log files will be selected to be compacted.
+
+Once it selects the target, it analyzes them to figure out which events can be excluded, and rewrites them
+into one compact file with discarding events which are decided to exclude.
+
+The compaction tries to exclude the events which point to the outdated data. As of now, below describes the candidates of events to be excluded:
+
+* Events for the job which is finished, and related stage/tasks events
+* Events for the executor which is terminated
+* Events for the SQL execution which is finished, and related job/stage/tasks events
+
+Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
+the original log files, but it will not affect the operation of the History Server.
+
+Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
+would be reduced during compaction. For streaming query we normally expect compaction
+will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
+in many cases for batch query.
+
+Please also note that this is a new feature introduced in Spark 3.0, and may not be completely stable. Under some circumstances,
+the compaction may exclude more events than you expect, leading some UI issues on History Server for the application.
+Use it with caution.
+
 ### Spark History Server Configuration Options
 
 Security options for the Spark History Server are covered more detail in the
@@ -159,23 +201,21 @@ Security options for the Spark History Server are covered more detail in the
     <td>false</td>
     <td>
       Indicates whether the history server should use kerberos to login. This is required
-      if the history server is accessing HDFS files on a secure Hadoop cluster. If this is
-      true, it uses the configs <code>spark.history.kerberos.principal</code> and
-      <code>spark.history.kerberos.keytab</code>.
+      if the history server is accessing HDFS files on a secure Hadoop cluster.
     </td>
   </tr>
   <tr>
     <td>spark.history.kerberos.principal</td>
     <td>(none)</td>
     <td>
-      Kerberos principal name for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies kerberos principal name for the History Server.
     </td>
   </tr>
   <tr>
     <td>spark.history.kerberos.keytab</td>
     <td>(none)</td>
     <td>
-      Location of the kerberos keytab file for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies location of the kerberos keytab file for the History Server.
     </td>
   </tr>
   <tr>
@@ -189,7 +229,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.cleaner.interval</td>
     <td>1d</td>
     <td>
-      How often the filesystem job history cleaner checks for files to delete.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies how often the filesystem job history cleaner checks for files to delete.
       Files are deleted if at least one of two conditions holds.
       First, they're deleted if they're older than <code>spark.history.fs.cleaner.maxAge</code>.
       They are also deleted if the number of files is more than
@@ -201,14 +241,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.cleaner.maxAge</td>
     <td>7d</td>
     <td>
-      Job history files older than this will be deleted when the filesystem history cleaner runs.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, job history files older than this will be deleted when the filesystem history cleaner runs.
     </td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.maxNum</td>
     <td>Int.MaxValue</td>
     <td>
-      The maximum number of files in the event log directory.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies the maximum number of files in the event log directory.
       Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
       This should be smaller than the underlying file system limit like
       `dfs.namenode.fs-limits.max-directory-items` in HDFS.
@@ -242,7 +282,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.driverlog.cleaner.interval</td>
     <td><code>spark.history.fs.cleaner.interval</code></td>
     <td>
-      How often the filesystem driver log cleaner checks for files to delete.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, specifies how often the filesystem driver log cleaner checks for files to delete.
       Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
     </td>
   </tr>
@@ -250,7 +290,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.driverlog.cleaner.maxAge</td>
     <td><code>spark.history.fs.cleaner.maxAge</code></td>
     <td>
-      Driver log files older than this will be deleted when the driver log cleaner runs.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, driver log files older than this will be deleted when the driver log cleaner runs.
     </td>
   </tr>
   <tr>
@@ -300,7 +340,15 @@ Security options for the Spark History Server are covered more detail in the
         Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
     </td>
   </tr>
-
+  <tr>
+    <td>spark.history.fs.eventLog.rolling.maxFilesToRetain</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The maximum number of event log files which will be retained as non-compacted. By default,
+      all event log files will be retained. The lowest value is 1 for technical reason.<br/>
+      Please read the section of "Applying compaction of old event log files" for more details.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -640,7 +688,10 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC infomation. Metrics `peakExecutorMetrics.*` are only enabled if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
+Executor metric values and their measured peak values per executor are exposed via the REST API at the end point `/applications/[app-id]/executors`.
+In addition, aggregated per-stage peak values of the executor metrics are written to the event log if `spark.eventLog.logStageExecutorMetrics` is true.
+Executor metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
 A list of the available metrics, with a short description:
 
 <table class="table">
@@ -736,7 +787,7 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMVMemory</td>
-    <td>Virtual memory size in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMRSSMemory</td>
@@ -744,23 +795,23 @@ A list of the available metrics, with a short description:
       in real memory.  This is just the pages which count
       toward text, data, or stack space.  This does not
       include pages which have not been demand-loaded in,
-      or which are swapped out. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+      or which are swapped out. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonVMemory</td>
-    <td>Virtual memory size for Python in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size for Python in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonRSSMemory</td>
-    <td>Resident Set Size for Python. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Resident Set Size for Python. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherVMemory</td>
-    <td>Virtual memory size for other kind of process in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size for other kind of process in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherRSSMemory</td>
-    <td>Resident Set Size for other kind of process. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Resident Set Size for other kind of process. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
     <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.MinorGCCount</td>
@@ -923,6 +974,8 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -930,6 +983,8 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
@@ -958,8 +1013,8 @@ This is the component with the largest amount of instrumented metrics
   - queue.executorManagement.listenerProcessingTime (timer)
 
 - namespace=appStatus (all metrics of type=counter)
-  - **note:** Introduced in Spark 3.0. Conditional to configuration parameter:  
-   `spark.app.status.metrics.enabled=true` (default is false)
+  - **note:** Introduced in Spark 3.0. Conditional to a configuration parameter:  
+   `spark.metrics.appStatusSource.enabled` (default is false)
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
@@ -990,6 +1045,17 @@ This is the component with the largest amount of instrumented metrics
 
 - namespace=JVMCPU
   - jvmCpuTime
+
+- namespace=ExecutorMetrics
+  - **note:** these metrics are conditional to a configuration parameter:
+    `spark.metrics.executorMetricsSource.enabled` (default is true) 
+  - This source contains memory-related metrics. A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+ 
+- namespace=plugin.\<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
 
 ### Component instance = Executor
 These metrics are exposed by Spark executors. Note, currently they are not available
@@ -1037,6 +1103,40 @@ when running in local mode.
   - threadpool.maxPool_size
   - threadpool.startedTasks
 
+- namespace=ExecutorMetrics
+  - **notes:** 
+    - These metrics are conditional to a configuration parameter:
+    `spark.metrics.executorMetricsSource.enabled` (default value is true) 
+    - ExecutorMetrics are updated as part of heartbeat processes scheduled
+   for the executors and for the driver at regular intervals: `spark.executor.heartbeatInterval` (default value is 10 seconds)
+    - An optional faster polling mechanism is available for executor memory metrics, 
+   it can be activated by setting a polling interval (in milliseconds) using the configuration parameter `spark.executor.metrics.pollingInterval`
+  - JVMHeapMemory
+  - JVMOffHeapMemory
+  - OnHeapExecutionMemory
+  - OnHeapStorageMemory
+  - OnHeapUnifiedMemory
+  - OffHeapExecutionMemory
+  - OffHeapStorageMemory
+  - OffHeapUnifiedMemory
+  - DirectPoolMemory
+  - MappedPoolMemory
+  - MinorGCCount
+  - MinorGCTime
+  - MajorGCCount
+  - MajorGCTime
+  - "ProcessTree*" metric counters:
+    - ProcessTreeJVMVMemory
+    - ProcessTreeJVMRSSMemory
+    - ProcessTreePythonVMemory
+    - ProcessTreePythonRSSMemory
+    - ProcessTreeOtherVMemory
+    - ProcessTreeOtherRSSMemory
+    - **note:** "ProcessTree*" metrics are collected only under certain conditions.
+      The conditions are the logical AND of the following: `/proc` filesystem exists,
+      `spark.executor.processTreeMetrics.enabled=true`.
+      "ProcessTree*" metrics report 0 when those conditions are not met.
+
 - namespace=JVMCPU
   - jvmCpuTime
 
@@ -1047,6 +1147,8 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -1054,16 +1156,18 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
-- namespace=<Executor Plugin Class Name>
-  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and 
-  configured using the Spark executor plugin infrastructure.
-  See also the configuration parameter `spark.executor.plugins`
+- namespace=plugin.\<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
 
 ### Source = JVM Source 
 Notes: 
@@ -1141,3 +1245,21 @@ can provide fine-grained profiling on individual nodes.
 * JVM utilities such as `jstack` for providing stack traces, `jmap` for creating heap-dumps,
 `jstat` for reporting time-series statistics and `jconsole` for visually exploring various JVM
 properties are useful for those comfortable with JVM internals.
+
+Spark also provides a plugin API so that custom instrumentation code can be added to Spark
+applications. There are two configuration keys available for loading plugins into Spark:
+
+- <code>spark.plugins</code>
+- <code>spark.plugins.defaultList</code>
+
+Both take a comma-separated list of class names that implement the
+<code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that it's
+possible for one list to be placed in the Spark default config file, allowing users to
+easily add other plugins from the command line without overwriting the config file's list. Duplicate
+plugins are ignored.
+
+Distribution of the jar files containing the plugin code is currently not done by Spark. The user
+or admin should make sure that the jar files are available to Spark applications, for example, by
+including the plugin jar with the Spark distribution. The exception to this rule is the YARN
+backend, where the <code>--jars</code> command line option (or equivalent config entry) can be
+used to make the plugin code available to both executors and cluster-mode drivers.

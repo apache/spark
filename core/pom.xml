@@ -21,17 +21,19 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-core_2.12</artifactId>
-  <properties>
-    <sbt.project.name>core</sbt.project.name>
-  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.apache.org/</url>
+
+  <properties>
+    <sbt.project.name>core</sbt.project.name>
+  </properties>
+  
   <dependencies>
     <dependency>
       <groupId>com.thoughtworks.paranamer</groupId>
@@ -163,7 +165,6 @@
       <artifactId>javax.servlet-api</artifactId>
       <version>${javaxservlet.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
@@ -292,6 +293,16 @@
     <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-graphite</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.rabbitmq</groupId>
+          <artifactId>amqp-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-jmx</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -403,7 +414,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.8.1</version>
+      <version>0.10.9</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -502,6 +513,24 @@
                 guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/main/scala-${scala.binary.version}</source>
+              </sources>
             </configuration>
           </execution>
         </executions>

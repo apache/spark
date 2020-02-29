@@ -221,13 +221,6 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
         self.assertEqual(testParams.getMaxIter(), 10)
-        testParams.setMaxIter(100)
-        self.assertTrue(testParams.isSet(maxIter))
-        self.assertEqual(testParams.getMaxIter(), 100)
-        testParams.clear(maxIter)
-        self.assertFalse(testParams.isSet(maxIter))
-        self.assertEqual(testParams.getMaxIter(), 10)
-        testParams.setMaxIter(100)
 
         self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -244,13 +237,12 @@ class ParamTests(SparkSessionTestCase):
 
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
-        testParams.setSeed(43)
 
         self.assertEqual(
             testParams.explainParams(),
             "\n".join(["inputCol: input column name. (undefined)",
-                       "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
-                       "seed: random seed. (default: 41, current: 43)"]))
+                       "maxIter: max number of iterations (>= 0). (default: 10)",
+                       "seed: random seed. (default: 41)"]))
 
     def test_clear_param(self):
         df = self.spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
@@ -315,6 +307,10 @@ class ParamTests(SparkSessionTestCase):
                 copied_no_extra[k] = v
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
+        with self.assertRaises(TypeError):
+            tp.copy(extra={"unknown_parameter": None})
+        with self.assertRaises(TypeError):
+            tp.copy(extra=["must be a dict"])
 
     def test_logistic_regression_check_thresholds(self):
         self.assertIsInstance(

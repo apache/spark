@@ -29,6 +29,8 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, ResourceProfileManager, TaskResourceRequests}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
@@ -44,6 +46,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private val managers = new mutable.ListBuffer[ExecutorAllocationManager]()
   private var listenerBus: LiveListenerBus = _
   private var client: ExecutorAllocationClient = _
+  private val clock = new SystemClock()
+  private var rpManager: ResourceProfileManager = _
+
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -107,65 +112,257 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("starting state") {
     val manager = createManager(createConf())
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
   }
 
-  test("add executors") {
+  test("add executors default profile") {
     val manager = createManager(createConf(1, 10, 1))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
     // Keep adding until the limit is reached
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 2)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 4)
-    assert(numExecutorsToAdd(manager) === 4)
-    assert(addExecutors(manager) === 4)
-    assert(numExecutorsTarget(manager) === 8)
-    assert(numExecutorsToAdd(manager) === 8)
-    assert(addExecutors(manager) === 2) // reached the limit of 10
-    assert(numExecutorsTarget(manager) === 10)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsTarget(manager) === 10)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 8)
+    // reached the limit of 10
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Register previously requested executors
-    onExecutorAdded(manager, "first")
-    assert(numExecutorsTarget(manager) === 10)
-    onExecutorAdded(manager, "second")
-    onExecutorAdded(manager, "third")
-    onExecutorAdded(manager, "fourth")
-    assert(numExecutorsTarget(manager) === 10)
-    onExecutorAdded(manager, "first") // duplicates should not count
-    onExecutorAdded(manager, "second")
-    assert(numExecutorsTarget(manager) === 10)
+    onExecutorAddedDefaultProfile(manager, "first")
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAddedDefaultProfile(manager, "third")
+    onExecutorAddedDefaultProfile(manager, "fourth")
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    onExecutorAddedDefaultProfile(manager, "first") // duplicates should not count
+    onExecutorAddedDefaultProfile(manager, "second")
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
 
     // Try adding again
     // This should still fail because the number pending + running is still at the limit
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsTarget(manager) === 10)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsTarget(manager) === 10)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+  }
+
+  test("add executors multiple profiles") {
+    val manager = createManager(createConf(1, 10, 1))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build
+    rpManager.addResourceProfile(rprof1)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    // Keep adding until the limit is reached
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 1)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    assert(numExecutorsToAdd(manager, rprof1) === 2)
+    assert(numExecutorsTarget(manager, rprof1.id) === 2)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    assert(numExecutorsToAdd(manager, rprof1) === 4)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 8)
+    // reached the limit of 10
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    assert(numExecutorsToAdd(manager, rprof1) === 8)
+    assert(numExecutorsTarget(manager, rprof1.id) === 8)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+
+    // Register previously requested executors
+    onExecutorAddedDefaultProfile(manager, "first")
+    onExecutorAdded(manager, "firstrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAddedDefaultProfile(manager, "third")
+    onExecutorAddedDefaultProfile(manager, "fourth")
+    onExecutorAdded(manager, "secondrp1", rprof1)
+    onExecutorAdded(manager, "thirdrp1", rprof1)
+    onExecutorAdded(manager, "fourthrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    onExecutorAddedDefaultProfile(manager, "first") // duplicates should not count
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAdded(manager, "firstrp1", rprof1)
+    onExecutorAdded(manager, "secondrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+
+    // Try adding again
+    // This should still fail because the number pending + running is still at the limit
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+  }
+
+  test("remove executors multiple profiles") {
+    val manager = createManager(createConf(5, 10, 5))
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build
+    val rp2 = new ResourceProfileBuilder()
+    val execReqs2 = new ExecutorResourceRequests().cores(1)
+    val taskReqs2 = new TaskResourceRequests().cpus(1)
+    rp2.require(execReqs2).require(taskReqs2)
+    val rprof2 = rp2.build
+    rpManager.addResourceProfile(rprof1)
+    rpManager.addResourceProfile(rprof2)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 10, rp = rprof1)))
+    post(SparkListenerStageSubmitted(createStageInfo(2, 10, rp = rprof2)))
+
+    (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id, rprof1) }
+    (11 to 20).map(_.toString).foreach { id => onExecutorAdded(manager, id, rprof2) }
+    (21 to 30).map(_.toString).foreach { id => onExecutorAdded(manager, id, defaultProfile) }
+
+    // Keep removing until the limit is reached
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(removeExecutor(manager, "1", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 1)
+    assert(executorsPendingToRemove(manager).contains("1"))
+    assert(removeExecutor(manager, "11", rprof2.id))
+    assert(removeExecutor(manager, "2", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 3)
+    assert(executorsPendingToRemove(manager).contains("2"))
+    assert(executorsPendingToRemove(manager).contains("11"))
+    assert(removeExecutor(manager, "21", defaultProfile.id))
+    assert(removeExecutor(manager, "3", rprof1.id))
+    assert(removeExecutor(manager, "4", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(executorsPendingToRemove(manager).contains("21"))
+    assert(executorsPendingToRemove(manager).contains("3"))
+    assert(executorsPendingToRemove(manager).contains("4"))
+    assert(removeExecutor(manager, "5", rprof1.id))
+    assert(!removeExecutor(manager, "6", rprof1.id)) // reached the limit of 5
+    assert(executorsPendingToRemove(manager).size === 7)
+    assert(executorsPendingToRemove(manager).contains("5"))
+    assert(!executorsPendingToRemove(manager).contains("6"))
+
+    // Kill executors previously requested to remove
+    onExecutorRemoved(manager, "1")
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(!executorsPendingToRemove(manager).contains("1"))
+    onExecutorRemoved(manager, "2")
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 4)
+    assert(!executorsPendingToRemove(manager).contains("2"))
+    assert(!executorsPendingToRemove(manager).contains("3"))
+    onExecutorRemoved(manager, "2") // duplicates should not count
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 4)
+    onExecutorRemoved(manager, "4")
+    onExecutorRemoved(manager, "5")
+    assert(executorsPendingToRemove(manager).size === 2)
+    assert(executorsPendingToRemove(manager).contains("11"))
+    assert(executorsPendingToRemove(manager).contains("21"))
+
+    // Try removing again
+    // This should still fail because the number pending + running is still at the limit
+    assert(!removeExecutor(manager, "7", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 2)
+    assert(!removeExecutor(manager, "8", rprof1.id))
+    assert(executorsPendingToRemove(manager).size === 2)
+
+    // make sure rprof2 has the same min limit or 5
+    assert(removeExecutor(manager, "12", rprof2.id))
+    assert(removeExecutor(manager, "13", rprof2.id))
+    assert(removeExecutor(manager, "14", rprof2.id))
+    assert(removeExecutor(manager, "15", rprof2.id))
+    assert(!removeExecutor(manager, "16", rprof2.id)) // reached the limit of 5
+    assert(executorsPendingToRemove(manager).size === 6)
+    assert(!executorsPendingToRemove(manager).contains("16"))
+    onExecutorRemoved(manager, "11")
+    onExecutorRemoved(manager, "12")
+    onExecutorRemoved(manager, "13")
+    onExecutorRemoved(manager, "14")
+    onExecutorRemoved(manager, "15")
+    assert(executorsPendingToRemove(manager).size === 1)
   }
 
   def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
     val conf = createConf(3, 15)
       .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
     val manager = createManager(conf)
     post(SparkListenerStageSubmitted(createStageInfo(0, 20)))
     for (i <- 0 to 5) {
-      addExecutors(manager)
+      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+      doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     }
-    assert(numExecutorsTarget(manager) === expected)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === expected)
   }
 
   test("executionAllocationRatio is correctly handled") {
@@ -184,83 +381,249 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(0, 10, 0))
     post(SparkListenerStageSubmitted(createStageInfo(0, 5)))
 
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
     // Verify that we're capped at number of tasks in the stage
-    assert(numExecutorsTarget(manager) === 0)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 3)
-    assert(numExecutorsToAdd(manager) === 4)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 5)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Verify that running a task doesn't affect the target
     post(SparkListenerStageSubmitted(createStageInfo(1, 3)))
     post(SparkListenerExecutorAdded(
       0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
-    assert(numExecutorsTarget(manager) === 5)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 6)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 8)
-    assert(numExecutorsToAdd(manager) === 4)
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsTarget(manager) === 8)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Verify that re-running a task doesn't blow things up
     post(SparkListenerStageSubmitted(createStageInfo(2, 3)))
     post(SparkListenerTaskStart(2, 0, createTaskInfo(0, 0, "executor-1")))
     post(SparkListenerTaskStart(2, 0, createTaskInfo(1, 0, "executor-1")))
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 9)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 10)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 9)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Verify that running a task once we're at our limit doesn't blow things up
     post(SparkListenerTaskStart(2, 0, createTaskInfo(0, 1, "executor-1")))
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsTarget(manager) === 10)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
   }
 
   test("add executors when speculative tasks added") {
     val manager = createManager(createConf(0, 10, 0))
 
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     // Verify that we're capped at number of tasks including the speculative ones in the stage
     post(SparkListenerSpeculativeTaskSubmitted(1))
-    assert(numExecutorsTarget(manager) === 0)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     post(SparkListenerSpeculativeTaskSubmitted(1))
     post(SparkListenerSpeculativeTaskSubmitted(1))
-    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 3)
-    assert(numExecutorsToAdd(manager) === 4)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 5)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Verify that running a task doesn't affect the target
     post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
-    assert(numExecutorsTarget(manager) === 5)
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     // Verify that running a speculative task doesn't affect the target
     post(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "executor-2", true)))
-    assert(numExecutorsTarget(manager) === 5)
-    assert(addExecutors(manager) === 0)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+  }
+
+  test("SPARK-30511 remove executors when speculative tasks end") {
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 40)
+    val conf = createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(stage))
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 3)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    (0 to 9).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (0 to 39).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 10)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 10)
+
+    // 30 tasks (0 - 29) finished
+    (0 to 29).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
+    (0 to 6).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
+    (0 to 6).foreach { i => onExecutorRemoved(manager, i.toString)}
+
+    // 10 speculative tasks (30 - 39) launch for the remaining tasks
+    (30 to 39).foreach { _ => post(SparkListenerSpeculativeTaskSubmitted(0))}
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTarget(manager, defaultProfile.id) == 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+    (10 to 12).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (40 to 49).map { i =>
+      createTaskInfo(taskId = i, taskIndex = i - 10, executorId = s"${i / 4}", speculative = true)}
+      .foreach { info => post(SparkListenerTaskStart(0, 0, info))}
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // At this point, we still have 6 executors running
+    assert(numExecutorsTarget(manager, defaultProfile.id) == 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+
+    // 6 speculative tasks (40 - 45) finish before the original tasks, with 4 speculative remaining
+    (40 to 45).map { i =>
+      createTaskInfo(taskId = i, taskIndex = i - 10, executorId = s"${i / 4}", speculative = true)}
+      .foreach {
+        info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))}
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
+    assert(removeExecutorDefaultProfile(manager, "10"))
+    onExecutorRemoved(manager, "10")
+    // At this point, we still have 5 executors running: ["7", "8", "9", "11", "12"]
+
+    // 6 original tasks (30 - 35) are intentionally killed
+    (30 to 35).map { i =>
+      createTaskInfo(i, i, executorId = s"${i / 4}")}
+      .foreach { info => post(
+        SparkListenerTaskEnd(0, 0, null, TaskKilled("test"), info, new ExecutorMetrics, null))}
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+    (7 to 8).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
+    (7 to 8).foreach { i => onExecutorRemoved(manager, i.toString)}
+    // At this point, we still have 3 executors running: ["9", "11", "12"]
+
+    // Task 36 finishes before the speculative task 46, task 46 killed
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(36, 36, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, TaskKilled("test"),
+      createTaskInfo(46, 36, executorId = "11", speculative = true), new ExecutorMetrics, null))
+
+    // We should have 3 original tasks (index 37, 38, 39) running, with corresponding 3 speculative
+    // tasks running. Target lowers to 2, but still hold 3 executors ["9", "11", "12"]
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+    // At this point, we still have 3 executors running: ["9", "11", "12"]
+
+    // Task 37 and 47 succeed at the same time
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(37, 37, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(47, 37, executorId = "11", speculative = true), new ExecutorMetrics, null))
+
+    // We should have 2 original tasks (index 38, 39) running, with corresponding 2 speculative
+    // tasks running
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    assert(removeExecutorDefaultProfile(manager, "11"))
+    onExecutorRemoved(manager, "11")
+    // At this point, we still have 2 executors running: ["9", "12"]
+
+    // Task 38 fails and task 49 fails, new speculative task 50 is submitted to speculate on task 39
+    post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
+      createTaskInfo(38, 38, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
+      createTaskInfo(49, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerSpeculativeTaskSubmitted(0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // maxNeeded = 1, allocate one more to satisfy speculation locality requirement
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+    post(SparkListenerTaskStart(0, 0,
+      createTaskInfo(50, 39, executorId = "12", speculative = true)))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+
+    // Task 39 and 48 succeed, task 50 killed
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(39, 39, executorId = "9"), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(48, 38, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, TaskKilled("test"),
+      createTaskInfo(50, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
+    post(SparkListenerStageCompleted(stage))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 0)
+    assert(removeExecutorDefaultProfile(manager, "9"))
+    onExecutorRemoved(manager, "9")
+    assert(removeExecutorDefaultProfile(manager, "12"))
+    onExecutorRemoved(manager, "12")
   }
 
   test("properly handle task end events from completed stages") {
@@ -281,43 +644,49 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageCompleted(stage))
 
     // There are still two tasks that belong to the zombie stage running.
-    assert(totalRunningTasks(manager) === 2)
+    assert(totalRunningTasksPerResourceProfile(manager) === 2)
 
     // submit another attempt for the stage.  We count completions from the first zombie attempt
     val stageAttempt1 = createStageInfo(stage.stageId, 5, attemptId = 1)
     post(SparkListenerStageSubmitted(stageAttempt1))
     post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, new ExecutorMetrics, null))
-    assert(totalRunningTasks(manager) === 1)
+    assert(totalRunningTasksPerResourceProfile(manager) === 1)
     val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
     val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
     post(SparkListenerTaskStart(0, 1, attemptTaskInfo1))
     post(SparkListenerTaskStart(0, 1, attemptTaskInfo2))
-    assert(totalRunningTasks(manager) === 3)
+    assert(totalRunningTasksPerResourceProfile(manager) === 3)
     post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, new ExecutorMetrics, null))
-    assert(totalRunningTasks(manager) === 2)
+    assert(totalRunningTasksPerResourceProfile(manager) === 2)
     post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, new ExecutorMetrics, null))
-    assert(totalRunningTasks(manager) === 1)
+    assert(totalRunningTasksPerResourceProfile(manager) === 1)
     post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, new ExecutorMetrics, null))
-    assert(totalRunningTasks(manager) === 0)
+    assert(totalRunningTasksPerResourceProfile(manager) === 0)
   }
 
   testRetry("cancel pending executors when no longer needed") {
     val manager = createManager(createConf(0, 10, 0))
     post(SparkListenerStageSubmitted(createStageInfo(2, 5)))
 
-    assert(numExecutorsTarget(manager) === 0)
-    assert(numExecutorsToAdd(manager) === 1)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 3)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
 
     val task1Info = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(2, 0, task1Info))
 
-    assert(numExecutorsToAdd(manager) === 4)
-    assert(addExecutors(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
 
     val task2Info = createTaskInfo(1, 0, "executor-1")
     post(SparkListenerTaskStart(2, 0, task2Info))
@@ -333,22 +702,21 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("remove executors") {
     val manager = createManager(createConf(5, 10, 5))
-    (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id) }
+    (1 to 10).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutor(manager, "1"))
+    assert(removeExecutorDefaultProfile(manager, "1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutor(manager, "2"))
-    assert(removeExecutor(manager, "3"))
+    assert(removeExecutorDefaultProfile(manager, "2"))
+    assert(removeExecutorDefaultProfile(manager, "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
-    assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutor(manager, "5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    assert(removeExecutorDefaultProfile(manager, "5"))
+    assert(!removeExecutorDefaultProfile(manager, "6")) // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -372,29 +740,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    assert(!removeExecutorDefaultProfile(manager, "7"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(!removeExecutor(manager, "8"))
+    assert(!removeExecutorDefaultProfile(manager, "8"))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
   test("remove multiple executors") {
     val manager = createManager(createConf(5, 10, 5))
-    (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id) }
+    (1 to 10).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("1")) === Seq("1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("1")) === Seq("1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutors(manager, Seq("2", "3")) === Seq("2", "3"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3")) === Seq("2", "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
     assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutors(manager, Seq("5")) === Seq("5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("5")) === Seq("5"))
+    assert(!removeExecutorDefaultProfile(manager, "6")) // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -418,87 +786,100 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    assert(!removeExecutorDefaultProfile(manager, "7"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("8")) !== Seq("8"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("8")) !== Seq("8"))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
-  test ("Removing with various numExecutorsTarget condition") {
+  test ("Removing with various numExecutorsTargetForDefaultProfileId condition") {
     val manager = createManager(createConf(5, 12, 5))
 
     post(SparkListenerStageSubmitted(createStageInfo(0, 8)))
 
-    // Remove when numExecutorsTarget is the same as the current number of executors
-    assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 2)
-    (1 to 8).foreach(execId => onExecutorAdded(manager, execId.toString))
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    // Remove when numExecutorsTargetForDefaultProfileId is the same as the current
+    // number of executors
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    (1 to 8).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
     (1 to 8).map { i => createTaskInfo(i, i, s"$i") }.foreach {
       info => post(SparkListenerTaskStart(0, 0, info)) }
     assert(manager.executorMonitor.executorCount === 8)
-    assert(numExecutorsTarget(manager) === 8)
-    assert(maxNumExecutorsNeeded(manager) == 8)
-    assert(!removeExecutor(manager, "1")) // won't work since numExecutorsTarget == numExecutors
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 8)
+    // won't work since numExecutorsTargetForDefaultProfileId == numExecutors
+    assert(!removeExecutorDefaultProfile(manager, "1"))
 
-    // Remove executors when numExecutorsTarget is lower than current number of executors
+    // Remove executors when numExecutorsTargetForDefaultProfileId is lower than
+    // current number of executors
     (1 to 3).map { i => createTaskInfo(i, i, s"$i") }.foreach { info =>
       post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
     }
     adjustRequestedExecutors(manager)
     assert(manager.executorMonitor.executorCount === 8)
-    assert(numExecutorsTarget(manager) === 5)
-    assert(maxNumExecutorsNeeded(manager) == 5)
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3"))=== Seq("2", "3"))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+    assert(removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3"))=== Seq("2", "3"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
 
-    // numExecutorsTarget is lower than minNumExecutors
+    // numExecutorsTargetForDefaultProfileId is lower than minNumExecutors
     post(SparkListenerTaskEnd(0, 0, null, Success, createTaskInfo(4, 4, "4"),
       new ExecutorMetrics, null))
     assert(manager.executorMonitor.executorCount === 5)
-    assert(numExecutorsTarget(manager) === 5)
-    assert(maxNumExecutorsNeeded(manager) == 4)
-    assert(!removeExecutor(manager, "4")) // lower limit
-    assert(addExecutors(manager) === 0) // upper limit
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
+    assert(!removeExecutorDefaultProfile(manager, "4")) // lower limit
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0) // upper limit
   }
 
   test ("interleaving add and remove") {
     val manager = createManager(createConf(5, 12, 5))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
     // Add a few executors
-    assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 2)
-    onExecutorAdded(manager, "1")
-    onExecutorAdded(manager, "2")
-    onExecutorAdded(manager, "3")
-    onExecutorAdded(manager, "4")
-    onExecutorAdded(manager, "5")
-    onExecutorAdded(manager, "6")
-    onExecutorAdded(manager, "7")
-    onExecutorAdded(manager, "8")
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    onExecutorAddedDefaultProfile(manager, "1")
+    onExecutorAddedDefaultProfile(manager, "2")
+    onExecutorAddedDefaultProfile(manager, "3")
+    onExecutorAddedDefaultProfile(manager, "4")
+    onExecutorAddedDefaultProfile(manager, "5")
+    onExecutorAddedDefaultProfile(manager, "6")
+    onExecutorAddedDefaultProfile(manager, "7")
+    onExecutorAddedDefaultProfile(manager, "8")
     assert(manager.executorMonitor.executorCount === 8)
-    assert(numExecutorsTarget(manager) === 8)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
 
 
     // Remove when numTargetExecutors is equal to the current number of executors
-    assert(!removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3")) !== Seq("2", "3"))
+    assert(!removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3")) !== Seq("2", "3"))
 
     // Remove until limit
-    onExecutorAdded(manager, "9")
-    onExecutorAdded(manager, "10")
-    onExecutorAdded(manager, "11")
-    onExecutorAdded(manager, "12")
+    onExecutorAddedDefaultProfile(manager, "9")
+    onExecutorAddedDefaultProfile(manager, "10")
+    onExecutorAddedDefaultProfile(manager, "11")
+    onExecutorAddedDefaultProfile(manager, "12")
     assert(manager.executorMonitor.executorCount === 12)
-    assert(numExecutorsTarget(manager) === 8)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
 
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3", "4")) === Seq("2", "3", "4"))
-    assert(!removeExecutor(manager, "5")) // lower limit reached
-    assert(!removeExecutor(manager, "6"))
+    assert(removeExecutorDefaultProfile(manager, "1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("2", "3", "4")) === Seq("2", "3", "4"))
+    assert(!removeExecutorDefaultProfile(manager, "5")) // lower limit reached
+    assert(!removeExecutorDefaultProfile(manager, "6"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -506,33 +887,36 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorMonitor.executorCount === 8)
 
     // Add until limit
-    assert(!removeExecutor(manager, "7")) // still at lower limit
+    assert(!removeExecutorDefaultProfile(manager, "7")) // still at lower limit
     assert((manager, Seq("8")) !== Seq("8"))
-    onExecutorAdded(manager, "13")
-    onExecutorAdded(manager, "14")
-    onExecutorAdded(manager, "15")
-    onExecutorAdded(manager, "16")
+    onExecutorAddedDefaultProfile(manager, "13")
+    onExecutorAddedDefaultProfile(manager, "14")
+    onExecutorAddedDefaultProfile(manager, "15")
+    onExecutorAddedDefaultProfile(manager, "16")
     assert(manager.executorMonitor.executorCount === 12)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(removeExecutors(manager, Seq("5", "6", "7")) === Seq("5", "6", "7"))
-    assert(removeExecutor(manager, "8"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("5", "6", "7")) === Seq("5", "6", "7"))
+    assert(removeExecutorDefaultProfile(manager, "8"))
     assert(manager.executorMonitor.executorCount === 12)
     onExecutorRemoved(manager, "5")
     onExecutorRemoved(manager, "6")
     assert(manager.executorMonitor.executorCount === 10)
-    assert(numExecutorsToAdd(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
     onExecutorRemoved(manager, "9")
     onExecutorRemoved(manager, "10")
-    assert(addExecutors(manager) === 4) // at upper limit
-    onExecutorAdded(manager, "17")
-    onExecutorAdded(manager, "18")
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4) // at upper limit
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    onExecutorAddedDefaultProfile(manager, "17")
+    onExecutorAddedDefaultProfile(manager, "18")
     assert(manager.executorMonitor.executorCount === 10)
-    assert(addExecutors(manager) === 0) // still at upper limit
-    onExecutorAdded(manager, "19")
-    onExecutorAdded(manager, "20")
+    // still at upper limit
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    onExecutorAddedDefaultProfile(manager, "19")
+    onExecutorAddedDefaultProfile(manager, "20")
     assert(manager.executorMonitor.executorCount === 12)
-    assert(numExecutorsTarget(manager) === 12)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 12)
   }
 
   test("starting/canceling add timer") {
@@ -570,22 +954,22 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(0, 20, 0), clock = clock)
 
     // No events - we should not be adding or removing
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(100L)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(1000L)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(10000L)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -598,43 +982,43 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onSchedulerBacklogged(manager)
     clock.advance(schedulerBacklogTimeout * 1000 / 2)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 0) // timer not exceeded yet
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0) // timer not exceeded yet
     clock.advance(schedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 1) // first timer exceeded
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1) // first timer exceeded
     clock.advance(sustainedSchedulerBacklogTimeout * 1000 / 2)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 1) // second timer not exceeded yet
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1) // second timer not exceeded yet
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 1 + 2) // second timer exceeded
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1 + 2) // second timer exceeded
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 1 + 2 + 4) // third timer exceeded
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1 + 2 + 4) // third timer exceeded
 
     // Scheduler queue drained
     onSchedulerQueueEmpty(manager)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 7) // timer is canceled
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 7) // timer is canceled
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 7)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 7)
 
     // Scheduler queue backlogged again
     onSchedulerBacklogged(manager)
     clock.advance(schedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 7 + 1) // timer restarted
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 7 + 1) // timer restarted
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 7 + 1 + 2)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 7 + 1 + 2)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 7 + 1 + 2 + 4)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 7 + 1 + 2 + 4)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsTarget(manager) === 20) // limit reached
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 20) // limit reached
   }
 
   test("mock polling loop remove behavior") {
@@ -642,9 +1026,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(1, 20, 1), clock = clock)
 
     // Remove idle executors on timeout
-    onExecutorAdded(manager, "executor-1")
-    onExecutorAdded(manager, "executor-2")
-    onExecutorAdded(manager, "executor-3")
+    onExecutorAddedDefaultProfile(manager, "executor-1")
+    onExecutorAddedDefaultProfile(manager, "executor-2")
+    onExecutorAddedDefaultProfile(manager, "executor-3")
     assert(executorsPendingToRemove(manager).isEmpty)
 
     // idle threshold not reached yet
@@ -660,10 +1044,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(executorsPendingToRemove(manager).size === 2) // limit reached (1 executor remaining)
 
     // Mark a subset as busy - only idle executors should be removed
-    onExecutorAdded(manager, "executor-4")
-    onExecutorAdded(manager, "executor-5")
-    onExecutorAdded(manager, "executor-6")
-    onExecutorAdded(manager, "executor-7")
+    onExecutorAddedDefaultProfile(manager, "executor-4")
+    onExecutorAddedDefaultProfile(manager, "executor-5")
+    onExecutorAddedDefaultProfile(manager, "executor-6")
+    onExecutorAddedDefaultProfile(manager, "executor-7")
     assert(manager.executorMonitor.executorCount === 7)
     assert(executorsPendingToRemove(manager).size === 2) // 2 pending to be removed
     onExecutorBusy(manager, "executor-4")
@@ -728,23 +1112,31 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val stage1 = createStageInfo(0, 1000)
     post(SparkListenerStageSubmitted(stage1))
 
-    assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 2)
-    assert(addExecutors(manager) === 4)
-    assert(addExecutors(manager) === 8)
-    assert(numExecutorsTarget(manager) === 15)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 8)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 15)
     (0 until 15).foreach { i =>
-      onExecutorAdded(manager, s"executor-$i")
+      onExecutorAddedDefaultProfile(manager, s"executor-$i")
     }
     assert(manager.executorMonitor.executorCount === 15)
     post(SparkListenerStageCompleted(stage1))
 
     adjustRequestedExecutors(manager)
-    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000)))
-    addExecutors(manager)
-    assert(numExecutorsTarget(manager) === 16)
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 16)
   }
 
   test("avoid ramp down initial executors until first job is submitted") {
@@ -752,19 +1144,19 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(2, 5, 3), clock = clock)
 
     // Verify the initial number of executors
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
     schedule(manager)
     // Verify whether the initial number of executors is kept with no pending tasks
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     clock.advance(100L)
 
-    assert(maxNumExecutorsNeeded(manager) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
     schedule(manager)
 
     // Verify that current number of executors should be ramp down when first job is submitted
-    assert(numExecutorsTarget(manager) === 2)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
   }
 
   test("avoid ramp down initial executors until idle executor is timeout") {
@@ -772,20 +1164,20 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(2, 5, 3), clock = clock)
 
     // Verify the initial number of executors
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
     schedule(manager)
     // Verify the initial number of executors is kept when no pending tasks
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
     (0 until 3).foreach { i =>
-      onExecutorAdded(manager, s"executor-$i")
+      onExecutorAddedDefaultProfile(manager, s"executor-$i")
     }
 
     clock.advance(executorIdleTimeout * 1000)
 
-    assert(maxNumExecutorsNeeded(manager) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
     schedule(manager)
-    // Verify executor is timeout,numExecutorsTarget is recalculated
-    assert(numExecutorsTarget(manager) === 2)
+    // Verify executor is timeout,numExecutorsTargetForDefaultProfileId is recalculated
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
   }
 
   test("get pending task number and related locality preference") {
@@ -801,7 +1193,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val stageInfo1 = createStageInfo(1, 5, localityPreferences1)
     post(SparkListenerStageSubmitted(stageInfo1))
 
-    assert(localityAwareTasks(manager) === 3)
+    assert(localityAwareTasksForDefaultProfile(manager) === 3)
+    val hostToLocal = hostToLocalTaskCount(manager)
     assert(hostToLocalTaskCount(manager) ===
       Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
 
@@ -813,67 +1206,76 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val stageInfo2 = createStageInfo(2, 3, localityPreferences2)
     post(SparkListenerStageSubmitted(stageInfo2))
 
-    assert(localityAwareTasks(manager) === 5)
+    assert(localityAwareTasksForDefaultProfile(manager) === 5)
     assert(hostToLocalTaskCount(manager) ===
       Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
 
     post(SparkListenerStageCompleted(stageInfo1))
-    assert(localityAwareTasks(manager) === 2)
+    assert(localityAwareTasksForDefaultProfile(manager) === 2)
     assert(hostToLocalTaskCount(manager) ===
       Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
   }
 
-  test("SPARK-8366: maxNumExecutorsNeeded should properly handle failed tasks") {
+  test("SPARK-8366: maxNumExecutorsNeededPerResourceProfile should properly handle failed tasks") {
     val manager = createManager(createConf())
-    assert(maxNumExecutorsNeeded(manager) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
 
     post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
-    assert(maxNumExecutorsNeeded(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
 
     val taskInfo = createTaskInfo(1, 1, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo))
-    assert(maxNumExecutorsNeeded(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
 
     // If the task is failed, we expect it to be resubmitted later.
     val taskEndReason = ExceptionFailure(null, null, null, null, None)
     post(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, new ExecutorMetrics, null))
-    assert(maxNumExecutorsNeeded(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
   }
 
   test("reset the state of allocation manager") {
     val manager = createManager(createConf())
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Allocation manager is reset when adding executor requests are sent without reporting back
     // executor added.
     post(SparkListenerStageSubmitted(createStageInfo(0, 10)))
 
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 2)
-    assert(addExecutors(manager) === 2)
-    assert(numExecutorsTarget(manager) === 4)
-    assert(addExecutors(manager) === 1)
-    assert(numExecutorsTarget(manager) === 5)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
 
     manager.reset()
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(manager.executorMonitor.executorCount === 0)
 
     // Allocation manager is reset when executors are added.
     post(SparkListenerStageSubmitted(createStageInfo(0, 10)))
 
-    addExecutors(manager)
-    addExecutors(manager)
-    addExecutors(manager)
-    assert(numExecutorsTarget(manager) === 5)
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
 
-    onExecutorAdded(manager, "first")
-    onExecutorAdded(manager, "second")
-    onExecutorAdded(manager, "third")
-    onExecutorAdded(manager, "fourth")
-    onExecutorAdded(manager, "fifth")
+    onExecutorAddedDefaultProfile(manager, "first")
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAddedDefaultProfile(manager, "third")
+    onExecutorAddedDefaultProfile(manager, "fourth")
+    onExecutorAddedDefaultProfile(manager, "fifth")
     assert(manager.executorMonitor.executorCount === 5)
 
     // Cluster manager lost will make all the live executors lost, so here simulate this behavior
@@ -884,28 +1286,31 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorRemoved(manager, "fifth")
 
     manager.reset()
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(manager.executorMonitor.executorCount === 0)
 
     // Allocation manager is reset when executors are pending to remove
-    addExecutors(manager)
-    addExecutors(manager)
-    addExecutors(manager)
-    assert(numExecutorsTarget(manager) === 5)
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    addExecutorsToTargetForDefaultProfile(manager, updatesNeeded)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 5)
 
-    onExecutorAdded(manager, "first")
-    onExecutorAdded(manager, "second")
-    onExecutorAdded(manager, "third")
-    onExecutorAdded(manager, "fourth")
-    onExecutorAdded(manager, "fifth")
-    onExecutorAdded(manager, "sixth")
-    onExecutorAdded(manager, "seventh")
-    onExecutorAdded(manager, "eighth")
+    onExecutorAddedDefaultProfile(manager, "first")
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAddedDefaultProfile(manager, "third")
+    onExecutorAddedDefaultProfile(manager, "fourth")
+    onExecutorAddedDefaultProfile(manager, "fifth")
+    onExecutorAddedDefaultProfile(manager, "sixth")
+    onExecutorAddedDefaultProfile(manager, "seventh")
+    onExecutorAddedDefaultProfile(manager, "eighth")
     assert(manager.executorMonitor.executorCount === 8)
 
-    removeExecutor(manager, "first")
-    removeExecutors(manager, Seq("second", "third"))
+    removeExecutorDefaultProfile(manager, "first")
+    removeExecutorsDefaultProfile(manager, Seq("second", "third"))
     assert(executorsPendingToRemove(manager) === Set("first", "second", "third"))
     assert(manager.executorMonitor.executorCount === 8)
 
@@ -919,8 +1324,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     manager.reset()
 
-    assert(numExecutorsTarget(manager) === 1)
-    assert(numExecutorsToAdd(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(executorsPendingToRemove(manager) === Set.empty)
     assert(manager.executorMonitor.executorCount === 0)
   }
@@ -931,31 +1336,31 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createConf(1, 2, 1).set(config.DYN_ALLOCATION_TESTING, false),
       clock = clock)
 
-    when(client.requestTotalExecutors(meq(2), any(), any())).thenReturn(true)
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
     // test setup -- job with 2 tasks, scale up to two executors
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     post(SparkListenerExecutorAdded(
       clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager) === 2)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
     post(SparkListenerExecutorAdded(
       clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     val taskInfo1 = createTaskInfo(1, 1, "executor-2")
     post(SparkListenerTaskStart(0, 0, taskInfo1))
-    assert(numExecutorsTarget(manager) === 2)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
 
     // have one task finish -- we should adjust the target number of executors down
     // but we should *not* kill any executors yet
     post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo0, new ExecutorMetrics, null))
-    assert(maxNumExecutorsNeeded(manager) === 1)
-    assert(numExecutorsTarget(manager) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     verify(client, never).killExecutors(any(), any(), any(), any())
 
     // now we cross the idle timeout for executor-1, so we kill it.  the really important
@@ -965,8 +1370,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .thenReturn(Seq("executor-1"))
     clock.advance(3000)
     schedule(manager)
-    assert(maxNumExecutorsNeeded(manager) === 1)
-    assert(numExecutorsTarget(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
     verify(client).killExecutors(Seq("executor-1"), false, false, false)
   }
@@ -974,7 +1379,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   test("SPARK-26758 check executor target number after idle time out ") {
     val clock = new ManualClock(10000L)
     val manager = createManager(createConf(1, 5, 3), clock = clock)
-    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
     post(SparkListenerExecutorAdded(
       clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     post(SparkListenerExecutorAdded(
@@ -985,14 +1390,14 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     clock.advance(executorIdleTimeout * 1000)
     schedule(manager)
     // once the schedule is run target executor number should be 1
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
   private def createConf(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
       initialExecutors: Int = 1): SparkConf = {
-    new SparkConf()
+    val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
       .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
@@ -1007,19 +1412,37 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)
+    sparkConf
   }
 
   private def createManager(
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
-    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock)
+    ResourceProfile.reInitDefaultProfile(conf)
+    rpManager = new ResourceProfileManager(conf)
+    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
+      resourceProfileManager = rpManager)
     managers += manager
     manager.start()
     manager
   }
 
-  private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
-    post(SparkListenerExecutorAdded(0L, id, null))
+  private val execInfo = new ExecutorInfo("host1", 1, Map.empty,
+    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+
+  private def onExecutorAddedDefaultProfile(
+      manager: ExecutorAllocationManager,
+      id: String): Unit = {
+    post(SparkListenerExecutorAdded(0L, id, execInfo))
+  }
+
+  private def onExecutorAdded(
+      manager: ExecutorAllocationManager,
+      id: String,
+      rp: ResourceProfile): Unit = {
+    val cores = rp.getExecutorCores.getOrElse(1)
+    val execInfo = new ExecutorInfo("host1", cores, Map.empty, Map.empty, Map.empty, rp.id)
+    post(SparkListenerExecutorAdded(0L, id, execInfo))
   }
 
   private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {
@@ -1037,8 +1460,18 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskEnd(1, 1, "foo", Success, info, new ExecutorMetrics, null))
   }
 
-  private def removeExecutor(manager: ExecutorAllocationManager, executorId: String): Boolean = {
-    val executorsRemoved = removeExecutors(manager, Seq(executorId))
+  private def removeExecutorDefaultProfile(
+      manager: ExecutorAllocationManager,
+      executorId: String): Boolean = {
+    val executorsRemoved = removeExecutorsDefaultProfile(manager, Seq(executorId))
+    executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
+  }
+
+  private def removeExecutor(
+      manager: ExecutorAllocationManager,
+      executorId: String,
+      rpId: Int): Boolean = {
+    val executorsRemoved = removeExecutors(manager, Seq((executorId, rpId)))
     executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
   }
 
@@ -1060,10 +1493,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       stageId: Int,
       numTasks: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
-      attemptId: Int = 0
+      attemptId: Int = 0,
+      rp: ResourceProfile = defaultProfile
     ): StageInfo = {
     new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
-      taskLocalityPreferences = taskLocalityPreferences)
+      taskLocalityPreferences = taskLocalityPreferences, resourceProfileId = rp.id)
   }
 
   private def createTaskInfo(
@@ -1078,54 +1512,117 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
    | Helper methods for accessing private methods and fields |
    * ------------------------------------------------------- */
 
-  private val _numExecutorsToAdd = PrivateMethod[Int](Symbol("numExecutorsToAdd"))
-  private val _numExecutorsTarget = PrivateMethod[Int](Symbol("numExecutorsTarget"))
-  private val _maxNumExecutorsNeeded = PrivateMethod[Int](Symbol("maxNumExecutorsNeeded"))
+  private val _numExecutorsToAddPerResourceProfileId =
+    PrivateMethod[mutable.HashMap[Int, Int]](
+      Symbol("numExecutorsToAddPerResourceProfileId"))
+  private val _numExecutorsTargetPerResourceProfileId =
+    PrivateMethod[mutable.HashMap[Int, Int]](
+      Symbol("numExecutorsTargetPerResourceProfileId"))
+  private val _maxNumExecutorsNeededPerResourceProfile =
+    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfile"))
   private val _addTime = PrivateMethod[Long](Symbol("addTime"))
   private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
-  private val _addExecutors = PrivateMethod[Int](Symbol("addExecutors"))
+  private val _doUpdateRequest = PrivateMethod[Unit](Symbol("doUpdateRequest"))
   private val _updateAndSyncNumExecutorsTarget =
     PrivateMethod[Int](Symbol("updateAndSyncNumExecutorsTarget"))
+  private val _addExecutorsToTarget = PrivateMethod[Int](Symbol("addExecutorsToTarget"))
   private val _removeExecutors = PrivateMethod[Seq[String]](Symbol("removeExecutors"))
   private val _onSchedulerBacklogged = PrivateMethod[Unit](Symbol("onSchedulerBacklogged"))
   private val _onSchedulerQueueEmpty = PrivateMethod[Unit](Symbol("onSchedulerQueueEmpty"))
-  private val _localityAwareTasks = PrivateMethod[Int](Symbol("localityAwareTasks"))
-  private val _hostToLocalTaskCount =
-    PrivateMethod[Map[String, Int]](Symbol("hostToLocalTaskCount"))
+  private val _localityAwareTasksPerResourceProfileId =
+    PrivateMethod[mutable.HashMap[Int, Int]](Symbol("numLocalityAwareTasksPerResourceProfileId"))
+  private val _rpIdToHostToLocalTaskCount =
+    PrivateMethod[Map[Int, Map[String, Int]]](Symbol("rpIdToHostToLocalTaskCount"))
   private val _onSpeculativeTaskSubmitted =
     PrivateMethod[Unit](Symbol("onSpeculativeTaskSubmitted"))
-  private val _totalRunningTasks = PrivateMethod[Int](Symbol("totalRunningTasks"))
+  private val _totalRunningTasksPerResourceProfile =
+    PrivateMethod[Int](Symbol("totalRunningTasksPerResourceProfile"))
 
-  private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _numExecutorsToAdd()
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+
+  private def numExecutorsToAddForDefaultProfile(manager: ExecutorAllocationManager): Int = {
+    numExecutorsToAdd(manager, defaultProfile)
   }
 
-  private def numExecutorsTarget(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _numExecutorsTarget()
+  private def numExecutorsToAdd(
+      manager: ExecutorAllocationManager,
+      rp: ResourceProfile): Int = {
+    val nmap = manager invokePrivate _numExecutorsToAddPerResourceProfileId()
+    nmap(rp.id)
+  }
+
+  private def updateAndSyncNumExecutorsTarget(
+      manager: ExecutorAllocationManager,
+      now: Long): Unit = {
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(now)
+  }
+
+  private def numExecutorsTargetForDefaultProfileId(manager: ExecutorAllocationManager): Int = {
+    numExecutorsTarget(manager, defaultProfile.id)
+  }
+
+  private def numExecutorsTarget(
+      manager: ExecutorAllocationManager,
+      rpId: Int): Int = {
+    val numMap = manager invokePrivate _numExecutorsTargetPerResourceProfileId()
+    numMap(rpId)
+  }
+
+  private def addExecutorsToTargetForDefaultProfile(
+      manager: ExecutorAllocationManager,
+      updatesNeeded: mutable.HashMap[ResourceProfile,
+        ExecutorAllocationManager.TargetNumUpdates]
+  ): Int = {
+    addExecutorsToTarget(manager, updatesNeeded, defaultProfile)
+  }
+
+  private def addExecutorsToTarget(
+      manager: ExecutorAllocationManager,
+      updatesNeeded: mutable.HashMap[ResourceProfile,
+        ExecutorAllocationManager.TargetNumUpdates],
+      rp: ResourceProfile
+  ): Int = {
+    val maxNumExecutorsNeeded =
+      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
+    manager invokePrivate
+      _addExecutorsToTarget(maxNumExecutorsNeeded, rp.id, updatesNeeded)
   }
 
   private def addTime(manager: ExecutorAllocationManager): Long = {
     manager invokePrivate _addTime()
   }
 
+  private def doUpdateRequest(
+      manager: ExecutorAllocationManager,
+      updates: Map[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
+      now: Long): Unit = {
+    manager invokePrivate _doUpdateRequest(updates, now)
+  }
+
   private def schedule(manager: ExecutorAllocationManager): Unit = {
     manager invokePrivate _schedule()
   }
 
-  private def maxNumExecutorsNeeded(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _maxNumExecutorsNeeded()
-  }
-
-  private def addExecutors(manager: ExecutorAllocationManager): Int = {
-    val maxNumExecutorsNeeded = manager invokePrivate _maxNumExecutorsNeeded()
-    manager invokePrivate _addExecutors(maxNumExecutorsNeeded)
+  private def maxNumExecutorsNeededPerResourceProfile(
+      manager: ExecutorAllocationManager,
+      rp: ResourceProfile): Int = {
+    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(0L)
   }
 
-  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Seq[String] = {
+  private def removeExecutorsDefaultProfile(
+      manager: ExecutorAllocationManager,
+      ids: Seq[String]): Seq[String] = {
+    val idsAndProfileIds = ids.map((_, defaultProfile.id))
+    manager invokePrivate _removeExecutors(idsAndProfileIds)
+  }
+
+  private def removeExecutors(
+      manager: ExecutorAllocationManager,
+      ids: Seq[(String, Int)]): Seq[String] = {
     manager invokePrivate _removeExecutors(ids)
   }
 
@@ -1141,15 +1638,22 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _onSpeculativeTaskSubmitted(id)
   }
 
-  private def localityAwareTasks(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _localityAwareTasks()
+  private def localityAwareTasksForDefaultProfile(manager: ExecutorAllocationManager): Int = {
+    val localMap = manager invokePrivate _localityAwareTasksPerResourceProfileId()
+    localMap(defaultProfile.id)
   }
 
-  private def totalRunningTasks(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _totalRunningTasks()
+  private def totalRunningTasksPerResourceProfile(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _totalRunningTasksPerResourceProfile(defaultProfile.id)
   }
 
-  private def hostToLocalTaskCount(manager: ExecutorAllocationManager): Map[String, Int] = {
-    manager invokePrivate _hostToLocalTaskCount()
+  private def hostToLocalTaskCount(
+      manager: ExecutorAllocationManager): Map[String, Int] = {
+    val rpIdToHostLocal = manager invokePrivate _rpIdToHostToLocalTaskCount()
+    rpIdToHostLocal(defaultProfile.id)
+  }
+
+  private def getResourceProfileIdOfExecutor(manager: ExecutorAllocationManager): Int = {
+    defaultProfile.id
   }
 }

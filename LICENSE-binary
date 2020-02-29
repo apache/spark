@@ -243,10 +243,10 @@ com.vlkan:flatbuffers
 com.ning:compress-lzf
 io.airlift:aircompressor
 io.dropwizard.metrics:metrics-core
-io.dropwizard.metrics:metrics-ganglia
 io.dropwizard.metrics:metrics-graphite
 io.dropwizard.metrics:metrics-json
 io.dropwizard.metrics:metrics-jvm
+io.dropwizard.metrics:metrics-jmx
 org.iq80.snappy:snappy
 com.clearspring.analytics:stream
 com.jamesmurty.utils:java-xmlbuilder
@@ -393,7 +393,6 @@ org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
 org.scala-lang.modules:scala-xml_2.12
-org.opencypher:okapi-shade
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
 org.apache.hive:hive-beeline
@@ -470,6 +469,7 @@ xmlenc:xmlenc
 net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
+org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
@@ -502,7 +502,7 @@ com.github.scopt:scopt_2.12
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
 core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
-ore/src/main/resources/org/apache/spark/ui/static/jquery*
+core/src/main/resources/org/apache/spark/ui/static/jquery*
 core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*

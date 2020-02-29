@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -102,6 +103,10 @@ private[columnar] class StringColumnAccessor(buffer: ByteBuffer)
 
 private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
+  with NullableColumnAccessor
+
+private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer, dataType: CalendarIntervalType)
+  extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
   with NullableColumnAccessor
 
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)

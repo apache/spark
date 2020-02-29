@@ -69,12 +69,12 @@ We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-TF and IDF are implemented in [HashingTF](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF)
-and [IDF](api/scala/index.html#org.apache.spark.mllib.feature.IDF).
+TF and IDF are implemented in [HashingTF](api/scala/org/apache/spark/mllib/feature/HashingTF.html)
+and [IDF](api/scala/org/apache/spark/mllib/feature/IDF.html).
 `HashingTF` takes an `RDD[Iterable[_]]` as the input.
 Each record could be an iterable of strings or other types.
 
-Refer to the [`HashingTF` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF) for details on the API.
+Refer to the [`HashingTF` Scala docs](api/scala/org/apache/spark/mllib/feature/HashingTF.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/TFIDFExample.scala %}
 </div>
@@ -135,7 +135,7 @@ Here we assume the extracted file is `text8` and in same directory as you run th
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec) for details on the API.
+Refer to the [`Word2Vec` Scala docs](api/scala/org/apache/spark/mllib/feature/Word2Vec.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/Word2VecExample.scala %}
 </div>
@@ -159,19 +159,19 @@ against features with very large variances exerting an overly large influence du
 
 ### Model Fitting
 
-[`StandardScaler`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) has the
+[`StandardScaler`](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) has the
 following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
 output, so take care when applying to sparse input.
 * `withStd` True by default. Scales the data to unit standard deviation.
 
-We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
+We provide a [`fit`](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) method in
 `StandardScaler` which can take an input of `RDD[Vector]`, learn the summary statistics, and then
 return a model which can transform the input dataset into unit standard deviation and/or zero mean features
 depending how we configure the `StandardScaler`.
 
-This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+This model implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html)
 which can apply the standardization on a `Vector` to produce a transformed `Vector` or on
 an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -185,7 +185,7 @@ so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`StandardScaler` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) for details on the API.
+Refer to the [`StandardScaler` Scala docs](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/StandardScalerExample.scala %}
 </div>
@@ -203,12 +203,12 @@ Normalizer scales individual samples to have unit $L^p$ norm. This is a common o
 classification or clustering. For example, the dot product of two $L^2$ normalized TF-IDF vectors
 is the cosine similarity of the vectors.
 
-[`Normalizer`](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) has the following
+[`Normalizer`](api/scala/org/apache/spark/mllib/feature/Normalizer.html) has the following
 parameter in the constructor:
 
 * `p` Normalization in $L^p$ space, $p = 2$ by default.
 
-`Normalizer` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+`Normalizer` implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html)
 which can apply the normalization on a `Vector` to produce a transformed `Vector` or on
 an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -221,7 +221,7 @@ with $L^2$ norm, and $L^\infty$ norm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`Normalizer` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) for details on the API.
+Refer to the [`Normalizer` Scala docs](api/scala/org/apache/spark/mllib/feature/Normalizer.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/NormalizerExample.scala %}
 </div>
@@ -239,7 +239,7 @@ Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.ml
 features for use in model construction. It reduces the size of the feature space, which can improve
 both speed and statistical learning behavior.
 
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
+[`ChiSqSelector`](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html) implements
 Chi-Squared feature selection. It operates on labeled data with categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
 features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
@@ -257,7 +257,7 @@ The number of features to select can be tuned using a held-out validation set.
 
 ### Model Fitting
 
-The [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method takes
+The [`fit`](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html) method takes
 an input of `RDD[LabeledPoint]` with categorical features, learns the summary statistics, and then
 returns a `ChiSqSelectorModel` which can transform an input dataset into the reduced feature space.
 The `ChiSqSelectorModel` can be applied either to a `Vector` to produce a reduced `Vector`, or to
@@ -272,7 +272,7 @@ The following example shows the basic use of ChiSqSelector. The data set used ha
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [`ChiSqSelector` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector)
+Refer to the [`ChiSqSelector` Scala docs](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html)
 for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/ChiSqSelectorExample.scala %}
@@ -312,11 +312,11 @@ v_N
   \end{pmatrix}
 \]`
 
-[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
+[`ElementwiseProduct`](api/scala/org/apache/spark/mllib/feature/ElementwiseProduct.html) has the following parameter in the constructor:
 
 * `scalingVec`: the transforming vector.
 
-`ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+`ElementwiseProduct` implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
 ### Example
 
@@ -325,7 +325,7 @@ This example below demonstrates how to transform vectors using a transforming ve
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [`ElementwiseProduct` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) for details on the API.
+Refer to the [`ElementwiseProduct` Scala docs](api/scala/org/apache/spark/mllib/feature/ElementwiseProduct.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/ElementwiseProductExample.scala %}
 </div>

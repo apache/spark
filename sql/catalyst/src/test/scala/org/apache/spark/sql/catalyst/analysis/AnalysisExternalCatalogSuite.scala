@@ -59,7 +59,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         Alias(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false), "s")()
       val plan = Project(Seq(func), testRelation)
       analyzer.execute(plan)
-      verifyZeroInteractions(catalog)
+      verifyNoInteractions(catalog)
     }
   }
 
@@ -73,7 +73,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         ignoreIfExists = false)
       reset(externCatalog)
       catalog.functionExists(FunctionIdentifier("sum"))
-      verifyZeroInteractions(externCatalog)
+      verifyNoInteractions(externCatalog)
     }
   }
 

@@ -215,14 +215,14 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10", Some {
       PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))
     })
 
     check("file://path/a=10/b=hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("a", "b", "c"),
-        ArrayBuffer(
+        Seq("a", "b", "c"),
+        Seq(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
           Literal.create(1.5, DoubleType)))
@@ -230,8 +230,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5, DoubleType)))
+        Seq("c"),
+        Seq(Literal.create(1.5, DoubleType)))
     })
 
     check("file:///", None)
@@ -272,8 +272,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     assert(partitionSpec2 ==
       Option(PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))))
   }
 
   test("parse partitions") {
@@ -1281,7 +1281,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+        case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
           assert(fileTable.fileIndex.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching DataSourceV2Relation, but got:\n$queryExecution")

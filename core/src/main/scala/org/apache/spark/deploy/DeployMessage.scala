@@ -60,6 +60,15 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  /**
+   * @param id the worker id
+   * @param worker the worker endpoint ref
+   */
+  case class WorkerDecommission(
+      id: String,
+      worker: RpcEndpointRef)
+    extends DeployMessage
+
   case class ExecutorStateChanged(
       appId: String,
       execId: Int,
@@ -148,6 +157,8 @@ private[deploy] object DeployMessages {
   case object WorkDirCleanup // Sent to Worker endpoint periodically for cleaning up app folders
 
   case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
+
+  case object DecommissionSelf // Mark as decommissioned. May be Master to Worker in the future.
 
   // AppClient to Master
 

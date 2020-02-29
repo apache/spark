@@ -43,8 +43,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 trait DataSourceScanExec extends LeafExecNode {
-  val relation: BaseRelation
-  val tableIdentifier: Option[TableIdentifier]
+  def relation: BaseRelation
+  def tableIdentifier: Option[TableIdentifier]
 
   protected val nodeNamePrefix: String = ""
 
@@ -76,7 +76,7 @@ trait DataSourceScanExec extends LeafExecNode {
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
        |${metadataStr.mkString("\n")}
      """.stripMargin
   }
@@ -103,7 +103,7 @@ case class RowDataSourceScanExec(
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
-    override val tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
@@ -164,7 +164,7 @@ case class FileSourceScanExec(
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
-    override val tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -187,7 +187,7 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  val driverMetrics: HashMap[String, Long] = HashMap.empty
+  private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
@@ -230,7 +230,7 @@ case class FileSourceScanExec(
       // call the file index for the files matching all filters except dynamic partition filters
       val predicate = dynamicPartitionFilters.reduce(And)
       val partitionColumns = relation.partitionSchema
-      val boundPredicate = newPredicate(predicate.transform {
+      val boundPredicate = Predicate.create(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
@@ -325,8 +325,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-  logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
+  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -378,7 +377,7 @@ case class FileSourceScanExec(
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
        |${metadataStr.mkString("\n")}
      """.stripMargin
   }

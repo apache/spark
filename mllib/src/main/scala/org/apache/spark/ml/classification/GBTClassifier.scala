@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -203,9 +204,10 @@ class GBTClassifier @Since("1.4.0") (
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy))
+        $(seed), $(featureSubsetStrategy), Some(instr))
     } else {
-      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
+      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
+        Some(instr))
     }
     baseLearners.foreach(copyValues(_))
 
@@ -291,13 +293,23 @@ class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  @Since("1.6.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
+    }
+    outputSchema
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        outputSchema($(leafCol)).metadata)
     } else {
       outputData
     }
@@ -312,7 +324,8 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val prediction: Double = margin(features)
     Vectors.dense(Array(-prediction, prediction))
   }
@@ -329,9 +342,6 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  /** Number of trees in ensemble */
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures, numClasses),
@@ -340,7 +350,8 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTClassificationModel (uid=$uid) with $numTrees trees"
+    s"GBTClassificationModel: uid = $uid, numTrees=$getNumTrees, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**
@@ -360,7 +371,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */

@@ -99,4 +99,7 @@ private[spark] object ToolTips {
        dynamic allocation is enabled. The number of granted executors may exceed the limit
        ephemerally when executors are being killed.
     """
+
+  val DURATION =
+    "Elapsed time since the stage was submitted until execution completion of all its tasks."
 }

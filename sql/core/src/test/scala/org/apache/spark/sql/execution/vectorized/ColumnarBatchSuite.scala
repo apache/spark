@@ -636,30 +636,24 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 0)
   }
 
-  testVector("CalendarInterval APIs", 4, CalendarIntervalType) {
+  testVector("CalendarInterval APIs", 5, CalendarIntervalType) {
     column =>
       val reference = mutable.ArrayBuffer.empty[CalendarInterval]
 
       val months = column.getChild(0)
-      val microseconds = column.getChild(1)
+      val days = column.getChild(1)
+      val microseconds = column.getChild(2)
       assert(months.dataType() == IntegerType)
+      assert(days.dataType() == IntegerType)
       assert(microseconds.dataType() == LongType)
 
-      months.putInt(0, 1)
-      microseconds.putLong(0, 100)
-      reference += new CalendarInterval(1, 100)
-
-      months.putInt(1, 0)
-      microseconds.putLong(1, 2000)
-      reference += new CalendarInterval(0, 2000)
-
-      column.putNull(2)
-      assert(column.getInterval(2) == null)
-      reference += null
-
-      months.putInt(3, 20)
-      microseconds.putLong(3, 0)
-      reference += new CalendarInterval(20, 0)
+      Seq(new CalendarInterval(1, 10, 100),
+        new CalendarInterval(0, 0, 2000),
+        new CalendarInterval(20, 0, 0),
+        new CalendarInterval(0, 200, 0)).zipWithIndex.foreach { case (v, i) =>
+          column.putInterval(i, v)
+          reference += v
+      }
 
       reference.zipWithIndex.foreach { case (v, i) =>
         val errMsg = "VectorType=" + column.getClass.getSimpleName
@@ -1311,7 +1305,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Decimal("1234.23456"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
       DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
-      new CalendarInterval(1, 0),
+      new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
       mapBuilder.build()
@@ -1332,7 +1326,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Decimal("0.01000"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")),
       DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")),
-      new CalendarInterval(-10, -100),
+      new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
       mapBuilder.build()
@@ -1424,8 +1418,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(10).isNullAt(2))
 
       assert(columns(11).dataType() == CalendarIntervalType)
-      assert(columns(11).getInterval(0) == new CalendarInterval(1, 0))
-      assert(columns(11).getInterval(1) == new CalendarInterval(-10, -100))
+      assert(columns(11).getInterval(0) == new CalendarInterval(1, 0, 0))
+      assert(columns(11).getInterval(1) == new CalendarInterval(-10, -50, -100))
       assert(columns(11).isNullAt(2))
 
       assert(columns(12).dataType() == ArrayType(IntegerType))

@@ -116,7 +116,8 @@ def build_pr_component_dic(jira_prs):
     dic = {}
     for issue, pr in jira_prs:
         print(issue)
-        jira_components = [c.name.upper() for c in jira_client.issue(issue).fields.components]
+        page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue))
+        jira_components = [c['name'].upper() for c in page['fields']['components']]
         if pr['number'] in dic:
             dic[pr['number']][1].update(jira_components)
         else:
@@ -163,7 +164,8 @@ for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
     url = pr['html_url']
     title = "[Github] Pull Request #%s (%s)" % (pr['number'], pr['user']['login'])
     try:
-        existing_links = map(lambda l: l.raw['object']['url'], jira_client.remote_links(issue))
+        page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue + "/remotelink"))
+        existing_links = map(lambda l: l['object']['url'], page)
     except:
         print("Failure reading JIRA %s (does it exist?)" % issue)
         print(sys.exc_info()[0])

@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
-import java.util.TimeZone;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
@@ -98,14 +99,14 @@ public class VectorizedColumnReader {
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
-  private final TimeZone convertTz;
-  private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
+  private final ZoneId convertTz;
+  private static final ZoneId UTC = ZoneOffset.UTC;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
-      TimeZone convertTz) throws IOException {
+      ZoneId convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -297,7 +298,7 @@ public class VectorizedColumnReader {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i,
-                DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+                DateTimeUtils.millisToMicros(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
             }
           }
         } else {
@@ -431,7 +432,7 @@ public class VectorizedColumnReader {
     } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));
+          column.putLong(rowId + i, DateTimeUtils.millisToMicros(dataColumn.readLong()));
         } else {
           column.putNull(rowId + i);
         }

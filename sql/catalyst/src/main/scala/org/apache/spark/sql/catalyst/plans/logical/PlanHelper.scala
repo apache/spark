@@ -43,7 +43,9 @@ object PlanHelper {
         case e: WindowExpression
           if !plan.isInstanceOf[Window] => e
         case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => e
+          if !(plan.isInstanceOf[Aggregate] ||
+               plan.isInstanceOf[Window] ||
+               plan.isInstanceOf[CollectMetrics]) => e
         case e: Generator
           if !plan.isInstanceOf[Generate] => e
       }

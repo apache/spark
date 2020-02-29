@@ -2,186 +2,186 @@
 -- Number of queries: 22
 
 
--- !query 0
+-- !query
 CREATE TABLE test_having (a int, b int, c string, d string) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 INSERT INTO test_having VALUES (0, 1, 'XXXX', 'A')
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO test_having VALUES (1, 2, 'AAAA', 'b')
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO test_having VALUES (2, 2, 'AAAA', 'c')
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO test_having VALUES (3, 3, 'BBBB', 'D')
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO test_having VALUES (4, 3, 'BBBB', 'e')
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 INSERT INTO test_having VALUES (5, 3, 'bbbb', 'F')
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 INSERT INTO test_having VALUES (6, 4, 'cccc', 'g')
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 INSERT INTO test_having VALUES (7, 4, 'cccc', 'h')
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 INSERT INTO test_having VALUES (8, 4, 'CCCC', 'I')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 INSERT INTO test_having VALUES (9, 4, 'CCCC', 'j')
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), udf(c)
--- !query 11 schema
-struct<CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
--- !query 11 output
+-- !query schema
+struct<CAST(udf(ansi_cast(b as string)) AS INT):int,CAST(udf(ansi_cast(c as string)) AS STRING):string>
+-- !query output
 1	XXXX
 3	bbbb
 
 
--- !query 12
+-- !query
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), udf(c)
--- !query 12 schema
-struct<CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
--- !query 12 output
+-- !query schema
+struct<CAST(udf(ansi_cast(b as string)) AS INT):int,CAST(udf(ansi_cast(c as string)) AS STRING):string>
+-- !query output
 3	BBBB
 3	bbbb
 
 
--- !query 13
+-- !query
 SELECT udf(c), max(udf(a)) FROM test_having
 	GROUP BY c HAVING udf(count(*)) > 2 OR udf(min(a)) = udf(max(a))
 	ORDER BY c
--- !query 13 schema
-struct<CAST(udf(cast(c as string)) AS STRING):string,max(CAST(udf(cast(a as string)) AS INT)):int>
--- !query 13 output
+-- !query schema
+struct<CAST(udf(ansi_cast(c as string)) AS STRING):string,max(CAST(udf(ansi_cast(a as string)) AS INT)):int>
+-- !query output
 XXXX	0
 bbbb	5
 
 
--- !query 14
+-- !query
 SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(udf(max(udf(a))))
--- !query 14 schema
-struct<CAST(udf(cast(cast(udf(cast(min(cast(udf(cast(a as string)) as int)) as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(max(cast(udf(cast(a as string)) as int)) as string)) as int) as string)) AS INT):int>
--- !query 14 output
+-- !query schema
+struct<CAST(udf(ansi_cast(ansi_cast(udf(ansi_cast(min(ansi_cast(udf(ansi_cast(a as string)) as int)) as string)) as int) as string)) AS INT):int,CAST(udf(ansi_cast(ansi_cast(udf(ansi_cast(max(ansi_cast(udf(ansi_cast(a as string)) as int)) as string)) as int) as string)) AS INT):int>
+-- !query output
 
 
 
--- !query 15
+-- !query
 SELECT udf(min(udf(a))), udf(udf(max(a))) FROM test_having HAVING udf(min(a)) < udf(max(udf(a)))
--- !query 15 schema
-struct<CAST(udf(cast(min(cast(udf(cast(a as string)) as int)) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(max(a) as string)) as int) as string)) AS INT):int>
--- !query 15 output
+-- !query schema
+struct<CAST(udf(ansi_cast(min(ansi_cast(udf(ansi_cast(a as string)) as int)) as string)) AS INT):int,CAST(udf(ansi_cast(ansi_cast(udf(ansi_cast(max(a) as string)) as int) as string)) AS INT):int>
+-- !query output
 0	9
 
 
--- !query 16
+-- !query
 SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a))
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 grouping expressions sequence is empty, and 'default.test_having.`a`' is not an aggregate function. Wrap '(min(default.test_having.`a`) AS `min(a#x)`, max(default.test_having.`a`) AS `max(a#x)`)' in windowing function(s) or wrap 'default.test_having.`a`' in first() (or first_value) if you don't care which value you get.;
 
 
--- !query 17
+-- !query
 SELECT 1 AS one FROM test_having HAVING udf(a) > 1
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '`a`' given input columns: [one]; line 1 pos 44
 
 
--- !query 18
+-- !query
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2))
--- !query 18 schema
+-- !query schema
 struct<one:int>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2))
--- !query 19 schema
+-- !query schema
 struct<one:int>
--- !query 19 output
+-- !query output
 1
 
 
--- !query 20
+-- !query
 SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2
--- !query 20 schema
+-- !query schema
 struct<one:int>
--- !query 20 output
+-- !query output
 1
 
 
--- !query 21
+-- !query
 DROP TABLE test_having
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 

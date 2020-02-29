@@ -19,4 +19,14 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+`CREATE TABLE` statement is used to define a table in an existing database. 
+
+The CREATE statements:
+* [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+* [CREATE TABLE USING HIVE FORMAT](sql-ref-syntax-ddl-create-table-hiveformat.html)
+* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)
+
+### Related Statements
+- [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+- [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)

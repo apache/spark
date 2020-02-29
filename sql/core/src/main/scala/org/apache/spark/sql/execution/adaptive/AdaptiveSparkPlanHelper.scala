@@ -60,7 +60,7 @@ trait AdaptiveSparkPlanHelper {
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.
    */
-  def map[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
+  def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret += f(_))
     ret
@@ -125,7 +125,14 @@ trait AdaptiveSparkPlanHelper {
   private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
     case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
     case s: QueryStageExec => Seq(s.plan)
-    case l: LocalShuffleReaderExec => Seq(l.child)
     case _ => p.children
   }
-}
+
+  /**
+   * Strip the executePlan of AdaptiveSparkPlanExec leaf node.
+   */
+  def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
+    case a: AdaptiveSparkPlanExec => a.executedPlan
+    case other => other
+  }
+ }

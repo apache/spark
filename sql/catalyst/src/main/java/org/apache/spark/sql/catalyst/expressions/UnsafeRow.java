@@ -103,7 +103,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   public static boolean isMutable(DataType dt) {
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
+    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
+      dt instanceof CalendarIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -298,6 +299,26 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
+  public void setInterval(int ordinal, CalendarInterval value) {
+    assertIndexIsValid(ordinal);
+    long cursor = getLong(ordinal) >>> 32;
+    assert cursor > 0 : "invalid cursor " + cursor;
+    if (value == null) {
+      setNullAt(ordinal);
+      // zero-out the bytes
+      Platform.putLong(baseObject, baseOffset + cursor, 0L);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+      // keep the offset for future update
+      Platform.putLong(baseObject, getFieldOffset(ordinal), (cursor << 32) | 16L);
+    } else {
+      Platform.putInt(baseObject, baseOffset + cursor, value.months);
+      Platform.putInt(baseObject, baseOffset + cursor + 4, value.days);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, value.microseconds);
+      setLong(ordinal, (cursor << 32) | 16L);
+    }
+  }
+
+  @Override
   public Object get(int ordinal, DataType dataType) {
     return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
@@ -401,9 +422,10 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+      final int months = Platform.getInt(baseObject, baseOffset + offset);
+      final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
       final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
+      return new CalendarInterval(months, days, microseconds);
     }
   }
 

@@ -104,8 +104,8 @@ private[ml] class HuberAggregator(
 
       val margin = {
         var sum = 0.0
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             sum += localCoefficients(index) * (value / localFeaturesStd(index))
           }
         }
@@ -118,8 +118,8 @@ private[ml] class HuberAggregator(
         lossSum += 0.5 * weight * (sigma + math.pow(linearLoss, 2.0) / sigma)
         val linearLossDivSigma = linearLoss / sigma
 
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             localGradientSumArray(index) +=
               -1.0 * weight * linearLossDivSigma * (value / localFeaturesStd(index))
           }
@@ -133,8 +133,8 @@ private[ml] class HuberAggregator(
         lossSum += 0.5 * weight *
           (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
 
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             localGradientSumArray(index) +=
               weight * sign * epsilon * (value / localFeaturesStd(index))
           }

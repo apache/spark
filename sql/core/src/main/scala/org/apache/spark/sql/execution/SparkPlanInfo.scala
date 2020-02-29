@@ -56,7 +56,6 @@ private[execution] object SparkPlanInfo {
       case ReusedSubqueryExec(child) => child :: Nil
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
-      case localReader: LocalShuffleReaderExec => localReader.child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
@@ -72,6 +71,7 @@ private[execution] object SparkPlanInfo {
       plan.nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics)
   }
 }

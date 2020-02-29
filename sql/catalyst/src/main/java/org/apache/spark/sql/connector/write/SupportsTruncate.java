@@ -21,6 +21,8 @@ package org.apache.spark.sql.connector.write;
  * Write builder trait for tables that support truncation.
  * <p>
  * Truncation removes all data in a table and replaces it with data that is committed in the write.
+ *
+ * @since 3.0.0
  */
 public interface SupportsTruncate extends WriteBuilder {
   /**
