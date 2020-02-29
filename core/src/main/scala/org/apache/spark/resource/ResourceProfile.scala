@@ -34,9 +34,12 @@ import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
  * This is meant to be immutable so user can't change it after building.
+ *
+ * This api is currently private until the rest of the pieces are in place and then it
+ * will become public.
  */
 @Evolving
-class ResourceProfile(
+private[spark] class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
