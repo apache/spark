@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.scheduler.rate
 
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.StreamingConf._
 import org.apache.spark.streaming.Duration
+import org.apache.spark.streaming.StreamingConf._
 
 /**
  * A component that estimates the rate at which an `InputDStream` should ingest
