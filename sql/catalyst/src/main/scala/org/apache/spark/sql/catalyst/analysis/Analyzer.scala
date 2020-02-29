@@ -2182,6 +2182,15 @@ class Analyzer(
       }
     }
 
+    private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
+      ne.exists(_.find {
+        case g: Generator =>
+          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+        case _ =>
+          false
+      }.nonEmpty)
+    }
+
     private def trimAlias(expr: NamedExpression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
@@ -2267,6 +2276,11 @@ class Analyzer(
 
         val newAgg = Aggregate(groupList, newAggList, child)
         Project(projectExprs.toList, newAgg)
+
+      case p @ Project(projectList, _) if hasAggFunctionInGenerator(projectList) =>
+        // If a generator has any aggregate function, we need to apply the `GlobalAggregates` rule
+        // first for replacing `Project` with `Aggregate`.
+        p
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.

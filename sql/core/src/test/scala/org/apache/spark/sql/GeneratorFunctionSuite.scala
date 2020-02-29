@@ -351,6 +351,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     assert(errMsg.contains("Generators are not supported when it's nested in expressions, " +
       "but got: explode(explode(v))"))
   }
+
+  test("SPARK-30997: generators in aggregate expressions for dataframe") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
+  }
 }
 
 case class EmptyGenerator() extends Generator {
