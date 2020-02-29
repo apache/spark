@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
+import org.apache.spark.util.Utils
 
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
@@ -120,6 +121,19 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     new Path(mrScratchDir, "-mr-10000")
   }
 
+  private def isBlobStoragePath(hadoopConf: Configuration, path: Path): Boolean = {
+    path != null && isBlobStorageScheme(hadoopConf, Option(path.toUri.getScheme).getOrElse(""))
+  }
+
+  private def isBlobStorageScheme(hadoopConf: Configuration, scheme: String): Boolean = {
+    val supportedBlobSchemes = hadoopConf.get("hive.blobstore.supported.schemes", "s3,s3a,s3n")
+    Utils.stringToSeq(supportedBlobSchemes).contains(scheme.toLowerCase(Locale.ROOT))
+  }
+
+  private def useBlobStorageAsScratchDir(hadoopConf: Configuration): Boolean = {
+    hadoopConf.get("hive.blobstore.use.blobstore.as.scratchdir", "true").toBoolean
+  }
+
   def getExternalTmpPath(
       sparkSession: SparkSession,
       hadoopConf: Configuration,
@@ -159,8 +173,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
       // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
       // Copied from Context.java#getTempDirForPath of Hive 2.3
-      if (BlobStorageUtils.isBlobStoragePath(hadoopConf, path)
-        && !BlobStorageUtils.useBlobStorageAsScratchDir(hadoopConf)) {
+      if (isBlobStoragePath(hadoopConf, path)
+        && !useBlobStorageAsScratchDir(hadoopConf)) {
         getMRTmpPath(hadoopConf, sessionScratchDir, scratchDir)
       } else {
         newVersionExternalTempPath(path, hadoopConf, stagingDir)
