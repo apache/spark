@@ -526,9 +526,12 @@ case class JsonToStructs(
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
-  def this(schema: DataType, options: Map[String, String], child: Expression,
-            timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
-    SQLConf.get.columnNameOfCorruptRecord)
+  def this(
+      schema: DataType,
+      options: Map[String, String],
+      child: Expression,
+      timeZoneId: Option[String]) =
+    this(schema, options, child, timeZoneId, SQLConf.get.columnNameOfCorruptRecord)
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
@@ -610,16 +613,14 @@ case class JsonToStructs(
 
 object JsonToStructs {
   def apply(
-             schema: DataType,
-             options: Map[String, String],
-             child: Expression,
-             timeZoneId: Option[String]): JsonToStructs =
+      schema: DataType,
+      options: Map[String, String],
+      child: Expression,
+      timeZoneId: Option[String]): JsonToStructs =
     new JsonToStructs(schema, options, child, timeZoneId)
 
-  def apply(
-             schema: DataType,
-             options: Map[String, String],
-             child: Expression): JsonToStructs = new JsonToStructs(schema, options, child, None)
+  def apply(schema: DataType, options: Map[String, String], child: Expression): JsonToStructs =
+    new JsonToStructs(schema, options, child, None)
 }
 
 /**
