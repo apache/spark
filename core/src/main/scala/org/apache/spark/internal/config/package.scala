@@ -1541,4 +1541,10 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val NATIVE_L1_THRESHOLD =
+    ConfigBuilder("spark.ml.blas.nativeL1Threshold")
+      .doc("vector size for logic change between f2jBLAS and natveBLAS in " +
+        "level-1 blas routines except dspmv().")
+      .intConf
+      .createWithDefault(256)
 }
