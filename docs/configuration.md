@@ -2442,6 +2442,20 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </div>
 
 
+### Spark ML
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.ml.blas.nativeL1Threshold</code></td>
+  <td>256</td>
+  <td>
+    Vector size for logic change between f2jBLAS and natveBLAS in level-1 blas routines except dspmv().
+  </td>
+</tr>
+</table>
+
+
 ### Spark Streaming
 
 <table class="table">
