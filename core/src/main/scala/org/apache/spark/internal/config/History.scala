@@ -41,7 +41,7 @@ private[spark] object History {
     .createWithDefaultString("10s")
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
-    .version("1.3.0")
+    .version("1.4.0")
     .booleanConf
     .createWithDefault(false)
 

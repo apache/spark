@@ -233,7 +233,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>
       Specifies whether the History Server should periodically clean up event logs from storage.
     </td>
-    <td>1.3.0</td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.interval</td>
