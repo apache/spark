@@ -2153,10 +2153,31 @@ class DataSourceV2SQLSuite
     def assertWrongTableIdent(): Unit = {
       withTable("t") {
         sql("CREATE TABLE t USING json AS SELECT 1 AS i")
-        val e = intercept[AnalysisException] {
-          sql("select * from spark_catalog.t")
+
+        val t = "spark_catalog.t"
+        def verify(sql: String, isTableOrView: Boolean): Unit = {
+          val message = if (isTableOrView) "Table or view" else "Table"
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"$message not found: $t"))
         }
-        assert(e.message.contains("Table or view not found: spark_catalog.t"))
+
+        verify(s"select * from $t", isTableOrView = true)
+        // Verify V1 commands that bypass table lookups.
+        verify(s"REFRESH TABLE $t", isTableOrView = true)
+        verify(s"DESCRIBE $t i", isTableOrView = true)
+        verify(s"DROP TABLE $t", isTableOrView = true)
+        verify(s"DROP VIEW $t", isTableOrView = true)
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS", isTableOrView = false)
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS", isTableOrView = true)
+        verify(s"MSCK REPAIR TABLE $t", isTableOrView = false)
+        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t", isTableOrView = false)
+        verify(s"SHOW CREATE TABLE $t", isTableOrView = true)
+        verify(s"SHOW CREATE TABLE $t AS SERDE", isTableOrView = false)
+        verify(s"CACHE TABLE $t", isTableOrView = true)
+        verify(s"UNCACHE TABLE $t", isTableOrView = true)
+        verify(s"TRUNCATE TABLE $t", isTableOrView = false)
+        verify(s"SHOW PARTITIONS $t", isTableOrView = false)
+        verify(s"SHOW COLUMNS FROM $t", isTableOrView = true)
       }
     }
 
