@@ -2982,16 +2982,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
     val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled not set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {
     withTempDir { testDir =>
-      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+      withSQLConf(SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key -> "true") {
         val msg = intercept[SparkException] {
           spark.sql(s"ADD FILE $testDir")
         }.getMessage
