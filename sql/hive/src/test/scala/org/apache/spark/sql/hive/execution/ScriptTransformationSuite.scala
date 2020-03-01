@@ -212,9 +212,8 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
-      // In Hive1.2, it does not do well on Decimal conversion. For example, in this case,
-      // it converts a decimal value's type from Decimal(38, 18) to Decimal(1, 0). So we need
-      // do extra cast here for Hive1.2. But in Hive2.3, it still keeps the original Decimal type.
+      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
       val decimalToString: Column => Column = if (HiveUtils.isHive23) {
         c => c.cast("string")
       } else {

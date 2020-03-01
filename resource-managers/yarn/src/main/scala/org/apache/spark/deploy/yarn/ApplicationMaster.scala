@@ -593,7 +593,7 @@ private[spark] class ApplicationMaster(
           }
       }
       try {
-        val numPendingAllocate = allocator.getPendingAllocate.size
+        val numPendingAllocate = allocator.getNumContainersPendingAllocate
         var sleepStartNs = 0L
         var sleepInterval = 200L // ms
         allocatorLock.synchronized {
@@ -778,8 +778,11 @@ private[spark] class ApplicationMaster(
       case r: RequestExecutors =>
         Option(allocator) match {
           case Some(a) =>
-            if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
+            if (a.requestTotalExecutorsWithPreferredLocalities(
+              r.resourceProfileToTotalExecs,
+              r.numLocalityAwareTasksPerResourceProfileId,
+              r.hostToLocalTaskCount,
+              r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)
