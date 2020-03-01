@@ -692,6 +692,7 @@ class AdaptiveQueryExecSuite
           agged.count()
         }
         assert(error.getCause().toString contains "Failed to materialize query stage")
+        assert(error.getSuppressed.size === 0)
       }
     }
   }

@@ -158,6 +158,7 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[SparkException]()
+      val runningStages = util.Collections.synchronizedSet(new util.HashSet[QueryStageExec]())
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -165,10 +166,15 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan)
 
-          // Start materialization of all new stages.
-          result.newStages.foreach { stage =>
+          // Start materialization of all new stages and fail fast if any stages failed eagerly
+          var anyFail = false
+          val stages = result.newStages.toIterator
+          while (!anyFail && stages.hasNext) {
+            val stage = stages.next()
+            runningStages.add(stage)
             try {
               stage.materialize().onComplete { res =>
+                runningStages.remove(stage)
                 if (res.isSuccess) {
                   events.offer(StageSuccess(stage, res.get))
                 } else {
@@ -176,7 +182,10 @@ case class AdaptiveSparkPlanExec(
                 }
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
-              case e: Throwable => events.offer(StageFailure(stage, e))
+              case e: Throwable =>
+                anyFail = true
+                runningStages.remove(stage)
+                events.offer(StageFailure(stage, e))
             }
           }
         }
@@ -192,13 +201,12 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
             errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}." +
-                s" and the cause is ${ex.getMessage}", ex))
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors)
+          cleanUpAndThrowException(runningStages, errors)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
@@ -522,13 +530,12 @@ case class AdaptiveSparkPlanExec(
    * Cancel all running stages with best effort and throw an Exception containing all stage
    * materialization errors and stage cancellation errors.
    */
-  private def cleanUpAndThrowException(errors: Seq[SparkException]): Unit = {
-    val runningStages = currentPhysicalPlan.collect {
-      case s: QueryStageExec => s
-    }
+  private def cleanUpAndThrowException(
+      runningStages: util.Set[QueryStageExec],
+      errors: Seq[SparkException]): Unit = {
     val cancelErrors = new mutable.ArrayBuffer[SparkException]()
     try {
-      runningStages.foreach { s =>
+      runningStages.asScala.foreach { s =>
         try {
           s.cancel()
         } catch {
@@ -539,8 +546,7 @@ case class AdaptiveSparkPlanExec(
       }
     } finally {
       val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures." +
-          s" and the cause is ${errors.head.getMessage}", errors.head)
+        "Adaptive execution failed due to stage materialization failures.", errors.head)
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex
