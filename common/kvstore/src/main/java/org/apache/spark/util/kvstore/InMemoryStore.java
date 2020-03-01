@@ -223,7 +223,7 @@ public class InMemoryStore implements KVStore {
       this.data = new ConcurrentHashMap<>();
       this.naturalParentIndexName = ti.getParentIndexName(KVIndex.NATURAL_INDEX_NAME);
       this.parentToChildrenMap = new ConcurrentHashMap<>();
-      this.hasNaturalParentIndex = naturalParentIndexName.isEmpty();
+      this.hasNaturalParentIndex = !naturalParentIndexName.isEmpty();
     }
 
     KVTypeInfo.Accessor getIndexAccessor(String indexName) {
