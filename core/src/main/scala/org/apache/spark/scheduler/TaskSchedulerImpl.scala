@@ -339,47 +339,50 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       // the specific resource assignments that would be given to a task
-      val taskResAssignments = HashMap[String, ResourceInformation]()
       val taskSetRpID = taskSet.taskSet.resourceProfileId
       // make the resource profile id a hard requirement for now - ie only put tasksets
       // on executors where resource profile exactly matches.
-      if (taskSetRpID == shuffledOffers(i).resourceProfileId &&
-        resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
-          taskResAssignments)) {
-        try {
-          val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
-          val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
-            taskResAssignments.toMap)
-          for (task <- taskDescOption) {
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetManager.put(tid, taskSet)
-            taskIdToExecutorId(tid) = execId
-            executorIdToRunningTaskIds(execId).add(tid)
-            availableCpus(i) -= task.cpus
-            assert(availableCpus(i) >= 0)
-            task.resources.foreach { case (rName, rInfo) =>
-              // Remove the first n elements from availableResources addresses, these removed
-              // addresses are the same as that we allocated in taskResourceAssignments since it's
-              // synchronized. We don't remove the exact addresses allocated because the current
-              // approach produces the identical result with less time complexity.
-              availableResources(i).getOrElse(rName,
-                throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
-                .remove(0, rInfo.addresses.size)
+      if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
+        val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
+          availableResources(i))
+        logWarning(s"task resources option is ${taskResAssignmentsOpt}")
+        taskResAssignmentsOpt.foreach { taskResAssignments =>
+          try {
+            logWarning(s"task resources option is ${taskResAssignments}")
+            val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
+            val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
+              taskResAssignments)
+            for (task <- taskDescOption) {
+              tasks(i) += task
+              val tid = task.taskId
+              taskIdToTaskSetManager.put(tid, taskSet)
+              taskIdToExecutorId(tid) = execId
+              executorIdToRunningTaskIds(execId).add(tid)
+              availableCpus(i) -= task.cpus
+              assert(availableCpus(i) >= 0)
+              task.resources.foreach { case (rName, rInfo) =>
+                // Remove the first n elements from availableResources addresses, these removed
+                // addresses are the same as that we allocated in taskResourceAssignments since it's
+                // synchronized. We don't remove the exact addresses allocated because the current
+                // approach produces the identical result with less time complexity.
+                availableResources(i).getOrElse(rName,
+                  throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
+                  .remove(0, rInfo.addresses.size)
+              }
+              // Only update hosts for a barrier task.
+              if (taskSet.isBarrier) {
+                // The executor address is expected to be non empty.
+                addressesWithDescs += (shuffledOffers(i).address.get -> task)
+              }
+              launchedTask = true
             }
-            // Only update hosts for a barrier task.
-            if (taskSet.isBarrier) {
-              // The executor address is expected to be non empty.
-              addressesWithDescs += (shuffledOffers(i).address.get -> task)
-            }
-            launchedTask = true
+          } catch {
+            case e: TaskNotSerializableException =>
+              logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+              // Do not offer resources for this task, but don't throw an error to allow other
+              // task sets to be submitted.
+              return launchedTask
           }
-        } catch {
-          case e: TaskNotSerializableException =>
-            logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
-            // Do not offer resources for this task, but don't throw an error to allow other
-            // task sets to be submitted.
-            return launchedTask
         }
       }
     }
@@ -388,22 +391,25 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
+   * Returns None if the resources don't meet the task requirements, otherwise returns
+   * the task resource assignments to give to the next task. Note that the assignments maybe
+   * be empty if no custom resources are used.
    */
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
       availCpus: Int,
-      availWorkerResources: Map[String, Buffer[String]],
-      taskResourceAssignments: HashMap[String, ResourceInformation]): Boolean = {
+      availWorkerResources: Map[String, Buffer[String]]
+      ): Option[Map[String, ResourceInformation]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
-    // check is ResourceProfile has cpus first since that is common case
-    if (availCpus < taskCpus) return false
+    // check if the ResourceProfile has cpus first since that is common case
+    if (availCpus < taskCpus) return None
 
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
-    if (tsResources.isEmpty) return true
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
+    if (tsResources.isEmpty) return Some(localTaskReqAssign.toMap)
     // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
@@ -415,13 +421,12 @@ private[spark] class TaskSchedulerImpl(
             localTaskReqAssign.put(rName, new ResourceInformation(rName,
               workerRes.take(taskAmount).toArray))
           } else {
-            return false
+            return None
           }
-        case None => return false
+        case None => return None
       }
     }
-    taskResourceAssignments ++= localTaskReqAssign
-    true
+    Some(localTaskReqAssign.toMap)
   }
 
   // Use the resource that the resourceProfile has as the limiting resource to calculate the

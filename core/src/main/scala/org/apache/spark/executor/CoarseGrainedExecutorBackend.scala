@@ -74,8 +74,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   private var _resources = Map.empty[String, ResourceInformation]
 
   /**
-   * Map each taskId to a tuple of cpus and the information about the resource allocated to it.
-   * Please refer to [[ResourceInformation]] for specifics.
+   * Map of taskId to a tuple of the number cpus and the custom resource information allocated to
+   * that task. Please refer to [[ResourceInformation]] for specifics.
    * Exposed for testing only.
    */
   private[executor] val taskResources =
