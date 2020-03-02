@@ -1384,10 +1384,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
   }
 
-  // TODO - add more full tests for fractional?
   test("Scheduler correctly accounts for GPUs per task with fractional amount") {
     val taskCpus = 1
-    val taskGpus = 0.25
+    val taskGpus = 0.33
     val executorGpus = 1
     val executorCpus = 4
 
@@ -1399,19 +1398,18 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskSet = FakeTask.createTaskSet(5)
 
     val numFreeCores = 4
-    val resources = Map(GPU -> ArrayBuffer("0", "0", "0", "0"))
+    val resources = Map(GPU -> ArrayBuffer("0", "0", "0"))
     val singleCoreWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
 
     taskScheduler.submitTasks(taskSet)
     // Launch tasks on executor that satisfies resource requirements.
     var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
-    assert(4 === taskDescriptions.length)
+    assert(3 === taskDescriptions.length)
     assert(!failedTaskSet)
     assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
     assert(ArrayBuffer("0") === taskDescriptions(1).resources.get(GPU).get.addresses)
     assert(ArrayBuffer("0") === taskDescriptions(2).resources.get(GPU).get.addresses)
-    assert(ArrayBuffer("0") === taskDescriptions(3).resources.get(GPU).get.addresses)
   }
 
   test("Scheduler works with multiple ResourceProfiles and gpus") {

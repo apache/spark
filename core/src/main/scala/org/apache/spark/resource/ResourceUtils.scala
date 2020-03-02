@@ -457,9 +457,9 @@ private[spark] object ResourceUtils extends Logging {
 
     taskReq.foreach { case (rName, treq) =>
       val execAmount = execReq(rName).amount
+      // handles fractional
+      val taskAmount = rp.getSchedulerTaskResourceAmount(rName)
       val numParts = rp.getNumSlotsPerAddress(rName, sparkConf)
-      // handle fractional
-      val taskAmount = if (numParts > 1) 1 else treq.amount
       if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
         val taskReqStr = s"${taskAmount}/${numParts}"
         val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt

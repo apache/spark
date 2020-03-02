@@ -407,13 +407,13 @@ private[spark] class TaskSchedulerImpl(
     // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
+      val taskAmount = taskSetProf.getSchedulerTaskResourceAmount(rName)
       availWorkerResources.get(rName) match {
         case Some(workerRes) =>
-          val taskReqAmount = taskReqs.amount
           val workerAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
-          if (workerAvail >= taskReqAmount) {
+          if (workerAvail >= taskAmount) {
             localTaskReqAssign.put(rName, new ResourceInformation(rName,
-              workerRes.take(taskReqAmount.toInt).toArray))
+              workerRes.take(taskAmount).toArray))
           } else {
             return false
           }
