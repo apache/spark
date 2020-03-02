@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
   test("sessionScratchDir = '/tmp/hive/user_a/session_b' & scratchDir = '/tmp/hive_scratch'") {
@@ -83,7 +84,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val scratchDir = "/tmp/hive_scratch"
 
     val s3Path = new Path("s3a://bucket/", "path")
-    hadoopConf.set("hive.blobstore.use.blobstore.as.scratchdir", "false")
+    spark.conf.set(SQLConf.HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR.key, false)
     val localMRTmpPathForS3 = insertIntoHiveTable.getExternalTmpPath(
       spark, hadoopConf, s3Path).toString
 

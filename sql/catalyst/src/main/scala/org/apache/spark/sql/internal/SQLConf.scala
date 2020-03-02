@@ -751,6 +751,20 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
+  val HIVE_BLOBSTORE_SUPPORTED_SCHEMES =
+    buildConf("spark.sql.hive.blobstore.supported.schemes")
+      .doc("Comma-separated list of supported blobstore schemes.")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .createWithDefault("s3,s3a,s3n")
+
+  val HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR =
+    buildConf("spark.sql.hive.blobstore.use.blobstore.as.scratchdir")
+      .doc("Enable the use of scratch directories directly on blob storage systems " +
+        "(it may cause performance penalties). ")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -2420,6 +2434,10 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+
+  def blobstoreSupportedSchemas: String = getConf(HIVE_BLOBSTORE_SUPPORTED_SCHEMES)
+
+  def useBlobstoreAsScratchDir: Boolean = getConf(HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
