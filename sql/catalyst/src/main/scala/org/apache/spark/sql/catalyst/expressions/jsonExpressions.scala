@@ -24,6 +24,7 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -795,4 +796,60 @@ case class SchemaOfJson(
   }
 
   override def prettyName: String = "schema_of_json"
+}
+
+/**
+ * A function that returns number of elements in outer Json Array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(jsonArray) - Returns length of the jsonArray",
+  examples = """
+    Examples:
+    > SELECT _FUNC_('[1,2,3,4]');
+      4
+    > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
+      5
+  """,
+  since = "3.0.0"
+)
+case class LengthOfJsonArray(child: Expression)
+  extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = IntegerType
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_array_length"
+
+  override def eval(input: InternalRow): Any = {
+    @transient
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if null array is encountered.
+          if (parser.nextToken() == null) {
+            return null
+          }
+          // Parse the array to compute its length.
+          parseCounter(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException => null
+    }
+  }
+
+  private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
+    // Counter for length of array
+    var array_length: Int = 0;
+    // Only json array are supported for this function.
+    if (parser.getCurrentToken != JsonToken.START_ARRAY) {
+      throw new AnalysisException(s"$prettyName can only be called on Json Array.")
+    }
+    // Keep traversing until the end of Json Array
+    while(parser.nextToken() != JsonToken.END_ARRAY) {
+      array_length += 1
+      // skip all the child of inner object or array
+      parser.skipChildren()
+    }
+    array_length
+  }
 }

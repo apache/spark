@@ -538,6 +538,7 @@ object FunctionRegistry {
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
     expression[SchemaOfJson]("schema_of_json"),
+    expression[LengthOfJsonArray]("json_array_length"),
 
     // cast
     expression[Cast]("cast"),

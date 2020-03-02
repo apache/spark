@@ -790,4 +790,30 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
     }
   }
+
+  test("Length of Json Array") {
+    val null_json_array = """"""
+    val simple_json_array = """[1,2,3]"""
+    val empty_json_array = """[]"""
+    val json_array_of_array = """[[1],[2,3],[]]"""
+    val json_array_of_objects = """[{"a":123},{"b":"hello"}]"""
+    val complex_json_array = """[1,2,3,[33,44],{"key":[2,3,4]}]"""
+    val not_a_json_array = """{"key":"not a json array"}"""
+    val invalid_json_array = """[1,2,3,4,5"""
+
+    checkEvaluation(LengthOfJsonArray(Literal(null_json_array)), null)
+    checkEvaluation(LengthOfJsonArray(Literal(simple_json_array)), 3)
+    checkEvaluation(LengthOfJsonArray(Literal(empty_json_array)), 0)
+    checkEvaluation(LengthOfJsonArray(Literal(json_array_of_array)), 3)
+    checkEvaluation(LengthOfJsonArray(Literal(json_array_of_objects)), 2)
+    checkEvaluation(LengthOfJsonArray(Literal(complex_json_array)), 5)
+    checkEvaluation(LengthOfJsonArray(Literal(invalid_json_array)), null)
+
+    val exception = intercept[TestFailedException]{
+      checkEvaluation(LengthOfJsonArray(Literal(not_a_json_array)), null)
+    }.getCause
+
+    assert(exception.isInstanceOf[AnalysisException])
+    assert(exception.getMessage.contains("can only be called on Json Array"))
+  }
 }
