@@ -19,18 +19,13 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton with MockitoSugar {
+class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
   test("sessionScratchDir = '/tmp/hive/user_a/session_b' & scratchDir = '/tmp/hive_scratch'") {
-    val insertIntoHiveTable = new InsertIntoHiveTable(
-      mock[CatalogTable], Map.empty[String, Option[String]],
-      mock[LogicalPlan], true, false, Seq.empty[String])
+    val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
     val hadoopConf = new Configuration()
     val scratchDir = "/tmp/hive_scratch"
     val sessionScratchDir = "/tmp/hive/user_a/session_b"
@@ -48,9 +43,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton with MockitoS
   }
 
   test("sessionScratchDir = empty & scratchDir = '/tmp/hive_scratch'") {
-    val insertIntoHiveTable = new InsertIntoHiveTable(
-      mock[CatalogTable], Map.empty[String, Option[String]],
-      mock[LogicalPlan], true, false, Seq.empty[String])
+    val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
     val hadoopConf = new Configuration()
     val scratchDir = "/tmp/hive_scratch"
     val emptySessionScratchDir = ""
@@ -69,9 +62,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton with MockitoS
   }
 
   test("default config & hdfs path") {
-    val insertIntoHiveTable = new InsertIntoHiveTable(
-      mock[CatalogTable], Map.empty[String, Option[String]],
-      mock[LogicalPlan], true, false, Seq.empty[String])
+    val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
 
     val hadoopConf = new Configuration()
     val stagingDir = ".hive-staging"
@@ -86,9 +77,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton with MockitoS
   }
 
   test("'hive.blobstore.use.blobstore.as.scratchdir=false' & s3 path") {
-    val insertIntoHiveTable = new InsertIntoHiveTable(
-      mock[CatalogTable], Map.empty[String, Option[String]],
-      mock[LogicalPlan], true, false, Seq.empty[String])
+    val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
 
     val hadoopConf = new Configuration()
     val scratchDir = "/tmp/hive_scratch"
