@@ -27,7 +27,9 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
 
+
 __all__ = ["StreamingContext"]
+
 
 @deprecated(deprecated_in="3.0.0",
             details="Spark Streaming is deprecated in favor of Structured Streaming.")
