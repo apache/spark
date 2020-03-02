@@ -38,7 +38,7 @@ object StreamingConf {
       .longConf
       .createOptional
 
-  val BLOCK_INTERVAL =
+  private[streaming] val BLOCK_INTERVAL =
     ConfigBuilder("spark.streaming.blockInterval")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("200ms")
