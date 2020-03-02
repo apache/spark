@@ -32,7 +32,7 @@ import org.apache.spark.sql.functions._
 object FValueTest {
 
   /** Used to construct output schema of tests */
-  case class FValueResult(
+  private  case class FValueResult(
       pValues: Vector,
       degreesOfFreedom: Array[Long],
       fValues: Vector)
