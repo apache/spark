@@ -45,8 +45,9 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
 
 private[sql] object PostgresConnectionProvider {
   class PGJDBCConfiguration(
-      parent: Configuration, keytab: String, principal: String) extends Configuration {
-    val entry =
+      parent: Configuration,
+      keytab: String, principal: String) extends Configuration {
+    private val entry =
       new AppConfigurationEntry(
         SecurityUtils.getKrb5LoginModuleName(),
         AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
