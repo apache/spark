@@ -158,7 +158,7 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[SparkException]()
-      var anyFail: Option[QueryStageExec] = None
+      var earlyFailedStage: Option[Int] = None
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -168,7 +168,7 @@ case class AdaptiveSparkPlanExec(
 
           // Start materialization of all new stages and fail fast if any stages failed eagerly
           val stages = result.newStages.toIterator
-          while (anyFail.isEmpty && stages.hasNext) {
+          while (earlyFailedStage.isEmpty && stages.hasNext) {
             val stage = stages.next()
             try {
               stage.materialize().onComplete { res =>
@@ -180,7 +180,7 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
-                anyFail = Some(stage)
+                earlyFailedStage = Some(stage.id)
                 events.offer(StageFailure(stage, e))
             }
           }
@@ -202,7 +202,7 @@ case class AdaptiveSparkPlanExec(
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors, anyFail)
+          cleanUpAndThrowException(errors, earlyFailedStage)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
@@ -528,9 +528,9 @@ case class AdaptiveSparkPlanExec(
    */
   private def cleanUpAndThrowException(
        errors: Seq[SparkException],
-       skipCancel: Option[QueryStageExec]): Unit = {
+       skipCancel: Option[Int]): Unit = {
     val runningStages = currentPhysicalPlan.collect {
-      case s: QueryStageExec if !skipCancel.contains(s) => s
+      case s: QueryStageExec if !skipCancel.contains(s.id) => s
     }
     val cancelErrors = new mutable.ArrayBuffer[SparkException]()
     try {
