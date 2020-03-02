@@ -88,7 +88,7 @@ jobs:
       run: ./dev/lint-java
     - name: Python
       run: |
-        pip install flake8 sphinx numpy
+        pip install flake8 sphinx numpy deprecation
         ./dev/lint-python
     - name: License
       run: ./dev/check-license
