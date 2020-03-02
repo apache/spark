@@ -2177,11 +2177,25 @@ class Analyzer(
       expr.find(_.isInstanceOf[Generator]).isDefined
     }
 
-    private def hasNestedGenerator(expr: NamedExpression): Boolean = {
-      def hasInnerGenerator(g: Generator): Boolean = g match {
+    private def hasInnerGenerator(g: Generator): Boolean = {
+      g.children.exists(_.find(hasGenerator).isDefined)
+    }
+
+    private def hasUnsupportedNestedGenerator(expr: NamedExpression): Boolean = {
+      def isAdjacentGenerators(g: Generator): Boolean = g match {
         // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
         case go: GeneratorOuter =>
-          hasInnerGenerator(go.child)
+          isAdjacentGenerators(go.child)
+        case _ =>
+          g.isInstanceOf[UnaryExpression] && (g.children.head match {
+            case ig: Generator => isAdjacentGenerators(ig)
+            case e => e.find(hasGenerator).isEmpty
+          })
+      }
+      def hasUnsupportedInnerGenerator(g: Generator): Boolean = g match {
+        // This is the case where we can support nested inner generators;
+        // they are adjacent and unary, e.g., `explode(explode(array(array(1, 2), array(3))))`.
+        case g if isAdjacentGenerators(g) => false
         case _ =>
           g.children.exists { _.find {
             case _: Generator => true
@@ -2189,9 +2203,9 @@ class Analyzer(
           }.isDefined }
       }
       CleanupAliases.trimNonTopLevelAliases(expr) match {
-        case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
-        case Alias(g: Generator, _) => hasInnerGenerator(g)
-        case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
+        case UnresolvedAlias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
+        case Alias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
+        case MultiAlias(g: Generator, _) => hasUnsupportedInnerGenerator(g)
         case other => hasGenerator(other)
       }
     }
@@ -2205,7 +2219,7 @@ class Analyzer(
       }.nonEmpty)
     }
 
-    private def trimAlias(expr: NamedExpression): Expression = expr match {
+    private def trimAlias(expr: Expression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
@@ -2220,17 +2234,21 @@ class Analyzer(
        * @return (the [[Generator]], seq of output names, outer flag)
        */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
-        case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
-        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
-        case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
+        case Alias(GeneratorOuter(g: Generator), name) => Some((g, name :: Nil, true))
+        case MultiAlias(GeneratorOuter(g: Generator), names) => Some((g, names, true))
+        case Alias(g: Generator, name) => Some((g, name :: Nil, false))
+        case MultiAlias(g: Generator, names) => Some((g, names, false))
         case _ => None
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
-        val nestedGenerator = projectList.find(hasNestedGenerator).get
+      // We need to resolve all the functions that might be replaced with generators
+      // before validating a plan in this rule.
+      case p if p.expressions.exists(_.find(_.isInstanceOf[UnresolvedFunction]).isDefined) => p
+
+      case Project(projectList, _) if projectList.exists(hasUnsupportedNestedGenerator) =>
+        val nestedGenerator = projectList.find(hasUnsupportedNestedGenerator).get
         throw new AnalysisException("Generators are not supported when it's nested in " +
           "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
 
@@ -2239,8 +2257,8 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per select clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
-      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
-        val nestedGenerator = aggList.find(hasNestedGenerator).get
+      case Aggregate(_, aggList, _) if aggList.exists(hasUnsupportedNestedGenerator) =>
+        val nestedGenerator = aggList.find(hasUnsupportedNestedGenerator).get
         throw new AnalysisException("Generators are not supported when it's nested in " +
           "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
 
@@ -2249,7 +2267,7 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
-      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
+      case Aggregate(groupList, aggList, child) if aggList.forall {
           case AliasedGenerator(_, _, _) => true
           case other => other.resolved
         } && aggList.exists(hasGenerator) =>
@@ -2300,24 +2318,66 @@ class Analyzer(
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
 
+        def createGenerate(g: Generator, outer: Boolean, names: Seq[String], child: LogicalPlan) = {
+          Generate(
+            g,
+            unrequiredChildIndex = Nil,
+            outer = outer,
+            qualifier = None,
+            generatorOutput = ResolveGenerate.makeGeneratorOutput(g, names),
+            child)
+        }
+
         val newProjectList = projectList
           .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
           .flatMap {
-            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+            case AliasedGenerator(generator, names, outer) =>
               // It's a sanity check, this should not happen as the previous case will throw
               // exception earlier.
               assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
-              resolvedGenerator =
-                Generate(
-                  generator,
-                  unrequiredChildIndex = Nil,
-                  outer = outer,
-                  qualifier = None,
-                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
-                  child)
+              if (hasInnerGenerator(generator)) {
+                // The case of multiple nested inner generators
+                def collectAdjacentGenerators(children: Seq[Expression])
+                  : Seq[(Generator, Boolean)] = {
+                  // We've already checked that all the `Generator` has unary nodes only
+                  // in `hasUnsupportedNestedGenerator`.
+                  assert(children.size == 1)
+                  children.head match {
+                    case GeneratorOuter(g: Generator) =>
+                      collectAdjacentGenerators(g.children) :+ (g, true)
+                    case g: Generator =>
+                      collectAdjacentGenerators(g.children) :+ (g, false)
+                    case _ =>
+                      Nil
+                  }
+                }
 
-              resolvedGenerator.generatorOutput
+                val generators = collectAdjacentGenerators(generator.children)
+                val newChild = generators.foldLeft(child) { case (curChild, (g, outer)) =>
+                  val newGenerator = if (g.children.head.isInstanceOf[Generator]) {
+                    g.withNewChildren(curChild.output).asInstanceOf[Generator]
+                  } else {
+                    g
+                  }
+                  val p = createGenerate(newGenerator, outer, "_gen_alias" :: Nil, curChild)
+                  Project(p.generatorOutput, p)
+                }
+                val topLevelGenerator = generator.withNewChildren(newChild.output)
+                  .asInstanceOf[Generator]
+                resolvedGenerator = createGenerate(topLevelGenerator, outer, names, newChild)
+                if (resolvedGenerator.resolved) {
+                  resolvedGenerator.generatorOutput
+                } else {
+                  resolvedGenerator = null
+                  Nil
+                }
+              } else if (generator.childrenResolved) {
+                resolvedGenerator = createGenerate(generator, outer, names, child)
+                resolvedGenerator.generatorOutput
+              } else {
+                Nil
+              }
             case other => other :: Nil
           }
 
