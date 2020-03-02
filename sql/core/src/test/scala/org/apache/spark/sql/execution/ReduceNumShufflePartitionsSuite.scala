@@ -24,6 +24,7 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec
+import org.apache.spark.sql.execution.adaptive.ReduceNumShufflePartitions.COALESCED_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -107,7 +108,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = agg.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader @ CustomShuffleReaderExec(_, _, "coalesced") => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 1)
         minNumPostShufflePartitions match {
@@ -154,7 +155,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader @ CustomShuffleReaderExec(_, _, "coalesced") => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -206,7 +207,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader @ CustomShuffleReaderExec(_, _, "coalesced") => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -258,7 +259,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader @ CustomShuffleReaderExec(_, _, "coalesced") => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -301,7 +302,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           val shuffleReaders = finalPlan.collect {
-            case reader @ CustomShuffleReaderExec(_, _, "coalesced") => reader
+            case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
           }
           assert(shuffleReaders.length === 0)
         } finally {
@@ -330,7 +331,9 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
       }.length == 2)
       assert(
-        finalPlan.collect { case p @ CustomShuffleReaderExec(_, _, "coalesced") => p }.length == 3)
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.length == 3)
 
 
       // test case 2: a query stage has 2 parent stages.
@@ -378,7 +381,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         Seq(0, 1, 2).map(i => Row(i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect { case p @ CustomShuffleReaderExec(_, _, "coalesced") => p }.isEmpty)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 200, None)
   }
@@ -396,7 +402,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       // As the pre-shuffle partition number are different, we will skip reducing
       // the shuffle partition numbers.
-      assert(finalPlan.collect { case p @ CustomShuffleReaderExec(_, _, "coalesced") => p }.isEmpty)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 100, None)
   }

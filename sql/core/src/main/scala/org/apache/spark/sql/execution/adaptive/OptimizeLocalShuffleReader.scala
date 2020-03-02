@@ -67,9 +67,9 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     plan match {
       case c @ CustomShuffleReaderExec(s: ShuffleQueryStageExec, _, _) =>
         CustomShuffleReaderExec(
-          s, getPartitionSpecs(s, Some(c.partitionSpecs.length)), "local")
+          s, getPartitionSpecs(s, Some(c.partitionSpecs.length)), LOCAL_SHUFFLE_READER_DESCRIPTION)
       case s: ShuffleQueryStageExec =>
-        CustomShuffleReaderExec(s, getPartitionSpecs(s, None), "local")
+        CustomShuffleReaderExec(s, getPartitionSpecs(s, None), LOCAL_SHUFFLE_READER_DESCRIPTION)
     }
   }
 
@@ -122,6 +122,8 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 object OptimizeLocalShuffleReader {
+
+  val LOCAL_SHUFFLE_READER_DESCRIPTION: String = "local"
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {

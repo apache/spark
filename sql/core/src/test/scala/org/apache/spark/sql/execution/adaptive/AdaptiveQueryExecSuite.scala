@@ -23,6 +23,7 @@ import java.net.URI
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -110,7 +111,7 @@ class AdaptiveQueryExecSuite
     }.length
 
     val numLocalReaders = collect(plan) {
-      case reader @ CustomShuffleReaderExec(_, _, "local") => reader
+      case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
     }.length
 
     assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
@@ -142,7 +143,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader @ CustomShuffleReaderExec(_, _, "local") => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
@@ -174,7 +175,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader @ CustomShuffleReaderExec(_, _, "local") => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]

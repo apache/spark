@@ -18,12 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,6 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * avoid many small reduce tasks that hurt performance.
  */
 case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
+  import ReduceNumShufflePartitions._
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.reducePostShufflePartitionsEnabled) {
@@ -82,11 +79,15 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs, "coalesced")
+            CustomShuffleReaderExec(stage, partitionSpecs, COALESCED_SHUFFLE_READER_DESCRIPTION)
         }
       } else {
         plan
       }
     }
   }
+}
+
+object ReduceNumShufflePartitions {
+  val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }
