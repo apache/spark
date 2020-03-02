@@ -276,8 +276,8 @@ public class InMemoryStore implements KVStore {
       }
     }
 
-    public Boolean delete(Object key) {
-      Boolean entryExists = data.remove(asKey(key)) != null;
+    public boolean delete(Object key) {
+      boolean entryExists = data.remove(asKey(key)) != null;
       if (entryExists && hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
           if (v.remove(asKey(key))) {
