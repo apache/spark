@@ -637,7 +637,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       if (state.equals(TaskState.RUNNING) &&
           shuffleServiceEnabled &&
           !slave.shuffleRegistered) {
-        assert(mesosExternalShuffleClient.isDefined,
+        assume(mesosExternalShuffleClient.isDefined,
           "External shuffle client was not instantiated even though shuffle service is enabled.")
         // TODO: Remove this and allow the MesosExternalShuffleService to detect
         // framework termination when new Mesos Framework HTTP API is available.
