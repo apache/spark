@@ -130,7 +130,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   setDefault(beta -> 1.0)
 
   /**
-   * log-loss is undefined for p=0 or p=1, so probabilities are clipped to
+   * param for eps. log-loss is undefined for p=0 or p=1, so probabilities are clipped to
    * max(eps, min(1 - eps, p)). Must be in range (0, 0.5). The default value is 1e-15.
    *
    * @group param
