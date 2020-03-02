@@ -1033,7 +1033,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     df.write.insertInto("students")
     spark.catalog.cacheTable("students")
     checkAnswer(spark.table("students"), df)
-    assume(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
+    assert(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
     sql("ALTER TABLE students RENAME TO teachers")
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")
     // Now we have both students and teachers.
@@ -1959,7 +1959,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")
