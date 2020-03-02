@@ -194,25 +194,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.resources.coordinateResourcesInStandalone</code></td>
-  <td>true</td>
-  <td>
-    Whether to coordinate resources automatically among workers/drivers(client only) 
-    in Standalone. If false, the user is responsible for configuring different resources
-    for workers/drivers that run on the same host.
-  </td>
-</tr>
-<tr>
- <td><code>spark.resources.dir</code></td>
-  <td>SPARK_HOME</td>
-  <td>
-    Directory used to coordinate resources among workers/drivers(client only) in Standalone.
-    Default is SPARK_HOME. Make sure to use the same directory for worker and drivers in
-    client mode that run on the same host. Don't clean up this directory while workers/drivers
-    are still alive to avoid the most likely resources conflict. 
-  </td>
-</tr>
-<tr>
  <td><code>spark.driver.resource.{resourceName}.amount</code></td>
   <td>0</td>
   <td>
@@ -228,9 +209,8 @@ of the most common options to set are:
   <td>
     A script for the driver to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
-    name and an array of addresses. For a client-submitted driver in Standalone, discovery
-    script must assign different resource addresses to this driver comparing to workers' and
-    other drivers' when <code>spark.resources.coordinateResourcesInStandalone</code> is off.
+    name and an array of addresses. For a client-submitted driver, discovery script must assign
+    different resource addresses to this driver comparing to other drivers on the same host.
   </td>
 </tr>
 <tr>
@@ -2789,5 +2769,4 @@ There are configurations available to request resources for the driver: <code>sp
 
 Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
 
-See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinateResourcesInStandalone</code>).
-
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. And please also note that local-cluster mode with multiple workers is not supported(see Standalone documentation).
