@@ -18,6 +18,7 @@
 from __future__ import print_function
 
 from py4j.java_gateway import java_import
+from deprecation import deprecated
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
@@ -28,7 +29,8 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 
 __all__ = ["StreamingContext"]
 
-
+@deprecated(deprecated_in="3.0.0",
+            details="Spark Streaming is deprecated in favor of Structured Streaming.")
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext

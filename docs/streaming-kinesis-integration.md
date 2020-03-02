@@ -17,6 +17,17 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+
+***************************************************************************************************
+## Deprecation notice.
+Spark Streaming is deprecated in favor of 
+[Spark structured streaming](structured-streaming-programming-guide.md).
+ This component is no longer actively maintained.
+ 
+***************************************************************************************************
+
+
 [Amazon Kinesis](http://aws.amazon.com/kinesis/) is a fully managed service for real-time processing of streaming data at massive scale.
 The Kinesis receiver creates an input DStream using the Kinesis Client Library (KCL) provided by Amazon under the Amazon Software License (ASL).
 The KCL builds on top of the Apache 2.0 licensed AWS Java SDK and provides load-balancing, fault-tolerance, checkpointing through the concepts of Workers, Checkpoints, and Shard Leases.

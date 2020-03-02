@@ -18,6 +18,14 @@ license: |
   limitations under the License.
 ---
 
+***************************************************************************************************
+## Deprecation notice.
+Spark Streaming is deprecated in favor of 
+[Spark structured streaming](structured-streaming-programming-guide.md).
+ This component is no longer actively maintained.
+ 
+***************************************************************************************************
+
 [Apache Kafka](https://kafka.apache.org/) is publish-subscribe messaging rethought as a distributed, partitioned, 
 replicated commit log service.  Please read the [Kafka documentation](https://kafka.apache.org/documentation.html) 
 thoroughly before starting an integration using Spark.

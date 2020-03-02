@@ -18,6 +18,14 @@ license: |
   limitations under the License.
 ---
 
+***************************************************************************************************
+## Deprecation notice.
+Spark Streaming is deprecated in favor of 
+[Spark structured streaming](structured-streaming-programming-guide.md).
+ This component is no longer actively maintained.
+ 
+***************************************************************************************************
+
 Spark Streaming can receive streaming data from any arbitrary data source beyond
 the ones for which it has built-in support (that is, beyond Kafka, Kinesis, files, sockets, etc.).
 This requires the developer to implement a *receiver* that is customized for receiving data from

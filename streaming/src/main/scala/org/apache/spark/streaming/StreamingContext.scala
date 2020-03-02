@@ -60,6 +60,7 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
+@deprecated("Spark Streaming is deprecated in favor of Structured Streaming.", since = "3.0.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -130,6 +131,9 @@ class StreamingContext private[streaming] (
 
   require(_sc != null || _cp != null,
     "Spark Streaming cannot be initialized with both SparkContext and checkpoint as null")
+
+  logWarning("Spark Streaming is deprecated in favor of Structured Streaming and is" +
+    " not under active development.")
 
   private[streaming] val isCheckpointPresent: Boolean = _cp != null
 

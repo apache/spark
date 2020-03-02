@@ -18,6 +18,14 @@ license: |
   limitations under the License.
 ---
 
+***************************************************************************************************
+## Deprecation notice.
+Spark Streaming is deprecated in favor of 
+[Spark structured streaming](structured-streaming-programming-guide.md).
+ This component is no longer actively maintained.
+ 
+***************************************************************************************************
+
 The Spark Streaming integration for Kafka 0.10 provides simple parallelism, 1:1 correspondence between Kafka 
 partitions and Spark partitions, and access to offsets and metadata. However, because the newer integration uses 
 the [new Kafka consumer API](https://kafka.apache.org/documentation.html#newconsumerapi) instead of the simple API, 
