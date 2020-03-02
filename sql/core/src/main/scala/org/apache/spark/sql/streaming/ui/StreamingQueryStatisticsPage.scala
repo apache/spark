@@ -267,7 +267,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       </table>
     } else {
       <div id="empty-streaming-query-message">
-        <b>No visualization information available because there is no batch.</b>
+        <b>No visualization information available.</b>
       </div>
       // scalastyle:on
     }
