@@ -39,7 +39,7 @@ import org.apache.spark.util.collection.BitSet
 class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 }
 

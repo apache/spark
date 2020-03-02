@@ -95,9 +95,9 @@ class CatalogSuite
     val columns = dbName
       .map { db => spark.catalog.listColumns(db, tableName) }
       .getOrElse { spark.catalog.listColumns(tableName) }
-    assume(tableMetadata.schema.nonEmpty, "bad test")
-    assume(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
-    assume(tableMetadata.bucketSpec.isDefined, "bad test")
+    assert(tableMetadata.schema.nonEmpty, "bad test")
+    assert(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
+    assert(tableMetadata.bucketSpec.isDefined, "bad test")
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
     val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     columns.collect().foreach { col =>

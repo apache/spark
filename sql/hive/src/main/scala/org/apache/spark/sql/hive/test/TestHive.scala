@@ -203,7 +203,7 @@ private[hive] class TestHiveSparkSession(
     }
   }
 
-  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+  assert(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
   @transient
   override lazy val sharedState: TestHiveSharedState = {

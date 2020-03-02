@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSQLContext {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 
   override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "json")
