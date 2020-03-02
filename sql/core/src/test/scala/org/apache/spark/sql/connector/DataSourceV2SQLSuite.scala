@@ -2056,7 +2056,8 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains(
+      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
   }
 
   test("SHOW FUNCTIONS not valid v1 namespace") {
@@ -2075,9 +2076,10 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+      sql("DROP FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains(
+      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -2089,7 +2091,8 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains(
+      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2126,7 +2129,8 @@ class DataSourceV2SQLSuite
       // the session catalog, not the `gloabl_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
-    assert(e.message.contains("global_temp.ns1.ns2.tbl is not a valid TableIdentifier"))
+    assert(e.message.contains(
+      "The namespace in session catalog must have exactly one name part: global_temp.ns1.ns2.tbl"))
   }
 
   test("table name same as catalog can be used") {
@@ -2155,29 +2159,29 @@ class DataSourceV2SQLSuite
         sql("CREATE TABLE t USING json AS SELECT 1 AS i")
 
         val t = "spark_catalog.t"
-        def verify(sql: String, isTableOrView: Boolean): Unit = {
-          val message = if (isTableOrView) "Table or view" else "Table"
+        def verify(sql: String): Unit = {
           val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(s"$message not found: $t"))
+          assert(e.message.contains(
+            s"The namespace in session catalog must have exactly one name part: $t"))
         }
 
-        verify(s"select * from $t", true)
+        verify(s"select * from $t")
         // Verify V1 commands that bypass table lookups.
-        verify(s"REFRESH TABLE $t", true)
-        verify(s"DESCRIBE $t i", true)
-        verify(s"DROP TABLE $t", true)
-        verify(s"DROP VIEW $t", true)
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS", false)
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS", true)
-        verify(s"MSCK REPAIR TABLE $t", false)
-        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t", false)
-        verify(s"SHOW CREATE TABLE $t", true)
-        verify(s"SHOW CREATE TABLE $t AS SERDE", false)
-        verify(s"CACHE TABLE $t", true)
-        verify(s"UNCACHE TABLE $t", true)
-        verify(s"TRUNCATE TABLE $t", false)
-        verify(s"SHOW PARTITIONS $t", false)
-        verify(s"SHOW COLUMNS FROM $t", true)
+        verify(s"REFRESH TABLE $t")
+        verify(s"DESCRIBE $t i")
+        verify(s"DROP TABLE $t")
+        verify(s"DROP VIEW $t")
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        verify(s"MSCK REPAIR TABLE $t")
+        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+        verify(s"SHOW CREATE TABLE $t")
+        verify(s"SHOW CREATE TABLE $t AS SERDE")
+        verify(s"CACHE TABLE $t")
+        verify(s"UNCACHE TABLE $t")
+        verify(s"TRUNCATE TABLE $t")
+        verify(s"SHOW PARTITIONS $t")
+        verify(s"SHOW COLUMNS FROM $t")
       }
     }
 
