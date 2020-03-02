@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
-import java.time.format.DateTimeParseException
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -27,7 +26,6 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 sealed trait DateFormatter extends Serializable {
@@ -38,24 +36,24 @@ sealed trait DateFormatter extends Serializable {
 class Iso8601DateFormatter(
     pattern: String,
     zoneId: ZoneId,
-    locale: Locale) extends DateFormatter with DateTimeFormatterHelper {
+    locale: Locale,
+    legacyFormat: LegacyDateFormats.LegacyDateFormat)
+  extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
+  @transient
+  private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
+    pattern, zoneId, locale, legacyFormat)
+
   override def parse(s: String): Int = {
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
-      val localDate = try {
-        LocalDate.parse(s, formatter)
-      } catch {
-        case e: DateTimeParseException if DateFormatter.hasDiffResult(s, pattern, zoneId) =>
-          throw new RuntimeException(e.getMessage + ", set " +
-            s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
-            "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
-            "this record. See more details in SPARK-30668.")
-      }
-      localDateToDays(localDate)
+      try {
+        val localDate = LocalDate.parse(s, formatter)
+        localDateToDays(localDate)
+      } catch checkDiffResult(s, legacyFormatter.parse)
     }
   }
 
@@ -110,14 +108,23 @@ object DateFormatter {
 
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
-      legacyFormat match {
-        case FAST_DATE_FORMAT =>
-          new LegacyFastDateFormatter(pattern, locale)
-        case SIMPLE_DATE_FORMAT | LENIENT_SIMPLE_DATE_FORMAT =>
-          new LegacySimpleDateFormatter(pattern, locale)
-      }
+      getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601DateFormatter(pattern, zoneId, locale)
+      new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+    }
+  }
+
+  def getLegacyFormatter(
+    pattern: String,
+    zoneId: ZoneId,
+    locale: Locale,
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
+
+    legacyFormat match {
+      case FAST_DATE_FORMAT =>
+        new LegacyFastDateFormatter(pattern, locale)
+      case SIMPLE_DATE_FORMAT | LENIENT_SIMPLE_DATE_FORMAT =>
+        new LegacySimpleDateFormatter(pattern, locale)
     }
   }
 
@@ -135,25 +142,5 @@ object DateFormatter {
 
   def apply(zoneId: ZoneId): DateFormatter = {
     getFormatter(None, zoneId)
-  }
-
-  def hasDiffResult(s: String, format: String, zoneId: ZoneId): Boolean = {
-    // Only check whether we will get different results between legacy format and new format, while
-    // legacy time parser policy set to EXCEPTION. For legacy parser, DateTimeParseException will
-    // not be thrown. On the contrary, if the legacy policy set to CORRECTED,
-    // DateTimeParseException will address by the caller side.
-    if (LegacyBehaviorPolicy.withName(
-        SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == EXCEPTION) {
-      val formatter = new LegacySimpleTimestampFormatter(
-        format, zoneId, defaultLocale, lenient = false)
-      val res = try {
-        Some(formatter.parse(s))
-      } catch {
-        case _: Throwable => None
-      }
-      res.nonEmpty
-    } else {
-      false
-    }
   }
 }

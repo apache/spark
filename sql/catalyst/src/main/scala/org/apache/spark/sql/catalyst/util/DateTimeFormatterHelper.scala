@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time._
 import java.time.chrono.IsoChronology
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, DateTimeParseException, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
@@ -56,6 +59,29 @@ trait DateTimeFormatterHelper {
       cache.put(key, formatter)
     }
     formatter
+  }
+
+  // When legacy time parser policy set to EXCEPTION, check whether we will get different results
+  // between legacy format and new format. For legacy parser, DateTimeParseException will not be
+  // thrown. On the contrary, if the legacy policy set to CORRECTED, DateTimeParseException will
+  // address by the caller side.
+  protected def checkDiffResult[T](
+    s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
+    case e: DateTimeParseException if LegacyBehaviorPolicy.withName(
+        SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == EXCEPTION =>
+      val res = try {
+        Some(legacyParseFunc(s))
+      } catch {
+        case _: Throwable => None
+      }
+      if (res.nonEmpty) {
+        throw new RuntimeException(e.getMessage + ", set " +
+          s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
+          "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
+          "this record. See more details in SPARK-30668.")
+      } else {
+        throw e
+      }
   }
 }
 
