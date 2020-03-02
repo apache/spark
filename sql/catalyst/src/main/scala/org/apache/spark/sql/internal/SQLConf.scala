@@ -742,6 +742,7 @@ object SQLConf {
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
       "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
       "Acceptable values include: none, uncompressed, snappy, zlib, lzo.")
+    .version("2.3.0")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
@@ -750,6 +751,7 @@ object SQLConf {
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
     .doc("When native, use the native version of ORC support instead of the ORC library in Hive. " +
       "It is 'hive' by default prior to Spark 2.4.")
+    .version("2.3.0")
     .internal()
     .stringConf
     .checkValues(Set("hive", "native"))
@@ -757,23 +759,27 @@ object SQLConf {
 
   val ORC_VECTORIZED_READER_ENABLED = buildConf("spark.sql.orc.enableVectorizedReader")
     .doc("Enables vectorized orc decoding.")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(true)
 
   val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.columnarReaderBatchSize")
     .doc("The number of rows to include in a orc vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .version("2.4.0")
     .intConf
     .createWithDefault(4096)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
+    .version("1.4.0")
     .booleanConf
     .createWithDefault(true)
 
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
       "otherwise the schema is picked from a random data file.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -781,6 +787,7 @@ object SQLConf {
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
          s"releases and replaced by ${SPARK_IGNORE_MISSING_FILES.key}.")
+    .version("1.4.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -790,6 +797,7 @@ object SQLConf {
            "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
            "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
            "HiveUtils.CONVERT_METASTORE_ORC for more information).")
+      .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -799,6 +807,7 @@ object SQLConf {
            "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
            "metastore to prune partitions during query planning.")
+      .version("2.1.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -807,6 +816,7 @@ object SQLConf {
       .doc("When nonzero, enable caching of partition file metadata in memory. All tables share " +
            "a cache that can use up to specified num bytes for file metadata. This conf only " +
            "has an effect when hive filesource partition management is enabled.")
+      .version("2.1.1")
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
@@ -822,6 +832,7 @@ object SQLConf {
       "and write it back to the table properties), INFER_ONLY (infer the schema but don't " +
       "attempt to write it to the table properties) and NEVER_INFER (the default mode-- fallback " +
       "to using the case-insensitive metastore schema instead of inferring).")
+    .version("2.1.1")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
@@ -834,23 +845,27 @@ object SQLConf {
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
       "distinct semantics. By default the optimization is disabled, since it may return " +
       "incorrect results when the files are empty.")
+    .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
       "to parse.")
+    .version("1.2.0")
     .stringConf
     .createWithDefault("_corrupt_record")
 
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
+    .version("1.3.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
+    .version("1.1.1")
     .stringConf
     .createOptional
 
@@ -858,23 +873,27 @@ object SQLConf {
     buildConf("spark.sql.thriftServer.incrementalCollect")
       .internal()
       .doc("When true, enable incremental collection for execution in Thrift Server.")
+      .version("2.0.3")
       .booleanConf
       .createWithDefault(false)
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
+      .version("1.4.0")
       .intConf
       .createWithDefault(200)
 
   val THRIFTSERVER_UI_SESSION_LIMIT = buildConf("spark.sql.thriftserver.ui.retainedSessions")
     .doc("The number of SQL client sessions kept in the JDBC/ODBC web UI history.")
+    .version("1.4.0")
     .intConf
     .createWithDefault(200)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
+    .version("1.3.0")
     .stringConf
     .createWithDefault("parquet")
 
@@ -883,6 +902,7 @@ object SQLConf {
     .doc("When true, a table created by a Hive CTAS statement (no USING clause) " +
       "without specifying any storage property will be converted to a data source table, " +
       s"using the data source set by ${DEFAULT_DATA_SOURCE_NAME.key}.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -891,22 +911,26 @@ object SQLConf {
       .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
         " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
         " metastore.")
+      .version("2.0.1")
       .booleanConf
       .createWithDefault(true)
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
+      .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
 
   val BUCKETING_ENABLED = buildConf("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
+    .version("2.4.0")
     .intConf
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
@@ -915,36 +939,42 @@ object SQLConf {
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort by clause are ignored.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val GROUP_BY_ORDINAL = buildConf("spark.sql.groupByOrdinal")
     .doc("When true, the ordinal numbers in group by clauses are treated as the position " +
       "in the select list. When false, the ordinal numbers are ignored.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
     .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
       "an analysis exception is thrown in the case.")
+    .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
+    .version("1.4.0")
     .internal()
     .stringConf
     .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.commitProtocolClass")
+      .version("2.1.1")
       .internal()
       .stringConf
       .createWithDefault(
@@ -956,6 +986,7 @@ object SQLConf {
         "of detected paths exceeds this value during partition discovery, it tries to list the " +
         "files with another Spark distributed job. This configuration is effective only when " +
         "using file-based sources such as Parquet, JSON and ORC.")
+      .version("1.5.0")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
@@ -965,6 +996,7 @@ object SQLConf {
     buildConf("spark.sql.sources.parallelPartitionDiscovery.parallelism")
       .doc("The number of parallelism to list a collection of path recursively, Set the " +
         "number to prevent file listing from generating too many tasks.")
+      .version("2.1.1")
       .internal()
       .intConf
       .createWithDefault(10000)
@@ -976,6 +1008,7 @@ object SQLConf {
         "schedule tasks to take advantage of data locality. It can be particularly " +
         "useful if data is read from a remote cluster so the scheduler could never " +
         "take advantage of locality anyway.")
+      .version("3.0.0")
       .internal()
       .booleanConf
       .createWithDefault(false)
@@ -984,6 +1017,7 @@ object SQLConf {
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
     buildConf("spark.sql.selfJoinAutoResolveAmbiguity")
+      .version("1.4.0")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -991,12 +1025,14 @@ object SQLConf {
   val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
     buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
+      .version("3.0.0")
       .internal()
       .booleanConf
       .createWithDefault(true)
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
+    .version("1.4.0")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -1004,12 +1040,14 @@ object SQLConf {
   val DATAFRAME_PIVOT_MAX_VALUES = buildConf("spark.sql.pivotMaxValues")
     .doc("When doing a pivot without specifying values for the pivot column this is the maximum " +
       "number of (distinct) values that will be collected without error.")
+    .version("1.6.0")
     .intConf
     .createWithDefault(10000)
 
   val RUN_SQL_ON_FILES = buildConf("spark.sql.runSQLOnFiles")
     .internal()
     .doc("When true, we could use `datasource`.`path` as table in SQL query.")
+    .version("1.6.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1017,6 +1055,7 @@ object SQLConf {
     .internal()
     .doc("When true, the whole stage (of multiple operators) will be compiled into single java" +
       " method.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1025,6 +1064,7 @@ object SQLConf {
     .internal()
     .doc("When true, embed the (whole-stage) codegen stage ID into " +
       "the class name of the generated class as a suffix")
+    .version("2.3.1")
     .booleanConf
     .createWithDefault(true)
 
@@ -1032,6 +1072,7 @@ object SQLConf {
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
       " deactivating whole-stage codegen.")
+    .version("2.0.0")
     .intConf
     .createWithDefault(100)
 
@@ -1041,6 +1082,7 @@ object SQLConf {
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
       "this config works only for tests.")
+    .version("2.4.0")
     .internal()
     .stringConf
     .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
@@ -1050,12 +1092,14 @@ object SQLConf {
     .internal()
     .doc("When true, (whole stage) codegen could be temporary disabled for the part of query that" +
       " fail to compile generated code")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
     .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
+    .version("2.3.0")
     .intConf
     .checkValue(maxLines => maxLines >= -1, "The maximum must be a positive integer, 0 to " +
       "disable logging or -1 to apply no limit.")
@@ -1069,6 +1113,7 @@ object SQLConf {
       "is the largest bytecode size possible for a valid Java method. When running on HotSpot, " +
       s"it may be preferable to set the value to ${CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT} " +
       "to match HotSpot's implementation.")
+    .version("2.3.0")
     .intConf
     .createWithDefault(65535)
 
@@ -1080,6 +1125,7 @@ object SQLConf {
       "generated, so use the code length as metric. When running on HotSpot, a function's " +
       "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
       "be too small, otherwise there will be many function calls.")
+    .version("3.0.0")
     .intConf
     .checkValue(threshold => threshold > 0, "The threshold must be a positive integer.")
     .createWithDefault(1024)
@@ -1090,6 +1136,7 @@ object SQLConf {
       .doc("When true, whole stage codegen would put the logic of consuming rows of each " +
         "physical operator into individual methods, instead of a single big method. This can be " +
         "used to avoid oversized function that can miss the opportunity of JIT optimization.")
+      .version("2.3.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -1097,6 +1144,7 @@ object SQLConf {
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
+    .version("2.0.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("128MB") // parquet.block.size
 
@@ -1107,6 +1155,7 @@ object SQLConf {
       " over estimated, then the partitions with small files will be faster than partitions with" +
       " bigger files (which is scheduled first). This configuration is effective only when using" +
       " file-based sources such as Parquet, JSON and ORC.")
+    .version("2.0.0")
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
@@ -1115,6 +1164,7 @@ object SQLConf {
       "encountering corrupted files and the contents that have been read will still be returned. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
+    .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
 
@@ -1123,24 +1173,28 @@ object SQLConf {
       "encountering missing files and the contents that have been read will still be returned. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
 
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
+    .version("2.2.0")
     .longConf
     .createWithDefault(0)
 
   val EXCHANGE_REUSE_ENABLED = buildConf("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.execution.reuseSubquery")
     .internal()
     .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1152,6 +1206,7 @@ object SQLConf {
           "be a subclass of StateStoreProvider, and must have a zero-arg constructor. " +
           "Note: For structured streaming, this configuration cannot be changed between query " +
           "restarts from the same checkpoint location.")
+      .version("2.3.0")
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
@@ -1161,6 +1216,7 @@ object SQLConf {
       .internal()
       .doc("Minimum number of state store delta files that needs to be generated before they " +
         "consolidated into snapshots.")
+      .version("2.0.0")
       .intConf
       .createWithDefault(10)
 
@@ -1168,24 +1224,28 @@ object SQLConf {
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
       .doc("State format version used by flatMapGroupsWithState operation in a streaming query")
+      .version("2.4.0")
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
+    .version("2.0.0")
     .stringConf
     .createOptional
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
     buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
       .doc("When true, enable temporary checkpoint locations force delete.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
     .internal()
     .doc("The minimum number of batches that must be retained and made recoverable.")
+    .version("2.1.1")
     .intConf
     .createWithDefault(100)
 
@@ -1195,6 +1255,7 @@ object SQLConf {
       "loading from files. The value adjusts a trade-off between memory usage vs cache miss: " +
       "'2' covers both success and direct failure cases, '1' covers only success case, " +
       "and '0' covers extreme case - disable cache to maximize memory size of executors.")
+    .version("2.4.0")
     .intConf
     .createWithDefault(2)
 
@@ -1204,6 +1265,7 @@ object SQLConf {
       .doc("State format version used by streaming aggregation operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
         "be modified after running.")
+      .version("2.4.0")
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
@@ -1214,6 +1276,7 @@ object SQLConf {
       "If we find a concurrent active run for a streaming query (in the same or different " +
       "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
       "query run to start the new one.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1223,6 +1286,7 @@ object SQLConf {
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
         "be modified after running.")
+      .version("3.0.0")
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
@@ -1232,6 +1296,7 @@ object SQLConf {
       .internal()
       .doc("When true, the logical plan for streaming query will be checked for unsupported" +
         " operations.")
+      .version("2.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1239,6 +1304,7 @@ object SQLConf {
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
         "and `${env:var}`.")
+      .version("2.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1249,6 +1315,7 @@ object SQLConf {
         "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
         "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
         "When disabled, records go directly to the 2nd level.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1256,6 +1323,7 @@ object SQLConf {
     buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
       .internal()
       .doc("Enable vectorized aggregate hash map. This is for testing/benchmarking only.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1265,6 +1333,7 @@ object SQLConf {
       .doc("When true, the code generator would split aggregate code into individual methods " +
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1276,6 +1345,7 @@ object SQLConf {
         "However the DAG depth may become too large and cause unexpected behavior. This " +
         "configuration puts a limit on this: when the depth of a view exceeds this value during " +
         "analysis, we terminate the resolution to avoid potential errors.")
+      .version("2.2.0")
       .intConf
       .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
         "must be positive.")
@@ -1283,6 +1353,7 @@ object SQLConf {
 
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
+      .version("2.1.0")
       .internal()
       .stringConf
       .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
@@ -1295,6 +1366,7 @@ object SQLConf {
         "'max' which chooses the maximum across multiple operators. " +
         "Note: This configuration cannot be changed between query restarts from the same " +
         "checkpoint location.")
+      .version("2.4.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .checkValue(
@@ -1309,6 +1381,7 @@ object SQLConf {
       .doc("In the case of ObjectHashAggregateExec, when the size of the in-memory hash map " +
         "grows too large, we will fall back to sort-based aggregation. This option sets a row " +
         "count threshold for the size of the hash map.")
+      .version("2.2.0")
       .intConf
       // We are trying to be conservative and use a relatively small default count threshold here
       // since the state object of some TypedImperativeAggregate function can be quite large (e.g.
@@ -1318,6 +1391,7 @@ object SQLConf {
   val USE_OBJECT_HASH_AGG = buildConf("spark.sql.execution.useObjectHashAggregateExec")
     .internal()
     .doc("Decides if we use ObjectHashAggregateExec")
+    .version("")
     .booleanConf
     .createWithDefault(true)
 
@@ -1326,12 +1400,14 @@ object SQLConf {
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
         "JSON functions such as to_json. " +
         "If false, it generates null for null fields in JSON objects.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
+    .version("")
     .booleanConf
     .createWithDefault(true)
 
@@ -1340,6 +1416,7 @@ object SQLConf {
       .internal()
       .doc("Number of log files after which all the previous files " +
         "are compacted into the next log file.")
+      .version("")
       .intConf
       .createWithDefault(10)
 
@@ -1347,12 +1424,14 @@ object SQLConf {
     buildConf("spark.sql.streaming.fileSink.log.cleanupDelay")
       .internal()
       .doc("How long that a file is guaranteed to be visible for all readers.")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
   val FILE_SOURCE_LOG_DELETION = buildConf("spark.sql.streaming.fileSource.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream source.")
+    .version("")
     .booleanConf
     .createWithDefault(true)
 
@@ -1361,6 +1440,7 @@ object SQLConf {
       .internal()
       .doc("Number of log files after which all the previous files " +
         "are compacted into the next log file.")
+      .version("")
       .intConf
       .createWithDefault(10)
 
@@ -1368,6 +1448,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.fileSource.log.cleanupDelay")
       .internal()
       .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
@@ -1377,12 +1458,14 @@ object SQLConf {
       .doc("When true, force the schema of streaming file source to be nullable (including all " +
         "the fields). Otherwise, the schema might not be compatible with actual data, which " +
         "leads to corruptions.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
   val FILE_SOURCE_CLEANER_NUM_THREADS =
     buildConf("spark.sql.streaming.fileSource.cleaner.numThreads")
       .doc("Number of threads used in the file source completed file cleaner.")
+      .version("")
       .intConf
       .createWithDefault(1)
 
@@ -1390,6 +1473,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.schemaInference")
       .internal()
       .doc("Whether file-based streaming sources will infer its own schema")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -1397,6 +1481,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.pollingDelay")
       .internal()
       .doc("How long to delay polling new data when no data is available")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
@@ -1404,6 +1489,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.stopTimeout")
       .doc("How long to wait in milliseconds for the streaming execution thread to stop when " +
         "calling the streaming query's stop() method. 0 or negative values wait indefinitely.")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
@@ -1411,6 +1497,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
       .doc("How long to wait between two progress events when there is no data")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10000L)
 
@@ -1419,18 +1506,21 @@ object SQLConf {
       .doc(
         "Whether streaming micro-batch engine will execute batches without data " +
           "for eager state management for stateful streaming queries.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
   val STREAMING_METRICS_ENABLED =
     buildConf("spark.sql.streaming.metricsEnabled")
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val STREAMING_PROGRESS_RETENTION =
     buildConf("spark.sql.streaming.numRecentProgressUpdates")
       .doc("The number of progress updates to retain for a streaming query")
+      .version("")
       .intConf
       .createWithDefault(100)
 
@@ -1438,6 +1528,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.checkpointFileManagerClass")
       .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
         "of the interface CheckpointFileManager.")
+      .version("")
       .internal()
       .stringConf
 
@@ -1445,6 +1536,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
+      .version("")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -1455,6 +1547,7 @@ object SQLConf {
       .doc("When true, SQL commands use parallel file listing, " +
         "as opposed to single thread listing. " +
         "This usually speeds up commands that need to list many directories.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1464,6 +1557,7 @@ object SQLConf {
       s"which is larger than `${AUTO_BROADCASTJOIN_THRESHOLD.key}` to be more conservative. " +
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
+    .version("")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(Long.MaxValue)
 
@@ -1474,6 +1568,7 @@ object SQLConf {
       "For non-partitioned data source tables, it will be automatically recalculated if table " +
       "statistics are not available. For partitioned data source and partitioned Hive tables, " +
       s"It is '${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1482,6 +1577,7 @@ object SQLConf {
       .internal()
       .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
         "column level statistics.")
+      .version("")
       .doubleConf
       .createWithDefault(0.05)
 
@@ -1492,6 +1588,7 @@ object SQLConf {
         "histogram. Note that collecting histograms takes extra cost. For example, collecting " +
         "column statistics usually takes only one table scan, but generating equi-height " +
         "histogram will cause an extra table scan.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -1499,6 +1596,7 @@ object SQLConf {
     buildConf("spark.sql.statistics.histogram.numBins")
       .internal()
       .doc("The number of bins when generating histograms.")
+      .version("")
       .intConf
       .checkValue(num => num > 1, "The number of bins must be greater than 1.")
       .createWithDefault(254)
@@ -1509,6 +1607,7 @@ object SQLConf {
       .doc("Accuracy of percentile approximation when generating equi-height histograms. " +
         "Larger value means better accuracy. The relative error can be deduced by " +
         "1.0 / PERCENTILE_ACCURACY.")
+      .version("")
       .intConf
       .createWithDefault(10000)
 
@@ -1517,30 +1616,35 @@ object SQLConf {
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val PLAN_STATS_ENABLED =
     buildConf("spark.sql.cbo.planStats.enabled")
       .doc("When true, the logical plan will fetch row counts and column statistics from catalog.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val JOIN_REORDER_ENABLED =
     buildConf("spark.sql.cbo.joinReorder.enabled")
       .doc("Enables join reorder in CBO.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val JOIN_REORDER_DP_THRESHOLD =
     buildConf("spark.sql.cbo.joinReorder.dp.threshold")
       .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
+      .version("")
       .intConf
       .checkValue(number => number > 0, "The maximum number must be a positive integer.")
       .createWithDefault(12)
@@ -1550,6 +1654,7 @@ object SQLConf {
       .internal()
       .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
         "rows * weight + size * (1 - weight).")
+      .version("")
       .doubleConf
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
@@ -1557,11 +1662,13 @@ object SQLConf {
   val JOIN_REORDER_DP_STAR_FILTER =
     buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
       .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1569,6 +1676,7 @@ object SQLConf {
     .internal()
     .doc("Specifies the upper limit of the ratio between the largest fact tables" +
       " for a star join to be considered. ")
+    .version("2.2.0")
     .doubleConf
     .createWithDefault(0.9)
 
@@ -1582,6 +1690,7 @@ object SQLConf {
       "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
       "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
       "recommended to use because they can be ambiguous.")
+    .version("2.2.0")
     .stringConf
     .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
       " ZoneId.of(_, ZoneId.SHORT_IDS)")
@@ -1591,6 +1700,7 @@ object SQLConf {
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")
       .internal()
       .doc("Threshold for number of rows guaranteed to be held in memory by the window operator")
+      .version("2.2.1")
       .intConf
       .createWithDefault(4096)
 
@@ -1598,6 +1708,7 @@ object SQLConf {
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
       .internal()
       .doc("Threshold for number of rows to be spilled by window operator")
+      .version("")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
@@ -1606,6 +1717,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows guaranteed to be held in memory by the sort merge " +
         "join operator")
+      .version("")
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
@@ -1613,6 +1725,7 @@ object SQLConf {
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
       .internal()
       .doc("Threshold for number of rows to be spilled by sort merge join operator")
+      .version("")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
@@ -1621,6 +1734,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows guaranteed to be held in memory by the cartesian " +
         "product operator")
+      .version("")
       .intConf
       .createWithDefault(4096)
 
@@ -1628,12 +1742,14 @@ object SQLConf {
     buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
       .internal()
       .doc("Threshold for number of rows to be spilled by cartesian product operator")
+      .version("")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
       " as regular expressions.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1642,12 +1758,14 @@ object SQLConf {
       .internal()
       .doc("Number of points to sample per partition in order to determine the range boundaries" +
           " for range partitioning, typically used in global sorting (without limit).")
+      .version("")
       .intConf
       .createWithDefault(100)
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -1659,6 +1777,7 @@ object SQLConf {
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+      .version("")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
@@ -1671,6 +1790,7 @@ object SQLConf {
         "4. gapply " +
         "The following data types are unsupported: " +
         "FloatType, BinaryType, ArrayType, StructType and MapType.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -1678,6 +1798,7 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.fallback.enabled")
       .doc("(Deprecated since Spark 3.0, please set " +
         "'spark.sql.execution.arrow.pyspark.fallback.enabled'.)")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1685,12 +1806,14 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.pyspark.fallback.enabled")
       .doc(s"When true, optimizations enabled by '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' will " +
         "fallback automatically to non-optimized implementations if an error occurs.")
+      .version("")
       .fallbackConf(ARROW_FALLBACK_ENABLED)
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+      .version("")
       .intConf
       .createWithDefault(10000)
 
@@ -1701,6 +1824,7 @@ object SQLConf {
         s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
         "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
         "pipelined; however, it might degrade performance. See SPARK-27870.")
+      .version("")
       .fallbackConf(BUFFER_SIZE)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
@@ -1710,6 +1834,7 @@ object SQLConf {
         "to use position if not. When false, a grouped map Pandas UDF will assign columns from " +
         "the returned Pandas DataFrame based on position, regardless of column label type. " +
         "This configuration will be deprecated in future releases.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1720,6 +1845,7 @@ object SQLConf {
         "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
         "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
         "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -1733,6 +1859,7 @@ object SQLConf {
       " column names of the left node are distinct. If all the conditions are met, the" +
       " rule will replace the except operation with a Filter by flipping the filter" +
       " condition(s) of the right node.")
+    .version("")
     .booleanConf
     .createWithDefault(true)
 
@@ -1743,6 +1870,7 @@ object SQLConf {
         "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
         "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
         "is returned in those cases, as previously.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1752,6 +1880,7 @@ object SQLConf {
       .doc("When integral literal is used in decimal operations, pick a minimum precision " +
         "required by the literal if this config is true, to make the resulting precision and/or " +
         "scale smaller. This can reduce the possibility of precision lose and/or overflow.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1770,17 +1899,20 @@ object SQLConf {
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
+      .version("")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
       "an output as binary. Otherwise, it returns as a string.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1791,6 +1923,7 @@ object SQLConf {
         "user-specified schema. If the validation fails, a runtime exception is thrown. " +
         "When this option is set to false, the partition column value will be converted to null " +
         "if it can not be casted to corresponding user-specified schema.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1798,22 +1931,25 @@ object SQLConf {
     buildConf("spark.sql.streaming.continuous.epochBacklogQueueSize")
       .doc("The max number of entries to be stored in queue to wait for late epochs. " +
         "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
+      .version("")
       .intConf
       .createWithDefault(10000)
 
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
-    .internal()
-    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
-      " buffer the results of a ContinuousDataReader.")
-    .intConf
-    .createWithDefault(1024)
+      .internal()
+      .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+        " buffer the results of a ContinuousDataReader.")
+      .version("")
+      .intConf
+      .createWithDefault(1024)
 
   val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
     buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
       .internal()
       .doc("The interval at which continuous execution readers will poll to check whether" +
         " the epoch has advanced on the driver.")
+      .version("")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
@@ -1822,12 +1958,14 @@ object SQLConf {
     .doc("A comma-separated list of data source short names or fully qualified data source " +
       "implementation class names for which Data Source V2 code path is disabled. These data " +
       "sources will fallback to Data Source V1 code path.")
+    .version("")
     .stringConf
     .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
       " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
+    .version("")
     .stringConf
     .createWithDefault("")
 
@@ -1838,6 +1976,7 @@ object SQLConf {
         "A comma-separated list of fully qualified data source register class names for which " +
           "MicroBatchReadSupport is disabled. Reads from these sources will fall back to the " +
           "V1 Sources.")
+      .version("")
       .stringConf
       .createWithDefault("")
 
@@ -1858,6 +1997,7 @@ object SQLConf {
         "(which takes precedence over this setting), e.g. " +
         "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
       )
+      .version("")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
@@ -1882,6 +2022,7 @@ object SQLConf {
         "in type coercion, e.g. converting `double` to `int` or `decimal` to `double` is " +
         "not allowed."
       )
+      .version("")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
@@ -1892,6 +2033,7 @@ object SQLConf {
       "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
       "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
       "the SQL parser.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1904,8 +2046,9 @@ object SQLConf {
         "issues. Turn on this config to insert a local sort before actually doing repartition " +
         "to generate consistent repartition results. The performance of repartition() may go " +
         "down since we insert extra local sort before it.")
-        .booleanConf
-        .createWithDefault(true)
+      .version("")
+      .booleanConf
+      .createWithDefault(true)
 
   val NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
@@ -1914,6 +2057,7 @@ object SQLConf {
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
         "reading unnecessary nested column data. Currently Parquet and ORC are the " +
         "data sources that implement this optimization.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1933,6 +2077,7 @@ object SQLConf {
       .doc("Prune nested fields from object serialization operator which are unnecessary in " +
         "satisfying a query. This optimization allows object serializers to avoid " +
         "executing unnecessary nested expressions.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1943,6 +2088,7 @@ object SQLConf {
         "satisfying a query. Note that this optimization doesn't prune nested fields from " +
         "physical data source scanning. For pruning nested fields from scanning, please use " +
         "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -1952,6 +2098,7 @@ object SQLConf {
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
+      .version("")
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
@@ -1967,6 +2114,7 @@ object SQLConf {
     .internal()
     .doc("If it is set to true, column names of the requested schema are passed to CSV parser. " +
       "Other column values can be ignored during parsing even if they are malformed.")
+    .version("")
     .booleanConf
     .createWithDefault(true)
 
@@ -1977,6 +2125,7 @@ object SQLConf {
       "Jupyter, the HTML table (generated by _repr_html_) will be returned. For plain Python " +
       "REPL, the returned outputs are formatted like dataframe.show(). In SparkR, the returned " +
       "outputs are showed similar to R data.frame would.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -1985,12 +2134,14 @@ object SQLConf {
       s"effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true. The valid range of this " +
       "config is from 0 to (Int.MaxValue - 1), so the invalid config like negative and " +
       "greater than (Int.MaxValue - 1) will be normalized to 0 and (Int.MaxValue - 1).")
+    .version("")
     .intConf
     .createWithDefault(20)
 
   val REPL_EAGER_EVAL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
     .doc("The max number of characters for each cell that is returned by eager evaluation. " +
       s"This only takes effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true.")
+    .version("")
     .intConf
     .createWithDefault(20)
 
@@ -2001,6 +2152,7 @@ object SQLConf {
         "by the fast hash aggregate product operator. The bit is not for actual value, " +
         "but the actual numBuckets is determined by loadFactor " +
         "(e.g: default bit value 16 , the actual numBuckets is ((1 << 16) / 0.5).")
+      .version("")
       .intConf
       .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
       .createWithDefault(16)
@@ -2008,6 +2160,7 @@ object SQLConf {
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
       "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
+    .version("")
     .stringConf
     .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz"))
     .createWithDefault("snappy")
@@ -2016,6 +2169,7 @@ object SQLConf {
     .doc("Compression level for the deflate codec used in writing of AVRO files. " +
       "Valid value must be in the range of from 1 to 9 inclusive or -1. " +
       "The default value is -1 which corresponds to 6 level in the current implementation.")
+    .version("2.4.0")
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
@@ -2024,6 +2178,7 @@ object SQLConf {
     .internal()
     .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
       "null. Otherwise, it returns -1, which was inherited from Hive.")
+    .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -2032,6 +2187,7 @@ object SQLConf {
       .internal()
       .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
         "to the built-in but external Avro data source module for backward compatibility.")
+      .version("2.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2042,6 +2198,7 @@ object SQLConf {
         "set operations are performed from left to right as they appear in the query. When set " +
         "to false and order of evaluation is not specified by parentheses, INTERSECT operations " +
         "are performed before any UNION, EXCEPT and MINUS operations.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2050,6 +2207,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be parsed " +
         "as Decimal rather than Double.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2059,6 +2217,7 @@ object SQLConf {
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
         "Decimal(11, 0) in non legacy mode.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2067,6 +2226,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, CREATE TABLE syntax without a provider will use hive " +
         s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key}.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2075,14 +2235,16 @@ object SQLConf {
       .internal()
       .doc("When true, the bucketed table scan will list files during planning to figure out the " +
         "output ordering, which is expensive and may make the planning quite slow.")
-    .booleanConf
-    .createWithDefault(false)
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
       .internal()
       .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
         "WHERE, which does not follow SQL standard.")
+      .version("2.4.1")
       .booleanConf
       .createWithDefault(false)
 
@@ -2090,7 +2252,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.json.allowEmptyString.enabled")
       .internal()
       .doc("When set to true, the parser of JSON data source treats empty strings as null for " +
-      "some data types such as `IntegerType`.")
+        "some data types such as `IntegerType`.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2100,6 +2263,7 @@ object SQLConf {
       .doc("When set to true, Spark returns an empty collection with `StringType` as element " +
         "type if the `array`/`map` function is called without any parameters. Otherwise, Spark " +
         "returns an empty collection with `NullType` as element type.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2108,6 +2272,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
         "udf(f: AnyRef, dataType: DataType). Otherwise, an exception will be thrown at runtime.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2116,6 +2281,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, TRUNCATE TABLE command will not try to set back original " +
         "permission and ACLs when re-creating the table/partition paths.")
+      .version("2.4.6")
       .booleanConf
       .createWithDefault(false)
 
@@ -2125,6 +2291,7 @@ object SQLConf {
       .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
         "for non-struct key type, will be named as `value`, following the behavior of Spark " +
         "version 2.4 and earlier.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2132,6 +2299,7 @@ object SQLConf {
     .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
       "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
       """ "... N more fields" placeholder.""")
+    .version("")
     .intConf
     .createWithDefault(25)
 
@@ -2140,6 +2308,7 @@ object SQLConf {
       "longer, further output will be truncated.  The default setting always generates a full " +
       "plan.  Set this to a lower value such as 8k if plan strings are taking up too much " +
       "memory or are causing OutOfMemory errors in the driver or UI processes.")
+    .version("")
     .bytesConf(ByteUnit.BYTE)
     .checkValue(i => i >= 0 && i <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, "Invalid " +
       "value for 'spark.sql.maxPlanStringLength'.  Length must be a valid string length " +
@@ -2151,6 +2320,7 @@ object SQLConf {
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
         "a SparkConf entry.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -2159,6 +2329,7 @@ object SQLConf {
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
       "Catalyst's TimestampType and DateType. If it is set to false, java.sql.Timestamp " +
       "and java.sql.Date are used for the same purpose.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -2166,6 +2337,7 @@ object SQLConf {
     .doc("The max length of a file that can be read by the binary file data source. " +
       "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
       "The theoretical max is Int.MaxValue, though VMs might implement a smaller max.")
+    .version("")
     .internal()
     .intConf
     .createWithDefault(Int.MaxValue)
@@ -2175,12 +2347,14 @@ object SQLConf {
       .internal()
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
         "with String")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
     .doc("Name of the default catalog. This will be the current catalog if users have not " +
       "explicitly set the current catalog yet.")
+    .version("")
     .stringConf
     .createWithDefault(SESSION_CATALOG_NAME)
 
@@ -2192,6 +2366,7 @@ object SQLConf {
         s"be loaded by the $SESSION_CATALOG_NAME, this catalog must also return the table " +
         s"metadata. To delegate operations to the $SESSION_CATALOG_NAME, implementations can " +
         "extend 'CatalogExtension'.")
+      .version("")
       .stringConf
       .createOptional
 
@@ -2212,6 +2387,7 @@ object SQLConf {
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .version("")
     .booleanConf
     .createWithDefault(false)
 
@@ -2225,6 +2401,7 @@ object SQLConf {
       "CORRECTED, inner CTE definitions take precedence. The default value is EXCEPTION, " +
       "AnalysisException is thrown while name conflict is detected in nested CTE. This config " +
       "will be removed in future versions and CORRECTED will be the only behavior.")
+    .version("")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2246,6 +2423,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
+      .version("")
       .booleanConf
       .createWithDefault(true)
 
@@ -2254,6 +2432,7 @@ object SQLConf {
       .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
         "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
         "if the default Maven Central repo is unreachable.")
+      .version("")
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/maven2/")
@@ -2266,6 +2445,7 @@ object SQLConf {
         "all interval units out of the specified range. If it is set to `false`, " +
         "`ParseException` is thrown if the input does not match to the pattern " +
         "defined by `from` and `to`.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2275,6 +2455,7 @@ object SQLConf {
       .doc("When true, all database and table properties are not reserved and available for " +
         "create/alter syntaxes. But please be aware that the reserved properties will be " +
         "silently removed.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2283,6 +2464,7 @@ object SQLConf {
       .internal()
       .doc("When true, only a single file can be added using ADD FILE. If false, then users " +
         "can add directory by passing directory path to ADD FILE.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
@@ -2290,11 +2472,13 @@ object SQLConf {
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
       .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
+      .version("")
       .booleanConf
       .createWithDefault(false)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -2304,6 +2488,7 @@ object SQLConf {
       .doc("The number of partitions to be handled in one turn when use " +
         "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
         "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+      .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
@@ -2311,6 +2496,7 @@ object SQLConf {
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
       "an analysis exception will be thrown.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -2323,6 +2509,7 @@ object SQLConf {
         "a local date/timestamp in the source calendar, interpreting the resulted date/" +
         "timestamp in the target calendar, and getting the number of micros/millis/days " +
         "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2335,6 +2522,7 @@ object SQLConf {
         "a local date/timestamp in the source calendar, interpreting the resulted date/" +
         "timestamp in the target calendar, and getting the number of micros/millis/days " +
         "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2347,6 +2535,7 @@ object SQLConf {
         "a local date/timestamp in the source calendar, interpreting the resulted date/" +
         "timestamp in the target calendar, and getting the number of micros/millis/days " +
         "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2359,6 +2548,7 @@ object SQLConf {
         "a local date/timestamp in the source calendar, interpreting the resulted date/" +
         "timestamp in the target calendar, and getting the number of micros/millis/days " +
         "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
