@@ -192,8 +192,6 @@ private[spark] class TaskSetManager(
   addPendingTasks()
 
   private def addPendingTasks(): Unit = {
-    // A zombie TaskSetManager may reach here while handling failed task.
-    if (isZombie) return
     val (_, duration) = Utils.timeTakenMs {
       for (i <- (0 until numTasks).reverse) {
         addPendingTask(i, resolveRacks = false)
@@ -239,6 +237,8 @@ private[spark] class TaskSetManager(
       index: Int,
       resolveRacks: Boolean = true,
       speculatable: Boolean = false): Unit = {
+    // A zombie TaskSetManager may reach here while handling failed task.
+    if (isZombie) return
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
       loc match {

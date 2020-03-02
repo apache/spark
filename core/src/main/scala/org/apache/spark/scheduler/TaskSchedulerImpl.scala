@@ -338,17 +338,14 @@ private[spark] class TaskSchedulerImpl(
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
-      // the specific resource assignments that would be given to a task
       val taskSetRpID = taskSet.taskSet.resourceProfileId
       // make the resource profile id a hard requirement for now - ie only put tasksets
       // on executors where resource profile exactly matches.
       if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
-        logWarning(s"task resources option is ${taskResAssignmentsOpt}")
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
-            logWarning(s"task resources option is ${taskResAssignments}")
             val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
             val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
               taskResAssignments)
@@ -542,12 +539,12 @@ private[spark] class TaskSchedulerImpl(
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && numBarrierSlotsAvailable < taskSet.numTasks) {
-          // Skip the launch process.
-          // TODO SPARK-24819 If the job requires more slots than available (both busy and free
-          // slots), fail the job on submit.
-          logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-            s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-            s"number of available slots is $numBarrierSlotsAvailable.")
+        // Skip the launch process.
+        // TODO SPARK-24819 If the job requires more slots than available (both busy and free
+        // slots), fail the job on submit.
+        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
+          s"number of available slots is $numBarrierSlotsAvailable.")
       } else {
         var launchedAnyTask = false
         // Record all the executor IDs assigned barrier tasks on.
