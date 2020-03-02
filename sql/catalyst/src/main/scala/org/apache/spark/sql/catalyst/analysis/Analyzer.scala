@@ -2165,7 +2165,8 @@ class Analyzer(
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
       def hasUnsupportedInnerGenerator(g: Generator): Boolean = g match {
-        case go: GeneratorOuter => // The only case that can have an inner generator
+        // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
+        case go: GeneratorOuter =>
           hasUnsupportedInnerGenerator(go.child)
         case _ =>
           g.children.exists { _.find {

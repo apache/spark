@@ -435,7 +435,11 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators",
-    nestedListRelation.select(Explode(Explode($"nestedList"))),
+    {
+      val nestedListRelation = LocalRelation(
+        AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
+      nestedListRelation.select(Explode(Explode($"nestedList")))
+    },
     "Generators are not supported when it's nested in expressions, but got: " +
       "explode(explode(nestedList))" :: Nil
   )
