@@ -23,7 +23,8 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -378,7 +379,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[Exception] {
+    val message = intercept[SparkException] {
       df.collect()
     }.getCause.getMessage
     assert(message.contains(s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
@@ -833,22 +834,18 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
-    Seq(true, false).foreach { wholeStageCodegen =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegen.toString) {
-        val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
-        val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
-        withSQLConf(confKey -> "legacy") {
-          val expected = Timestamp.valueOf("2020-01-27 20:06:11.847")
-          checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
-            Row(expected))
-        }
-        withSQLConf(confKey -> "corrected") {
-          checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")), Row(null))
-        }
-        withSQLConf(confKey -> "exception") {
-          checkExceptionMessage(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")))
-        }
-      }
+    val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+    val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
+    withSQLConf(confKey -> "legacy") {
+      val expected = Timestamp.valueOf("2020-01-27 20:06:11.847")
+      checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")),
+        Row(expected))
+    }
+    withSQLConf(confKey -> "corrected") {
+      checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")), Row(null))
+    }
+    withSQLConf(confKey -> "exception") {
+      checkExceptionMessage(df.select(to_timestamp(col("ts"), "yyyy-MM-dd'T'HH:mm:ss.SSSz")))
     }
   }
 

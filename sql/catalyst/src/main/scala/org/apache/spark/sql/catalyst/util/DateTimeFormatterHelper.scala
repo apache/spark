@@ -25,6 +25,7 @@ import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -75,7 +76,7 @@ trait DateTimeFormatterHelper {
         case _: Throwable => None
       }
       if (res.nonEmpty) {
-        throw new RuntimeException(e.getMessage + ", set " +
+        throw new SparkUpgradeException("3.0", e.getMessage + ", set " +
           s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
           "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
           "this record. See more details in SPARK-30668.")

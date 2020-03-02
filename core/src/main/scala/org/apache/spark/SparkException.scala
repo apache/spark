@@ -43,3 +43,9 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  */
 private[spark] case class ExecutorDeadException(message: String)
   extends SparkException(message)
+
+/**
+ * Exception thrown when Spark returns different result after upgrading to a new version.
+ */
+private[spark] class SparkUpgradeException(version: String, message: String)
+  extends SparkException(s"Exception for upgrading to Spark $version: $message")
