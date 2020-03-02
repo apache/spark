@@ -116,8 +116,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
       // plan should show the rewritten aggregate expression.
       val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
       checkKeywordsExistsInExplain(df,
-        "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
-          "any(v#x) AS any(v)#x]")
+        "Aggregate [k#x], [k#x, every(v) AS every(v)#x, some(v) AS some(v)#x, " +
+          "any(v) AS any(v)#x]")
     }
   }
 
@@ -266,7 +266,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
           val expected_pattern1 =
             "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
           val expected_pattern2 =
-            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+            "PartitionFilters: \\[isnotnull\\(k#L\\), dynamicpruningexpression\\(k#xL " +
               "IN subquery#x\\)\\]"
           val expected_pattern3 =
             "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +

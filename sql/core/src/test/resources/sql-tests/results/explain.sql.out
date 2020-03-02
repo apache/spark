@@ -76,7 +76,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Condition : (isnotnull(key) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -85,7 +85,7 @@ Input [2]: [key#x, val#x]
 (5) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_max(val#x)]
+Functions [1]: [partial_max(val)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
      
@@ -96,9 +96,9 @@ Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
-Functions [1]: [max(val#x)]
-Aggregate Attributes [1]: [max(val#x)#x]
-Results [2]: [key#x, max(val#x)#x AS max(val)#x]
+Functions [1]: [max(val)]
+Aggregate Attributes [1]: [max(val)#x]
+Results [2]: [key#x, max(val)#x AS max(val)#x]
      
 (8) Exchange 
 Input [2]: [key#x, max(val)#x]
@@ -143,7 +143,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Condition : (isnotnull(key) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -152,7 +152,7 @@ Input [2]: [key#x, val#x]
 (5) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_max(val#x)]
+Functions [1]: [partial_max(val)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
      
@@ -163,17 +163,17 @@ Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
-Functions [1]: [max(val#x)]
-Aggregate Attributes [1]: [max(val#x)#x]
-Results [3]: [key#x, max(val#x)#x AS max(val)#x, max(val#x)#x AS max(val#x)#x]
+Functions [1]: [max(val)]
+Aggregate Attributes [1]: [max(val)#x]
+Results [3]: [key#x, max(val)#x AS max(val)#x, max(val)#x AS max(val)#x]
      
 (8) Filter [codegen id : 2]
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
-Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
+Input [3]: [key#x, max(val)#x, max(val)#x]
+Condition : (isnotnull(max(val)) AND (max(val)#x > 0))
      
 (9) Project [codegen id : 2]
 Output [2]: [key#x, max(val)#x]
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
+Input [3]: [key#x, max(val)#x, max(val)#x]
 
 
 -- !query
@@ -211,7 +211,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Condition : (isnotnull(key) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -229,7 +229,7 @@ Input [2]: [key#x, val#x]
       
 (7) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Condition : (isnotnull(key) AND (key#x > 0))
      
 (8) Project [codegen id : 2]
 Output [2]: [key#x, val#x]
@@ -290,7 +290,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
-Condition : isnotnull(key#x)
+Condition : isnotnull(key)
      
 (4) Project [codegen id : 2]
 Output [2]: [key#x, val#x]
@@ -308,7 +308,7 @@ Input [2]: [key#x, val#x]
       
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : isnotnull(key#x)
+Condition : isnotnull(key)
      
 (8) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -365,7 +365,7 @@ Input [2]: [key#x, val#x]
       
 (5) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : isnotnull(key#x)
+Condition : isnotnull(key)
      
 (6) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -414,7 +414,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x > 3))
+Condition : (((isnotnull(key) AND isnotnull(val)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x > 3))
      
 (4) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -444,7 +444,7 @@ Input [2]: [key#x, val#x]
       
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x = 2))
+Condition : (((isnotnull(key) AND isnotnull(val)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x = 2))
      
 (8) Project [codegen id : 1]
 Output [1]: [key#x]
@@ -453,7 +453,7 @@ Input [2]: [key#x, val#x]
 (9) HashAggregate [codegen id : 1]
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_max(key#x)]
+Functions [1]: [partial_max(key)]
 Aggregate Attributes [1]: [max#x]
 Results [1]: [max#x]
      
@@ -464,9 +464,9 @@ Arguments: SinglePartition, true, [id=#x]
 (11) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
-Functions [1]: [max(key#x)]
-Aggregate Attributes [1]: [max(key#x)#x]
-Results [1]: [max(key#x)#x AS max(key)#x]
+Functions [1]: [max(key)]
+Aggregate Attributes [1]: [max(key)#x]
+Results [1]: [max(key)#x AS max(key)#x]
      
 Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (18)
@@ -490,7 +490,7 @@ Input [2]: [key#x, val#x]
       
 (14) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(val#x) AND (val#x > 0))
+Condition : (isnotnull(val) AND (val#x > 0))
      
 (15) Project [codegen id : 1]
 Output [1]: [key#x]
@@ -499,7 +499,7 @@ Input [2]: [key#x, val#x]
 (16) HashAggregate [codegen id : 1]
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_max(key#x)]
+Functions [1]: [partial_max(key)]
 Aggregate Attributes [1]: [max#x]
 Results [1]: [max#x]
      
@@ -510,9 +510,9 @@ Arguments: SinglePartition, true, [id=#x]
 (18) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
-Functions [1]: [max(key#x)]
-Aggregate Attributes [1]: [max(key#x)#x]
-Results [1]: [max(key#x)#x AS max(key)#x]
+Functions [1]: [max(key)]
+Aggregate Attributes [1]: [max(key)#x]
+Results [1]: [max(key)#x AS max(key)#x]
 
 
 -- !query
@@ -572,7 +572,7 @@ Input [2]: [key#x, val#x]
       
 (6) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(val#x) AND (val#x > 0))
+Condition : (isnotnull(val) AND (val#x > 0))
      
 (7) Project [codegen id : 1]
 Output [1]: [key#x]
@@ -581,7 +581,7 @@ Input [2]: [key#x, val#x]
 (8) HashAggregate [codegen id : 1]
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_max(key#x)]
+Functions [1]: [partial_max(key)]
 Aggregate Attributes [1]: [max#x]
 Results [1]: [max#x]
      
@@ -592,9 +592,9 @@ Arguments: SinglePartition, true, [id=#x]
 (10) HashAggregate [codegen id : 2]
 Input [1]: [max#x]
 Keys: []
-Functions [1]: [max(key#x)]
-Aggregate Attributes [1]: [max(key#x)#x]
-Results [1]: [max(key#x)#x AS max(key)#x]
+Functions [1]: [max(key)]
+Aggregate Attributes [1]: [max(key)#x]
+Results [1]: [max(key)#x AS max(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (17)
@@ -618,7 +618,7 @@ Input [2]: [key#x, val#x]
       
 (13) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(val#x) AND (val#x > 0))
+Condition : (isnotnull(val) AND (val#x > 0))
      
 (14) Project [codegen id : 1]
 Output [1]: [key#x]
@@ -745,7 +745,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 10))
+Condition : (isnotnull(key) AND (key#x > 10))
      
 (4) Project [codegen id : 2]
 Output [2]: [key#x, val#x]
@@ -763,7 +763,7 @@ Input [2]: [key#x, val#x]
       
 (7) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 10))
+Condition : (isnotnull(key) AND (key#x > 10))
      
 (8) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -817,7 +817,7 @@ Input [2]: [key#x, val#x]
       
 (3) Filter [codegen id : 1]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 10))
+Condition : (isnotnull(key) AND (key#x > 10))
      
 (4) Project [codegen id : 1]
 Output [2]: [key#x, val#x]
@@ -826,7 +826,7 @@ Input [2]: [key#x, val#x]
 (5) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_max(val#x)]
+Functions [1]: [partial_max(val)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
      
@@ -837,9 +837,9 @@ Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 (7) HashAggregate [codegen id : 4]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
-Functions [1]: [max(val#x)]
-Aggregate Attributes [1]: [max(val#x)#x]
-Results [2]: [key#x, max(val#x)#x AS max(val)#x]
+Functions [1]: [max(val)]
+Aggregate Attributes [1]: [max(val)#x]
+Results [2]: [key#x, max(val)#x AS max(val)#x]
      
 (8) ReusedExchange  [Reuses operator id: 6]
 Output [2]: [key#x, max#x]
@@ -847,9 +847,9 @@ Output [2]: [key#x, max#x]
 (9) HashAggregate [codegen id : 3]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
-Functions [1]: [max(val#x)]
-Aggregate Attributes [1]: [max(val#x)#x]
-Results [2]: [key#x, max(val#x)#x AS max(val)#x]
+Functions [1]: [max(val)]
+Aggregate Attributes [1]: [max(val)#x]
+Results [2]: [key#x, max(val)#x AS max(val)#x]
      
 (10) BroadcastExchange 
 Input [2]: [key#x, max(val)#x]
@@ -961,7 +961,7 @@ Input [2]: [key#x, val#x]
 (3) ObjectHashAggregate 
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_collect_set(val#x, 0, 0)]
+Functions [1]: [partial_collect_set(val, 0, 0)]
 Aggregate Attributes [1]: [buf#x]
 Results [2]: [key#x, buf#x]
      
@@ -972,9 +972,9 @@ Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 (5) ObjectHashAggregate 
 Input [2]: [key#x, buf#x]
 Keys [1]: [key#x]
-Functions [1]: [collect_set(val#x, 0, 0)]
-Aggregate Attributes [1]: [collect_set(val#x, 0, 0)#x]
-Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
+Functions [1]: [collect_set(val, 0, 0)]
+Aggregate Attributes [1]: [collect_set(val, 0, 0)#x]
+Results [2]: [key#x, sort_array(collect_set(val, 0, 0), true)[0] AS sort_array(collect_set(val), true)[0]#x]
 
 
 -- !query
@@ -1011,7 +1011,7 @@ Arguments: [key#x ASC NULLS FIRST], false, 0
 (4) SortAggregate 
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_min(val#x)]
+Functions [1]: [partial_min(val)]
 Aggregate Attributes [1]: [min#x]
 Results [2]: [key#x, min#x]
      
@@ -1026,9 +1026,9 @@ Arguments: [key#x ASC NULLS FIRST], false, 0
 (7) SortAggregate 
 Input [2]: [key#x, min#x]
 Keys [1]: [key#x]
-Functions [1]: [min(val#x)]
-Aggregate Attributes [1]: [min(val#x)#x]
-Results [2]: [key#x, min(val#x)#x AS min(val)#x]
+Functions [1]: [min(val)]
+Aggregate Attributes [1]: [min(val)#x]
+Results [2]: [key#x, min(val)#x AS min(val)#x]
 
 
 -- !query
