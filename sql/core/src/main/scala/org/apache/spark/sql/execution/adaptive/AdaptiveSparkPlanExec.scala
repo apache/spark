@@ -158,7 +158,7 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[SparkException]()
-      val runningStages = util.Collections.synchronizedSet(new util.HashSet[QueryStageExec]())
+      var anyFail: Option[QueryStageExec] = None
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -167,14 +167,11 @@ case class AdaptiveSparkPlanExec(
           executionId.foreach(onUpdatePlan)
 
           // Start materialization of all new stages and fail fast if any stages failed eagerly
-          var anyFail = false
           val stages = result.newStages.toIterator
-          while (!anyFail && stages.hasNext) {
+          while (anyFail.isEmpty && stages.hasNext) {
             val stage = stages.next()
-            runningStages.add(stage)
             try {
               stage.materialize().onComplete { res =>
-                runningStages.remove(stage)
                 if (res.isSuccess) {
                   events.offer(StageSuccess(stage, res.get))
                 } else {
@@ -183,8 +180,7 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
-                anyFail = true
-                runningStages.remove(stage)
+                anyFail = Some(stage)
                 events.offer(StageFailure(stage, e))
             }
           }
@@ -206,7 +202,7 @@ case class AdaptiveSparkPlanExec(
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(runningStages, errors)
+          cleanUpAndThrowException(errors, anyFail)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
@@ -531,11 +527,14 @@ case class AdaptiveSparkPlanExec(
    * materialization errors and stage cancellation errors.
    */
   private def cleanUpAndThrowException(
-      runningStages: util.Set[QueryStageExec],
-      errors: Seq[SparkException]): Unit = {
+       errors: Seq[SparkException],
+       skipCancel: Option[QueryStageExec]): Unit = {
+    val runningStages = currentPhysicalPlan.collect {
+      case s: QueryStageExec if !skipCancel.contains(s) => s
+    }
     val cancelErrors = new mutable.ArrayBuffer[SparkException]()
     try {
-      runningStages.asScala.foreach { s =>
+      runningStages.foreach { s =>
         try {
           s.cancel()
         } catch {
