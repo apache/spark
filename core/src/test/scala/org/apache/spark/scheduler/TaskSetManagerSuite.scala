@@ -369,8 +369,29 @@ class TaskSetManagerSuite
 
     clock.advance(LOCALITY_WAIT_MS)
 
+    // offers not accepted due to task set zombies are not delay schedule rejects
+    manager.isZombie = true
+    val (taskDesciption, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
+    assert(taskDesciption.isEmpty)
+    assert(delayReject === false)
+    manager.isZombie = false
+
+    // offers not accepted due to blacklisting are not delay schedule rejects
+    val tsmSpy = spy(manager)
+    val blacklist = mock(classOf[TaskSetBlacklist])
+    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+    when(blacklist.isNodeBlacklistedForTaskSet(any())).thenReturn(true)
+    val (blacklistTask, blackListReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
+    assert(blacklistTask.isEmpty)
+    assert(blackListReject === false)
+
     // After another delay, we can go ahead and launch that task non-locally
     assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index === 3)
+
+    // offers not accepted due to no pending tasks are not delay schedule rejects
+    val (noPendingTask, noPendingReject) = manager.resourceOffer("exec2", "host2", ANY)
+    assert(noPendingTask.isEmpty)
+    assert(noPendingReject === false)
   }
 
   test("delay scheduling with failed hosts") {

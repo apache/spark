@@ -365,9 +365,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // partial resource has rejected offer
     assert(taskScheduler
       .resourceOffers(
-        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        IndexedSeq(WorkerOffer("exec2", "host1", 1), WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
-      .flatten.isEmpty)
+      .flatten.size === 1)
 
     // This does not reset timer since last partial resource offer was rejected
     clock.advance(advanceAmount)
