@@ -1224,7 +1224,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Compression and Serialization
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.broadcast.compress</code></td>
   <td>true</td>
@@ -1298,6 +1298,7 @@ Apart from these, the following properties are also available, and may be useful
     with Kryo.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
+  <th>1.2.0</th>
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
@@ -1308,6 +1309,7 @@ Apart from these, the following properties are also available, and may be useful
     copies of the same object. Can be disabled to improve performance if you know this is not the
     case.
   </td>
+  <th>0.8.0</th>
 </tr>
 <tr>
   <td><code>spark.kryo.registrationRequired</code></td>
@@ -1319,6 +1321,7 @@ Apart from these, the following properties are also available, and may be useful
     significant performance overhead, so enabling this option can enforce strictly that a
     user has not omitted classes from registration.
   </td>
+  <th>1.1.0</th>
 </tr>
 <tr>
   <td><code>spark.kryo.registrator</code></td>
@@ -1332,6 +1335,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
+  <th>0.5.0</th>
 </tr>
 <tr>
   <td><code>spark.kryo.unsafe</code></td>
@@ -1340,6 +1344,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to use unsafe based Kryo serializer. Can be
     substantially faster by using Unsafe Based IO.
   </td>
+  <th>2.1.0</th>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer.max</code></td>
@@ -1349,6 +1354,7 @@ Apart from these, the following properties are also available, and may be useful
     This must be larger than any object you attempt to serialize and must be less than 2048m.
     Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
+  <th>1.4.0</th>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer</code></td>
@@ -1358,6 +1364,7 @@ Apart from these, the following properties are also available, and may be useful
     Note that there will be one buffer <i>per core</i> on each worker. This buffer will grow up to
     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
+  <th>1.4.0</th>
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
