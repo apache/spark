@@ -528,9 +528,11 @@ case class AdaptiveSparkPlanExec(
    */
   private def cleanUpAndThrowException(
        errors: Seq[SparkException],
-       skipCancel: Option[Int]): Unit = {
+       earlyFailedStage: Option[Int]): Unit = {
     val runningStages = currentPhysicalPlan.collect {
-      case s: QueryStageExec if !skipCancel.contains(s.id) => s
+      // earlyFailedStage is the stage which failed before calling doMaterialize,
+      // so we should avoid calling cancel on it to re-trigger the failure again.
+      case s: QueryStageExec if !earlyFailedStage.contains(s.id) => s
     }
     val cancelErrors = new mutable.ArrayBuffer[SparkException]()
     try {
