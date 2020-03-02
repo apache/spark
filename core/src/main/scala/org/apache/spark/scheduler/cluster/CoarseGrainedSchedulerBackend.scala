@@ -232,7 +232,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map { case (rName, info) =>
-            // tell the executor it can schedule resources up to numParts times,
+            // tell the executor it can schedule resources up to numSlotsPerAddress times,
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
