@@ -1904,7 +1904,12 @@ package object config {
   private[spark] val GRACEFUL_DECOMMISSION_SHUFFLEDATA_LEASETIME_PCT =
     ConfigBuilder("spark.graceful.decommission.shuffedata.leasetimePct")
       .doc("Percentage of time to expiry after which shuffle data " +
-        "cleaned up (if enabled) on the node. Value ranges between (0-100)")
+        "cleaned up (if enabled) on the node. Value ranges between (0-100)" +
+        " This value is always greater than or equal to executor" +
+        " leaseTime (is set to be equal if incorrectly configured)." +
+        " Near 0% would mean generated data is marked as lost too early." +
+        " Too close to 100 would shuffle data may not get cleared proactively" +
+        " leading to tasks going into fetchFail scenarios")
       .version("3.1.0")
       .intConf
       .checkValue(v => v >= 0 && v < 100, "The percentage should be positive.")

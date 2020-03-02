@@ -816,7 +816,11 @@ private[spark] class TaskSetManager(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
 
           // Do account fetch failure exception raised by decommissioned
-          // node against stage failure.
+          // node against stage failure. Here the logic is to specify,
+          // if the task failed due to fetchFailed of decommission nodes than
+          // don't count towards the stageFailure. countTowardsStageFailures
+          // variable of TaskEndReason, that can be used in DAG scheduler to account
+          // fetch failure while checking the stage abort
           decommissionTracker match {
             case Some(decommissionTracker) =>
               if (decommissionTracker.isNodeDecommissioned(fetchFailed.bmAddress.host)) {

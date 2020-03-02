@@ -127,7 +127,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
   test("Check the Multiple Node Decommission state") {
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
-    decommissionTracker.addNodeToDecommission("hostB", 30000, SpotRotationLoss)
+    decommissionTracker.addNodeToDecommission("hostB", 30000, NodeLoss)
     assert(decommissionTracker.isNodeDecommissioning("hostA"))
     assert(decommissionTracker.isNodeDecommissioning("hostB"))
 

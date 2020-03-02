@@ -37,9 +37,10 @@ private[spark] object NodeState extends Enumeration {
     // In hadoop-2.7 there is no support for node state DECOMMISSIONING
     // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
     // to node state DECOMMISSIONING.
-    // Inorder to build the spark using hadoop2 and hadoop3, comparing the value of
-    // DECOMMISSIONING here and for other state we are matching
-    // the state and assigning the node state at spark end
+    // Inorder to build the spark using hadoop2 and hadoop3, not
+    // using YarnNodeState for the node state DECOMMISSIONING here and
+    // and for other state we are matching the YarnNodeState and assigning
+    // the node state at spark end
     if (state.toString.equals(NodeState.DECOMMISSIONING.toString)) {
       NodeState.GRACEFUL_DECOMMISSIONING
     } else {

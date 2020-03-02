@@ -1631,6 +1631,8 @@ private[spark] class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
+          // Gracefully handling the stage abort due to fetch failure in the
+          // decommission nodes
           if (!event.reason.asInstanceOf[FetchFailed].countTowardsStageFailures) {
             // Ignore stage attempts due to fetch failed only
             // once per attempt

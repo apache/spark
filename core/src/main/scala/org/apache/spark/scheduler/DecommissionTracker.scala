@@ -31,7 +31,9 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * DecommissionTracker tracks the list of decommissioned nodes.
- *
+ * This decommission trackers maintains the decommissioned nodes state.
+ * Decommission tracker schedules the executor decommission and shuffle
+ * decommission for that node.
  */
 private[scheduler] class DecommissionTracker (
   conf: SparkConf,
@@ -112,10 +114,6 @@ private[scheduler] class DecommissionTracker (
       return
     }
 
-    // Consider node is picked up for nodeRotation it will be marked for
-    // Graceful Decommission with termination time of -1.
-    // But it is possible that it may then be genuinely nodeLoss.
-    // In those case override needs to be allowed.
     // Override decommissionHostnameMap in case termination time is less than
     // existing the terminationTime in decommissionHostnameMap.
     if (decommissionHostnameMap.contains(hostname)) {
@@ -149,8 +147,8 @@ private[scheduler] class DecommissionTracker (
       shuffleDataDecommissionTimeMs = curTimeMs + 1000
     } else {
       reason match {
-        case SpotRotationLoss | NodeLoss =>
-          // In Spot block Rotation loss and SpotLoss case adjust termination time so
+        case NodeLoss =>
+          // In Nodeloss(Spotloss in aws/ preemptible VMs i  GCP) case adjust termination time so
           // that enough buffer to real termination is available for job to finish
           // consuming shuffle data.
           executorDecommissionTimeMs = (delay * executorDecommissionLeasePct) / 100 + curTimeMs
@@ -404,9 +402,4 @@ private[spark] sealed trait NodeDecommissionReason extends Serializable {
 @DeveloperApi
 private[spark] case object NodeLoss extends NodeDecommissionReason {
   override def message: String = "nodeLoss"
-}
-
-@DeveloperApi
-private[spark] case object SpotRotationLoss extends NodeDecommissionReason {
-  override def message: String = "nodeRotationLoss"
 }
