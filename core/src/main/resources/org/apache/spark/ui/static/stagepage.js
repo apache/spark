@@ -331,7 +331,7 @@ $(document).ready(function () {
 
           $("#additionalMetrics").click(function(){
               $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-              $("#toggle-metrics").toggle();
+              $("#toggle-metrics").toggleClass("d-none");
               if (window.localStorage) {
                   window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
               }
@@ -339,7 +339,7 @@ $(document).ready(function () {
 
           $("#aggregatedMetrics").click(function(){
               $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-              $("#toggle-aggregatedMetrics").toggle();
+              $("#toggle-aggregatedMetrics").toggleClass("d-none");
               if (window.localStorage) {
                   window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
               }
