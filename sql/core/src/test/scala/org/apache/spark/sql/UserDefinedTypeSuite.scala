@@ -149,6 +149,12 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
 
 private[sql] case class FooWithDate(date: LocalDateTime, s: String, i: Int)
 
+private[sql] object FooWithDate {
+  def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
+    FooWithDate(b.date, a.s + b.s, a.i)
+  }
+}
+
 private[sql] class LocalDateTimeUDT extends UserDefinedType[LocalDateTime] {
   override def sqlType: DataType = LongType
 
@@ -337,10 +343,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
   }
 
   test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
-    def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
-      FooWithDate(b.date, a.s + b.s, a.i)
-    }
-
     UDTRegistration.register(classOf[LocalDateTime].getName, classOf[LocalDateTimeUDT].getName)
 
     // remove sub-millisecond part as we only use millis based timestamp while serde
@@ -348,7 +350,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       0, ZoneOffset.UTC)
     val inputDS = List(FooWithDate(date, "Foo", 1), FooWithDate(date, "Foo", 3),
       FooWithDate(date, "Foo", 3)).toDS()
-    val agg = inputDS.groupByKey(x => x.i).mapGroups((_, iter) => iter.reduce(concatFoo))
+    val agg = inputDS.groupByKey(x => x.i).mapGroups { (_, iter) =>
+      iter.reduce(FooWithDate.concatFoo)
+    }
     val result = agg.collect()
 
     assert(result.toSet === Set(FooWithDate(date, "FooFoo", 3), FooWithDate(date, "Foo", 1)))
