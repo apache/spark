@@ -20,9 +20,7 @@ package org.apache.spark.ml.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.NATIVE_L1_THRESHOLD
-
+import org.apache.spark.ml.NATIVE_L1_THRESHOLD
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
@@ -30,15 +28,7 @@ private[spark] object BLAS extends Serializable {
 
   @transient private var _f2jBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
-  private val nativeL1Threshold =
-    new SparkConf().getInt(NATIVE_L1_THRESHOLD.key, 256)
-
-  private[ml] def nativeBLAS: NetlibBLAS = {
-    if (_nativeBLAS == null) {
-      _nativeBLAS = NativeBLAS
-    }
-    _nativeBLAS
-  }
+  private val nativeL1Threshold = sys.env.getOrElse(NATIVE_L1_THRESHOLD, "256").toInt
 
   // For level-1 function dspmv, use f2jBLAS for better performance.
   private[ml] def f2jBLAS: NetlibBLAS = {
@@ -244,6 +234,14 @@ private[spark] object BLAS extends Serializable {
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
+  }
+
+  // For level-3 routines, we use the native BLAS.
+  private[ml] def nativeBLAS: NetlibBLAS = {
+    if (_nativeBLAS == null) {
+      _nativeBLAS = NativeBLAS
+    }
+    _nativeBLAS
   }
 
   /**

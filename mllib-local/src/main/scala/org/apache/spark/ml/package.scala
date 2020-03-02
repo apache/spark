@@ -25,26 +25,22 @@ package org.apache.spark
  * @groupdesc param A list of (hyper-)parameter keys this algorithm can take. Users can set and get
  *            the parameter values through setters and getters, respectively.
  * @groupprio param -5
- *
- * @groupname setParam Parameter setters
+  * @groupname setParam Parameter setters
  * @groupprio setParam 5
- *
- * @groupname getParam Parameter getters
+  * @groupname getParam Parameter getters
  * @groupprio getParam 6
- *
- * @groupname expertParam (expert-only) Parameters
+  * @groupname expertParam (expert-only) Parameters
  * @groupdesc expertParam A list of advanced, expert-only (hyper-)parameter keys this algorithm can
  *            take. Users can set and get the parameter values through setters and getters,
  *            respectively.
  * @groupprio expertParam 7
- *
- * @groupname expertSetParam (expert-only) Parameter setters
+  * @groupname expertSetParam (expert-only) Parameter setters
  * @groupprio expertSetParam 8
- *
- * @groupname expertGetParam (expert-only) Parameter getters
+  * @groupname expertGetParam (expert-only) Parameter getters
  * @groupprio expertGetParam 9
- *
- * @groupname Ungrouped Members
+  * @groupname Ungrouped Members
  * @groupprio Ungrouped 0
  */
-package object ml
+package object ml {
+  private[spark] val NATIVE_L1_THRESHOLD = "SPARK_BLAS_NATIVE_L1_THRESHOLD"
+}

@@ -2442,20 +2442,6 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </div>
 
 
-### Spark ML
-
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.ml.blas.nativeL1Threshold</code></td>
-  <td>256</td>
-  <td>
-    Vector size for logic change between f2jBLAS and natveBLAS in level-1 blas routines except dspmv().
-  </td>
-</tr>
-</table>
-
-
 ### Spark Streaming
 
 <table class="table">
@@ -2717,6 +2703,10 @@ The following variables can be set in `spark-env.sh`:
   <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>Hostname your Spark program will advertise to other machines.</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_BLAS_NATIVE_L1_THRESHOLD</code></td>
+    <td>Minimum vector size to use native BLAS libraries (if available) for Level 1 routines rather than Java implementation. Default value is 256.</td>
   </tr>
 </table>
 
