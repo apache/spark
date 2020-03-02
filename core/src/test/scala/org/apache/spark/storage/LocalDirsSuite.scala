@@ -39,7 +39,7 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def assumeNonExistentAndNotCreatable(f: File): Unit = {
     try {
-      assume(!f.exists() && !f.mkdirs())
+      assert(!f.exists() && !f.mkdirs())
     } finally {
       Utils.deleteRecursively(f)
     }
