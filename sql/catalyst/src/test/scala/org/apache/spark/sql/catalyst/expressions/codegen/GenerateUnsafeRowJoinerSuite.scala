@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.time.{LocalDateTime, ZoneOffset}
+
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -97,6 +99,23 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
   test("SPARK-22508: GenerateUnsafeRowJoiner.create should not generate codes beyond 64KB") {
     val N = 3000
     testConcatOnce(N, N, variable)
+  }
+
+  test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
+    val schema1 = new StructType(Array(
+      StructField("date", new WrappedDateTimeUDT),
+      StructField("s", StringType),
+      StructField("i", IntegerType)))
+    val proj1 = UnsafeProjection.create(schema1.fields.map(_.dataType))
+    val intRow1 = new GenericInternalRow(Array[Any](
+      LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
+      UTF8String.fromString("hello"), 1))
+
+    val schema2 = new StructType(Array(StructField("i", IntegerType)))
+    val proj2 = UnsafeProjection.create(schema2.fields.map(_.dataType))
+    val intRow2 = new GenericInternalRow(Array[Any](2))
+
+    testConcat(schema1, proj1.apply(intRow1), schema2, proj2.apply(intRow2))
   }
 
   private def testConcat(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]): Unit = {
@@ -202,4 +221,24 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     assert(output.hashCode() == expectedOutput.hashCode(), "hash codes were not equal")
   }
 
+}
+
+private[sql] case class WrappedDateTime(dt: LocalDateTime)
+
+private[sql] class WrappedDateTimeUDT extends UserDefinedType[WrappedDateTime] {
+  override def sqlType: DataType = LongType
+
+  override def serialize(obj: WrappedDateTime): Long = {
+    obj.dt.toEpochSecond(ZoneOffset.UTC)
+  }
+
+  def deserialize(datum: Any): WrappedDateTime = datum match {
+    case value: Long =>
+      val v = LocalDateTime.ofEpochSecond(value, 0, ZoneOffset.UTC)
+      WrappedDateTime(v)
+  }
+
+  override def userClass: Class[WrappedDateTime] = classOf[WrappedDateTime]
+
+  private[spark] override def asNullable: WrappedDateTimeUDT = this
 }
