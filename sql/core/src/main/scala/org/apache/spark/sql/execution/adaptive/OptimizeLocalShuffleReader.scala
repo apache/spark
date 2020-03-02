@@ -82,8 +82,11 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     val numReducers = shuffleDep.partitioner.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
     val numMappers = shuffleDep.rdd.getNumPartitions
-    lazy val splitPoints =
+    val splitPoints = if (numMappers == 0) {
+      Array.empty
+    } else {
       equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
+    }
     (0 until numMappers).flatMap { mapIndex =>
       (splitPoints :+ numReducers).sliding(2).map {
         case Array(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
