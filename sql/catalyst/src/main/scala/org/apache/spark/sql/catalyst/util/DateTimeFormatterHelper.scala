@@ -28,7 +28,6 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
@@ -67,19 +66,17 @@ trait DateTimeFormatterHelper {
   // thrown. On the contrary, if the legacy policy set to CORRECTED, DateTimeParseException will
   // address by the caller side.
   protected def checkDiffResult[T](
-    s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
-    case e: DateTimeParseException if LegacyBehaviorPolicy.withName(
-        SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)) == EXCEPTION =>
+      s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
+    case e: DateTimeParseException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
       val res = try {
         Some(legacyParseFunc(s))
       } catch {
         case _: Throwable => None
       }
       if (res.nonEmpty) {
-        throw new SparkUpgradeException("3.0", e.getMessage + ", set " +
-          s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before " +
-          "Spark 3.0. Set to CORRECTED to use the new approach, which would return null for " +
-          "this record. See more details in SPARK-30668.")
+        throw new SparkUpgradeException("3.0", s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to " +
+          "LEGACY to restore the behavior before Spark 3.0. Set to CORRECTED to use the new " +
+          "approach, which would return null for this record. See more details in SPARK-30668.", e)
       } else {
         throw e
       }

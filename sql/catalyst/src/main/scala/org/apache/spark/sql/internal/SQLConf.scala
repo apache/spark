@@ -2755,8 +2755,9 @@ class SQLConf extends Serializable with Logging {
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
-  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.withName(
-    getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
+    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
+  }
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

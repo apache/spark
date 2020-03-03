@@ -23,7 +23,6 @@ import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
@@ -101,11 +100,10 @@ object DateFormatter {
   }
 
   private def getFormatter(
-    format: Option[String],
-    zoneId: ZoneId,
-    locale: Locale = defaultLocale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
-
+      format: Option[String],
+      zoneId: ZoneId,
+      locale: Locale = defaultLocale,
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
@@ -115,11 +113,10 @@ object DateFormatter {
   }
 
   def getLegacyFormatter(
-    pattern: String,
-    zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
-
+      pattern: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): DateFormatter = {
     legacyFormat match {
       case FAST_DATE_FORMAT =>
         new LegacyFastDateFormatter(pattern, locale)
@@ -129,10 +126,10 @@ object DateFormatter {
   }
 
   def apply(
-    format: String,
-    zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat): DateFormatter = {
+      format: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): DateFormatter = {
     getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 

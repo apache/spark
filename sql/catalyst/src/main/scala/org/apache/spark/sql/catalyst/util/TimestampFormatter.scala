@@ -196,11 +196,10 @@ object TimestampFormatter {
   def defaultPattern(): String = s"${DateFormatter.defaultPattern()} HH:mm:ss"
 
   private def getFormatter(
-    format: Option[String],
-    zoneId: ZoneId,
-    locale: Locale = defaultLocale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
-
+      format: Option[String],
+      zoneId: ZoneId,
+      locale: Locale = defaultLocale,
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
@@ -210,11 +209,10 @@ object TimestampFormatter {
   }
 
   def getLegacyFormatter(
-    pattern: String,
-    zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat): TimestampFormatter = {
-
+      pattern: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): TimestampFormatter = {
     legacyFormat match {
       case FAST_DATE_FORMAT =>
         new LegacyFastTimestampFormatter(pattern, zoneId, locale)
@@ -226,10 +224,10 @@ object TimestampFormatter {
   }
 
   def apply(
-    format: String,
-    zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat): TimestampFormatter = {
+      format: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): TimestampFormatter = {
     getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 

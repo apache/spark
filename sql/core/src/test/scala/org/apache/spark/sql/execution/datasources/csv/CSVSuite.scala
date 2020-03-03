@@ -2307,6 +2307,27 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
     checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
   }
+
+  test("exception mode for parsing date/timestamp string") {
+    val ds = Seq("2020-01-27T20:06:11.847-0800").toDS()
+    val csv = spark.read
+      .option("header", false)
+      .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
+      .schema("t timestamp").csv(ds)
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        csv.collect()
+      }.getCause.getMessage
+      assert(msg.contains(s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
+        "the behavior before Spark 3.0"))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkAnswer(csv, Row(Timestamp.valueOf("2020-01-27 20:06:11.847")))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkAnswer(csv, Row(null))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

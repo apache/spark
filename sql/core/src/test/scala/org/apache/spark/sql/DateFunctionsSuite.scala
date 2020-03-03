@@ -382,7 +382,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val message = intercept[SparkException] {
       df.collect()
     }.getCause.getMessage
-    assert(message.contains(s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
+    assert(message.contains(s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
       "the behavior before Spark 3.0"))
   }
 
