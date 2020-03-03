@@ -437,61 +437,72 @@ object DataSourceStrategy {
     }
   }
 
+  /**
+   * Find the column name of an expression that can be pushed down.
+   */
+  private[sql] def pushDownColName(e: Expression): Option[String] = {
+    def helper(e: Expression): Option[Seq[String]] = e match {
+      case a: Attribute => Some(Seq(a.name))
+      case _ => None
+    }
+    helper(e).flatMap(_.headOption)
+  }
+
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
-    case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
+    case expressions.EqualTo(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.EqualTo(_, convertToScala(v, t)))
+    case expressions.EqualTo(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.EqualTo(_, convertToScala(v, t)))
 
-    case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.EqualNullSafe(_, convertToScala(v, t)))
+    case expressions.EqualNullSafe(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.EqualNullSafe(_, convertToScala(v, t)))
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
+    case expressions.GreaterThan(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.GreaterThan(_, convertToScala(v, t)))
+    case expressions.GreaterThan(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.LessThan(_, convertToScala(v, t)))
 
-    case expressions.LessThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+    case expressions.LessThan(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.LessThan(_, convertToScala(v, t)))
+    case expressions.LessThan(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.GreaterThan(_, convertToScala(v, t)))
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.GreaterThanOrEqual(_, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.LessThanOrEqual(_, convertToScala(v, t)))
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(e: Expression, Literal(v, t)) =>
+      pushDownColName(e).map(sources.LessThanOrEqual(_, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(Literal(v, t), e: Expression) =>
+      pushDownColName(e).map(sources.GreaterThanOrEqual(_, convertToScala(v, t)))
 
-    case expressions.InSet(a: Attribute, set) =>
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, set.toArray.map(toScala)))
+    case expressions.InSet(e: Expression, set) =>
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      pushDownColName(e).map(sources.In(_, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(a: Attribute, list) if list.forall(_.isInstanceOf[Literal]) =>
+    case expressions.In(e: Expression, list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, hSet.toArray.map(toScala)))
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      pushDownColName(e).map(sources.In(_, hSet.toArray.map(toScala)))
 
-    case expressions.IsNull(a: Attribute) =>
-      Some(sources.IsNull(a.name))
-    case expressions.IsNotNull(a: Attribute) =>
-      Some(sources.IsNotNull(a.name))
-    case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringStartsWith(a.name, v.toString))
+    case expressions.IsNull(e: Expression) =>
+      pushDownColName(e).map(sources.IsNull)
+    case expressions.IsNotNull(e: Expression) =>
+      pushDownColName(e).map(sources.IsNotNull)
+    case expressions.StartsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
+      pushDownColName(e).map(sources.StringStartsWith(_, v.toString))
 
-    case expressions.EndsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringEndsWith(a.name, v.toString))
+    case expressions.EndsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
+      pushDownColName(e).map(sources.StringEndsWith(_, v.toString))
 
-    case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringContains(a.name, v.toString))
+    case expressions.Contains(e: Expression, Literal(v: UTF8String, StringType)) =>
+      pushDownColName(e).map(sources.StringContains(_, v.toString))
 
     case expressions.Literal(true, BooleanType) =>
       Some(sources.AlwaysTrue)
