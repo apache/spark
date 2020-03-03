@@ -104,9 +104,9 @@ object CommandUtils extends Logging {
     totalSize
   }
 
-   def sumSizeWithMaxDeserializationFactor(sizesWithFactors: Seq[SizeInBytesWithDeserFactor])
-    : SizeInBytesWithDeserFactor = {
-    val definedFactors = sizesWithFactors.filter(_.deserFactor.isDefined).map(_.deserFactor.get)
+  def sumSizeWithMaxDeserializationFactor(
+      sizesWithFactors: Seq[SizeInBytesWithDeserFactor]): SizeInBytesWithDeserFactor = {
+    val definedFactors = sizesWithFactors.flatMap(_.deserFactor)
     SizeInBytesWithDeserFactor(
       sizesWithFactors.map(_.sizeInBytes).sum,
       if (definedFactors.isEmpty) None else Some(definedFactors.max))
