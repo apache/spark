@@ -26,15 +26,15 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 
 class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   val attrInts = Seq(
-    'cint.int,
+    'cint.int
   ).zip(Seq(
-    "cint",
+    "cint"
   ))
 
   val attrStrs = Seq(
-    'cstr.int,
+    'cstr.int
   ).zip(Seq(
-    "cstr",
+    "cstr"
   ))
 
   test("translate simple expression") { attrInts.zip(attrStrs)
