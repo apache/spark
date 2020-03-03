@@ -2460,7 +2460,7 @@ object functions {
   def soundex(e: Column): Column = withExpr { SoundEx(e.expr) }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
    * @param pattern a string representing a regular expression. The regex string should be
@@ -2474,7 +2474,7 @@ object functions {
   }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
    * @param pattern a string representing a regular expression. The regex string should be
