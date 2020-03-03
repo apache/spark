@@ -158,7 +158,6 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[SparkException]()
-      var earlyFailedStage: Option[Int] = None
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -167,9 +166,7 @@ case class AdaptiveSparkPlanExec(
           executionId.foreach(onUpdatePlan)
 
           // Start materialization of all new stages and fail fast if any stages failed eagerly
-          val stages = result.newStages.toIterator
-          while (earlyFailedStage.isEmpty && stages.hasNext) {
-            val stage = stages.next()
+          result.newStages.foreach { stage =>
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
@@ -180,8 +177,9 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
-                earlyFailedStage = Some(stage.id)
-                events.offer(StageFailure(stage, e))
+                errors.prepend(
+                  new SparkException(s"Early failed query stage found: ${stage.treeString}", e))
+                cleanUpAndThrowException(errors, Some(stage.id))
             }
           }
         }
@@ -196,18 +194,13 @@ case class AdaptiveSparkPlanExec(
           case StageSuccess(stage, res) =>
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
-            if (earlyFailedStage.contains(stage.id)) {
-              errors.prepend(
-                new SparkException(s"Early failed query stage found: ${stage.treeString}", ex))
-            } else {
-              errors.append(
-                new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
-            }
+            errors.append(
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors, earlyFailedStage)
+          cleanUpAndThrowException(errors, None)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
