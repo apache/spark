@@ -568,6 +568,7 @@ test_that("spark.survreg", {
       model2 <- read.ml(modelPath)
 
       expect_is(model2, "LinearRegressionModel")
+      expect_equal(summary(model), summary(model2))
 
       prediction2 <- predict(model2, df)
       expect_equal(
