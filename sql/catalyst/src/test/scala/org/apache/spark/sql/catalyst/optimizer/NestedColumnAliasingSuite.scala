@@ -264,7 +264,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Do not generate redundant aliases if parent nested field is aliased too") {
     val nestedRelation = LocalRelation('a.struct('b.struct('c.int,
-      'd.struct('f.int, 'g.int), 'e.int)))
+      'd.struct('f.int, 'g.int)), 'e.int))
 
     // `a.b`
     val first = 'a.getField("b")
