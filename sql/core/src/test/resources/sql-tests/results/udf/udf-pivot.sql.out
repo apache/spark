@@ -441,7 +441,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.;
+Invalid pivot column 'named_struct(course, course, m, m)'. Pivot columns must be comparable.;
 
 
 -- !query

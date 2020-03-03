@@ -263,8 +263,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   protected def flatArguments: Iterator[Any] = stringArgs.flatMap {
     case t: Iterable[_] => t
-    case e: Expression => e.argumentString :: Nil
     case single => single :: Nil
+  }
+
+  protected def flatArgumentStrings: Iterator[String] = flatArguments.map {
+    case e: Expression => e.argumentString
+    case arg: Any => arg.toString
   }
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
@@ -274,7 +278,7 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleString(maxFields: Int): String = toString
 
   override def toString: String = prettyName + truncatedString(
-    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
+    flatArgumentStrings.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   def argumentString: String = toString
 

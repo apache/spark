@@ -91,7 +91,7 @@ Results [2]: [key#x, max#x]
      
 (6) Exchange 
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, 4), true, [id=#x]
       
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
@@ -158,7 +158,7 @@ Results [2]: [key#x, max#x]
      
 (6) Exchange 
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, 4), true, [id=#x]
       
 (7) HashAggregate [codegen id : 2]
 Input [2]: [key#x, max#x]
@@ -246,7 +246,7 @@ Results [2]: [key#x, val#x]
      
 (11) Exchange 
 Input [2]: [key#x, val#x]
-Arguments: hashpartitioning(key#x, val#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, val, 4), true, [id=#x]
       
 (12) HashAggregate [codegen id : 4]
 Input [2]: [key#x, val#x]
@@ -832,7 +832,7 @@ Results [2]: [key#x, max#x]
      
 (6) Exchange 
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, 4), true, [id=#x]
       
 (7) HashAggregate [codegen id : 4]
 Input [2]: [key#x, max#x]
@@ -917,7 +917,7 @@ Input [2]: [key#x, val#x]
 (3) HashAggregate 
 Input [2]: [key#x, val#x]
 Keys: []
-Functions [3]: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Functions [3]: [partial_count(val), partial_sum(cast(key#x as bigint)), partial_count(key) FILTER (WHERE (val#x > 1))]
 Aggregate Attributes [3]: [count#xL, sum#xL, count#xL]
 Results [3]: [count#xL, sum#xL, count#xL]
      
@@ -928,9 +928,9 @@ Arguments: SinglePartition, true, [id=#x]
 (5) HashAggregate [codegen id : 2]
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions [3]: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
-Aggregate Attributes [3]: [count(val#x)#xL, sum(cast(key#x as bigint))#xL, count(key#x)#xL]
-Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Functions [3]: [count(val), sum(cast(key#x as bigint)), count(key)]
+Aggregate Attributes [3]: [count(val)#xL, sum(cast(key#x as bigint))#xL, count(key)#xL]
+Results [2]: [(count(val)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
 
 
 -- !query
@@ -967,7 +967,7 @@ Results [2]: [key#x, buf#x]
      
 (4) Exchange 
 Input [2]: [key#x, buf#x]
-Arguments: hashpartitioning(key#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, 4), true, [id=#x]
       
 (5) ObjectHashAggregate 
 Input [2]: [key#x, buf#x]
@@ -1017,7 +1017,7 @@ Results [2]: [key#x, min#x]
      
 (5) Exchange 
 Input [2]: [key#x, min#x]
-Arguments: hashpartitioning(key#x, 4), true, [id=#x]
+Arguments: hashpartitioning(key, 4), true, [id=#x]
       
 (6) Sort [codegen id : 2]
 Input [2]: [key#x, min#x]
