@@ -71,6 +71,7 @@ class DatasetSuite extends QueryTest
     checkDataset(
       data.toDS(),
       data: _*)
+
   }
 
   test("toDS should compare map with byte array keys correctly") {

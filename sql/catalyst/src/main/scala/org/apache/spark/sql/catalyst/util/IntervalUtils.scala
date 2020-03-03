@@ -534,6 +534,67 @@ object IntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
+  /**
+   * Return the quotient of two calendar interval instances.
+   *
+   * This is only defined for calender interval instances that have only a single time component
+   * defined and both arguments share the same time component. Otherwise the quotient would be
+   * ambiguous.
+   */
+  def divideIntervals(dividend: CalendarInterval, divisor: CalendarInterval): Double = {
+    val dvdComponents = Seq(dividend.months, dividend.days, dividend.microseconds)
+    val dvsComponents = Seq(divisor.months, divisor.days, divisor.microseconds)
+
+    if (dvsComponents.count(_ == 0) == 3 ||
+      dvdComponents.count(_ != 0) > 1 ||
+      dvsComponents.count(_ != 0) > 1) {
+      return Double.NaN
+    }
+
+    (dvdComponents, dvsComponents) match {
+      case (Seq(0, 0, 0L), Seq(_, _, _)) => 0.0
+      case (Seq(dvd, 0, 0L), Seq(dvs, 0, 0L)) => dvd.doubleValue() / dvs
+      case (Seq(0, dvd, 0L), Seq(0, dvs, 0L)) => dvd.doubleValue() / dvs
+      case (Seq(0, 0, dvd), Seq(0, 0, dvs)) => dvd.doubleValue() / dvs
+      case _ => Double.NaN
+    }
+  }
+
+  /**
+   * Return the quotient of two calendar interval instances.
+   *
+   * This is only defined for calender interval instances that have only a single time component
+   * defined and both arguments share the same time component. Otherwise the quotient would be
+   * ambiguous.
+   *
+   * @throws ArithmeticException if any argument has multiple time components, both arguments do not
+   *                             share the same time component, the result overflows
+   *                             or division by zero interval
+   */
+  def divideIntervalsExact(dividend: CalendarInterval, divisor: CalendarInterval): Double = {
+    val dvdComponents = Seq(dividend.months, dividend.days, dividend.microseconds)
+    val dvsComponents = Seq(divisor.months, divisor.days, divisor.microseconds)
+
+    if (dvsComponents.count(_ == 0) == 3) {
+      throw new ArithmeticException("Divide interval by zero interval")
+    }
+    if (dvdComponents.count(_ != 0) > 1) {
+      throw new ArithmeticException(s"Dividend has multiple time components defined: $dividend")
+    }
+    if (dvsComponents.count(_ != 0) > 1) {
+      throw new ArithmeticException(s"Divisor has multiple time components defined: $divisor")
+    }
+
+    (dvdComponents, dvsComponents) match {
+      case (Seq(0, 0, 0L), Seq(_, _, _)) => 0.0
+      case (Seq(dvd, 0, 0L), Seq(dvs, 0, 0L)) => dvd.doubleValue() / dvs
+      case (Seq(0, dvd, 0L), Seq(0, dvs, 0L)) => dvd.doubleValue() / dvs
+      case (Seq(0, 0, dvd), Seq(0, 0, dvs)) => dvd.doubleValue() / dvs
+      case _ =>
+        throw new ArithmeticException(s"Intervals must be defined " +
+          s"in the same single time component: $dividend / $divisor")
+  }
+
   private object ParseState extends Enumeration {
     type ParseState = Value
 

@@ -313,6 +313,7 @@ class Analyzer(
           case _ => m
         }
         case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, CalendarIntervalType) => DivideIntervals(l, r)
           case (CalendarIntervalType, _) => DivideInterval(l, r)
           case _ => d
         }

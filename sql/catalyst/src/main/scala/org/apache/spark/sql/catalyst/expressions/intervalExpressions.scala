@@ -138,6 +138,34 @@ abstract class IntervalNumOperation(
   override def prettyName: String = operationName.stripSuffix("Exact") + "_interval"
 }
 
+abstract class IntervalsOperation(
+    intervalLeft: Expression,
+    intervalRight: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def left: Expression = intervalLeft
+  override def right: Expression = intervalRight
+
+  protected val operation: (CalendarInterval, CalendarInterval) => Double
+  protected def operationName: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, CalendarIntervalType)
+  override def dataType: DataType = DoubleType
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(left: Any, right: Any): Any = {
+    operation(left.asInstanceOf[CalendarInterval], right.asInstanceOf[CalendarInterval])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (left, right) => s"$iu.$operationName($left, $right)")
+  }
+
+  override def prettyName: String =
+    operationName.stripSuffix("Exact").stripSuffix("Intervals") + "_intervals"
+}
+
 case class MultiplyInterval(
     interval: Expression,
     num: Expression,
@@ -160,6 +188,19 @@ case class DivideInterval(
     if (checkOverflow) divideExact else divide
 
   override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+}
+
+case class DivideIntervals(
+    dividend: Expression,
+    divisor: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends IntervalsOperation(dividend, divisor) {
+
+  override protected val operation: (CalendarInterval, CalendarInterval) => Double =
+    if (checkOverflow) divideIntervalsExact else divideIntervals
+
+  override protected def operationName: String =
+    if (checkOverflow) "divideIntervalsExact" else "divideIntervals"
 }
 
 // scalastyle:off line.size.limit

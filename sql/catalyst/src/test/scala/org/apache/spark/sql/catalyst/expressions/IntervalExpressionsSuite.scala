@@ -263,6 +263,99 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Some(false))
   }
 
+  test("pretty names") {
+    def check(expr: Expression, expected: String): Unit = {
+      assert(expr.prettyName == expected)
+    }
+
+    check(MultiplyInterval(Literal(stringToInterval("1 hour")), Literal(2.0)), "multiply_interval")
+    check(DivideInterval(Literal(stringToInterval("1 hour")), Literal(2.0)), "divide_interval")
+    check(DivideIntervals(
+      Literal(stringToInterval("1 hour")),
+      Literal(stringToInterval("1 minute"))
+    ), "divide_intervals")
+  }
+
+  test("divide intervals") {
+    def check(dividend: String, divisor: String, expected: Option[Double],
+              expectedErrMsg: Option[String] = None): Unit = {
+      Seq("true", "false").foreach { v =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          val expr = DivideIntervals(
+            Literal(stringToInterval(dividend)),
+            Literal(stringToInterval(divisor))
+          )
+
+          if (expected.isEmpty) {
+            if (v == "true") {
+              checkExceptionInExpression[ArithmeticException](expr, expectedErrMsg.orNull)
+            } else {
+              checkEvaluation(expr, Double.NaN)
+            }
+          } else {
+            checkEvaluation(expr, expected.get)
+          }
+        }
+      }
+    }
+
+    check("0 second", "1 minute", Some(0.0))
+    check("1 hour", "1 minute", Some(60.0))
+    check("1 minute", "1 hour", Some(1.0 / 60.0))
+    check("-1 minute", "1 hour", Some(-1.0 / 60.0))
+    check("1 minute", "-1 hour", Some(1.0 / -60.0))
+    check("-1 minute", "-1 hour", Some(1.0 / 60.0))
+    check("7 days", "1 day", Some(7.0))
+    check("1 day", "7 days", Some(1.0 / 7.0))
+    check("1 year", "1 month", Some(12.0))
+    check("1 month", "1 year", Some(1.0 / 12.0))
+
+    check("1 minute", "0 seconds", None, Some("Divide interval by zero interval"))
+    check("1 day", "0 seconds", None, Some("Divide interval by zero interval"))
+    check("1 month", "0 seconds", None, Some("Divide interval by zero interval"))
+
+    check("1 minute", "1 day", None,
+      Some("Intervals must be defined in the same single time component: 1 minutes / 1 days"))
+    check("1 minute", "1 month", None,
+      Some("Intervals must be defined in the same single time component: 1 minutes / 1 months"))
+
+    check("1 day", "1 minute", None,
+      Some("Intervals must be defined in the same single time component: 1 days / 1 minutes"))
+    check("1 day", "1 month", None,
+      Some("Intervals must be defined in the same single time component: 1 days / 1 months"))
+
+    check("1 month", "1 minute", None,
+      Some("Intervals must be defined in the same single time component: 1 months / 1 minutes"))
+    check("1 month", "1 day", None,
+      Some("Intervals must be defined in the same single time component: 1 months / 1 days"))
+
+    check("1 minute", "1 day 1 minute", None,
+      Some("Divisor has multiple time components defined: 1 days 1 minutes"))
+    check("1 minute", "1 month 1 minute", None,
+      Some("Divisor has multiple time components defined: 1 months 1 minutes"))
+    check("1 day", "1 day 1 minute", None,
+      Some("Divisor has multiple time components defined: 1 days 1 minutes"))
+    check("1 day", "1 month 1 day", None,
+      Some("Divisor has multiple time components defined: 1 months 1 days"))
+    check("1 month", "1 month 1 minute", None,
+      Some("Divisor has multiple time components defined: 1 months 1 minutes"))
+    check("1 month", "1 month 1 day", None,
+      Some("Divisor has multiple time components defined: 1 months 1 days"))
+
+    check("1 day 1 minute", "1 minute", None,
+      Some("Dividend has multiple time components defined: 1 days 1 minutes"))
+    check("1 day 1 minute", "1 day", None,
+      Some("Dividend has multiple time components defined: 1 days 1 minutes"))
+    check("1 month 1 minute", "1 minute", None,
+      Some("Dividend has multiple time components defined: 1 months 1 minutes"))
+    check("1 month 1 minute", "1 month", None,
+      Some("Dividend has multiple time components defined: 1 months 1 minutes"))
+    check("1 month 1 day", "1 day", None,
+      Some("Dividend has multiple time components defined: 1 months 1 days"))
+    check("1 month 1 day", "1 month", None,
+      Some("Dividend has multiple time components defined: 1 months 1 days"))
+  }
+
   test("make interval") {
     def check(
         years: Int = 0,
