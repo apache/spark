@@ -18,12 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,12 +27,14 @@ import org.apache.spark.sql.internal.SQLConf
  * avoid many small reduce tasks that hurt performance.
  */
 case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
+  import ReduceNumShufflePartitions._
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.reducePostShufflePartitionsEnabled) {
       return plan
     }
-    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
+    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
+        || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
@@ -44,8 +42,6 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     }
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
-      case _: LocalShuffleReaderExec => Nil
-      case _: SkewJoinShuffleReaderExec => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
     }
@@ -70,7 +66,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val partitionStartIndices = ShufflePartitionsCoalescer.coalescePartitions(
+        val partitionSpecs = ShufflePartitionsCoalescer.coalescePartitions(
           validMetrics.toArray,
           firstPartitionIndex = 0,
           lastPartitionIndex = distinctNumPreShufflePartitions.head,
@@ -83,7 +79,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CoalescedShuffleReaderExec(stage, partitionStartIndices)
+            CustomShuffleReaderExec(stage, partitionSpecs, COALESCED_SHUFFLE_READER_DESCRIPTION)
         }
       } else {
         plan
@@ -92,35 +88,6 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-/**
- * A wrapper of shuffle query stage, which submits fewer reduce task as one reduce task may read
- * multiple shuffle partitions. This can avoid many small reduce tasks that hurt performance.
- *
- * @param child It's usually `ShuffleQueryStageExec`, but can be the shuffle exchange node during
- *              canonicalization.
- * @param partitionStartIndices The start partition indices for the coalesced partitions.
- */
-case class CoalescedShuffleReaderExec(
-    child: SparkPlan,
-    partitionStartIndices: Array[Int]) extends UnaryExecNode {
-
-  override def output: Seq[Attribute] = child.output
-
-  override def outputPartitioning: Partitioning = {
-    UnknownPartitioning(partitionStartIndices.length)
-  }
-
-  private var cachedShuffleRDD: ShuffledRowRDD = null
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = child match {
-        case stage: ShuffleQueryStageExec =>
-          stage.shuffle.createShuffledRDD(Some(partitionStartIndices))
-        case _ =>
-          throw new IllegalStateException("operating on canonicalization plan")
-      }
-    }
-    cachedShuffleRDD
-  }
+object ReduceNumShufflePartitions {
+  val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }
