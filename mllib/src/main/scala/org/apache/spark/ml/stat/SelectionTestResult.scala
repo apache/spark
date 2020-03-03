@@ -88,7 +88,7 @@ class ChiSqTestResult private[stat] (
  * Object containing the test results for the FValue regression test.
  */
 @Since("3.1.0")
-class FValueRegressionTestResult private[stat] (
+class FValueTestResult private[stat] (
     override val pValue: Double,
     override val degreesOfFreedom: Long,
     override val statistic: Double) extends SelectionTestResult {

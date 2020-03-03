@@ -241,9 +241,7 @@ final class FValueSelector @Since("3.1.0") (override val uid: String)
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
     }
     val indices = features.map { case (_, index) => index }
-    val pValues = features.map(_._1.pValue)
-    val statistic = features.map(_._1.statistic)
-    copyValues(new FValueSelectorModel(uid, indices.sorted, pValues, statistic)
+    copyValues(new FValueSelectorModel(uid, indices.sorted)
       .setParent(this))
   }
 
@@ -271,9 +269,7 @@ object FValueSelector extends DefaultParamsReadable[FValueSelector] {
 @Since("3.1.0")
 class FValueSelectorModel private[ml](
     override val uid: String,
-    val selectedFeatures: Array[Int],
-    val pValues: Array[Double],
-    val statistic: Array[Double])
+    val selectedFeatures: Array[Int])
   extends Model[FValueSelectorModel] with FValueSelectorParams with MLWritable {
 
   var prev = -1
@@ -337,7 +333,7 @@ class FValueSelectorModel private[ml](
 
   @Since("3.1.0")
   override def copy(extra: ParamMap): FValueSelectorModel = {
-    val copied = new FValueSelectorModel(uid, selectedFeatures, pValues, statistic)
+    val copied = new FValueSelectorModel(uid, selectedFeatures)
       .setParent(parent)
     copyValues(copied, extra)
   }
@@ -392,18 +388,13 @@ object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
   override def load(path: String): FValueSelectorModel = super.load(path)
 
   private[FValueSelectorModel] class FValueSelectorModelWriter(
-      instance:
-      FValueSelectorModel) extends MLWriter {
+      instance: FValueSelectorModel) extends MLWriter {
 
-    private case class Data(
-        selectedFeatures: Seq[Int],
-        pValue: Seq[Double],
-        statistics: Seq[Double])
+    private case class Data(selectedFeatures: Seq[Int])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.selectedFeatures.toSeq, instance.pValues.toSeq,
-        instance.statistic.toSeq)
+      val data = Data(instance.selectedFeatures.toSeq)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -419,12 +410,9 @@ object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-        .select("selectedFeatures", "pValue", "statistics").head()
+        .select("selectedFeatures").head()
       val selectedFeatures = data.getAs[Seq[Int]](0).toArray
-      val pValue = data.getAs[Seq[Double]](1).toArray
-      val statistics = data.getAs[Seq[Double]](2).toArray
-      val model = new FValueSelectorModel(metadata.uid, selectedFeatures,
-        pValue, statistics)
+      val model = new FValueSelectorModel(metadata.uid, selectedFeatures)
       metadata.getAndSetParams(model)
       model
     }

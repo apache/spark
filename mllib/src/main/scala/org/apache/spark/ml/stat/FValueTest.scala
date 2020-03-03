@@ -122,7 +122,7 @@ object FValueTest {
       val corr = covariance / (yStd * xStd(i))
       val fValue = corr * corr / (1 - corr * corr) * degreesOfFreedom
       val pValue = 1.0 - fd.cumulativeProbability(fValue)
-      fTestResultArray(i) = new FValueRegressionTestResult(pValue, degreesOfFreedom, fValue)
+      fTestResultArray(i) = new FValueTestResult(pValue, degreesOfFreedom, fValue)
     }
     fTestResultArray
   }
