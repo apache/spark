@@ -50,8 +50,7 @@ case class CsvToStructs(
     schema: StructType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None,
-    nameOfCorruptRecord: String)
+    timeZoneId: Option[String] = None)
   extends UnaryExpression
     with TimeZoneAwareExpression
     with CodegenFallback
@@ -65,10 +64,6 @@ case class CsvToStructs(
   val nullableSchema: StructType = schema.asNullable
 
   // Used in `FunctionRegistry`
-  def this(schema: StructType, options: Map[String, String], child: Expression,
-      timeZoneId: Option[String]) = this(schema, options, child, timeZoneId,
-    SQLConf.get.columnNameOfCorruptRecord)
-
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
@@ -103,7 +98,7 @@ case class CsvToStructs(
       options,
       columnPruning = true,
       defaultTimeZoneId = timeZoneId.get,
-      defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
+      defaultColumnNameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD))
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
@@ -137,15 +132,6 @@ case class CsvToStructs(
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def prettyName: String = "from_csv"
-}
-
-object CsvToStructs {
-  def apply(schema: StructType, options: Map[String, String], child: Expression,
-      timeZoneId: Option[String]): CsvToStructs =
-    new CsvToStructs(schema, options, child, timeZoneId)
-
-  def apply(schema: StructType, options: Map[String, String], child: Expression): CsvToStructs =
-    new CsvToStructs(schema, options, child, None)
 }
 
 /**
