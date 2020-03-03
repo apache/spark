@@ -761,7 +761,7 @@ class DataSourceV2SQLSuite
         checkAnswer(sql("select spark_catalog.default.t.i from t"), Row(1))
         checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
         checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
-        checkAnswer(sql(s"select spark_catalog.default.t.i from spark_catalog.default.t"), Row(1))
+        checkAnswer(sql("select spark_catalog.default.t.i from spark_catalog.default.t"), Row(1))
       }
     }
   }

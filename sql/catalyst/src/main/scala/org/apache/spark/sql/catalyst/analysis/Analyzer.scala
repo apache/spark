@@ -930,7 +930,7 @@ class Analyzer(
     private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
-          def loaded: Option[LogicalPlan] = CatalogV2Util.loadTable(catalog, ident).map {
+          def loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
