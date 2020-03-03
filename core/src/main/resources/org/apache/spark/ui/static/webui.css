@@ -212,7 +212,7 @@ pre {
   display: none;
 }
 
-span.expand-dag-viz, span.collapse-table {
+span.expand-dag-viz, .collapse-table {
   cursor: pointer;
 }
 

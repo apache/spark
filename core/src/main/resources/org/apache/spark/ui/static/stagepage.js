@@ -281,7 +281,7 @@ $(document).ready(function () {
     setDataTableDefaults();
 
     $("#showAdditionalMetrics").append(
-        "<div><a id='additionalMetrics'>" +
+        "<div><a id='additionalMetrics' class='collapse-table'>" +
         "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>" +
         " Show Additional Metrics" +
         "</a></div>" +

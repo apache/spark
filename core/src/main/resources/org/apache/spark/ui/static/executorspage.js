@@ -561,8 +561,8 @@ $(document).ready(function () {
                 $('#execSummary [data-toggle="tooltip"]').tooltip();
 
                 $("#showAdditionalMetrics").append(
-                    "<div><a id='additionalMetrics'>" +
-                    "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span> " +
+                    "<div><a id='additionalMetrics' class='collapse-table'>" +
+                    "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span>" +
                     "Show Additional Metrics" +
                     "</a></div>" +
                     "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
