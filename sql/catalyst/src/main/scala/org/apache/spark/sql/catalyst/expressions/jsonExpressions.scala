@@ -514,8 +514,7 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None,
-    nameOfCorruptRecord: String)
+    timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
 
   // The JSON input data might be missing certain fields. We force the nullability
@@ -526,13 +525,6 @@ case class JsonToStructs(
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
-  def this(
-      schema: DataType,
-      options: Map[String, String],
-      child: Expression,
-      timeZoneId: Option[String]) =
-    this(schema, options, child, timeZoneId, SQLConf.get.columnNameOfCorruptRecord)
-
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
@@ -568,7 +560,10 @@ case class JsonToStructs(
   }
 
   @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
+    val parsedOptions = new JSONOptions(
+      options,
+      timeZoneId.get,
+      SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD))
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
@@ -609,18 +604,6 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
-}
-
-object JsonToStructs {
-  def apply(
-      schema: DataType,
-      options: Map[String, String],
-      child: Expression,
-      timeZoneId: Option[String]): JsonToStructs =
-    new JsonToStructs(schema, options, child, timeZoneId)
-
-  def apply(schema: DataType, options: Map[String, String], child: Expression): JsonToStructs =
-    new JsonToStructs(schema, options, child, None)
 }
 
 /**
