@@ -317,7 +317,8 @@ class RollingEventLogFilesWriter(
       throw new IOException(s"Target log directory already exists ($logDirForAppPath)")
     }
 
-    fileSystem.mkdirs(logDirForAppPath, EventLogFileWriter.LOG_FILE_PERMISSIONS)
+    // SPARK-30860: use the class method to avoid the umask causing permission issues
+    FileSystem.mkdirs(fileSystem, logDirForAppPath, EventLogFileWriter.LOG_FILE_PERMISSIONS)
     createAppStatusFile(inProgress = true)
     rollEventLogFile()
   }
