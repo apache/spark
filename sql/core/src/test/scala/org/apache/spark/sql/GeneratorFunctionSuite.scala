@@ -308,6 +308,14 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
   }
+
+  test("SPARK-30998: Unsupported nested inner generators") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+    }.getMessage
+    assert(errMsg.contains("Generators are not supported when it's nested in expressions, " +
+      "but got: explode(explode(v))"))
+  }
 }
 
 case class EmptyGenerator() extends Generator {
