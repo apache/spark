@@ -3454,6 +3454,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       """.stripMargin)
     checkAnswer(df2, Row(1) :: Nil)
   }
+
+  test("SPARK-31022: group by alias should fail if there are name conflicts") {
+    withTempView("v") {
+      spark.range(10).toDF("col").createTempView("v")
+      checkAnswer(sql("SELECT div(col, 10) AS new_col FROM v GROUP BY new_col"), Row(0))
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT div(col, 10) AS col FROM v GROUP BY col")
+      }
+      assert(e.message.contains("ambiguous"))
+
+      withSQLConf(SQLConf.LEGACY_ALLOW_AMBIGUOUS_GROUP_BY_ALIAS.key -> "true") {
+        checkAnswer(
+          sql("SELECT div(col, 10) AS col FROM v GROUP BY col"),
+          spark.range(10).select(lit(0).as("col")))
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

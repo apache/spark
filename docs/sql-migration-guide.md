@@ -341,6 +341,8 @@ license: |
 
     - The decimal string representation can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` operator in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
 
+  - Since Spark 3.0, group by alias fails if there are name conflicts like `SELECT col + 1 as col FROM t GROUP BY col`. In Spark version 2.4 and earlier, it works and the column will be resolved using child output. To restore the previous behaviour, set `spark.sql.legacy.allowAmbiguousGroupByAlias` to `true`.
+
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
   - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.

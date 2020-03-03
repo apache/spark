@@ -1636,9 +1636,33 @@ class Analyzer(
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-            groups.exists(!_.resolved) =>
-        agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) =>
+        if (groups.exists(!_.resolved)) {
+          agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
+        } else {
+          // If we can resolve the GROUP BY column with both child output or aliased column in
+          // the SELECT clause, we should fail as it's ambiguous.
+          // Note: this can't be done in `CheckAnalysis`, as the alias in the grouping expressions
+          //       will be removed at that time.
+          if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_AMBIGUOUS_GROUP_BY_ALIAS)) {
+            groups.foreach {
+              case attr: Attribute =>
+                val resolvedWithAlias = aggs.find {
+                  case a: Alias => resolver(a.name, attr.name)
+                  case _ => false
+                }
+                if (resolvedWithAlias.isDefined) {
+                  throw new AnalysisException(s"GROUP BY column ${attr.name} is ambiguous. It " +
+                    "can refer to a column in the child plan, or an aliased column in the " +
+                    "SELECT clause. Please fix the name conflicts, or set " +
+                    s"${SQLConf.LEGACY_ALLOW_AMBIGUOUS_GROUP_BY_ALIAS.key} to true to resolve " +
+                    "the column with the child plan.")
+                }
+              case _ =>
+            }
+          }
+          agg
+        }
 
       case gs @ GroupingSets(selectedGroups, groups, child, aggs)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&

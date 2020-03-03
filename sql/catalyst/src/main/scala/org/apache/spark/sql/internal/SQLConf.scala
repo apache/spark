@@ -2453,6 +2453,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_ALLOW_AMBIGUOUS_GROUP_BY_ALIAS =
+    buildConf("spark.sql.legacy.allowAmbiguousGroupByAlias")
+      .doc(s"When ${GROUP_BY_ALIASES.key} is enabled and this conf is true, Spark will resolve " +
+        "the GROUP BY column using child's output, even though there is an ambiguous alias in " +
+        "the SELECT clause. Id false, Spark fails the query.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
