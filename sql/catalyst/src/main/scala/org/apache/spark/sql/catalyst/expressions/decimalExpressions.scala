@@ -164,7 +164,7 @@ case class HasOverflow(
       s"""
          |${ev.value} = !$eval.changePrecision(
          |  ${inputType.precision}, ${inputType.scale}, Decimal.ROUND_HALF_UP());
-         |  ${ev.isNull} = false;
+         |${ev.isNull} = false;
        """.stripMargin
     })
   }
