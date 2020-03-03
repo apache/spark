@@ -650,9 +650,6 @@ class ResolveSessionCatalog(
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
-        if (ident.namespace.isEmpty) {
-          throw new AnalysisException(s"Table not found: ${nameParts.quoted}")
-        }
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
@@ -661,13 +658,7 @@ class ResolveSessionCatalog(
   object TempViewOrV1Table {
     def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
       case _ if isTempView(nameParts) => Some(nameParts)
-      case Seq(CatalogManager.SESSION_CATALOG_NAME, name @ _*) if isTempView(name) =>
-        throw new AnalysisException(s"Table or view not found: ${nameParts.quoted}")
-      case SessionCatalogAndIdentifier(_, tbl) =>
-        if (tbl.namespace.isEmpty) {
-          throw new AnalysisException(s"Table or view not found: ${nameParts.quoted}")
-        }
-        Some(tbl.asMultipartIdentifier)
+      case SessionCatalogAndIdentifier(_, tbl) => Some(tbl.asMultipartIdentifier)
       case _ => None
     }
   }

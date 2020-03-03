@@ -2325,7 +2325,8 @@ class DataSourceV2SQLSuite
       val e1 = intercept[AnalysisException](
         sql(s"CACHE TABLE $sessionCatalogName.v")
       )
-      assert(e1.message.contains("Table or view not found: spark_catalog.v"))
+      assert(e1.message.contains(
+        "The namespace in session catalog must have exactly one name part: spark_catalog.v"))
     }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
