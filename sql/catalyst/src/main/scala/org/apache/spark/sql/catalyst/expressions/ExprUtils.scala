@@ -30,11 +30,11 @@ object ExprUtils {
   def evalSchemaExpr(exp: Expression): StructType = {
     val dataType = if (exp.foldable) {
       exp.eval() match {
-        case s: UTF8String =>
+        case s: UTF8String if s != null =>
           // Use `DataType.fromDDL` since the type string can be struct<...>.
           DataType.fromDDL(s.toString)
         case _ => throw new AnalysisException(
-          s"The expression ${exp.sql} must return a valid string.")
+          s"The expression '${exp.sql}' must be evaluated to a valid string.")
       }
     } else {
       throw new AnalysisException(
