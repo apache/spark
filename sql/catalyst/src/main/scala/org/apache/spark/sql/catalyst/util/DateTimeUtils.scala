@@ -170,22 +170,22 @@ object DateTimeUtils {
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
    * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   *
+   * where `zone_id` should have one of the forms:
+   *   - Z - Zulu time zone UTC+0
+   *   - +|-[h]h:[m]m
+   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
+   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
+   *     and a suffix in the formats:
+   *     - +|-h[h]
+   *     - +|-hh[:]mm
+   *     - +|-hh:mm:ss
+   *     - +|-hhmmss
+   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
