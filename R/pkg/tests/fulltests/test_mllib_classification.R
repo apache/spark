@@ -511,6 +511,8 @@ test_that("spark.fmClassifier", {
 
     expect_is(model2, "FMClassificationModel")
 
+    expect_equal(summary(model1), summary(model2))
+
     prediction2 <- predict(model2, df)
     expect_equal(
       collect(drop(prediction1, c("rawPrediction", "probability"))),
