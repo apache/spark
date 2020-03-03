@@ -28,16 +28,18 @@ import org.apache.spark.unsafe.types.UTF8String
 object ExprUtils {
 
   def evalSchemaExpr(exp: Expression): StructType = {
-    // Use `DataType.fromDDL` since the type string can be struct<...>.
-    val dataType = exp match {
-      case Literal(s, StringType) =>
-        DataType.fromDDL(s.toString)
-      case e @ SchemaOfCsv(_: Literal, _) =>
-        val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
-        DataType.fromDDL(ddlSchema.toString)
-      case e => throw new AnalysisException(
+    val dataType = if (exp.foldable) {
+      exp.eval() match {
+        case s: UTF8String =>
+          // Use `DataType.fromDDL` since the type string can be struct<...>.
+          DataType.fromDDL(s.toString)
+        case _ => throw new AnalysisException(
+          s"The expression ${exp.sql} must return a valid string.")
+      }
+    } else {
+      throw new AnalysisException(
         "Schema should be specified in DDL format as a string literal or output of " +
-          s"the schema_of_csv function instead of ${e.sql}")
+        s"the schema_of_csv function instead of ${exp.sql}")
     }
 
     if (!dataType.isInstanceOf[StructType]) {
@@ -48,7 +50,8 @@ object ExprUtils {
   }
 
   def evalTypeExpr(exp: Expression): DataType = exp match {
-    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case Literal(s, StringType) =>
+      DataType.fromDDL(s.toString)
     case e @ SchemaOfJson(_: Literal, _) =>
       val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
