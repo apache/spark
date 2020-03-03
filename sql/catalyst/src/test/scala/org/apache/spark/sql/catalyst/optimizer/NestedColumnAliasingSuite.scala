@@ -215,12 +215,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     val optimized = Optimize.execute(query)
 
-    val expected = nestedRelation
-      .select(GetStructField('a, 0, Some("b")))
-      .limit(5)
-      .analyze
-
-    comparePlans(optimized, expected)
+    comparePlans(optimized, query)
   }
 
   test("nested field pruning for getting struct field in array of struct") {

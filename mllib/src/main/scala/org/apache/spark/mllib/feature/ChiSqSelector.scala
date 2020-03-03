@@ -44,17 +44,6 @@ class ChiSqSelectorModel @Since("1.3.0") (
 
   private val filterIndices = selectedFeatures.sorted
 
-  @deprecated("not intended for subclasses to use", "2.1.0")
-  protected def isSorted(array: Array[Int]): Boolean = {
-    var i = 1
-    val len = array.length
-    while (i < len) {
-      if (array(i) < array(i-1)) return false
-      i += 1
-    }
-    true
-  }
-
   /**
    * Applies transformation on a vector.
    *
@@ -85,8 +74,9 @@ class ChiSqSelectorModel @Since("1.3.0") (
     }
   }
 
-  private[spark] def compressSparse(indices: Array[Int],
-                                    values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def compressSparse(
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
     val newValues = new ArrayBuilder.ofDouble
     val newIndices = new ArrayBuilder.ofInt
     var i = 0

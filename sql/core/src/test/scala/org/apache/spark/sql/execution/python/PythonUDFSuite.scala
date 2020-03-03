@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.functions.count
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class PythonUDFSuite extends QueryTest with SharedSQLContext {
+class PythonUDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   import IntegratedUDFTestUtils._

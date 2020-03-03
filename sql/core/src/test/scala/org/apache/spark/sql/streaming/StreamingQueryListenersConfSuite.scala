@@ -33,13 +33,13 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
     super.sparkConf.set(STREAMING_QUERY_LISTENERS.key,
       "org.apache.spark.sql.streaming.TestListener")
 
-  test("test if the configured query lister is loaded") {
+  test("test if the configured query listener is loaded") {
     testStream(MemoryStream[Int].toDS)(
       StartStream(),
       StopStream
     )
 
-    spark.sparkContext.listenerBus.waitUntilEmpty(5000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
 
     assert(TestListener.queryStartedEvent != null)
     assert(TestListener.queryTerminatedEvent != null)

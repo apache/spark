@@ -48,6 +48,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -455,7 +456,8 @@ private[spark] class ApplicationMaster(
       val executorMemory = _sparkConf.get(EXECUTOR_MEMORY).toInt
       val executorCores = _sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
-        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources)
+        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       dummyRunner.launchContextDebugInfo()
     }
 
@@ -578,7 +580,11 @@ private[spark] class ApplicationMaster(
             e.getMessage)
         case e: Throwable =>
           failureCount += 1
-          if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+          if (!NonFatal(e)) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE,
+              "Fatal exception: " + StringUtils.stringifyException(e))
+          } else if (failureCount >= reporterMaxFailures) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                 s"$failureCount time(s) from Reporter thread.")
@@ -587,7 +593,7 @@ private[spark] class ApplicationMaster(
           }
       }
       try {
-        val numPendingAllocate = allocator.getPendingAllocate.size
+        val numPendingAllocate = allocator.getNumContainersPendingAllocate
         var sleepStartNs = 0L
         var sleepInterval = 200L // ms
         allocatorLock.synchronized {
@@ -703,7 +709,8 @@ private[spark] class ApplicationMaster(
       // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
-    if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
+    if (args.primaryRFile != null &&
+        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
       // TODO(davies): add R dependencies here
     }
 
@@ -711,7 +718,7 @@ private[spark] class ApplicationMaster(
       .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         try {
           if (!Modifier.isStatic(mainMethod.getModifiers)) {
             logError(s"Could not find static main method in object ${args.userClass}")
@@ -771,8 +778,11 @@ private[spark] class ApplicationMaster(
       case r: RequestExecutors =>
         Option(allocator) match {
           case Some(a) =>
-            if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
+            if (a.requestTotalExecutorsWithPreferredLocalities(
+              r.resourceProfileToTotalExecs,
+              r.numLocalityAwareTasksPerResourceProfileId,
+              r.hostToLocalTaskCount,
+              r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)
@@ -851,7 +861,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

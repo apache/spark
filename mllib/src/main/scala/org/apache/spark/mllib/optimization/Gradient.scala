@@ -218,8 +218,8 @@ class LogisticGradient(numClasses: Int) extends Gradient {
 
         val margins = Array.tabulate(numClasses - 1) { i =>
           var margin = 0.0
-          data.foreachActive { (index, value) =>
-            if (value != 0.0) margin += value * weightsArray((i * dataSize) + index)
+          data.foreachNonZero { (index, value) =>
+            margin += value * weightsArray((i * dataSize) + index)
           }
           if (i == label.toInt - 1) marginY = margin
           if (margin > maxMargin) {
@@ -258,8 +258,8 @@ class LogisticGradient(numClasses: Int) extends Gradient {
           val multiplier = math.exp(margins(i)) / (sum + 1.0) - {
             if (label != 0.0 && label == i + 1) 1.0 else 0.0
           }
-          data.foreachActive { (index, value) =>
-            if (value != 0.0) cumGradientArray(i * dataSize + index) += multiplier * value
+          data.foreachNonZero { (index, value) =>
+            cumGradientArray(i * dataSize + index) += multiplier * value
           }
         }
 

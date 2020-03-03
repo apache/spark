@@ -62,7 +62,7 @@ object SVMSuite {
 
 class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
     }

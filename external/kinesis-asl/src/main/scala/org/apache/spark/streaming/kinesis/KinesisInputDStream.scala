@@ -19,10 +19,11 @@ package org.apache.spark.streaming.kinesis
 
 import scala.reflect.ClassTag
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import collection.JavaConverters._
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.annotation.Evolving
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
@@ -44,7 +45,9 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val messageHandler: Record => T,
     val kinesisCreds: SparkAWSCredentials,
     val dynamoDBCreds: Option[SparkAWSCredentials],
-    val cloudWatchCreds: Option[SparkAWSCredentials]
+    val cloudWatchCreds: Option[SparkAWSCredentials],
+    val metricsLevel: MetricsLevel,
+    val metricsEnabledDimensions: Set[String]
   ) extends ReceiverInputDStream[T](_ssc) {
 
   import KinesisReadConfigurations._
@@ -80,18 +83,17 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
   override def getReceiver(): Receiver[T] = {
     new KinesisReceiver(streamName, endpointUrl, regionName, initialPosition,
       checkpointAppName, checkpointInterval, _storageLevel, messageHandler,
-      kinesisCreds, dynamoDBCreds, cloudWatchCreds)
+      kinesisCreds, dynamoDBCreds, cloudWatchCreds,
+      metricsLevel, metricsEnabledDimensions)
   }
 }
 
-@Evolving
 object KinesisInputDStream {
   /**
    * Builder for [[KinesisInputDStream]] instances.
    *
    * @since 2.2.0
    */
-  @Evolving
   class Builder {
     // Required params
     private var streamingContext: Option[StreamingContext] = None
@@ -107,6 +109,8 @@ object KinesisInputDStream {
     private var kinesisCredsProvider: Option[SparkAWSCredentials] = None
     private var dynamoDBCredsProvider: Option[SparkAWSCredentials] = None
     private var cloudWatchCredsProvider: Option[SparkAWSCredentials] = None
+    private var metricsLevel: Option[MetricsLevel] = None
+    private var metricsEnabledDimensions: Option[Set[String]] = None
 
     /**
      * Sets the StreamingContext that will be used to construct the Kinesis DStream. This is a
@@ -240,6 +244,7 @@ object KinesisInputDStream {
      * endpoint. Defaults to [[DefaultCredentialsProvider]] if no custom value is specified.
      *
      * @param credentials [[SparkAWSCredentials]] to use for Kinesis authentication
+     * @return Reference to this [[KinesisInputDStream.Builder]]
      */
     def kinesisCredentials(credentials: SparkAWSCredentials): Builder = {
       kinesisCredsProvider = Option(credentials)
@@ -251,6 +256,7 @@ object KinesisInputDStream {
      * endpoint. Will use the same credentials used for AWS Kinesis if no custom value is set.
      *
      * @param credentials [[SparkAWSCredentials]] to use for DynamoDB authentication
+     * @return Reference to this [[KinesisInputDStream.Builder]]
      */
     def dynamoDBCredentials(credentials: SparkAWSCredentials): Builder = {
       dynamoDBCredsProvider = Option(credentials)
@@ -262,9 +268,40 @@ object KinesisInputDStream {
      * endpoint. Will use the same credentials used for AWS Kinesis if no custom value is set.
      *
      * @param credentials [[SparkAWSCredentials]] to use for CloudWatch authentication
+     * @return Reference to this [[KinesisInputDStream.Builder]]
      */
     def cloudWatchCredentials(credentials: SparkAWSCredentials): Builder = {
       cloudWatchCredsProvider = Option(credentials)
+      this
+    }
+
+    /**
+     * Sets the CloudWatch metrics level. Defaults to
+     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL]] if no custom value is specified.
+     *
+     * @param metricsLevel [[MetricsLevel]] to specify the CloudWatch metrics level
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     * @see
+     * [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
+     */
+    def metricsLevel(metricsLevel: MetricsLevel): Builder = {
+      this.metricsLevel = Option(metricsLevel)
+      this
+    }
+
+    /**
+     * Sets the enabled CloudWatch metrics dimensions. Defaults to
+     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS]]
+     * if no custom value is specified.
+     *
+     * @param metricsEnabledDimensions Set[String] to specify which CloudWatch metrics dimensions
+     *   should be enabled
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     * @see
+     * [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
+     */
+    def metricsEnabledDimensions(metricsEnabledDimensions: Set[String]): Builder = {
+      this.metricsEnabledDimensions = Option(metricsEnabledDimensions)
       this
     }
 
@@ -290,7 +327,9 @@ object KinesisInputDStream {
         ssc.sc.clean(handler),
         kinesisCredsProvider.getOrElse(DefaultCredentials),
         dynamoDBCredsProvider,
-        cloudWatchCredsProvider)
+        cloudWatchCredsProvider,
+        metricsLevel.getOrElse(DEFAULT_METRICS_LEVEL),
+        metricsEnabledDimensions.getOrElse(DEFAULT_METRICS_ENABLED_DIMENSIONS))
     }
 
     /**
@@ -327,4 +366,8 @@ object KinesisInputDStream {
   private[kinesis] val DEFAULT_KINESIS_REGION_NAME: String = "us-east-1"
   private[kinesis] val DEFAULT_INITIAL_POSITION: KinesisInitialPosition = new Latest()
   private[kinesis] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2
+  private[kinesis] val DEFAULT_METRICS_LEVEL: MetricsLevel =
+    KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL
+  private[kinesis] val DEFAULT_METRICS_ENABLED_DIMENSIONS: Set[String] =
+    KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet
 }

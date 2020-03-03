@@ -17,31 +17,52 @@
 
 package org.apache.spark.sql.execution
 
-import java.sql.{Date, Timestamp}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-
-class HiveResultSuite extends SparkFunSuite with SharedSQLContext {
+class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
   test("date formatting in hive result") {
-    val date = "2018-12-28"
-    val executedPlan = Seq(Date.valueOf(date)).toDS().queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
-    assert(result.head == date)
+    val dates = Seq("2018-12-28", "1582-10-13", "1582-10-14", "1582-10-15")
+    val df = dates.toDF("a").selectExpr("cast(a as date) as b")
+    val result = HiveResult.hiveResultString(df)
+    assert(result == dates)
+    val df2 = df.selectExpr("array(b)")
+    val result2 = HiveResult.hiveResultString(df2)
+    assert(result2 == dates.map(x => s"[$x]"))
   }
 
   test("timestamp formatting in hive result") {
-    val timestamp = "2018-12-28 01:02:03"
-    val executedPlan = Seq(Timestamp.valueOf(timestamp)).toDS().queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
-    assert(result.head == timestamp)
+    val timestamps = Seq(
+      "2018-12-28 01:02:03",
+      "1582-10-13 01:02:03",
+      "1582-10-14 01:02:03",
+      "1582-10-15 01:02:03")
+    val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
+    val result = HiveResult.hiveResultString(df)
+    assert(result == timestamps)
+    val df2 = df.selectExpr("array(b)")
+    val result2 = HiveResult.hiveResultString(df2)
+    assert(result2 == timestamps.map(x => s"[$x]"))
   }
 
   test("toHiveString correctly handles UDTs") {
     val point = new ExamplePoint(50.0, 50.0)
     val tpe = new ExamplePointUDT()
     assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
+  }
+
+  test("decimal formatting in hive result") {
+    val df = Seq(new java.math.BigDecimal("1")).toDS()
+    Seq(2, 6, 18).foreach { scala =>
+      val decimalDf = df.selectExpr(s"CAST(value AS decimal(38, $scala))")
+      val result = HiveResult.hiveResultString(decimalDf)
+      assert(result.head.split("\\.").last.length === scala)
+    }
+
+    val df2 = Seq(java.math.BigDecimal.ZERO).toDS()
+      .selectExpr(s"CAST(value AS decimal(38, 8))")
+    val result = HiveResult.hiveResultString(df2)
+    assert(result.head === "0.00000000")
   }
 }

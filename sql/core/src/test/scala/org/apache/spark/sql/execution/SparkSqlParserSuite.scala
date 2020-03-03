@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
@@ -80,33 +80,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("show functions") {
-    assertEqual("show functions", ShowFunctionsCommand(None, None, true, true))
-    assertEqual("show all functions", ShowFunctionsCommand(None, None, true, true))
-    assertEqual("show user functions", ShowFunctionsCommand(None, None, true, false))
-    assertEqual("show system functions", ShowFunctionsCommand(None, None, false, true))
-    intercept("show special functions", "SHOW special FUNCTIONS")
-    assertEqual("show functions foo",
-      ShowFunctionsCommand(None, Some("foo"), true, true))
-    assertEqual("show functions foo.bar",
-      ShowFunctionsCommand(Some("foo"), Some("bar"), true, true))
-    assertEqual("show functions 'foo\\\\.*'",
-      ShowFunctionsCommand(None, Some("foo\\.*"), true, true))
-    intercept("show functions foo.bar.baz", "Unsupported function name")
-  }
-
-  test("describe function") {
-    assertEqual("describe function bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = false))
-    assertEqual("describe function extended bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = true))
-    assertEqual("describe function foo.bar",
-      DescribeFunctionCommand(
-        FunctionIdentifier("bar", database = Some("foo")), isExtended = false))
-    assertEqual("describe function extended f.bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = Some("f")), isExtended = true))
-  }
-
   private def createTableUsing(
       table: String,
       database: Option[String] = None,
@@ -159,7 +132,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("create table - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)",
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)
@@ -179,7 +152,8 @@ class SparkSqlParserSuite extends AnalysisTest {
         partitionColumnNames = Seq("c", "d")
       )
     )
-    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>)",
+    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
+      "STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)
@@ -210,111 +184,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table extended t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-    assertEqual("describe table formatted t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-  }
-
   test("describe query") {
     val query = "SELECT * FROM t"
     assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
     assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
-  }
-
-  test("describe table column") {
-    assertEqual("DESCRIBE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE t `abc.xyz`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
-    assertEqual("DESCRIBE t abc.xyz",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
-    assertEqual("DESCRIBE t `a.b`.`x.y`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
-
-    assertEqual("DESCRIBE TABLE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE TABLE EXTENDED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-    assertEqual("DESCRIBE TABLE FORMATTED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-
-    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
-      "DESC TABLE COLUMN for a specific partition is not supported")
-  }
-
-  test("analyze table statistics") {
-    assertEqual("analyze table t compute statistics",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
-    assertEqual("analyze table t compute statistics noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
-    assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
-
-    // Partitions specified
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-
-    intercept("analyze table t compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-    intercept("analyze table t partition (a) compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-  }
-
-  test("analyze table column statistics") {
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
-
-    assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified - should be ignored
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR ALL COLUMNS",
-      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
-
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
-      "missing 'COLUMNS' at '<EOF>'")
   }
 
   test("query organization") {
@@ -359,5 +232,23 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
       parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
     assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
+  }
+
+  test("manage resources") {
+    assertEqual("ADD FILE abc.txt", AddFileCommand("abc.txt"))
+    assertEqual("ADD FILE 'abc.txt'", AddFileCommand("abc.txt"))
+    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFileCommand("/path/to/abc.txt"))
+    assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
+    assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
+    assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
+    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarCommand("/path2/_2/abc.jar"))
+    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'", AddJarCommand("/test/path_2/jar/abc.jar"))
+    assertEqual("ADD JAR \"abc.jar\"", AddJarCommand("abc.jar"))
+    assertEqual("LIST JAR /path-with-dash/abc.jar",
+      ListJarsCommand(Array("/path-with-dash/abc.jar")))
+    assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
+    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
+    assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
+    assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
 }

@@ -18,13 +18,12 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
-import scala.util.Random
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
@@ -236,4 +235,77 @@ private[ml] object TreeTests extends SparkFunSuite {
       LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
     sc.parallelize(arr)
   }
+
+  /**
+   * Feature vectors used in tree-based transformation.
+   */
+  val leafVectors = Array(
+    Vectors.dense(0, 1, 3),
+    Vectors.dense(-1, 2, 1),
+    Vectors.dense(1, 0, 2),
+    Vectors.dense(2, 1, 9),
+    Vectors.dense(0, 2, 6))
+
+  val root0 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                         root
+     *                      /         \
+     *             x1 in [0, 2]   otherwise
+     *                    /            \
+     *               node1           leaf2
+     *               /    \
+     *          x0 <= 0  x0 > 0
+     *             /       \
+     *          leaf0      leaf1
+     */
+    val leaf0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
+      new ContinuousSplit(0, 0.0), null)
+    new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
+  }
+
+  /**
+   * The leaf indices of vectors after transformation by root0.
+   */
+  val leafIndices0 = Array(2.0, 0.0, 1.0, 2.0, 0.0)
+
+  val root1 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                          root
+     *                      /         \
+     *                 x2 <= 1      x2 > 1
+     *                    /            \
+     *                 leaf0          node1
+     *                               /    \
+     *                    x1 in [0, 1]   otherwise
+     *                             /       \
+     *                         leaf1     leaf2
+     */
+    val leaf0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
+    new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
+      new ContinuousSplit(2, 1.0), null)
+  }
+
+  /**
+   * The leaf indices of vectors after transformation by root1.
+   */
+  val leafIndices1 = Array(1.0, 0.0, 1.0, 1.0, 2.0)
+
+  def getSingleTreeLeafData: Array[(Double, Vector)] =
+    leafIndices0.zip(leafVectors)
+
+  def getTwoTreesLeafData: Array[(Vector, Vector)] =
+    leafIndices0.zip(leafIndices1).zip(leafVectors)
+      .map { case ((i0, i1), vec) => (Vectors.dense(i0, i1), vec) }
 }

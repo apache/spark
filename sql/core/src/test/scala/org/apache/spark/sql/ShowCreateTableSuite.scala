@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
-class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSQLContext
+class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSparkSession
 
 abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
@@ -148,17 +148,23 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("view") {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1 AS a")
-      checkCreateView("v1")
+  test("temp view") {
+    val viewName = "spark_28383"
+    withTempView(viewName) {
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
     }
-  }
 
-  test("view with output columns") {
-    withView("v1") {
-      sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
-      checkCreateView("v1")
+    withGlobalTempView(viewName) {
+      sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
+        sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
     }
   }
 
@@ -166,15 +172,20 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
-      val shownDDL = sql(s"SHOW CREATE TABLE t1")
-        .head()
-        .getString(0)
-        .split("\n")
-        .head
-      assert(shownDDL == createTable)
+      val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
+      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
 
       checkCreateTable("t1")
     }
+  }
+
+  protected def getShowDDL(showCreateTableSql: String): String = {
+    val result = sql(showCreateTableSql)
+      .head()
+      .getString(0)
+      .split("\n")
+      .map(_.trim)
+    if (result.length > 1) result(0) + result(1) else result.head
   }
 
   protected def checkCreateTable(table: String): Unit = {
@@ -200,7 +211,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+  protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     def normalize(table: CatalogTable): CatalogTable = {
       val nondeterministicProps = Set(
         "CreateTime",

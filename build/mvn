@@ -22,7 +22,7 @@ _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
 # Options used during compilation
-_COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+_COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has
@@ -80,6 +80,15 @@ install_mvn() {
   fi
   if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
     local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
+        
+    if [ $(command -v curl) ]; then
+      local TEST_MIRROR_URL="${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"
+      if ! curl -L --output /dev/null --silent --head --fail "$TEST_MIRROR_URL" ; then
+        # Fall back to archive.apache.org for older Maven
+        echo "Falling back to archive.apache.org to download Maven"
+        APACHE_MIRROR="https://archive.apache.org/dist"
+      fi
+    fi
 
     install_app \
       "${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries" \

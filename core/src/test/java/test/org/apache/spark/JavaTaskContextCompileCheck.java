@@ -17,7 +17,10 @@
 
 package test.org.apache.spark;
 
+import java.util.Map;
+
 import org.apache.spark.TaskContext;
+import org.apache.spark.resource.ResourceInformation;
 import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.TaskFailureListener;
 
@@ -40,7 +43,9 @@ public class JavaTaskContextCompileCheck {
     tc.stageId();
     tc.stageAttemptNumber();
     tc.taskAttemptId();
+    // this returns a scala Map, so make sure the JMap version give a java type back
     tc.resources();
+    Map<String, ResourceInformation> resources = tc.resourcesJMap();
     tc.taskMetrics();
     tc.taskMemoryManager();
     tc.getLocalProperties();

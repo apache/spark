@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -95,7 +95,6 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 }
 
 /**
- * :: Experimental ::
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
  * <a href=http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>Lin and Cohen</a>. From
  * the abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
@@ -108,7 +107,6 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  * Spectral clustering (Wikipedia)</a>
  */
 @Since("2.4.0")
-@Experimental
 class PowerIterationClustering private[clustering] (
     @Since("2.4.0") override val uid: String)
   extends PowerIterationClusteringParams with DefaultParamsWritable {

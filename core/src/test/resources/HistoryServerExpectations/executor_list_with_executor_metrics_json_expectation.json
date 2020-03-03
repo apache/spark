@@ -49,7 +49,8 @@
     "MajorGCCount" : 3,
     "MajorGCTime" : 144
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "3",
   "hostPort" : "test-3.vpc.company.com:37641",
@@ -114,7 +115,8 @@
     "HTTP_SCHEME" : "http://",
     "NM_HOST" : "test-3.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000004"
-  }
+  },
+  "resources" : { }
 }, {
   "id" : "2",
   "hostPort" : "test-4.vpc.company.com:33179",
@@ -179,7 +181,8 @@
     "HTTP_SCHEME" : "http://",
     "NM_HOST" : "test-4.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000003"
-  }
+  },
+  "resources" : { }
 }, {
   "id" : "1",
   "hostPort" : "test-2.vpc.company.com:43764",
@@ -244,5 +247,6 @@
     "HTTP_SCHEME" : "http://",
     "NM_HOST" : "test-2.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000002"
-  }
+  },
+  "resources" : { }
 } ]

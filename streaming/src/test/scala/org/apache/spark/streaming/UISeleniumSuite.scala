@@ -23,8 +23,8 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -97,6 +97,8 @@ class UISeleniumSuite
 
       val sparkUI = ssc.sparkContext.ui.get
 
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
+
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
@@ -149,8 +151,9 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Output Op Duration", "Status", "Job Id",
-            "Job Duration", "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total",
+          List("Output Op Id", "Description", "Output Op Duration (?)", "Status", "Job Id",
+            "Job Duration (?)", "Stages: Succeeded/Total",
+            "Tasks (for all stages): Succeeded/Total",
             "Error")
         }
 
@@ -161,7 +164,7 @@ class UISeleniumSuite
 
         // Check job ids
         val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
-        jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
+        jobIdCells.map(_.text).filter(_.forall(_.isDigit)) should be (List("0", "1", "2", "3"))
 
         val jobLinks = jobIdCells.flatMap(_.attribute("href"))
         jobLinks.size should be (4)
@@ -195,6 +198,8 @@ class UISeleniumSuite
       }
 
       ssc.stop(false)
+
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))

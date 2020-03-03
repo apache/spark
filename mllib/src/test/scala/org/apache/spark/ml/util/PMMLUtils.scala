@@ -30,7 +30,6 @@ import org.jpmml.model.filters.ImportFilter
  */
 private[spark] object PMMLUtils {
   /**
-   * :: Experimental ::
    * Load a PMML model from a string. Note: for testing only, PMML model evaluation is supported
    * through external spark-packages.
    */

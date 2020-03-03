@@ -54,7 +54,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       Seq(dsTbl, hiveTbl).foreach { tbl =>
         sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
-        val catalogStats = getCatalogStatistics(tbl)
+        val catalogStats = getTableStats(tbl)
         withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
           val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
           assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
@@ -136,10 +136,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
              |)""".stripMargin)
 
         spark.sql("REFRESH TABLE t1")
-        // Before SPARK-19678, sizeInBytes should be equal to dataSize.
-        // After SPARK-19678, sizeInBytes should be equal to DEFAULT_SIZE_IN_BYTES.
+        // After SPARK-28573, sizeInBytes should be equal to dataSize.
         val relation1 = spark.table("t1").queryExecution.analyzed.children.head
-        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+        assert(relation1.stats.sizeInBytes === dataSize)
 
         spark.sql("REFRESH TABLE t1")
         // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
@@ -159,7 +158,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     // Non-partitioned table
     val nonPartTable = "non_part_table"
     withTable(nonPartTable) {
-      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING) USING hive")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
 
@@ -313,7 +312,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
 
-        assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(17436))
+        assert(getTableStats(tableName).sizeInBytes === BigInt(17436))
       }
     }
   }
@@ -354,11 +353,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           // Analyze original table - expect 3 partitions
           sql(s"ANALYZE TABLE $sourceTableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(sourceTableName).sizeInBytes === BigInt(3 * 5812))
+          assert(getTableStats(sourceTableName).sizeInBytes === BigInt(3 * 5812))
 
           // Analyze partial-copy table - expect only 1 partition
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(5812))
+          assert(getTableStats(tableName).sizeInBytes === BigInt(5812))
         }
     }
   }
@@ -841,7 +840,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("alter table should not have the side effect to store statistics in Spark side") {
     val table = "alter_table_side_effect"
     withTable(table) {
-      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"CREATE TABLE $table (i string, j string) USING hive")
       sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
@@ -1205,7 +1204,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.
-        val cs = getCatalogStatistics(tableName).colStats
+        val cs = getTableStats(tableName).colStats
         val intHistogram = cs("cint").histogram.get
         val tsHistogram = cs("ctimestamp").histogram.get
         assert(intHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
@@ -1474,7 +1473,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         spark.sql("REFRESH TABLE t1")
         val relation1 = spark.table("t1").queryExecution.analyzed.children.head
-        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+        // After SPARK-28573, sizeInBytes should be the actual size.
+        assert(relation1.stats.sizeInBytes === getDataSize(tempDir))
 
         spark.sql("REFRESH TABLE t1")
         withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
@@ -1485,43 +1485,75 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
-    withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
-      withTable("t1", "t2") {
-        sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-        sql("INSERT INTO t1 VALUES (1, 'a')")
-        checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
-        sql("CREATE TABLE t2 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-        sql("INSERT INTO t2 VALUES (1, 'a')")
-        checkKeywordsExist(sql("EXPLAIN SELECT * FROM t1, t2 WHERE t1.id=t2.id"),
-          "BroadcastHashJoin")
+  test("fallBackToHdfs should not support Hive partitioned table") {
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
+        HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
+          withTable("spark_28876") {
+            sql(
+              s"""
+                 |CREATE TABLE spark_28876(id bigint)
+                 |PARTITIONED BY (ds STRING)
+                 |STORED AS PARQUET
+                 |LOCATION '${tableDir.toURI}'
+             """.stripMargin)
+
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
+
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
+          }
+        }
       }
     }
   }
 
-  test("SPARK-25474: should not fall back to hdfs when table statistics exists" +
-    " for CatalogFileIndex dataSourceTable") {
+  test("SPARK-30269 failed to update partition stats if it's equal to table's old stats") {
+    val tbl = "SPARK_30269"
+    val ext_tbl = "SPARK_30269_external"
+    withTempDir { dir =>
+      withTable(tbl, ext_tbl) {
+        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
+        sql(
+          s"""
+             | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+             | PARTITIONED BY (ds)
+             | LOCATION '${dir.toURI}'
+           """.stripMargin)
 
-    var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
-    Seq(true, false).foreach { fallBackToHdfs =>
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> fallBackToHdfs.toString) {
-        withTable("t1") {
-          sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-          sql("INSERT INTO t1 VALUES (1, 'a')")
-          // Analyze command updates the statistics of table `t1`
-          sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
-          val catalogTable = getCatalogTable("t1")
-          assert(catalogTable.stats.isDefined)
+        Seq(tbl, ext_tbl).foreach { tblName =>
+          sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
-          if (!fallBackToHdfs) {
-            sizeInBytesDisabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
-          } else {
-            sizeInBytesEnabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
-          }
-          checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
+          // analyze table
+          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
+          var tableStats = getTableStats(tblName)
+          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.rowCount.isEmpty)
+
+          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
+          tableStats = getTableStats(tblName)
+          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.rowCount.get == 1)
+
+          // analyze a single partition
+          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
+          var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+          assert(partStats.sizeInBytes == 601)
+          assert(partStats.rowCount.isEmpty)
+
+          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
+          partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+          assert(partStats.sizeInBytes == 601)
+          assert(partStats.rowCount.get == 1)
         }
       }
     }
-    assert(sizeInBytesEnabledFallBack === sizeInBytesDisabledFallBack)
   }
 }

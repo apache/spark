@@ -20,10 +20,9 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
-import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.util.SerializableConfiguration
 
 class FileBatchWrite(
     job: Job,
@@ -45,7 +44,7 @@ class FileBatchWrite(
     committer.abortJob(job)
   }
 
-  override def createBatchWriterFactory(): DataWriterFactory = {
+  override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
     FileWriterFactory(description, committer)
   }
 }

@@ -330,7 +330,7 @@ class LDA private (
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
     val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
-    val iterationTimes = Array.fill[Double](maxIterations)(0)
+    val iterationTimes = Array.ofDim[Double](maxIterations)
     while (iter < maxIterations) {
       val start = System.nanoTime()
       state.next()

@@ -27,18 +27,18 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util.Utils
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  private def cachePrimitiveTest(data: DataFrame, dataType: String): Unit = {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
@@ -507,7 +507,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
           withTable("table1") {
             val workDirPath = workDir.getAbsolutePath

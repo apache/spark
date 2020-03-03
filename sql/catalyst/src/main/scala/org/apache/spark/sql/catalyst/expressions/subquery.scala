@@ -37,9 +37,6 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
   /** Updates the expression with a new plan. */
   def withNewPlan(plan: T): PlanExpression[T]
 
-  /** Defines how the canonicalization should work for this expression. */
-  def canonicalize(attrs: AttributeSeq): PlanExpression[T]
-
   protected def conditionString: String = children.mkString("[", " && ", "]")
 }
 
@@ -61,22 +58,17 @@ abstract class SubqueryExpression(
         children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
     case _ => false
   }
-  override def canonicalize(attrs: AttributeSeq): SubqueryExpression = {
-    // Normalize the outer references in the subquery plan.
-    val normalizedPlan = plan.transformAllExpressions {
-      case OuterReference(r) => OuterReference(QueryPlan.normalizeExprId(r, attrs))
-    }
-    withNewPlan(normalizedPlan).canonicalized.asInstanceOf[SubqueryExpression]
-  }
 }
 
 object SubqueryExpression {
   /**
-   * Returns true when an expression contains an IN or EXISTS subquery and false otherwise.
+   * Returns true when an expression contains an IN or correlated EXISTS subquery
+   * and false otherwise.
    */
-  def hasInOrExistsSubquery(e: Expression): Boolean = {
+  def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
-      case _: ListQuery | _: Exists => true
+      case _: ListQuery => true
+      case _: Exists if e.children.nonEmpty => true
       case _ => false
     }.isDefined
   }
@@ -312,7 +304,10 @@ case class ListQuery(
 }
 
 /**
- * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
+ * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition
+ * or some uncorrelated condition.
+ *
+ * 1. correlated condition:
  *
  * For example (SQL):
  * {{{
@@ -321,6 +316,17 @@ case class ListQuery(
  *   WHERE   EXISTS (SELECT  *
  *                   FROM    b
  *                   WHERE   b.id = a.id)
+ * }}}
+ *
+ * 2. uncorrelated condition example:
+ *
+ * For example (SQL):
+ * {{{
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   EXISTS (SELECT  *
+ *                   FROM    b
+ *                   WHERE   b.id > 10)
  * }}}
  */
 case class Exists(

@@ -24,16 +24,13 @@ import javax.imageio.ImageIO
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.input.PortableDataStream
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.annotation.Since
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Defines the image schema and methods to read and manipulate images.
  */
-@Experimental
 @Since("2.3.0")
 object ImageSchema {
 

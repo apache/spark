@@ -25,11 +25,11 @@ import scala.language.implicitConversions
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
 
-class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
+class HDFSMetadataLogSuite extends SharedSparkSession {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
@@ -59,6 +59,21 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("HDFSMetadataLog: purge") {
+    testPurge()
+  }
+
+  Seq(
+    classOf[FileSystemBasedCheckpointFileManager],
+    classOf[FileContextBasedCheckpointFileManager]
+  ).map(_.getCanonicalName).foreach { cls =>
+    test(s"HDFSMetadataLog: purge - explicit file manager - $cls") {
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> cls) {
+        testPurge()
+      }
+    }
+  }
+
+  private def testPurge(): Unit = {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -75,12 +90,16 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(2).isDefined)
       assert(metadataLog.getLatest().get._1 == 2)
 
-      // There should be exactly one file, called "2", in the metadata directory.
+      // There should be at most two files, called "2", and optionally crc file,
+      // in the metadata directory.
       // This check also tests for regressions of SPARK-17475
-      val allFiles = new File(metadataLog.metadataPath.toString).listFiles()
-        .filter(!_.getName.startsWith(".")).toSeq
-      assert(allFiles.size == 1)
-      assert(allFiles(0).getName() == "2")
+      val allFiles = new File(metadataLog.metadataPath.toString).listFiles().toSeq
+      assert(allFiles.size <= 2)
+      assert(allFiles.exists(_.getName == "2"))
+      if (allFiles.size == 2) {
+        // there's possibly crc file being left as well
+        assert(allFiles.exists(_.getName == ".2.crc"))
+      }
     }
   }
 

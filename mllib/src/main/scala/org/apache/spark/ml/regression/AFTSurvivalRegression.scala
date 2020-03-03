@@ -24,17 +24,16 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
@@ -45,9 +44,8 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for accelerated failure time (AFT) regression.
  */
-private[regression] trait AFTSurvivalRegressionParams extends Params
-  with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
-  with HasTol with HasFitIntercept with HasAggregationDepth with Logging {
+private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
+  with HasMaxIter with HasTol with HasFitIntercept with HasAggregationDepth with Logging {
 
   /**
    * Param for censor column name.
@@ -120,36 +118,22 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 }
 
 /**
- * :: Experimental ::
  * Fit a parametric survival regression model named accelerated failure time (AFT) model
  * (see <a href="https://en.wikipedia.org/wiki/Accelerated_failure_time_model">
  * Accelerated failure time model (Wikipedia)</a>)
  * based on the Weibull distribution of the survival time.
  */
-@Experimental
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
-  with DefaultParamsWritable with Logging {
+  extends Regressor[Vector, AFTSurvivalRegression, AFTSurvivalRegressionModel]
+  with AFTSurvivalRegressionParams with DefaultParamsWritable with Logging {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("aftSurvReg"))
 
   /** @group setParam */
   @Since("1.6.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
   def setCensorCol(value: String): this.type = set(censorCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -210,24 +194,20 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
   }
 
-  @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
-    transformSchema(dataset.schema, logging = true)
+  @Since("3.0.0")
+  override def train(dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val featuresSummarizer = {
-      val seqOp = (c: MultivariateOnlineSummarizer, v: AFTPoint) => c.add(v.features)
-      val combOp = (c1: MultivariateOnlineSummarizer, c2: MultivariateOnlineSummarizer) => {
-        c1.merge(c2)
-      }
-      instances.treeAggregate(
-        new MultivariateOnlineSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val featuresSummarizer = instances.treeAggregate(
+      Summarizer.createSummarizerBuffer("mean", "std", "count"))(
+      seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
+      combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
+      depth = $(aggregationDepth)
+    )
 
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresStd = featuresSummarizer.std.toArray
     val numFeatures = featuresStd.size
 
     instr.logPipelineStage(this)
@@ -287,7 +267,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val coefficients = Vectors.dense(rawCoefficients)
     val intercept = parameters(1)
     val scale = math.exp(parameters(0))
-    copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale).setParent(this))
+    new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
   }
 
   @Since("1.6.0")
@@ -307,25 +287,19 @@ object AFTSurvivalRegression extends DefaultParamsReadable[AFTSurvivalRegression
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[AFTSurvivalRegression]].
  */
-@Experimental
 @Since("1.6.0")
 class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("2.0.0") val coefficients: Vector,
     @Since("1.6.0") val intercept: Double,
     @Since("1.6.0") val scale: Double)
-  extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
+  extends RegressionModel[Vector, AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
+  with MLWritable {
 
-  /** @group setParam */
-  @Since("1.6.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+  @Since("3.0.0")
+  override def numFeatures: Int = coefficients.size
 
   /** @group setParam */
   @Since("1.6.0")
@@ -354,7 +328,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -363,12 +337,14 @@ class AFTSurvivalRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
       val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+        .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {
@@ -382,7 +358,15 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    if (isDefined(quantilesCol) && $(quantilesCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(quantilesCol), $(quantileProbabilities).length)
+    }
+    outputSchema
   }
 
   @Since("1.6.0")
@@ -394,6 +378,11 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter =
     new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"AFTSurvivalRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 @Since("1.6.0")
@@ -576,8 +565,8 @@ private class AFTAggregator(
 
     val margin = {
       var sum = 0.0
-      xi.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+      xi.foreachNonZero { (index, value) =>
+        if (localFeaturesStd(index) != 0.0) {
           sum += coefficients(index) * (value / localFeaturesStd(index))
         }
       }
@@ -591,8 +580,8 @@ private class AFTAggregator(
 
     gradientSumArray(0) += delta + multiplier * sigma * epsilon
     gradientSumArray(1) += { if (fitIntercept) multiplier else 0.0 }
-    xi.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    xi.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         gradientSumArray(index + 2) += multiplier * (value / localFeaturesStd(index))
       }
     }

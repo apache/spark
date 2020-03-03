@@ -472,6 +472,19 @@ object Overlay {
     builder.append(input.substringSQL(pos + length, Int.MaxValue))
     builder.build()
   }
+
+  def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.length
+    }
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
+      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -487,6 +500,14 @@ object Overlay {
        Spark ANSI SQL
       > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
        Structured SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
+       Spark CORE
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
+       Structured SQL
   """)
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
@@ -496,19 +517,42 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = input.dataType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
+    TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      TypeUtils.checkForSameTypeInputExpr(
+        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  private lazy val replaceFunc = input.dataType match {
+    case StringType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[UTF8String],
+          replaceEval.asInstanceOf[UTF8String],
+          posEval, lenEval)
+      }
+    case BinaryType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[Array[Byte]],
+          replaceEval.asInstanceOf[Array[Byte]],
+          posEval, lenEval)
+      }
+  }
+
   override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
-    val inputStr = inputEval.asInstanceOf[UTF8String]
-    val replaceStr = replaceEval.asInstanceOf[UTF8String]
-    val position = posEval.asInstanceOf[Int]
-    val length = lenEval.asInstanceOf[Int]
-    Overlay.calculate(inputStr, replaceStr, position, length)
+    replaceFunc(inputEval, replaceEval, posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -675,8 +719,6 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
-
     _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
@@ -706,8 +748,6 @@ object StringTrim {
        SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SL');
-       parkSQ
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
@@ -723,7 +763,7 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -802,8 +842,6 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -814,8 +852,6 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('Sp', 'SSparkSQLS');
-       arkSQLS
   """,
   since = "1.5.0")
 case class StringTrimLeft(
@@ -823,7 +859,7 @@ case class StringTrimLeft(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -904,8 +940,6 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -916,8 +950,6 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('LQSa', 'SSparkSQLS');
-       SSpark
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
@@ -926,7 +958,7 @@ case class StringTrimRight(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -1255,11 +1287,11 @@ object ParseUrl {
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
   examples = """
     Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
        spark.apache.org
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
        query=1
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
   """,
   since = "2.0.0")

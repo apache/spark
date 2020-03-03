@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 object OrcUtils extends Logging {
 
@@ -62,8 +62,9 @@ object OrcUtils extends Logging {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
-      val reader = OrcFile.createReader(file, readerOptions)
-      val schema = reader.getSchema
+      val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
+        reader.getSchema
+      }
       if (schema.getFieldNames.size == 0) {
         None
       } else {
@@ -162,6 +163,7 @@ object OrcUtils extends Logging {
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
+                  reader.close()
                   throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
                     + s"$matchedOrcFieldsString in case-insensitive mode")
                 } else {

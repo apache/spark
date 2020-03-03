@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import java.util.Locale
 
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -181,12 +182,19 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("read/write") {
-    val t = new StopWordsRemover()
+    val t1 = new StopWordsRemover()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setStopWords(Array("the", "a"))
       .setCaseSensitive(true)
-    testDefaultReadWrite(t)
+    testDefaultReadWrite(t1)
+
+    val t2 = new StopWordsRemover()
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("result1", "result2", "result3"))
+      .setStopWords(Array("the", "a"))
+      .setCaseSensitive(true)
+    testDefaultReadWrite(t2)
   }
 
   test("StopWordsRemover output column already exists") {
@@ -199,7 +207,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     testTransformerByInterceptingException[(Array[String], Array[String])](
       dataSet,
       remover,
-      s"requirement failed: Column $outputCol already exists.",
+      s"requirement failed: Output Column $outputCol already exists.",
       "expected")
   }
 
@@ -215,6 +223,125 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
       assert(remover.getLocale == "en_US")
     } finally {
       Locale.setDefault(oldDefault)
+    }
+  }
+
+  test("Multiple Columns: StopWordsRemover default") {
+    val remover = new StopWordsRemover()
+      .setInputCols(Array("raw1", "raw2"))
+      .setOutputCols(Array("filtered1", "filtered2"))
+    val df = Seq(
+      (Seq("test", "test"), Seq("test1", "test2"), Seq("test", "test"), Seq("test1", "test2")),
+      (Seq("a", "b", "c", "d"), Seq("a", "b"), Seq("b", "c", "d"), Seq("b")),
+      (Seq("a", "the", "an"), Seq("the", "an"), Seq(), Seq()),
+      (Seq("A", "The", "AN"), Seq("A", "The"), Seq(), Seq()),
+      (Seq(null), Seq(null), Seq(null), Seq(null)),
+      (Seq(), Seq(), Seq(), Seq())
+    ).toDF("raw1", "raw2", "expected1", "expected2")
+
+    remover.transform(df)
+      .select("filtered1", "expected1", "filtered2", "expected2")
+      .collect().foreach {
+        case Row(r1: Seq[_], e1: Seq[_], r2: Seq[_], e2: Seq[_]) =>
+          assert(r1 === e1,
+            s"The result value is not correct after bucketing. Expected $e1 but found $r1")
+          assert(r2 === e2,
+            s"The result value is not correct after bucketing. Expected $e2 but found $r2")
+    }
+  }
+
+  test("Multiple Columns: StopWordsRemover with particular stop words list") {
+    val stopWords = Array("test", "a", "an", "the")
+    val remover = new StopWordsRemover()
+      .setInputCols(Array("raw1", "raw2"))
+      .setOutputCols(Array("filtered1", "filtered2"))
+      .setStopWords(stopWords)
+    val df = Seq(
+      (Seq("test", "test"), Seq("test1", "test2"), Seq(), Seq("test1", "test2")),
+      (Seq("a", "b", "c", "d"), Seq("a", "b"), Seq("b", "c", "d"), Seq("b")),
+      (Seq("a", "the", "an"), Seq("a", "the", "test1"), Seq(), Seq("test1")),
+      (Seq("A", "The", "AN"), Seq("A", "The", "AN"), Seq(), Seq()),
+      (Seq(null), Seq(null), Seq(null), Seq(null)),
+      (Seq(), Seq(), Seq(), Seq())
+    ).toDF("raw1", "raw2", "expected1", "expected2")
+
+    remover.transform(df)
+      .select("filtered1", "expected1", "filtered2", "expected2")
+      .collect().foreach {
+        case Row(r1: Seq[_], e1: Seq[_], r2: Seq[_], e2: Seq[_]) =>
+          assert(r1 === e1,
+            s"The result value is not correct after bucketing. Expected $e1 but found $r1")
+          assert(r2 === e2,
+            s"The result value is not correct after bucketing. Expected $e2 but found $r2")
+    }
+  }
+
+  test("Compare single/multiple column(s) StopWordsRemover in pipeline") {
+    val df = Seq(
+      (Seq("test", "test"), Seq("test1", "test2")),
+      (Seq("a", "b", "c", "d"), Seq("a", "b")),
+      (Seq("a", "the", "an"), Seq("a", "the", "test1")),
+      (Seq("A", "The", "AN"), Seq("A", "The", "AN")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("input1", "input2")
+
+    val multiColsRemover = new StopWordsRemover()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("output1", "output2"))
+
+    val plForMultiCols = new Pipeline()
+      .setStages(Array(multiColsRemover))
+      .fit(df)
+
+    val removerForCol1 = new StopWordsRemover()
+      .setInputCol("input1")
+      .setOutputCol("output1")
+    val removerForCol2 = new StopWordsRemover()
+      .setInputCol("input2")
+      .setOutputCol("output2")
+
+    val plForSingleCol = new Pipeline()
+      .setStages(Array(removerForCol1, removerForCol2))
+      .fit(df)
+
+    val resultForSingleCol = plForSingleCol.transform(df)
+      .select("output1", "output2")
+      .collect()
+    val resultForMultiCols = plForMultiCols.transform(df)
+      .select("output1", "output2")
+      .collect()
+
+    resultForSingleCol.zip(resultForMultiCols).foreach {
+      case (rowForSingle, rowForMultiCols) =>
+        assert(rowForSingle === rowForMultiCols)
+    }
+  }
+
+  test("Multiple Columns: Mismatched sizes of inputCols/outputCols") {
+    val remover = new StopWordsRemover()
+      .setInputCols(Array("input1"))
+      .setOutputCols(Array("result1", "result2"))
+    val df = Seq(
+      (Seq("A"), Seq("A")),
+      (Seq("The", "the"), Seq("The"))
+    ).toDF("input1", "input2")
+    intercept[IllegalArgumentException] {
+      remover.transform(df).count()
+    }
+  }
+
+  test("Multiple Columns: Set both of inputCol/inputCols") {
+    val remover = new StopWordsRemover()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setInputCol("input1")
+    val df = Seq(
+      (Seq("A"), Seq("A")),
+      (Seq("The", "the"), Seq("The"))
+    ).toDF("input1", "input2")
+    intercept[IllegalArgumentException] {
+      remover.transform(df).count()
     }
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import java.{util => ju}
+import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
@@ -24,6 +26,7 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -119,6 +122,59 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
+  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
+  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
+  }
+
+  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+  }
+
+  /**
+   * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
+   * format `batchTime` without milliseconds.
+   *
+   * @param batchTime the batch time to be formatted
+   * @param batchInterval the batch interval
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
+   * @param timezone only for test
+   */
+  def formatBatchTime(
+      batchTime: Long,
+      batchInterval: Long,
+      showYYYYMMSS: Boolean = true,
+      timezone: TimeZone = null): String = {
+    val oldTimezones =
+      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
+    if (timezone != null) {
+      batchTimeFormat.get.setTimeZone(timezone)
+      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
+    }
+    try {
+      val formattedBatchTime =
+        if (batchInterval < 1000) {
+          batchTimeFormatWithMilliseconds.get.format(batchTime)
+        } else {
+          // If batchInterval >= 1 second, don't show milliseconds
+          batchTimeFormat.get.format(batchTime)
+        }
+      if (showYYYYMMSS) {
+        formattedBatchTime
+      } else {
+        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
+      }
+    } finally {
+      if (timezone != null) {
+        batchTimeFormat.get.setTimeZone(oldTimezones._1)
+        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
+      }
+    }
+  }
+
   /** Generate a human-readable string representing a number (e.g. 100 K) */
   def formatNumber(records: Double): String = {
     val trillion = 1e12
@@ -178,7 +234,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -228,7 +283,7 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -310,9 +365,13 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
+      // When headerClasses is not empty, it should have the same length as headers parameter
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // The tooltip information could be None, which indicates header does not have a tooltip.
+      // When tooltipHeaders is not empty, it should have the same length as headers parameter
+      tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -333,6 +392,14 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getTooltip(index: Int): Option[String] = {
+      if (index < tooltipHeaders.size) {
+        tooltipHeaders(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
@@ -346,7 +413,15 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        getTooltip(x._2) match {
+          case Some(tooltip) =>
+            <th width={colWidthAttr} class={getClass(x._2)}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {getHeaderContent(x._1)}
+              </span>
+            </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        }
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
@@ -409,7 +484,7 @@ private[spark] object UIUtils extends Logging {
             class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="right">
+           data-placement="top">
           DAG Visualization
         </a>
       </span>
@@ -426,6 +501,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>
@@ -549,5 +627,40 @@ private[spark] object UIUtils extends Logging {
 
   def buildErrorResponse(status: Response.Status, msg: String): Response = {
     Response.status(status).entity(msg).`type`(MediaType.TEXT_PLAIN).build()
+  }
+
+  /**
+   * There may be different duration labels in each batch. So we need to
+   * mark those missing duration label as '0d' to avoid UI rending error.
+   */
+  def durationDataPadding(
+      values: Array[(Long, ju.Map[String, JLong])]): Array[(Long, Map[String, Double])] = {
+    val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
+    values.map { case (xValue, yValue) =>
+      val dataPadding = operationLabels.map { opLabel =>
+        if (yValue.containsKey(opLabel)) {
+          (opLabel, yValue.get(opLabel).toDouble)
+        } else {
+          (opLabel, 0d)
+        }
+      }
+      (xValue, dataPadding.toMap)
+    }
+  }
+
+  def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
+    if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{message}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      Seq.empty[Node]
+    }
   }
 }

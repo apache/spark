@@ -36,8 +36,9 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 import org.apache.kafka.common.security.scram.ScramLoginModule
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
@@ -125,7 +126,9 @@ private[spark] object KafkaTokenUtil extends Logging {
       adminClientProperties.put(SaslConfigs.SASL_MECHANISM, SaslConfigs.GSSAPI_MECHANISM)
       if (sparkConf.contains(KEYTAB)) {
         logDebug("Keytab detected, using it for login.")
-        val jaasParams = getKeytabJaasParams(sparkConf, clusterConf)
+        val keyTab = sparkConf.get(KEYTAB).get
+        val principal = sparkConf.get(PRINCIPAL).get
+        val jaasParams = getKeytabJaasParams(keyTab, principal, clusterConf.kerberosServiceName)
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       } else {
         logDebug("Using ticket cache for login.")
@@ -181,17 +184,18 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private def getKeytabJaasParams(
-      sparkConf: SparkConf,
-      clusterConf: KafkaTokenClusterConf): String = {
+  def getKeytabJaasParams(
+      keyTab: String,
+      principal: String,
+      kerberosServiceName: String): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
       | debug=${isGlobalKrbDebugEnabled()}
       | useKeyTab=true
-      | serviceName="${clusterConf.kerberosServiceName}"
-      | keyTab="${sparkConf.get(KEYTAB).get}"
-      | principal="${sparkConf.get(PRINCIPAL).get}";
+      | serviceName="$kerberosServiceName"
+      | keyTab="$keyTab"
+      | principal="$principal";
       """.stripMargin.replace("\n", "")
     logDebug(s"Krb keytab JAAS params: $params")
     params
@@ -213,7 +217,7 @@ private[spark] object KafkaTokenUtil extends Logging {
    * Krb5LoginModule package vary in different JVMs.
    * Please see Hadoop UserGroupInformation for further details.
    */
-  private def getKrb5LoginModuleName(): String = {
+  def getKrb5LoginModuleName(): String = {
     if (System.getProperty("java.vendor").contains("IBM")) {
       "com.ibm.security.auth.module.Krb5LoginModule"
     } else {
@@ -238,8 +242,8 @@ private[spark] object KafkaTokenUtil extends Logging {
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
       logDebug("%-15s %-15s %-15s %-25s %-15s %-15s %-15s".format(
-        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.tokenId,
+        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.owner,
         tokenInfo.renewersAsString,
         dateFormat.format(tokenInfo.issueTimestamp),
@@ -248,7 +252,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def findMatchingToken(
+  def findMatchingTokenClusterConfig(
       sparkConf: SparkConf,
       bootStrapServers: String): Option[KafkaTokenClusterConf] = {
     val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
@@ -269,6 +273,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   def getTokenJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
       getTokenService(clusterConf.identifier))
+    require(token != null, s"Token for identifier ${clusterConf.identifier} must exist")
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
@@ -284,5 +289,19 @@ private[spark] object KafkaTokenUtil extends Logging {
     logDebug(s"Scram JAAS params: ${KafkaRedactionUtil.redactJaasParam(params)}")
 
     params
+  }
+
+  def needTokenUpdate(
+      sparkConf: SparkConf,
+      params: ju.Map[String, Object],
+      clusterConfig: Option[KafkaTokenClusterConf]): Boolean = {
+    if (HadoopDelegationTokenManager.isServiceEnabled(sparkConf, "kafka") &&
+        clusterConfig.isDefined && params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
+      logDebug("Delegation token used by connector, checking if uses the latest token.")
+      val connectorJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
+      getTokenJaasParams(clusterConfig.get) != connectorJaasParams
+    } else {
+      false
+    }
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   import ParquetCompatibilityTest._
 
   private val parquetFilePath = Thread.currentThread().getContextClassLoader.getResource(

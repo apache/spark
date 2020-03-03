@@ -16,19 +16,22 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite base for testing the redaction of DataSourceScanExec/BatchScanExec.
  */
-abstract class DataSourceScanRedactionTest extends QueryTest with SharedSQLContext {
+abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set("spark.redaction.string.regex", "file:/[^\\]\\s]+")
@@ -69,7 +72,7 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSQLConte
  */
 class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "orc")
+    .set(SQLConf.USE_V1_SOURCE_LIST.key, "orc")
 
   override protected def getRootPath(df: DataFrame): Path =
     df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
@@ -121,7 +124,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "")
+    .set(SQLConf.USE_V1_SOURCE_LIST.key, "")
 
   override protected def getRootPath(df: DataFrame): Path =
     df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
@@ -150,15 +153,50 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
   }
 
   test("FileScan description") {
-    withTempPath { path =>
-      val dir = path.getCanonicalPath
-      spark.range(0, 10).write.orc(dir)
-      val df = spark.read.orc(dir)
+    Seq("json", "orc", "parquet").foreach { format =>
+      withTempPath { path =>
+        val dir = path.getCanonicalPath
+        spark.range(0, 10).write.format(format).save(dir)
+        val df = spark.read.format(format).load(dir)
 
-      assert(isIncluded(df.queryExecution, "ReadSchema"))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
-      assert(isIncluded(df.queryExecution, "PushedFilters"))
-      assert(isIncluded(df.queryExecution, "Location"))
+        withClue(s"Source '$format':") {
+          assert(isIncluded(df.queryExecution, "ReadSchema"))
+          assert(isIncluded(df.queryExecution, "BatchScan"))
+          if (Seq("orc", "parquet").contains(format)) {
+            assert(isIncluded(df.queryExecution, "PushedFilters"))
+          }
+          assert(isIncluded(df.queryExecution, "Location"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30362: test input metrics for DSV2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 10).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum == 10)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
+        }
+      }
     }
   }
 }

@@ -29,6 +29,11 @@ import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
+  test("redactParams shouldn't throw exception when no SparkEnv available") {
+    // This is effecting only tests and should never happen in production
+    assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())
+  }
+
   test("redactParams should give back empty parameters") {
     setSparkEnv(Map.empty)
     assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())
@@ -63,7 +68,7 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
   test("redactParams should redact token password from parameters") {
     setSparkEnv(Map.empty)
     val groupId = "id-" + ju.UUID.randomUUID().toString
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
     val kafkaParams = Seq(
@@ -76,8 +81,8 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
     assert(redactedParams.size === 2)
     assert(redactedParams.get(ConsumerConfig.GROUP_ID_CONFIG).get === groupId)
     val redactedJaasParams = redactedParams.get(SaslConfigs.SASL_JAAS_CONFIG).get
-    assert(redactedJaasParams.contains(tokenId))
-    assert(!redactedJaasParams.contains(tokenPassword))
+    assert(redactedJaasParams.contains(tokenId1))
+    assert(!redactedJaasParams.contains(tokenPassword1))
   }
 
   test("redactParams should redact passwords from parameters") {
@@ -108,13 +113,13 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   test("redactJaasParam should redact token password") {
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
 
     val redactedJaasParams = KafkaRedactionUtil.redactJaasParam(jaasParams)
 
-    assert(redactedJaasParams.contains(tokenId))
-    assert(!redactedJaasParams.contains(tokenPassword))
+    assert(redactedJaasParams.contains(tokenId1))
+    assert(!redactedJaasParams.contains(tokenPassword1))
   }
 }

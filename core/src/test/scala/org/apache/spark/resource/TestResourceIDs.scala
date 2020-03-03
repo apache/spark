@@ -18,14 +18,18 @@
 package org.apache.spark.resource
 
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.Worker.SPARK_WORKER_PREFIX
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 object TestResourceIDs {
-  val DRIVER_GPU_ID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
-  val EXECUTOR_GPU_ID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
-  val TASK_GPU_ID = ResourceID(SPARK_TASK_PREFIX, GPU)
+  val DRIVER_GPU_ID = new ResourceID(SPARK_DRIVER_PREFIX, GPU)
+  val EXECUTOR_GPU_ID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
+  val TASK_GPU_ID = new ResourceID(SPARK_TASK_PREFIX, GPU)
+  val WORKER_GPU_ID = new ResourceID(SPARK_WORKER_PREFIX, GPU)
 
-  val DRIVER_FPGA_ID = ResourceID(SPARK_DRIVER_PREFIX, FPGA)
-  val EXECUTOR_FPGA_ID = ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
-  val TASK_FPGA_ID = ResourceID(SPARK_TASK_PREFIX, FPGA)
+  val DRIVER_FPGA_ID = new ResourceID(SPARK_DRIVER_PREFIX, FPGA)
+  val EXECUTOR_FPGA_ID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
+  val TASK_FPGA_ID = new ResourceID(SPARK_TASK_PREFIX, FPGA)
+  val WORKER_FPGA_ID = new ResourceID(SPARK_WORKER_PREFIX, FPGA)
+
 }

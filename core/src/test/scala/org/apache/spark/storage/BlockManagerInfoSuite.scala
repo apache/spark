@@ -31,7 +31,6 @@ class BlockManagerInfoSuite extends SparkFunSuite {
       val bmInfo = new BlockManagerInfo(
         BlockManagerId("executor0", "host", 1234, None),
         timeMs = 300,
-        Array(),
         maxOnHeapMem = 10000,
         maxOffHeapMem = 20000,
         slaveEndpoint = null,

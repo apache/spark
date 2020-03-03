@@ -28,10 +28,10 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
-abstract class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val dateSchema = s"""
@@ -354,14 +354,12 @@ class AvroV1LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "avro")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "avro")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 }
 
 class AvroV2LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

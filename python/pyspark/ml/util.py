@@ -119,7 +119,7 @@ class MLWriter(BaseReadWrite):
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java("handleOverwrite", path, True, self.sc._jsc.sc())
+        wrapper._call_java("handleOverwrite", path, True, self.sparkSession._jsparkSession)
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -343,22 +343,6 @@ class JavaMLReadable(MLReadable):
 
 
 @inherit_doc
-class JavaPredictionModel():
-    """
-    (Private) Java Model for prediction tasks (regression and classification).
-    To be mixed in with class:`pyspark.ml.JavaModel`
-    """
-
-    @property
-    @since("2.1.0")
-    def numFeatures(self):
-        """
-        Returns the number of features the model was trained on. If unknown, returns -1
-        """
-        return self._call_java("numFeatures")
-
-
-@inherit_doc
 class DefaultParamsWritable(MLWritable):
     """
     .. note:: DeveloperApi
@@ -406,6 +390,7 @@ class DefaultParamsWriter(MLWriter):
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
+
         - class
         - timestamp
         - sparkVersion
@@ -413,6 +398,7 @@ class DefaultParamsWriter(MLWriter):
         - paramMap
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
+
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
         """

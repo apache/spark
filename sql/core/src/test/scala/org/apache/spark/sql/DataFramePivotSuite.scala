@@ -22,10 +22,10 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext {
+class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("pivot courses") {
@@ -46,7 +46,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      courseSales.groupBy($"course").pivot($"year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
   }
 
@@ -206,7 +206,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
       expected)
     checkAnswer(
-      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      complexData.groupBy().pivot($"b", Seq(true, false)).agg(max("a")),
       expected)
   }
 

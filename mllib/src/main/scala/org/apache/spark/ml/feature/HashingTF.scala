@@ -24,7 +24,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -43,7 +43,8 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
  */
 @Since("1.2.0")
 class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
+    with DefaultParamsWritable {
 
   private var hashFunc: Any => Int = FeatureHasher.murmur3Hash
 
@@ -59,15 +60,6 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Number of features. Should be greater than 0.
-   * (default = 2^18^)
-   * @group param
-   */
-  @Since("1.2.0")
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    ParamValidators.gt(0))
-
-  /**
    * Binary toggle to control term frequency counts.
    * If true, all non-zero counts are set to 1.  This is useful for discrete probabilistic
    * models that model binary events rather than integer counts.
@@ -79,11 +71,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")
 
-  setDefault(numFeatures -> (1 << 18), binary -> false)
-
-  /** @group getParam */
-  @Since("1.2.0")
-  def getNumFeatures: Int = $(numFeatures)
+  setDefault(binary -> false)
 
   /** @group setParam */
   @Since("1.2.0")
@@ -100,19 +88,20 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
+    val localNumFeatures = $(numFeatures)
+    val localBinary = $(binary)
+
     val hashUDF = udf { terms: Seq[_] =>
-      val numOfFeatures = $(numFeatures)
-      val isBinary = $(binary)
       val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
       terms.foreach { term =>
         val i = indexOf(term)
-        if (isBinary) {
+        if (localBinary) {
           termFrequencies(i) = 1.0
         } else {
           termFrequencies(i) += 1.0
         }
       }
-      Vectors.sparse($(numFeatures), termFrequencies.toSeq)
+      Vectors.sparse(localNumFeatures, termFrequencies.toSeq)
     }
 
     dataset.withColumn($(outputCol), hashUDF(col($(inputCol))),
@@ -138,6 +127,11 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"HashingTF: uid=$uid, binary=${$(binary)}, numFeatures=${$(numFeatures)}"
+  }
 }
 
 @Since("1.6.0")

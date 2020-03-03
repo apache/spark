@@ -18,10 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -41,8 +42,10 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
+  private var binaryDataset: DataFrame = _
+  private val seed = 42
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
@@ -50,13 +53,14 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     orderedLabeledPoints5_20 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20))
         .map(_.asML)
+    binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  def binaryClassificationTestWithContinuousFeatures(rf: RandomForestClassifier) {
+  def binaryClassificationTestWithContinuousFeatures(rf: RandomForestClassifier): Unit = {
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
     val newRF = rf
@@ -78,12 +82,14 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Binary classification with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
+      .setBootstrap(false)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
 
   test("Binary classification with continuous features and node Id cache:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
+      .setBootstrap(false)
       .setCacheNodeIds(true)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
@@ -169,6 +175,8 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = rf.fit(df)
 
     testPredictionModelSinglePrediction(model, df)
+    testClassificationModelSingleRawPrediction(model, df)
+    testProbClassificationModelSingleProbPrediction(model, df)
   }
 
   test("Fitting without numClasses in metadata") {
@@ -202,12 +210,90 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("model support predict leaf index") {
+    val model0 = new DecisionTreeClassificationModel("dtc", TreeTests.root0, 3, 2)
+    val model1 = new DecisionTreeClassificationModel("dtc", TreeTests.root1, 3, 2)
+    val model = new RandomForestClassificationModel("rfc", Array(model0, model1), 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = TreeTests.getTwoTreesLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
   test("should support all NumericType labels and not support other types") {
     val rf = new RandomForestClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[RandomForestClassificationModel, RandomForestClassifier](
       rf, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
+  }
+
+  test("tree params") {
+    val rdd = orderedLabeledPoints5_20
+    val rf = new RandomForestClassifier()
+      .setImpurity("entropy")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val numClasses = 2
+
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getSeed === model.getSeed)
+      assert(i.getImpurity === model.getImpurity)
+    })
+  }
+
+  test("training with sample weights") {
+    val df = binaryDataset
+    val numClasses = 2
+    // (numTrees, maxDepth, subsamplingRate, fractionInTol)
+    val testParams = Seq(
+      (20, 5, 1.0, 0.96),
+      (20, 10, 1.0, 0.96),
+      (20, 10, 0.95, 0.96)
+    )
+
+    for ((numTrees, maxDepth, subsamplingRate, tol) <- testParams) {
+      val estimator = new RandomForestClassifier()
+        .setNumTrees(numTrees)
+        .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol))
+      MLTestingUtils.testOutliersWithSmallWeights[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ == _, tol),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[RandomForestClassificationModel,
+        RandomForestClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -249,6 +335,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
+    oldStrategy.bootstrap = rf.getBootstrap
     val oldModel = OldRandomForest.trainClassifier(
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
@@ -260,7 +347,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
       numClasses)
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.hasParent)
-    assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
+    assert(!newModel.trees.head.hasParent)
     assert(newModel.numClasses === numClasses)
     assert(newModel.numFeatures === numFeatures)
   }

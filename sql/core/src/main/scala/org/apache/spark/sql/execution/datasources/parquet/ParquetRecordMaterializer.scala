@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.TimeZone
+import java.time.ZoneId
 
 import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -36,13 +36,13 @@ private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-    convertTz: Option[TimeZone])
-  extends RecordMaterializer[UnsafeRow] {
+    convertTz: Option[ZoneId])
+  extends RecordMaterializer[InternalRow] {
 
   private val rootConverter =
     new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz, NoopUpdater)
 
-  override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
+  override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 
   override def getRootConverter: GroupConverter = rootConverter
 }

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -60,7 +61,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val zero = Cast(Literal(0), sumDataType)
+  private lazy val zero = Literal.default(sumDataType)
 
   override lazy val aggBufferAttributes = sum :: Nil
 
@@ -89,5 +90,9 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     )
   }
 
-  override lazy val evaluateExpression: Expression = sum
+  override lazy val evaluateExpression: Expression = resultType match {
+    case d: DecimalType => CheckOverflow(sum, d, !SQLConf.get.ansiEnabled)
+    case _ => sum
+  }
+
 }

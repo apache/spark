@@ -52,7 +52,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
    // This mutates the SparkConf, so all accesses to it must be made after this line
    Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       """

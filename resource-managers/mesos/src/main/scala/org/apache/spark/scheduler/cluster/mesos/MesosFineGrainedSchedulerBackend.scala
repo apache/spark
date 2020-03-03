@@ -74,7 +74,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
 
   @volatile var appId: String = _
 
-  override def start() {
+  override def start(): Unit = {
     classLoader = Thread.currentThread.getContextClassLoader
     val driver = createSchedulerDriver(
       master,
@@ -184,12 +184,12 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     execArgs
   }
 
-  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
+  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID): Unit = {}
 
   override def registered(
       driver: org.apache.mesos.SchedulerDriver,
       frameworkId: FrameworkID,
-      masterInfo: MasterInfo) {
+      masterInfo: MasterInfo): Unit = {
     inClassLoader() {
       appId = frameworkId.getValue
       logInfo("Registered as framework ID " + appId)
@@ -208,9 +208,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def disconnected(d: org.apache.mesos.SchedulerDriver) {}
+  override def disconnected(d: org.apache.mesos.SchedulerDriver): Unit = {}
 
-  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo) {}
+  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo): Unit = {}
 
   private def getTasksSummary(tasks: JArrayList[MesosTaskInfo]): String = {
     val builder = new StringBuilder
@@ -229,7 +229,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
    * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
    * tasks are balanced across the cluster.
    */
-  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]) {
+  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]): Unit = {
     inClassLoader() {
       // Fail first on offers with unmet constraints
       val (offersMatchingConstraints, offersNotMatchingConstraints) =
@@ -368,7 +368,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     (taskInfo, finalResources.asJava)
   }
 
-  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
+  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus): Unit = {
     inClassLoader() {
       val tid = status.getTaskId.getValue.toLong
       val state = mesosToTaskState(status.getState)
@@ -386,7 +386,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def error(d: org.apache.mesos.SchedulerDriver, message: String) {
+  override def error(d: org.apache.mesos.SchedulerDriver, message: String): Unit = {
     inClassLoader() {
       logError("Mesos error: " + message)
       markErr()
@@ -394,18 +394,18 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     if (schedulerDriver != null) {
       schedulerDriver.stop()
     }
   }
 
-  override def reviveOffers() {
+  override def reviveOffers(): Unit = {
     schedulerDriver.reviveOffers()
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
 
   /**
    * Remove executor associated with slaveId in a thread safe manner.
@@ -418,7 +418,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   private def recordSlaveLost(
-      d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason) {
+      d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason): Unit = {
     inClassLoader() {
       logInfo("Mesos slave lost: " + slaveId.getValue)
       removeExecutor(slaveId.getValue, reason.toString)
@@ -426,12 +426,15 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID) {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID): Unit = {
     recordSlaveLost(d, slaveId, SlaveLost())
   }
 
   override def executorLost(
-      d: org.apache.mesos.SchedulerDriver, executorId: ExecutorID, slaveId: SlaveID, status: Int) {
+      d: org.apache.mesos.SchedulerDriver,
+      executorId: ExecutorID,
+      slaveId: SlaveID,
+      status: Int): Unit = {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
     recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))

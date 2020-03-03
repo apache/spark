@@ -47,7 +47,8 @@ case class AddJarCommand(path: String) extends RunnableCommand {
  */
 case class AddFileCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.addFile(path)
+    val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
+    sparkSession.sparkContext.addFile(path, recursive)
     Seq.empty[Row]
   }
 }

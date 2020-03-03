@@ -22,13 +22,13 @@ import java.math.BigDecimal
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SharedSQLContext {
+class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("built-in fixed arity expressions") {
@@ -134,10 +134,12 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df1.head().getDouble(0) >= 0.0)
 
-    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
-    val df2 = testData.select(bar())
-    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
-    assert(df2.head().getDouble(0) >= 0.0)
+    withSQLConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key -> "true") {
+      val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+      val df2 = testData.select(bar())
+      assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+      assert(df2.head().getDouble(0) >= 0.0)
+    }
 
     val javaUdf = udf(new UDF0[Double] {
       override def call(): Double = Math.random()
@@ -309,7 +311,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19338 Provide identical names for UDFs in the EXPLAIN output") {
     def explainStr(df: DataFrame): String = {
-      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
       val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
       sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
     }
@@ -360,13 +362,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           .withColumn("b", udf1($"a", lit(10)))
         df.cache()
         df.write.saveAsTable("t")
-        sparkContext.listenerBus.waitUntilEmpty(1000)
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 1, "expected to be cached in saveAsTable")
         df.write.insertInto("t")
-        sparkContext.listenerBus.waitUntilEmpty(1000)
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 2, "expected to be cached in insertInto")
         df.write.save(path.getCanonicalPath)
-        sparkContext.listenerBus.waitUntilEmpty(1000)
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 3, "expected to be cached in save for native")
       }
     }
@@ -441,16 +443,23 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf(Any, DataType)") {
-    val f = udf((x: Int) => x, IntegerType)
-    checkAnswer(
-      Seq(new Integer(1), null).toDF("x").select(f($"x")),
-      Row(1) :: Row(0) :: Nil)
+    withSQLConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key -> "true") {
+      val f = udf((x: Int) => x, IntegerType)
+      checkAnswer(
+        Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
+        Row(1) :: Row(0) :: Nil)
 
-    val f2 = udf((x: Double) => x, DoubleType)
-    checkAnswer(
-      Seq(new java.lang.Double(1.1), null).toDF("x").select(f2($"x")),
-      Row(1.1) :: Row(0.0) :: Nil)
+      val f2 = udf((x: Double) => x, DoubleType)
+      checkAnswer(
+        Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
+        Row(1.1) :: Row(0.0) :: Nil)
+    }
 
+  }
+
+  test("use untyped Scala UDF should fail by default") {
+    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
+    assert(e.getMessage.contains("You're using untyped Scala UDF"))
   }
 
   test("SPARK-26308: udf with decimal") {

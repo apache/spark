@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.objects.ExternalMapToCatalyst
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
+class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
@@ -181,15 +181,6 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
       // codegen cache should work for Datasets of same type.
       val count3 = getCodegenCount()
       assert(count3 == count2)
-
-      withSQLConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID.key -> "false") {
-        // trigger codegen for another Dataset of same type
-        createDataset().collect()
-        // with the rule disabled, codegen happens again for encoder serializer and encoder
-        // deserializer
-        val count4 = getCodegenCount()
-        assert(count4 == (count3 + 2))
-      }
     }
 
     withClue("array type") {

@@ -170,9 +170,9 @@ public class ExternalShuffleIntegrationSuite {
       TransportConf clientConf,
       int port) throws Exception {
     final FetchResult res = new FetchResult();
-    res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
-    res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
-    res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
+    res.successBlocks = Collections.synchronizedSet(new HashSet<>());
+    res.failedBlocks = Collections.synchronizedSet(new HashSet<>());
+    res.buffers = Collections.synchronizedList(new LinkedList<>());
 
     final Semaphore requestsRemaining = new Semaphore(0);
 

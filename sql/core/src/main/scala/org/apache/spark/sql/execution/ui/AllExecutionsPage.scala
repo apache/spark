@@ -324,7 +324,15 @@ private[ui] class ExecutionPagedTable(
 
             <th>
               <a href={headerLink}>
-                {header}
+                {if (header == "Duration") {
+                  <span data-toggle="tooltip" data-placement="top"
+                    title="Time from query submission to completion
+                    (or if still executing, time since submission)">
+                    {header}
+                  </span>
+                } else {
+                  {header}
+                }}
               </a>
             </th>
           } else {

@@ -19,26 +19,26 @@ package org.apache.spark.streaming.scheduler
 
 import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
-
-class ExecutorAllocationManagerSuite extends SparkFunSuite
-  with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
+class ExecutorAllocationManagerSuite extends TestSuiteBase
+  with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
   private var clock: StreamManualClock = null
 
-  before {
+  override def beforeEach(): Unit = {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new StreamManualClock()
   }
@@ -72,10 +72,15 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(expectedRequestedTotalExecs.get), meq(0), meq(Map.empty))
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+                expectedRequestedTotalExecs.get)),
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)),
+              meq(Map.empty))
         } else {
-          verify(allocationClient, never).requestTotalExecutors(0, 0, Map.empty)
-        }
+          verify(allocationClient, never).requestTotalExecutors(
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map.empty)}
       }
 
       /** Verify that a particular executor was killed */
@@ -140,8 +145,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
-      verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
+      val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      verify(allocationClient, times(1)).
+        requestTotalExecutors(
+          meq(Map(defaultProfId -> expectedRequestedTotalExecs)),
+          meq(Map(defaultProfId -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>
@@ -364,11 +372,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     }
   }
 
-  private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
-  private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
-  private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _addBatchProcTime = PrivateMethod[Unit](Symbol("addBatchProcTime"))
+  private val _requestExecutors = PrivateMethod[Unit](Symbol("requestExecutors"))
+  private val _killExecutor = PrivateMethod[Unit](Symbol("killExecutor"))
   private val _executorAllocationManager =
-    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
+    PrivateMethod[Option[ExecutorAllocationManager]](Symbol("executorAllocationManager"))
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)
@@ -392,13 +400,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    var ssc: StreamingContext = null
-    try {
-      ssc = new  StreamingContext(conf, Seconds(1))
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
-    } finally {
-      if (ssc != null) ssc.stop()
     }
   }
 }

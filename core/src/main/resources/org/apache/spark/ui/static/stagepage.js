@@ -286,7 +286,7 @@ $(document).ready(function () {
         " Show Additional Metrics" +
         "</a></div>" +
         "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
-        "<div><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
+        "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
         "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
         "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
@@ -297,34 +297,53 @@ $(document).ready(function () {
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
-        .attr("data-placement", "right")
+        .attr("data-placement", "top")
         .attr("title", "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
             "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
     $('#task_deserialization_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "right")
+        .attr("data-placement", "top")
         .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
     $('#shuffle_read_blocked_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "right")
+        .attr("data-placement", "top")
         .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
     $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
-        .attr("data-placement", "right")
+        .attr("data-placement", "top")
         .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
     $('#result_serialization_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "right")
+            .attr("data-placement", "top")
             .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
     $('#getting_result_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "right")
+            .attr("data-placement", "top")
             .attr("title", "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
     $('#peak_execution_memory').attr("data-toggle", "tooltip")
-            .attr("data-placement", "right")
+            .attr("data-placement", "top")
             .attr("title", "Execution memory refers to the memory used by internal data structures created during " +
                 "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
                 "should be approximately the sum of the peak sizes across all such data structures created " +
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
     $('[data-toggle="tooltip"]').tooltip();
-    tasksSummary = $("#parent-container");
+    var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
+        // rendering the UI page
+        $.get(createTemplateURI(appId, "stagespage"), function(template) {
+          tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+
+          $("#additionalMetrics").click(function(){
+              $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
+              $("#toggle-metrics").toggle();
+              if (window.localStorage) {
+                  window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
+              }
+          });
+
+          $("#aggregatedMetrics").click(function(){
+              $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
+              $("#toggle-aggregatedMetrics").toggle();
+              if (window.localStorage) {
+                  window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
+              }
+          });
 
         var endPoint = stageEndPoint(appId);
         var stageAttemptId = getStageAttemptId();
@@ -346,7 +365,7 @@ $(document).ready(function () {
             }
 
             // prepare data for executor summary table
-            stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
+            var stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
                 var executorDetailsMap = {};
@@ -472,27 +491,6 @@ $(document).ready(function () {
             // prepare data for accumulatorUpdates
             var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>
                 !(accumUpdate.name).toString().includes("internal."));
-
-            // rendering the UI page
-            var data = {"executors": response};
-            $.get(createTemplateURI(appId, "stagespage"), function(template) {
-                tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html(), data));
-
-                $("#additionalMetrics").click(function(){
-                    $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-metrics").toggle();
-                    if (window.localStorage) {
-                        window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
-                    }
-                });
-
-                $("#aggregatedMetrics").click(function(){
-                    $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-aggregatedMetrics").toggle();
-                    if (window.localStorage) {
-                        window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
-                    }
-                });
 
                 var quantiles = "0,0.25,0.5,0.75,1.0";
                 $.getJSON(endPoint + "/" + stageAttemptId + "/taskSummary?quantiles=" + quantiles,
@@ -758,8 +756,11 @@ $(document).ready(function () {
                         {
                             data : function (row, type) {
                                 if (accumulatorTable.length > 0 && row.accumulatorUpdates.length > 0) {
-                                    var accIndex = row.accumulatorUpdates.length - 1;
-                                    return row.accumulatorUpdates[accIndex].name + ' : ' + row.accumulatorUpdates[accIndex].update;
+                                    var allAccums = "";
+                                    row.accumulatorUpdates.forEach(function(accumulator) {
+                                        allAccums += accumulator.name + ': ' + accumulator.update + "<BR>";
+                                    })
+                                    return allAccums;
                                 } else {
                                     return "";
                                 }
@@ -878,6 +879,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
                     ],
+                    "deferRender": true
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();
@@ -897,14 +899,14 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if (para == "0") {
-                        var column = taskTableSelector.column(optionalColumns);
+                        var allColumns = taskTableSelector.columns(optionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
-                            column.visible(true);
+                            allColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
-                            column.visible(false);
+                            allColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);

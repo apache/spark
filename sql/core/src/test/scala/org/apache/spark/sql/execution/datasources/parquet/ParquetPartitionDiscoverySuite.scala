@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -51,14 +51,14 @@ case class ParquetData(intField: Int, stringField: String)
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 abstract class ParquetPartitionDiscoverySuite
-  extends QueryTest with ParquetTest with SharedSQLContext {
+  extends QueryTest with ParquetTest with SharedSparkSession {
   import PartitioningUtils._
   import testImplicits._
 
   val defaultPartitionName = ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 
   val timeZoneId = ZoneId.systemDefault()
-  val df = DateFormatter()
+  val df = DateFormatter(timeZoneId)
   val tf = TimestampFormatter(timestampPartitionPattern, timeZoneId)
 
   protected override def beforeAll(): Unit = {
@@ -215,14 +215,14 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10", Some {
       PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))
     })
 
     check("file://path/a=10/b=hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("a", "b", "c"),
-        ArrayBuffer(
+        Seq("a", "b", "c"),
+        Seq(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
           Literal.create(1.5, DoubleType)))
@@ -230,8 +230,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5, DoubleType)))
+        Seq("c"),
+        Seq(Literal.create(1.5, DoubleType)))
     })
 
     check("file:///", None)
@@ -272,8 +272,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     assert(partitionSpec2 ==
       Option(PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))))
   }
 
   test("parse partitions") {
@@ -1047,8 +1047,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
@@ -1195,7 +1194,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
@@ -1282,7 +1281,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+        case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
           assert(fileTable.fileIndex.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching DataSourceV2Relation, but got:\n$queryExecution")
