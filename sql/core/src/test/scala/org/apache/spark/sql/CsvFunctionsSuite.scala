@@ -217,6 +217,6 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg2 = intercept[AnalysisException] {
       Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
     }.getMessage
-    assert(errMsg2.contains("must return a valid string"))
+    assert(errMsg2.contains("The expression '1' must be evaluated to a valid string"))
   }
 }
