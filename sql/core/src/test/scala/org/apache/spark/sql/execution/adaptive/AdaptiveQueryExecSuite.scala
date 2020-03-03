@@ -692,7 +692,8 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           agged.count()
         }
-        assert(error.getCause().toString contains "Failed to materialize query stage")
+        assert(error.getCause().toString contains "Early failed query stage found")
+        assert(error.getSuppressed.size === 0)
       }
     }
   }
