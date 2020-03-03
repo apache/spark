@@ -219,4 +219,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(errMsg2.contains("The expression '1' must be evaluated to a valid string"))
   }
+
+  test("schema_of_csv - infers the schema of foldable CSV string") {
+    val input = concat_ws(",", lit(0.1), lit(1))
+    checkAnswer(
+      spark.range(1).select(schema_of_csv(input)),
+      Seq(Row("struct<_c0:double,_c1:int>")))
+  }
 }
