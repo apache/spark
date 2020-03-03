@@ -441,11 +441,11 @@ object DataSourceStrategy {
    * Find the column name of an expression that can be pushed down.
    */
   private[sql] def pushDownColName(e: Expression): Option[String] = {
-    def helper(e: Expression): Option[Seq[String]] = e match {
-      case a: Attribute => Some(Seq(a.name))
+    def helper(e: Expression) = e match {
+      case a: Attribute => Some(a.name)
       case _ => None
     }
-    helper(e).flatMap(_.headOption)
+    helper(e)
   }
 
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
@@ -480,16 +480,20 @@ object DataSourceStrategy {
       pushDownColName(e).map(sources.GreaterThanOrEqual(_, convertToScala(v, t)))
 
     case expressions.InSet(e: Expression, set) =>
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      pushDownColName(e).map(sources.In(_, set.toArray.map(toScala)))
+      pushDownColName(e).map {
+        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+        sources.In(_, set.toArray.map(toScala))
+      }
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
     case expressions.In(e: Expression, list) if list.forall(_.isInstanceOf[Literal]) =>
-      val hSet = list.map(_.eval(EmptyRow))
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      pushDownColName(e).map(sources.In(_, hSet.toArray.map(toScala)))
+      pushDownColName(e).map {
+        val hSet = list.map(_.eval(EmptyRow))
+        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+        sources.In(_, hSet.toArray.map(toScala))
+      }
 
     case expressions.IsNull(e: Expression) =>
       pushDownColName(e).map(sources.IsNull)
