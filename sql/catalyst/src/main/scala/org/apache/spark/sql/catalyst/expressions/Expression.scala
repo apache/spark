@@ -268,7 +268,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   protected def flatArgumentStrings: Iterator[String] = flatArguments.map {
     case e: Expression => e.argumentString
-    case arg: Any => arg.toString
+    case arg => s"$arg"
   }
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
