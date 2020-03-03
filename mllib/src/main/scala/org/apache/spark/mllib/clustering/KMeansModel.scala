@@ -48,11 +48,11 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   @transient private lazy val clusterCentersWithNorm =
     if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
-  // TODO: computation of radii may take seconds, so save it to KMeansModel in training
-  @transient private lazy val radii = if (clusterCenters == null) {
+  // TODO: computation of statistics may take seconds, so save it to KMeansModel in training
+  @transient private lazy val statistics = if (clusterCenters == null) {
     null
   } else {
-    distanceMeasureInstance.computeRadii(clusterCentersWithNorm)
+    distanceMeasureInstance.computeStatistics(clusterCentersWithNorm)
   }
 
   @Since("2.4.0")
@@ -80,7 +80,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
    */
   @Since("0.8.0")
   def predict(point: Vector): Int = {
-    distanceMeasureInstance.findClosest(clusterCentersWithNorm, radii,
+    distanceMeasureInstance.findClosest(clusterCentersWithNorm, statistics,
       new VectorWithNorm(point))._1
   }
 
@@ -90,7 +90,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   @Since("1.0.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val bcCentersWithNorm = points.context.broadcast(clusterCentersWithNorm)
-    val bcRadii = points.context.broadcast(radii)
+    val bcRadii = points.context.broadcast(statistics)
     points.map(p =>
       distanceMeasureInstance.findClosest(bcCentersWithNorm.value,
         bcRadii.value, new VectorWithNorm(p))._1)

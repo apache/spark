@@ -25,47 +25,17 @@ import org.apache.spark.mllib.util.MLUtils
 private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
-   * Radii of centers used in triangle inequality to obtain useful bounds to find
-   * closest centers.
-   *
-   * @see <a href="https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf">Charles Elkan,
-   *      Using the Triangle Inequality to Accelerate k-Means</a>
-   *
-   * @return Radii of centers. If distance between point x and center c is less than
-   *         the radius of center c, then center c is the closest center to point x.
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
    */
-  def computeRadii(centers: Array[VectorWithNorm]): Array[Double] = {
-    val k = centers.length
-    Array.fill(k)(Double.NaN)
-  }
+  def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]]
 
   /**
    * @return the index of the closest center to the given point, as well as the cost.
    */
   def findClosest(
       centers: Array[VectorWithNorm],
-      radii: Array[Double],
-      point: VectorWithNorm): (Int, Double) = {
-    var bestDistance = Double.PositiveInfinity
-    var bestIndex = 0
-    var i = 0
-    var found = false
-    while (i < centers.length && !found) {
-      val center = centers(i)
-      val d = distance(center, point)
-      val r = radii(i)
-      if (d < r) {
-        bestDistance = d
-        bestIndex = i
-        found = true
-      } else if (d < bestDistance) {
-        bestDistance = d
-        bestIndex = i
-      }
-      i += 1
-    }
-    (bestIndex, bestDistance)
-  }
+      statistics: Array[Array[Double]],
+      point: VectorWithNorm): (Int, Double)
 
   /**
    * @return the index of the closest center to the given point, as well as the cost.
@@ -200,30 +170,45 @@ object DistanceMeasure {
 private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
 
   /**
-   * @return Radii of centers. If distance between point x and center c is less than
-   *         the radius of center c, then center c is the closest center to point x.
-   *         For Euclidean distance, radius of center c is half of the distance between
-   *         center c and its closest center.
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   * @see <a href="https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf">Charles Elkan,
+   *      Using the Triangle Inequality to Accelerate k-Means</a>
+   *
+   * @return A symmetric matrix containing statistics, matrix(i)(j) represents:
+   *         1, squared radii of the center i, if i==j. If distance between point x and center i
+   *         is less than the radius of center i, then center i is the closest center to point x.
+   *         For Euclidean distance, radius of center i is half of the distance between center i
+   *         and its closest center;
+   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
+   *         Given point x, let i be current closest center, and d be current best squared
+   *         distance, if d < r, then we no longer need to compute the distance to center j.
    */
-  override def computeRadii(centers: Array[VectorWithNorm]): Array[Double] = {
+  override def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]] = {
     val k = centers.length
     if (k == 1) {
-      Array(Double.NaN)
+      Array(Array(Double.NaN))
     } else {
-      val distances = Array.fill(k)(Double.PositiveInfinity)
+      val matrix = Array.ofDim[Double](k, k)
       var i = 0
+      while (i < k) {
+        matrix(i)(i) = Double.PositiveInfinity
+        i += 1
+      }
+      i = 0
       while (i < k) {
         var j = i + 1
         while (j < k) {
           val d = distance(centers(i), centers(j))
-          if (d < distances(i)) distances(i) = d
-          if (d < distances(j)) distances(j) = d
+          val r = 0.25 * d * d
+          matrix(i)(j) = r
+          matrix(j)(i) = r
+          if (r < matrix(i)(i)) matrix(i)(i) = r
+          if (r < matrix(j)(j)) matrix(j)(j) = r
           j += 1
         }
         i += 1
       }
-
-      distances.map(_ / 2)
+      matrix
     }
   }
 
@@ -232,25 +217,25 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
    */
   override def findClosest(
       centers: Array[VectorWithNorm],
-      radii: Array[Double],
+      statistics: Array[Array[Double]],
       point: VectorWithNorm): (Int, Double) = {
-    var bestDistance = Double.PositiveInfinity
+    var bestDistance = EuclideanDistanceMeasure.fastSquaredDistance(centers(0), point)
+    if (bestDistance < statistics(0)(0)) {
+      return (0, bestDistance)
+    }
+
     var bestIndex = 0
-    var i = 0
-    var found = false
-    while (i < centers.length && !found) {
+    var i = 1
+    while (i < centers.length) {
       val center = centers(i)
       // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
       // distance computation.
-      var lowerBoundOfSqDist = center.norm - point.norm
-      lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
-      if (lowerBoundOfSqDist < bestDistance) {
+      val normDiff = center.norm - point.norm
+      val lowerBound = normDiff * normDiff
+      if (lowerBound < bestDistance && statistics(i)(bestIndex) < bestDistance) {
         val d = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
-        val r = radii(i)
-        if (d < r * r) {
-          bestDistance = d
-          bestIndex = i
-          found = true
+        if (d < statistics(i)(i)) {
+          return (i, d)
         } else if (d < bestDistance) {
           bestDistance = d
           bestIndex = i
@@ -344,35 +329,77 @@ private[spark] object EuclideanDistanceMeasure {
 private[spark] class CosineDistanceMeasure extends DistanceMeasure {
 
   /**
-   * @return Radii of centers. If distance between point x and center c is less than
-   *         the radius of center c, then center c is the closest center to point x.
-   *         For Cosine distance, it is similar to Euclidean distance. However, here
-   *         radian/angle is used instead of Cosine distance: for center c, finding
-   *         its closest center, computing the radian/angle between them, halving the
-   *         radian/angle, and converting it back to Cosine distance at the end.
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   * @return A symmetric matrix containing statistics, matrix(i)(j) represents:
+   *         1, squared radii of the center i, if i==j. If distance between point x and center i
+   *         is less than the radius of center i, then center i is the closest center to point x.
+   *         For Cosine distance, it is similar to Euclidean distance. However, here radian/angle
+   *         is used instead of Cosine distance: for center c, finding its closest center,
+   *         computing the radian/angle between them, halving it, and converting it back to Cosine
+   *         distance at the end.
+   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
+   *         Given point x, let i be current closest center, and d be current best squared
+   *         distance, if d < r, then we no longer need to compute the distance to center j.
    */
-  override def computeRadii(centers: Array[VectorWithNorm]): Array[Double] = {
+  override def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]] = {
     val k = centers.length
     if (k == 1) {
-      Array(Double.NaN)
+      Array(Array(Double.NaN))
     } else {
-      val distances = Array.fill(k)(Double.PositiveInfinity)
+      val matrix = Array.ofDim[Double](k, k)
       var i = 0
+      while (i < k) {
+        matrix(i)(i) = Double.PositiveInfinity
+        i += 1
+      }
+      i = 0
       while (i < k) {
         var j = i + 1
         while (j < k) {
+          // d = 1 - cos(x)
+          // r = 1 - cos(x/2) = 1 - sqrt((cos(x) + 1) / 2) = 1 - sqrt(1 - d/2)
           val d = distance(centers(i), centers(j))
-          if (d < distances(i)) distances(i) = d
-          if (d < distances(j)) distances(j) = d
+          val r = 1 - math.sqrt(1 - d / 2)
+          matrix(i)(j) = r
+          matrix(j)(i) = r
+          if (r < matrix(i)(i)) matrix(i)(i) = r
+          if (r < matrix(j)(j)) matrix(j)(j) = r
           j += 1
         }
         i += 1
       }
-
-      // d = 1 - cos(x)
-      // r = 1 - cos(x/2) = 1 - sqrt((cos(x) + 1) / 2) = 1 - sqrt(1 - d/2)
-      distances.map(d => 1 - math.sqrt(1 - d / 2))
+      matrix
     }
+  }
+
+  /**
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Array[Double]],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = distance(centers(0), point)
+    if (bestDistance < statistics(0)(0)) {
+      return (0, bestDistance)
+    }
+
+    var bestIndex = 0
+    var i = 1
+    while (i < centers.length) {
+      if (statistics(i)(bestIndex) < bestDistance) {
+        val center = centers(i)
+        val d = distance(center, point)
+        if (d < statistics(i)(i)) {
+          return (i, d)
+        } else if (d < bestDistance) {
+          bestDistance = d
+          bestIndex = i
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
   }
 
   /**

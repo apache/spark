@@ -266,7 +266,6 @@ class KMeans private (
     var converged = false
     var cost = 0.0
     var iteration = 0
-    var totalRadiiTime = 0L
 
     val iterationStartTime = System.nanoTime()
 
@@ -274,12 +273,10 @@ class KMeans private (
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
-      val radiiStartTime = System.nanoTime()
-      val radii = distanceMeasureInstance.computeRadii(centers)
-      totalRadiiTime += System.nanoTime() - radiiStartTime
+      val statistics = distanceMeasureInstance.computeStatistics(centers)
 
       val costAccum = sc.doubleAccumulator
-      val bcCenters = sc.broadcast((centers, radii))
+      val bcCenters = sc.broadcast((centers, statistics))
 
       // Find the new centers
       val collected = data.mapPartitions { points =>
@@ -329,7 +326,6 @@ class KMeans private (
       instr.foreach(_.logNamedValue(s"Cost@iter=$iteration", s"$cost"))
       iteration += 1
     }
-    logInfo(f"Radii computation took ${totalRadiiTime / 1e9}%.3f seconds.")
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
     logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
