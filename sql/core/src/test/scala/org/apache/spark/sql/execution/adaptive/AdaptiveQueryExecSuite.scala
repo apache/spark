@@ -22,8 +22,9 @@ import java.net.URI
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -110,7 +111,7 @@ class AdaptiveQueryExecSuite
     }.length
 
     val numLocalReaders = collect(plan) {
-      case reader: LocalShuffleReaderExec => reader
+      case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
     }.length
 
     assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
@@ -142,11 +143,11 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader: LocalShuffleReaderExec => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
-      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // The pre-shuffle partition size is [0, 0, 0, 72, 0]
       // And the partitionStartIndices is [0, 3, 4], so advisoryParallelism = 3.
       // the final parallelism is
@@ -174,11 +175,11 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader: LocalShuffleReaderExec => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
-      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
       // and the partitions length is 2 * numMappers = 4
       assert(localShuffleRDD0.getPartitions.length == 4)
@@ -622,10 +623,10 @@ class AdaptiveQueryExecSuite
         def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
           assert(joins.size == 1 && joins.head.isSkewJoin)
           assert(joins.head.left.collect {
-            case r: SkewJoinShuffleReaderExec => r
+            case r: CustomShuffleReaderExec => r
           }.head.partitionSpecs.length == expectedNumPartitions)
           assert(joins.head.right.collect {
-            case r: SkewJoinShuffleReaderExec => r
+            case r: CustomShuffleReaderExec => r
           }.head.partitionSpecs.length == expectedNumPartitions)
         }
 
