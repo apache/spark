@@ -254,7 +254,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
-  test("SPARK-31017: Hit maxBytesInFlight limit before maxBlocksInFlightPerAddress") {
+  test("SPARK-31017: Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
@@ -291,7 +291,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(transfer, times(2)).fetchBlocks(any(), any(), any(), any(), any(), any())
   }
 
-  test("SPARK-31017: Hit maxBlocksInFlightPerAddress limit before maxBytesInFlight") {
+  test("SPARK-31017: Hit maxBlocksInFlightPerAddress limitation before maxBytesInFlight") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
