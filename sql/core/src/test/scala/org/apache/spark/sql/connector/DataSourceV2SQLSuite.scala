@@ -2342,7 +2342,7 @@ class DataSourceV2SQLSuite
     assert(e2.message.contains("It is not allowed to add database prefix"))
   }
 
-  test("SPARK-blah: star expression should work for qualified column names for v2 tables") {
+  test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, name string) USING foo")
