@@ -200,4 +200,23 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
+
+  test("support foldable schema by from_csv") {
+    val options = Map[String, String]().asJava
+    val schema = concat_ws(",", lit("i int"), lit("s string"))
+    checkAnswer(
+      Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
+      Row(Row(1, "a")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("1", "i int")).toDF("csv", "schema")
+        .select(from_csv($"csv", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+
+    val errMsg2 = intercept[AnalysisException] {
+      Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
+    }.getMessage
+    assert(errMsg2.contains("must return a valid string"))
+  }
 }
