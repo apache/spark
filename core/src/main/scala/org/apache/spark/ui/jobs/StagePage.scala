@@ -412,7 +412,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={s"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="form-inline float-right"
+                class="form-inline float-right justify-content-end"
                 style="margin-bottom: 0px;">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
@@ -431,7 +431,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                    class="col-1 form-control" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn">Go</button>
+            <button type="submit" class="btn btn-spark">Go</button>
           </form>
         </div>
       </div>
