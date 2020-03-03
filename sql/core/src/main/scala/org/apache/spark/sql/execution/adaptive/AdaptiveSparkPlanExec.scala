@@ -177,9 +177,9 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
-                errors.prepend(
-                  new SparkException(s"Early failed query stage found: ${stage.treeString}", e))
-                cleanUpAndThrowException(errors, Some(stage.id))
+                val ex = new SparkException(
+                  s"Early failed query stage found: ${stage.treeString}", e)
+                cleanUpAndThrowException(Seq(ex), Some(stage.id))
             }
           }
         }
