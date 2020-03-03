@@ -66,7 +66,8 @@ Finally, note that the Java VM does not always behave well with more than 200 Gi
 purchase machines with more RAM than this, you can run _multiple worker JVMs per node_. In
 Spark's [standalone mode](spark-standalone.html), you can set the number of workers per node
 with the `SPARK_WORKER_INSTANCES` variable in `conf/spark-env.sh`, and the number of cores
-per worker with `SPARK_WORKER_CORES`.
+per worker with `SPARK_WORKER_CORES`. But please note that support of multiple workers on the
+same host is deprecated in Spark 3.0 and is going to be removed in Spark 3.1.
 
 # Network
 

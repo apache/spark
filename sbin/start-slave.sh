@@ -86,6 +86,7 @@ function start_instance {
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   start_instance 1 "$@"
 else
+  echo "WARNING: Support of multiple workers on the same host is deprecated in Spark 3.0 and is going to be removed in Spark 3.1."
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
     start_instance $(( 1 + $i )) "$@"
   done
