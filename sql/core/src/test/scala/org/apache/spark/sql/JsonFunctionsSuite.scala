@@ -313,7 +313,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
+    assert(errMsg1.getMessage.startsWith("The expression '1' must be evaluated to a valid string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -652,5 +652,19 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         .as[String].head.length
       assert(json_tuple_result === len)
     }
+  }
+
+  test("support foldable schema by from_json") {
+    val options = Map[String, String]().asJava
+    val schema = regexp_replace(lit("dpt_org_id INT, dpt_org_city STRING"), "dpt_org_", "")
+    checkAnswer(
+      Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
+      Row(Row(1, "Moscow")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+        .select(from_json($"json", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
   }
 }
