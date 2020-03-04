@@ -200,7 +200,7 @@ class JDBCOptions(
       logDebug(s"Keytab path not found, assuming --files, file name used on executor: $result")
       result
     } else {
-      logDebug("No keytab path found, assuming manual upload")
+      logDebug("Keytab path found, assuming manual upload")
       keytabParam
     }
   }

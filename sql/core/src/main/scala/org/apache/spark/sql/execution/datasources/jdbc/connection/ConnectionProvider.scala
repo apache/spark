@@ -24,8 +24,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 /**
  * Connection provider which opens connection toward various databases (database specific instance
- * needed). If authentication required then it's the provider's responsibility to set all the
- * parameters.
+ * needed). If kerberos authentication required then it's the provider's responsibility to set all
+ * the parameters.
  */
 private[jdbc] trait ConnectionProvider {
   def getConnection(): Connection
@@ -45,7 +45,7 @@ private[jdbc] object ConnectionProvider extends Logging {
 
         case _ =>
           throw new IllegalArgumentException(s"Driver ${options.driverClass} does not support " +
-            "secure connection")
+            "Kerberos authentication")
       }
     }
   }

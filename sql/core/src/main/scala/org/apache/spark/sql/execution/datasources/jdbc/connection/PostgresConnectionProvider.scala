@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
+import java.util.Properties
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 import scala.collection.JavaConverters._
@@ -30,9 +31,9 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
     extends BasicConnectionProvider(driver, options) {
   def setAuthenticationConfigIfNeeded(): Unit = {
     val parent = Configuration.getConfiguration
-    val configEntry = parent.getAppConfigurationEntry(PostgresConnectionProvider.appEntry)
+    val configEntry = parent.getAppConfigurationEntry(appEntry)
     if (configEntry == null || configEntry.isEmpty) {
-      val config = new PGJDBCConfiguration(parent, options.keytab, options.principal)
+      val config = new PGJDBCConfiguration(parent, appEntry, options.keytab, options.principal)
       Configuration.setConfiguration(config)
     }
   }
@@ -41,12 +42,20 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
     setAuthenticationConfigIfNeeded()
     super.getConnection()
   }
+
+  def appEntry: String = {
+    val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
+    val properties: Properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
+    properties.getProperty("jaasApplicationName", "pgjdbc")
+  }
 }
 
 private[sql] object PostgresConnectionProvider {
   class PGJDBCConfiguration(
       parent: Configuration,
-      keytab: String, principal: String) extends Configuration {
+      appEntry: String,
+      keytab: String,
+      principal: String) extends Configuration {
     private val entry =
       new AppConfigurationEntry(
         SecurityUtils.getKrb5LoginModuleName(),
@@ -70,5 +79,4 @@ private[sql] object PostgresConnectionProvider {
   }
 
   val driverClass = "org.postgresql.Driver"
-  val appEntry = "pgjdbc"
 }
