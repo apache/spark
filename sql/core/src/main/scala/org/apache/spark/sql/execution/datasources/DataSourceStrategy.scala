@@ -478,8 +478,8 @@ object DataSourceStrategy {
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(e, list) if list.forall(_.isInstanceOf[Literal]) => e match {
-      case PushableColumn(name) =>
+    case expressions.In(e, list) => e match {
+      case PushableColumn(name) if list.forall(_.isInstanceOf[Literal]) =>
         val hSet = list.map(_.eval(EmptyRow))
         val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
         Some(sources.In(name, hSet.toArray.map(toScala)))

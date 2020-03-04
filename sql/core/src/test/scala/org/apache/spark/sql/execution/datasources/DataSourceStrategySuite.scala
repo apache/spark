@@ -240,7 +240,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-31027 test `PushDownCol.unapply` that finds the column name of " +
+  test("SPARK-31027 test `PushableColumn.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
       assert(PushableColumn.unapply(attrInt) === Some(colName))
