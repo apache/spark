@@ -518,8 +518,8 @@ test_that("spark.fmClassifier", {
       collect(drop(prediction1, c("rawPrediction", "probability"))),
       collect(drop(prediction2, c("rawPrediction", "probability")))
     )
+    unlink(modelPath)
   }
 })
-
 
 sparkR.session.stop()
