@@ -77,6 +77,10 @@ object SQLConf {
     }
   }
 
+  def isValidTimezone(zone: String): Boolean = {
+    Try { DateTimeUtils.getZoneId(zone) }.isSuccess
+  }
+
   /**
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
@@ -1656,8 +1660,8 @@ object SQLConf {
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .version("")
       .stringConf
-      .checkValue(z => Try { DateTimeUtils.getZoneId(z) }.isSuccess, "The timeZone should obey" +
-        " rules managed by java.time.zone.ZoneRulesProvider")
+      .checkValue(isValidTimezone, "The time zone should obey rules managed by" +
+        " java.time.zone.ZoneRulesProvider")
       .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
