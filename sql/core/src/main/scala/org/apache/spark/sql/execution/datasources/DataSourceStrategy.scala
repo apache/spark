@@ -636,12 +636,12 @@ object DataSourceStrategy {
   }
 }
 
-case class PushDownColumn(name: String, dataType: DataType)
-
 /**
  * Find the column name of an expression that can be pushed down.
  */
-object PushableColumn {
+private[sql] object PushableColumn {
+  case class PushDownColumn(name: String, dataType: DataType)
+
   def unapply(e: Expression): Option[PushDownColumn] = {
     def helper(e: Expression) = e match {
       case a: Attribute => Some(a.name)
