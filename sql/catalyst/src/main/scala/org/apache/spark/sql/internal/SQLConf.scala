@@ -394,6 +394,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
+    .internal()
+    .doc("Configures the log level for adaptive execution logging. The value can be 'trace', " +
+      "'debug', 'info', 'warn', or 'error'. The default log level is 'trace'.")
+    .version("3.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+      "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are 'trace', 'debug', " +
+        "'info', 'warn' and 'error'.")
+    .createWithDefault("debug")
+
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
@@ -2640,6 +2652,8 @@ class SQLConf extends Serializable with Logging {
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
 
   def targetPostShuffleInputSize: Long = getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
