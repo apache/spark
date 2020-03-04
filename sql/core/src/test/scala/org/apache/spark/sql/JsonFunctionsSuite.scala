@@ -667,4 +667,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
   }
+
+  test("schema_of_json - infers the schema of foldable JSON string") {
+    val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
+    checkAnswer(
+      spark.range(1).select(schema_of_json(input)),
+      Seq(Row("struct<id:bigint,price:double>")))
+  }
 }
