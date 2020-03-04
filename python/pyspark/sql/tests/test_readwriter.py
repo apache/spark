@@ -163,6 +163,43 @@ class ReadwriterTests(ReusedSQLTestCase):
             self.assertEqual(6, self.spark.sql("select * from test_table").count())
 
 
+class ReadwriterV2Tests(ReusedSQLTestCase):
+    def test_api(self):
+        from pyspark.sql.readwriter import DataFrameWriterV2
+        from pyspark.sql.functions import col
+
+        df = self.df
+        writer = df.writeTo("testcat.t")
+        self.assertIsInstance(writer, DataFrameWriterV2)
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy("id"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+
+    def test_partitioning_functions(self):
+        import datetime
+        from pyspark.sql.readwriter import DataFrameWriterV2
+        from pyspark.sql.functions import col, years, months, days, hours, bucket
+
+        df = self.spark.createDataFrame(
+            [(1, datetime.datetime.now(), "foo")],
+            ("id", "ts", "value")
+        )
+
+        writer = df.writeTo("testcat.t")
+
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), DataFrameWriterV2)
+        self.assertIsInstance(
+            writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), DataFrameWriterV2
+        )
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_readwriter import *
