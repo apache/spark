@@ -468,7 +468,7 @@ object DataSourceStrategy {
     case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.InSet(e: Expression, set) => e match {
+    case expressions.InSet(e, set) => e match {
       case PushableColumn(name) =>
         val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
         Some(sources.In(name, set.toArray.map(toScala)))
@@ -645,7 +645,7 @@ object DataSourceStrategy {
 /**
  * Find the column name of an expression that can be pushed down.
  */
-private[sql] object PushableColumn {
+private[datasources] object PushableColumn {
   def unapply(e: Expression): Option[String] = {
     def helper(e: Expression) = e match {
       case a: Attribute => Some(a.name)
