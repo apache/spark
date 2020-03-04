@@ -2788,7 +2788,7 @@ object SparkContext extends Logging {
       case "local" =>
         checkResourcesPerTask(1)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1, sc._resources)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2801,7 +2801,7 @@ object SparkContext extends Logging {
         }
         checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount, sc._resources)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2812,7 +2812,7 @@ object SparkContext extends Logging {
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
-        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount, sc._resources)
         scheduler.initialize(backend)
         (backend, scheduler)
 

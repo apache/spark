@@ -27,6 +27,7 @@ import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -103,7 +104,8 @@ private[spark] class LocalEndpoint(
 private[spark] class LocalSchedulerBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
-    val totalCores: Int)
+    val totalCores: Int,
+    val resources: Map[String, ResourceInformation])
   extends SchedulerBackend with ExecutorBackend with Logging {
 
   private val appId = "local-" + System.currentTimeMillis
@@ -134,8 +136,13 @@ private[spark] class LocalSchedulerBackend(
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
-      new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Map.empty,
-        Map.empty)))
+      new ExecutorInfo(
+        executorEndpoint.localExecutorHostname,
+        totalCores,
+        Map.empty,
+        Map.empty,
+        resources,
+        DEFAULT_RESOURCE_PROFILE_ID)))
     launcherBackend.setAppId(appId)
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
