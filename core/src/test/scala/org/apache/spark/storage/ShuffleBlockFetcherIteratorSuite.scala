@@ -340,6 +340,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs().size === 1)
   }
+
   test("fetch continuous blocks in batch should respect maxBytesInFlight") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
