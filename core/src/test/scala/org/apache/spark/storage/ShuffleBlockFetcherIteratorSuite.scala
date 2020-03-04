@@ -382,9 +382,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true)
 
     var numResults = 0
-    // After initialize(), there will be 6 FetchRequests, and the each of the first 5
-    // includes 3 merged blocks and the last one has 1 merged block. So, only the
-    // first 5 requests(5 * 3 * 100 >= 1500) can be sent.
+    // After initialize(), there will be 6 FetchRequests. And each of the first 5 requests
+    // includes 1 merged block which is merged from 3 shuffle blocks. The last request has 1 merged
+    // block which merged from 2 shuffle blocks. So, only the first 5 requests(5 * 3 * 100 >= 1500)
+    // can be sent. The second FetchRequest will hit maxBlocksInFlightPerAddress so it won't
+    // be sent.
     verify(transfer, times(5)).fetchBlocks(any(), any(), any(), any(), any(), any())
     while (iterator.hasNext) {
       val (blockId, inputStream) = iterator.next()
@@ -436,9 +438,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       metrics,
       true)
     var numResults = 0
-    // After initialize(), there will be 2 FetchRequests that one has 2 merged blocks and another
-    // one has one merged blocks. So only the first FetchRequest can be sent. The second
-    // FetchRequest will hit maxBlocksInFlightPerAddress so it won't be sent.
+    // After initialize(), there will be 2 FetchRequests. First one has 2 merged blocks and each
+    // of them is merged from 2 shuffle blocks, second one has 1 merged block which is merged from
+    // 1 shuffle block. So only the first FetchRequest can be sent. The second FetchRequest will
+    // hit maxBlocksInFlightPerAddress so it won't be sent.
     verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
     while (iterator.hasNext) {
       val (blockId, inputStream) = iterator.next()
