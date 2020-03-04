@@ -203,6 +203,7 @@ private[yarn] class ExecutorRunnable(
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
+      ("-XX:ActiveProcessorCount=" + executorCores.toString) ++
       javaOpts ++
       Seq("org.apache.spark.executor.YarnCoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,

@@ -998,6 +998,7 @@ private[spark] class Client(
     // Command for the ApplicationMaster
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
+      ("-XX:ActiveProcessorCount=" + amCores.toString) ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
