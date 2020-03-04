@@ -177,7 +177,7 @@ public class InMemoryStore implements KVStore {
      * iterators.  https://bugs.openjdk.java.net/browse/JDK-8078645
      */
     private static class CountingRemoveIfForEach<T> implements BiConsumer<Comparable<Object>, T> {
-      private final ConcurrentMap<Comparable<Object>, T> data;
+      private final InstanceList<T> instanceList;
       private final Predicate<? super T> filter;
 
       /**
@@ -189,17 +189,15 @@ public class InMemoryStore implements KVStore {
        */
       private int count = 0;
 
-      CountingRemoveIfForEach(
-          ConcurrentMap<Comparable<Object>, T> data,
-          Predicate<? super T> filter) {
-        this.data = data;
+      CountingRemoveIfForEach(InstanceList<T> instanceList, Predicate<? super T> filter) {
+        this.instanceList = instanceList;
         this.filter = filter;
       }
 
       @Override
       public void accept(Comparable<Object> key, T value) {
         if (filter.test(value)) {
-          if (data.remove(key, value)) {
+          if (instanceList.delete(key, value)) {
             count++;
           }
         }
@@ -253,7 +251,7 @@ public class InMemoryStore implements KVStore {
         return count;
       } else {
         Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
-        CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
+        CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(this, filter);
 
         // Go through all the values in `data` and delete objects that meets the predicate `filter`.
         // This can be slow when there is a large number of entries in `data`.
@@ -278,7 +276,22 @@ public class InMemoryStore implements KVStore {
 
     public boolean delete(Object key) {
       boolean entryExists = data.remove(asKey(key)) != null;
-      if (entryExists && hasNaturalParentIndex) {
+      if (entryExists) {
+        deleteParentIndex(key);
+      }
+      return entryExists;
+    }
+
+    public boolean delete(Object key, T value) {
+      boolean entryExists = data.remove(asKey(key), value);
+      if (entryExists) {
+        deleteParentIndex(key);
+      }
+      return entryExists;
+    }
+
+    private void deleteParentIndex(Object key) {
+      if (hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
           if (v.remove(asKey(key))) {
             // `v` can be empty after removing the natural key and we can remove it from
@@ -289,7 +302,6 @@ public class InMemoryStore implements KVStore {
           }
         }
       }
-      return entryExists;
     }
 
     public int size() {
