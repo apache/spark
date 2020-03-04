@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
@@ -47,6 +47,15 @@ case class DataSourceV2Relation(
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
+
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      val attrs = hasMeta.metadataColumns
+      val outputNames = outputSet.map(_.name).toSet
+      attrs.filterNot(col => outputNames.contains(col.name)).toAttributes
+    case _ =>
+      Nil
+  }
 
   override def name: String = table.name()
 
@@ -77,6 +86,14 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
+  }
+
+  def withMetadataColumns(): DataSourceV2Relation = {
+    if (metadataOutput.nonEmpty) {
+      DataSourceV2Relation(table, output ++ metadataOutput, catalog, identifier, options)
+    } else {
+      this
+    }
   }
 }
 
