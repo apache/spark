@@ -825,7 +825,6 @@ case class LengthOfJsonArray(child: Expression)
   override def prettyName: String = "json_array_length"
 
   override def eval(input: InternalRow): Any = {
-    @transient
     val json = child.eval(input).asInstanceOf[UTF8String]
     try {
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
@@ -839,23 +838,26 @@ case class LengthOfJsonArray(child: Expression)
         }
       }
     } catch {
-      case _: JsonProcessingException => null
+      case _: JsonProcessingException | _: IOException => null
     }
   }
 
   private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
-    // Counter for length of array
-    var array_length: Int = 0;
+    var length: Int = 0;
     // Only json array are supported for this function.
-    if (parser.getCurrentToken != JsonToken.START_ARRAY) {
+    if (parser.currentToken != JsonToken.START_ARRAY) {
       throw new AnalysisException(s"$prettyName can only be called on Json Array.")
     }
     // Keep traversing until the end of Json Array
     while(parser.nextToken() != JsonToken.END_ARRAY) {
-      array_length += 1
+      // Null indicates end of input.
+      if (parser.currentToken == null) {
+        throw new AnalysisException("Please provide a valid Json Array.")
+      }
+      length += 1
       // skip all the child of inner object or array
       parser.skipChildren()
     }
-    array_length
+    length
   }
 }
