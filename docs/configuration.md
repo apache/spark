@@ -2704,10 +2704,6 @@ The following variables can be set in `spark-env.sh`:
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>Hostname your Spark program will advertise to other machines.</td>
   </tr>
-  <tr>
-    <td><code>SPARK_BLAS_NATIVE_L1_THRESHOLD</code></td>
-    <td>Minimum vector size to use native BLAS libraries (if available) for Level 1 routines rather than Java implementation. Default value is 256.</td>
-  </tr>
 </table>
 
 In addition to the above, there are also options for setting up the Spark

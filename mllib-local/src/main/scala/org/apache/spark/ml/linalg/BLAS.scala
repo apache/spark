@@ -20,7 +20,6 @@ package org.apache.spark.ml.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.ml.NATIVE_L1_THRESHOLD
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
@@ -28,7 +27,7 @@ private[spark] object BLAS extends Serializable {
 
   @transient private var _f2jBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
-  private val nativeL1Threshold = sys.env.getOrElse(NATIVE_L1_THRESHOLD, "256").toInt
+  private val vectorSizeThreshold: Int = 256
 
   // For level-1 function dspmv, use f2jBLAS for better performance.
   private[ml] def f2jBLAS: NetlibBLAS = {
@@ -39,7 +38,7 @@ private[spark] object BLAS extends Serializable {
   }
 
   private def getBLAS(vectorSize: Int): NetlibBLAS = {
-    if (vectorSize < nativeL1Threshold) {
+    if (vectorSize < vectorSizeThreshold) {
       f2jBLAS
     } else {
       nativeBLAS
@@ -236,14 +235,6 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  // For level-3 routines, we use the native BLAS.
-  private[ml] def nativeBLAS: NetlibBLAS = {
-    if (_nativeBLAS == null) {
-      _nativeBLAS = NativeBLAS
-    }
-    _nativeBLAS
-  }
-
   /**
    * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
@@ -269,6 +260,14 @@ private[spark] object BLAS extends Serializable {
       beta: Double,
       y: DenseVector): Unit = {
     f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
+  }
+
+  // For level-3 routines, we use the native BLAS.
+  private[ml] def nativeBLAS: NetlibBLAS = {
+    if (_nativeBLAS == null) {
+      _nativeBLAS = NativeBLAS
+    }
+    _nativeBLAS
   }
 
   /**
