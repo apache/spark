@@ -575,6 +575,7 @@ test_that("spark.survreg", {
         collect(prediction1),
         collect(prediction2)
       )
+      unlink(modelPath)
     }
   })
 })
