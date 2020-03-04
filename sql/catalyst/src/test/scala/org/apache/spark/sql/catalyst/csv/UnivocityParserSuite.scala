@@ -28,6 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types._
@@ -317,5 +318,45 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         expected = Some(InternalRow.empty))
     }.getMessage
     assert(errMsg2.contains("i does not exist"))
+  }
+
+  test("SPARK-30960: parse date/timestamp string with legacy format") {
+    def check(parser: UnivocityParser): Unit = {
+      // The legacy format allows 1 or 2 chars for some fields.
+      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45") ==
+        date(2020, 1, 12, 12, 3, 45, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12") ==
+        days(2020, 1, 12, 0, 0, 0))
+      // The legacy format allows arbitrary length of second fraction.
+      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1") ==
+        date(2020, 1, 12, 12, 3, 45, 100000))
+      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1234") ==
+        date(2020, 1, 12, 12, 3, 45, 123400))
+      // The legacy format allow date string to end with T or space, with arbitrary string
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12T") ==
+        days(2020, 1, 12, 0, 0, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12Txyz") ==
+        days(2020, 1, 12, 0, 0, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12 ") ==
+        days(2020, 1, 12, 0, 0, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12 xyz") ==
+        days(2020, 1, 12, 0, 0, 0))
+      // The legacy format ignores the "GMT" from the string
+      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45GMT") ==
+        date(2020, 1, 12, 12, 3, 45, 0))
+      assert(parser.makeConverter("t", TimestampType).apply("GMT2020-1-12 12:3:45") ==
+        date(2020, 1, 12, 12, 3, 45, 0))
+      assert(parser.makeConverter("t", DateType).apply("2020-1-12GMT") ==
+        days(2020, 1, 12, 0, 0, 0))
+      assert(parser.makeConverter("t", DateType).apply("GMT2020-1-12") ==
+        days(2020, 1, 12, 0, 0, 0))
+    }
+
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    check(new UnivocityParser(StructType(Seq.empty), options))
+
+    val optionsWithPattern =
+      new CSVOptions(Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
+    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
   }
 }

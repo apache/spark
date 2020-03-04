@@ -21,7 +21,6 @@ import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
@@ -230,7 +229,15 @@ class JacksonParser(
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timestampFormatter.parse(parser.getText)
+          try {
+            timestampFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+          }
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -239,7 +246,23 @@ class JacksonParser(
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          dateFormatter.parse(parser.getText)
+          try {
+            dateFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              DateTimeUtils.stringToDate(str, options.zoneId).getOrElse {
+                // In Spark 1.5.0, we store the data as number of days since epoch in string.
+                // So, we just convert it to Int.
+                try {
+                  parser.getText.toInt
+                } catch {
+                  case _: NumberFormatException => throw e
+                }
+              }.asInstanceOf[Integer]
+          }
       }
 
     case BinaryType =>
