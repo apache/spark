@@ -769,7 +769,7 @@ case class SchemaOfJson(
       super.checkInputDataTypes()
     } else {
       TypeCheckResult.TypeCheckFailure(
-        "The input csv should be a foldable string expression and not null; " +
+        "The input json should be a foldable string expression and not null; " +
         s"however, got ${child.sql}.")
     }
   }
