@@ -348,4 +348,24 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
     check(config2)
   }
+
+  test("spark.sql.session.timeZone should only accept valid zone id") {
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "MIT")
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "MIT")
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
+      "America/Chicago")
+
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "pst")
+    }
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
+    }
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
+    }
+
+
+  }
 }
