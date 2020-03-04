@@ -468,23 +468,17 @@ object DataSourceStrategy {
     case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.InSet(e, set) => e match {
-      case PushableColumn(name) =>
-        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-        Some(sources.In(name, set.toArray.map(toScala)))
-      case _ => None
-    }
+    case expressions.InSet(e @ PushableColumn(name), set) =>
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(e, list) => e match {
-      case PushableColumn(name) if list.forall(_.isInstanceOf[Literal]) =>
-        val hSet = list.map(_.eval(EmptyRow))
-        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-        Some(sources.In(name, hSet.toArray.map(toScala)))
-      case _ => None
-    }
+    case expressions.In(e @ PushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
+      val hSet = list.map(_.eval(EmptyRow))
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, hSet.toArray.map(toScala)))
 
     case expressions.IsNull(PushableColumn(name)) =>
       Some(sources.IsNull(name))
@@ -645,7 +639,7 @@ object DataSourceStrategy {
 /**
  * Find the column name of an expression that can be pushed down.
  */
-private[datasources] object PushableColumn {
+object PushableColumn {
   def unapply(e: Expression): Option[String] = {
     def helper(e: Expression) = e match {
       case a: Attribute => Some(a.name)
