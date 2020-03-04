@@ -36,7 +36,7 @@ object StreamingConf {
   private[streaming] val BACKPRESSURE_INITIAL_RATE =
     ConfigBuilder("spark.streaming.backpressure.initialRate")
       .longConf
-      .createOptional
+      .fallbackConf(RECEIVER_MAX_RATE)
 
   private[streaming] val BLOCK_INTERVAL =
     ConfigBuilder("spark.streaming.blockInterval")
