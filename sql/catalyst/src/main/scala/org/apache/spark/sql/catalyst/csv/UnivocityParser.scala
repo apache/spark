@@ -175,10 +175,30 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timestampFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+        }
+      }
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          dateFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
+        }
+      }
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
