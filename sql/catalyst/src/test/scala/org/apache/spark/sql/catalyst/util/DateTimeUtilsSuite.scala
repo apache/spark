@@ -200,6 +200,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("GMT+07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17 GMT+07:30", expected)
 
       zoneId = getZoneId("GMT+07:03")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
@@ -217,13 +218,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, 456000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.456Z", expected)
       checkStringToTimestamp("2015-03-18 12:03:17.456Z", expected)
-      checkStringToTimestamp("2015-03-18 12:03:17.456UTC", expected)
+      checkStringToTimestamp("2015-03-18 12:03:17.456 UTC", expected)
 
       zoneId = getZoneId("GMT-01:00")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123GMT-01:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123 GMT-01:00", expected)
+
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
+      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123 GMT+07:30", expected)
 
       zoneId = getZoneId("GMT+07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
@@ -232,7 +238,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123121+7:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123121GMT+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123121 GMT+0730", expected)
+
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, zid = zoneId))
+      checkStringToTimestamp("2015-03-18T12:03:17.12312+7:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.12312 UT+07:30", expected)
 
       expected = Option(time(18, 12, 15, zid = zid))
       checkStringToTimestamp("18:12:15", expected)
@@ -240,7 +251,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("GMT+07:30")
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("T18:12:15.12312+7:30", expected)
-      checkStringToTimestamp("T18:12:15.12312GMT+07:30", expected)
+      checkStringToTimestamp("T18:12:15.12312 UTC+07:30", expected)
+
+      zoneId = getZoneId("GMT+07:30")
+      expected = Option(time(18, 12, 15, 123120, zid = zoneId))
+      checkStringToTimestamp("18:12:15.12312+7:30", expected)
+      checkStringToTimestamp("18:12:15.12312 GMT+07:30", expected)
 
       expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
@@ -267,6 +283,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("GMT+00:00")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456789+0:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123456789 UTC+0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123456789GMT+00:00", expected)
 
       zoneId = getZoneId("Europe/Moscow")
