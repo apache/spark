@@ -385,7 +385,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // After initialize(), there will be 6 FetchRequests. And each of the first 5 requests
     // includes 1 merged block which is merged from 3 shuffle blocks. The last request has 1 merged
     // block which merged from 2 shuffle blocks. So, only the first 5 requests(5 * 3 * 100 >= 1500)
-    // can be sent. The second FetchRequest will hit maxBlocksInFlightPerAddress so it won't
+    // can be sent. The 6th FetchRequest will hit maxBlocksInFlightPerAddress so it won't
     // be sent.
     verify(transfer, times(5)).fetchBlocks(any(), any(), any(), any(), any(), any())
     while (iterator.hasNext) {
@@ -395,7 +395,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       verifyBufferRelease(mockBuf, inputStream)
       numResults += 1
     }
-    // The last request will be sent after next() is called.
+    // The 6th request will be sent after next() is called.
     verify(transfer, times(6)).fetchBlocks(any(), any(), any(), any(), any(), any())
     assert(numResults == 6)
   }
