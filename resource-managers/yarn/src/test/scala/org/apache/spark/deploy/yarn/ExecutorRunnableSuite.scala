@@ -25,6 +25,8 @@ import org.apache.hadoop.yarn.api.records.{ContainerLaunchContext, LocalResource
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.Mockito.{mock, when}
+import org.scalatest.matchers.must.Matchers.{contain, not}
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -35,6 +37,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
   private def createExecutorRunnable(
       sparkConf: SparkConf = new SparkConf(),
       securityManager: SecurityManager = mock(classOf[SecurityManager])): ExecutorRunnable = {
+    val executorCores = sparkConf.get(EXECUTOR_CORES)
     new ExecutorRunnable(
       None,
       new YarnConfiguration(),
@@ -43,7 +46,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
       "exec-1",
       "localhost",
       1,
-      1,
+      executorCores,
       "application_123_1",
       securityManager,
       Map.empty[String, LocalResource],
@@ -102,5 +105,34 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     assert(!metaInfo.containsKey(ExecutorRunnable.SECRET_KEY))
     val metadataStorageVal: Any = metaInfo.get(SHUFFLE_SERVER_RECOVERY_DISABLED.key)
     assert(metadataStorageVal != null && metadataStorageVal.asInstanceOf[Boolean])
+  }
+
+  test("SPARK-53209: ActiveProcessorCount not set by default") {
+    val sparkConf = new SparkConf()
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable.prepareCommand()
+    commands should not contain ("-XX:ActiveProcessorCount=")
+  }
+
+  test("SPARK-53209: ActiveProcessorCount should default to 1 when executor cores not configured") {
+    val sparkConf = new SparkConf()
+        .set("spark.yarn.limitActiveProcessorCount", "true")
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable.prepareCommand()
+    commands should contain ("-XX:ActiveProcessorCount=1")
+    commands should contain inOrderElementsOf List("--cores", "1")
+  }
+
+  test("SPARK-53209: ActiveProcessorCount should respect custom executor core count") {
+    val sparkConf = new SparkConf()
+      .set("spark.yarn.limitActiveProcessorCount", "true")
+      .set(EXECUTOR_CORES, 7)
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable.prepareCommand()
+    commands should contain ("-XX:ActiveProcessorCount=7")
+    commands should contain inOrderElementsOf List("--cores", "7")
   }
 }
