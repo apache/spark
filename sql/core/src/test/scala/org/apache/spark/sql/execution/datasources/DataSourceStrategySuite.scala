@@ -243,14 +243,14 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-31027 test `PushDownCol.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
-      assert(PushDownCol.unapply(attrInt) === Some(PushDownCol(colName, IntegerType)))
+      assert(PushableColumn.unapply(attrInt) === Some(PushDownColumn(colName, IntegerType)))
     }
     attrStrs.foreach { case (attrStr, colName) =>
-      assert(PushDownCol.unapply(attrStr) === Some(PushDownCol(colName, StringType)))
+      assert(PushableColumn.unapply(attrStr) === Some(PushDownColumn(colName, StringType)))
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
-    assert(PushDownCol.unapply(Abs('col.int)) === None)
+    assert(PushableColumn.unapply(Abs('col.int)) === None)
   }
 
   /**
