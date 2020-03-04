@@ -2302,6 +2302,12 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     checkAnswer(csv, Row("a", "b", 1))
   }
 
+  test("SPARK-30960: parse date/timestamp string with legacy format") {
+    val ds = Seq("2020-1-12 3:23:34.12, 2020-1-12 T").toDS()
+    val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
+    checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
+  }
+
   test("case sensitivity of filters references") {
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {

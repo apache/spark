@@ -1033,7 +1033,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     df.write.insertInto("students")
     spark.catalog.cacheTable("students")
     checkAnswer(spark.table("students"), df)
-    assume(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
+    assert(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
     sql("ALTER TABLE students RENAME TO teachers")
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")
     // Now we have both students and teachers.
@@ -1959,7 +1959,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")
@@ -2982,16 +2982,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
     val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled not set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {
     withTempDir { testDir =>
-      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+      withSQLConf(SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key -> "true") {
         val msg = intercept[SparkException] {
           spark.sql(s"ADD FILE $testDir")
         }.getMessage

@@ -258,9 +258,10 @@ class ResolveSessionCatalog(
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
-      if (!isV2Provider(c.provider)) {
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
+      if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
+          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
@@ -271,15 +272,16 @@ class ResolveSessionCatalog(
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
           ignoreIfExists = c.ifNotExists)
       }
 
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
-      if (!isV2Provider(c.provider)) {
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
+      if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
-          c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
+          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, Some(c.asSelect))
@@ -290,7 +292,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
           writeOptions = c.options,
           ignoreIfExists = c.ifNotExists)
       }
@@ -312,7 +314,7 @@ class ResolveSessionCatalog(
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(c.provider)),
           orCreate = c.orCreate)
       }
 
@@ -327,7 +329,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(c.provider)),
           writeOptions = c.options,
           orCreate = c.orCreate)
       }
@@ -593,11 +595,6 @@ class ResolveSessionCatalog(
           FunctionIdentifier(nameParts.head, None)
         } else {
           ident.namespace match {
-            // For name parts like `spark_catalog.t`, we need to fill in the default database so
-            // that the caller side won't treat it as a temp function.
-            case Array() if nameParts.head == CatalogManager.SESSION_CATALOG_NAME =>
-              FunctionIdentifier(
-                ident.name, Some(catalogManager.v1SessionCatalog.getCurrentDatabase))
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
             case _ =>
               throw new AnalysisException(s"Unsupported function name '$ident'")
@@ -663,14 +660,7 @@ class ResolveSessionCatalog(
   object TempViewOrV1Table {
     def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
       case _ if isTempView(nameParts) => Some(nameParts)
-      case SessionCatalogAndTable(_, tbl) =>
-        if (nameParts.head == CatalogManager.SESSION_CATALOG_NAME && tbl.length == 1) {
-          // For name parts like `spark_catalog.t`, we need to fill in the default database so
-          // that the caller side won't treat it as a temp view.
-          Some(Seq(catalogManager.v1SessionCatalog.getCurrentDatabase, tbl.head))
-        } else {
-          Some(tbl)
-        }
+      case SessionCatalogAndIdentifier(_, tbl) => Some(tbl.asMultipartIdentifier)
       case _ => None
     }
   }

@@ -163,6 +163,12 @@ public class InMemoryStore implements KVStore {
     }
   }
 
+  /**
+   * An alias class for the type "ConcurrentHashMap<Comparable<Object>, Boolean>", which is used
+   * as a concurrent hashset for storing natural keys and the boolean value doesn't matter.
+   */
+  private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
+
   private static class InstanceList<T> {
 
     /**
@@ -205,11 +211,19 @@ public class InMemoryStore implements KVStore {
     private final KVTypeInfo ti;
     private final KVTypeInfo.Accessor naturalKey;
     private final ConcurrentMap<Comparable<Object>, T> data;
+    private final String naturalParentIndexName;
+    private final Boolean hasNaturalParentIndex;
+    // A mapping from parent to the natural keys of its children.
+    // For example, a mapping from a stage ID to all the task IDs in the stage.
+    private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
 
     private InstanceList(Class<?> klass) {
       this.ti = new KVTypeInfo(klass);
       this.naturalKey = ti.getAccessor(KVIndex.NATURAL_INDEX_NAME);
       this.data = new ConcurrentHashMap<>();
+      this.naturalParentIndexName = ti.getParentIndexName(KVIndex.NATURAL_INDEX_NAME);
+      this.parentToChildrenMap = new ConcurrentHashMap<>();
+      this.hasNaturalParentIndex = !naturalParentIndexName.isEmpty();
     }
 
     KVTypeInfo.Accessor getIndexAccessor(String indexName) {
@@ -217,11 +231,35 @@ public class InMemoryStore implements KVStore {
     }
 
     int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
-      Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
-      CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
+      int count = 0;
+      if (KVIndex.NATURAL_INDEX_NAME.equals(index)) {
+        for (Object naturalKey : indexValues) {
+          count += delete(asKey(naturalKey)) ? 1 : 0;
+        }
+        return count;
+      } else if (hasNaturalParentIndex && naturalParentIndexName.equals(index)) {
+        // If there is a parent index for the natural index and `index` happens to be it,
+        // Spark can use the `parentToChildrenMap` to get the related natural keys, and then
+        // delete them from `data`.
+        for (Object indexValue : indexValues) {
+          Comparable<Object> parentKey = asKey(indexValue);
+          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          for (Comparable<Object> naturalKey : children.keySet()) {
+            data.remove(naturalKey);
+            count ++;
+          }
+          parentToChildrenMap.remove(parentKey);
+        }
+        return count;
+      } else {
+        Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
+        CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
 
-      data.forEach(callback);
-      return callback.count();
+        // Go through all the values in `data` and delete objects that meets the predicate `filter`.
+        // This can be slow when there is a large number of entries in `data`.
+        data.forEach(callback);
+        return callback.count();
+      }
     }
 
     public T get(Object key) {
@@ -230,10 +268,28 @@ public class InMemoryStore implements KVStore {
 
     public void put(T value) throws Exception {
       data.put(asKey(naturalKey.get(value)), value);
+      if (hasNaturalParentIndex) {
+        Comparable<Object> parentKey = asKey(getIndexAccessor(naturalParentIndexName).get(value));
+        NaturalKeys children =
+          parentToChildrenMap.computeIfAbsent(parentKey, k -> new NaturalKeys());
+        children.put(asKey(naturalKey.get(value)), true);
+      }
     }
 
-    public void delete(Object key) {
-      data.remove(asKey(key));
+    public boolean delete(Object key) {
+      boolean entryExists = data.remove(asKey(key)) != null;
+      if (entryExists && hasNaturalParentIndex) {
+        for (NaturalKeys v : parentToChildrenMap.values()) {
+          if (v.remove(asKey(key))) {
+            // `v` can be empty after removing the natural key and we can remove it from
+            // `parentToChildrenMap`. However, `parentToChildrenMap` is a ConcurrentMap and such
+            // checking and deleting can be slow.
+            // This method is to delete one object with certain key, let's make it simple here.
+            break;
+          }
+        }
+      }
+      return entryExists;
     }
 
     public int size() {
@@ -241,7 +297,7 @@ public class InMemoryStore implements KVStore {
     }
 
     public InMemoryView<T> view() {
-      return new InMemoryView<>(data.values(), ti);
+      return new InMemoryView<>(data, ti, naturalParentIndexName, parentToChildrenMap);
     }
 
     private static <T> Predicate<? super T> getPredicate(
@@ -271,22 +327,32 @@ public class InMemoryStore implements KVStore {
 
   private static class InMemoryView<T> extends KVStoreView<T> {
     private static final InMemoryView<?> EMPTY_VIEW =
-      new InMemoryView<>(Collections.emptyList(), null);
+      new InMemoryView<>(new ConcurrentHashMap<>(), null, "", new ConcurrentHashMap<>());
 
-    private final Collection<T> elements;
+    private final ConcurrentMap<Comparable<Object>, T> data;
     private final KVTypeInfo ti;
     private final KVTypeInfo.Accessor natural;
+    private final ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap;
+    private final String naturalParentIndexName;
+    private final Boolean hasNaturalParentIndex;
 
-    InMemoryView(Collection<T> elements, KVTypeInfo ti) {
-      this.elements = elements;
+    InMemoryView(
+        ConcurrentMap<Comparable<Object>, T> data,
+        KVTypeInfo ti,
+        String naturalParentIndexName,
+        ConcurrentMap<Comparable<Object>, NaturalKeys> parentToChildrenMap) {
+      this.data = data;
       this.ti = ti;
       this.natural = ti != null ? ti.getAccessor(KVIndex.NATURAL_INDEX_NAME) : null;
+      this.naturalParentIndexName = naturalParentIndexName;
+      this.parentToChildrenMap = parentToChildrenMap;
+      this.hasNaturalParentIndex = !naturalParentIndexName.isEmpty();
     }
 
     @Override
     public Iterator<T> iterator() {
-      if (elements.isEmpty()) {
-        return new InMemoryIterator<>(elements.iterator());
+      if (data.isEmpty()) {
+        return new InMemoryIterator<>(Collections.emptyIterator());
       }
 
       KVTypeInfo.Accessor getter = index != null ? ti.getAccessor(index) : null;
@@ -322,15 +388,31 @@ public class InMemoryStore implements KVStore {
      */
     private List<T> copyElements() {
       if (parent != null) {
-        KVTypeInfo.Accessor parentGetter = ti.getParentAccessor(index);
-        Preconditions.checkArgument(parentGetter != null, "Parent filter for non-child index.");
-        Comparable<?> parentKey = asKey(parent);
-
-        return elements.stream()
-          .filter(e -> compare(e, parentGetter, parentKey) == 0)
-          .collect(Collectors.toList());
+        Comparable<Object> parentKey = asKey(parent);
+        if (hasNaturalParentIndex && naturalParentIndexName.equals(ti.getParentIndexName(index))) {
+          // If there is a parent index for the natural index and the parent of `index` happens to
+          // be it, Spark can use the `parentToChildrenMap` to get the related natural keys, and
+          // then copy them from `data`.
+          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          ArrayList<T> elements = new ArrayList<>();
+          for (Comparable<Object> naturalKey : children.keySet()) {
+            data.computeIfPresent(naturalKey, (k, v) -> {
+              elements.add(v);
+              return v;
+            });
+          }
+          return elements;
+        } else {
+          // Go through all the values in `data` and collect all the objects has certain parent
+          // value. This can be slow when there is a large number of entries in `data`.
+          KVTypeInfo.Accessor parentGetter = ti.getParentAccessor(index);
+          Preconditions.checkArgument(parentGetter != null, "Parent filter for non-child index.");
+          return data.values().stream()
+            .filter(e -> compare(e, parentGetter, parentKey) == 0)
+            .collect(Collectors.toList());
+        }
       } else {
-        return new ArrayList<>(elements);
+        return new ArrayList<>(data.values());
       }
     }
 

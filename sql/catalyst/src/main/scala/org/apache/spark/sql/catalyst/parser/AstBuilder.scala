@@ -2763,9 +2763,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
     }
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val defaultProvider = conf.defaultDataSourceName
-    val provider =
-      Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
