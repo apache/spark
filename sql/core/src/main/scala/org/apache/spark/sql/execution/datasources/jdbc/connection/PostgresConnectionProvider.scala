@@ -45,7 +45,7 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
 
   def appEntry: String = {
     val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
-    val properties: Properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
+    val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 }
