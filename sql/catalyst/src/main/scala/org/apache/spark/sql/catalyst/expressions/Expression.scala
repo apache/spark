@@ -260,7 +260,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
-  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
+  protected def flatArguments: Iterator[Any] = stringArgs.flatMap {
     case t: Iterable[_] => t
     case single => single :: Nil
   }
