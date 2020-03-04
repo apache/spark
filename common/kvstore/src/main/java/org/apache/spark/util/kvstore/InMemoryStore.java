@@ -177,7 +177,7 @@ public class InMemoryStore implements KVStore {
      * iterators.  https://bugs.openjdk.java.net/browse/JDK-8078645
      */
     private static class CountingRemoveIfForEach<T> implements BiConsumer<Comparable<Object>, T> {
-      private final InstanceList<T> data;
+      private final InstanceList<T> instanceList;
       private final Predicate<? super T> filter;
 
       /**
@@ -189,15 +189,15 @@ public class InMemoryStore implements KVStore {
        */
       private int count = 0;
 
-      CountingRemoveIfForEach(InstanceList<T> data, Predicate<? super T> filter) {
-        this.data = data;
+      CountingRemoveIfForEach(InstanceList<T> instanceList, Predicate<? super T> filter) {
+        this.instanceList = instanceList;
         this.filter = filter;
       }
 
       @Override
       public void accept(Comparable<Object> key, T value) {
         if (filter.test(value)) {
-          if (data.delete(key, value)) {
+          if (instanceList.delete(key, value)) {
             count++;
           }
         }
