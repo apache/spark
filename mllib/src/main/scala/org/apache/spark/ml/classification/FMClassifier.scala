@@ -31,7 +31,6 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.col
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -52,12 +51,16 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
  * FM is able to estimate interactions even in problems with huge sparsity
  * (like advertising and recommendation system).
  * FM formula is:
- * {{{
+ * <blockquote>
+ *   $$
+ *   \begin{align}
  *   y = \sigma\left( w_0 + \sum\limits^n_{i-1} w_i x_i +
  *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j \right)
- * }}}
+ *   \end{align}
+ *   $$
+ * </blockquote>
  * First two terms denote global bias and linear term (as same as linear regression),
- * and last term denotes pairwise interactions term. {{{v_i}}} describes the i-th variable
+ * and last term denotes pairwise interactions term. v_i describes the i-th variable
  * with k factors.
  *
  * FM classification model uses logistic loss which can be solved by gradient descent method, and

@@ -22,8 +22,9 @@ import java.net.URI
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -110,7 +111,7 @@ class AdaptiveQueryExecSuite
     }.length
 
     val numLocalReaders = collect(plan) {
-      case reader: LocalShuffleReaderExec => reader
+      case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
     }.length
 
     assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
@@ -142,11 +143,11 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader: LocalShuffleReaderExec => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
-      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // The pre-shuffle partition size is [0, 0, 0, 72, 0]
       // And the partitionStartIndices is [0, 3, 4], so advisoryParallelism = 3.
       // the final parallelism is
@@ -174,11 +175,11 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader: LocalShuffleReaderExec => reader
+        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
       }
       assert(localReaders.length == 2)
-      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
       // and the partitions length is 2 * numMappers = 4
       assert(localShuffleRDD0.getPartitions.length == 4)
@@ -583,7 +584,6 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
       SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
       withTempView("skewData1", "skewData2") {
         spark
@@ -609,8 +609,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
@@ -624,10 +623,10 @@ class AdaptiveQueryExecSuite
         def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
           assert(joins.size == 1 && joins.head.isSkewJoin)
           assert(joins.head.left.collect {
-            case r: SkewJoinShuffleReaderExec => r
+            case r: CustomShuffleReaderExec => r
           }.head.partitionSpecs.length == expectedNumPartitions)
           assert(joins.head.right.collect {
-            case r: SkewJoinShuffleReaderExec => r
+            case r: CustomShuffleReaderExec => r
           }.head.partitionSpecs.length == expectedNumPartitions)
         }
 
@@ -636,14 +635,15 @@ class AdaptiveQueryExecSuite
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
-        // Partition 0: both left and right sides are skewed, and divide into 5 splits, so
-        //              5 x 5 sub-partitions.
+        // Partition 0: both left and right sides are skewed, left side is divided
+        //              into 2 splits and right side is divided into 4 splits, so
+        //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 5 splits, so
-        //              5 sub-partitions.
-        // So total (25 + 1 + 5) partitions.
+        // Partition 4: only left side is skewed, and divide into 3 splits, so
+        //              3 sub-partitions.
+        // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 25 + 1 + 5)
+        checkSkewJoin(innerSmj, 8 + 1 + 3)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -651,13 +651,13 @@ class AdaptiveQueryExecSuite
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
-        //              so only left side is divided into 5 splits, and thus 5 sub-partitions.
+        //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 5 splits, so
-        //              5 sub-partitions.
-        // So total (5 + 1 + 5) partitions.
+        // Partition 4: only left side is skewed, and divide into 3 splits, so
+        //              3 sub-partitions.
+        // So total (2 + 1 + 3) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 5 + 1 + 5)
+        checkSkewJoin(leftSmj, 2 + 1 + 3)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -665,13 +665,13 @@ class AdaptiveQueryExecSuite
         // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but right join can't split left side,
-        //              so only right side is divided into 5 splits, and thus 5 sub-partitions.
+        //              so only right side is divided into 4 splits, and thus 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
         // Partition 4: only left side is skewed, but right join can't split left side, so just
         //              1 partition.
-        // So total (5 + 1 + 1) partitions.
+        // So total (4 + 1 + 1) partitions.
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
-        checkSkewJoin(rightSmj, 5 + 1 + 1)
+        checkSkewJoin(rightSmj, 4 + 1 + 1)
       }
     }
   }
@@ -692,7 +692,8 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           agged.count()
         }
-        assert(error.getCause().toString contains "Failed to materialize query stage")
+        assert(error.getCause().toString contains "Early failed query stage found")
+        assert(error.getSuppressed.size === 0)
       }
     }
   }

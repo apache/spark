@@ -4,6 +4,10 @@
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
 select interval 4 month 2 weeks 3 microseconds * 1.5;
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;
+select interval 2147483647 month * 2;
+select interval 2147483647 month / 0.5;
+select interval 2147483647 day * 2;
+select interval 2147483647 day / 0.5;
 
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;
@@ -83,70 +87,6 @@ select interval '12:11:10' hour to second '1' year;
 select interval (-30) day;
 select interval (a + 1) day;
 select interval 30 day day day;
-
--- sum interval values
--- null
-select sum(cast(null as interval));
-
--- empty set
-select sum(cast(v as interval)) from VALUES ('1 seconds') t(v) where 1=0;
-
--- basic interval sum
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
-select sum(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
-
--- group by
-select
-    i,
-    sum(cast(v as interval))
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
-group by i;
-
--- having
-select
-    sum(cast(v as interval)) as sv
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
-having sv is not null;
-
--- window
-SELECT
-    i,
-    sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-FROM VALUES(1, '1 seconds'), (1, '2 seconds'), (2, NULL), (2, NULL) t(i,v);
-
--- average with interval type
--- null
-select avg(cast(v as interval)) from VALUES (null) t(v);
-
--- empty set
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
-
--- basic interval avg
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
-select avg(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
-
--- group by
-select
-    i,
-    avg(cast(v as interval))
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
-group by i;
-
--- having
-select
-    avg(cast(v as interval)) as sv
-from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
-having sv is not null;
-
--- window
-SELECT
-    i,
-    avg(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-FROM VALUES (1,'1 seconds'), (1,'2 seconds'), (2,NULL), (2,NULL) t(i,v);
 
 -- Interval year-month arithmetic
 

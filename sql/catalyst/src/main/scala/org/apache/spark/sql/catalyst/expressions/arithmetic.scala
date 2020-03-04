@@ -403,11 +403,18 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+case class IntegralDivide(
+    left: Expression,
+    right: Expression,
+    returnLong: Boolean) extends DivModLike {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right, SQLConf.get.integralDivideReturnLong)
+  }
 
   override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
 
-  override def dataType: DataType = if (SQLConf.get.integralDivideReturnLong) {
+  override def dataType: DataType = if (returnLong) {
     LongType
   } else {
     left.dataType
@@ -416,7 +423,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
   override def decimalToDataTypeCodeGen(decimalResult: String): String = {
-    if (SQLConf.get.integralDivideReturnLong) {
+    if (returnLong) {
       s"$decimalResult.toLong()"
     } else {
       decimalResult
@@ -433,7 +440,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
     val divide = integral.quot _
-    if (SQLConf.get.integralDivideReturnLong) {
+    if (returnLong) {
       val toLong = integral.asInstanceOf[Integral[Any]].toLong _
       (x, y) => {
         val res = divide(x, y)
@@ -449,6 +456,12 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+}
+
+object IntegralDivide {
+  def apply(left: Expression, right: Expression): IntegralDivide = {
+    new IntegralDivide(left, right)
+  }
 }
 
 @ExpressionDescription(

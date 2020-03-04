@@ -49,26 +49,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
-  test("SPARK-30098: create table without provider should " +
-    "use default data source under non-legacy mode") {
-    val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
-    val defaultProvider = conf.defaultDataSourceName
-    val expectedPlan = CreateTableStatement(
-      Seq("my_tab"),
-      new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType),
-      Seq.empty[Transform],
-      None,
-      Map.empty[String, String],
-      defaultProvider,
-      Map.empty[String, String],
-      None,
-      None,
-      false)
-    parseCompare(createSql, expectedPlan)
-  }
-
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
@@ -80,7 +60,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -103,7 +83,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         None,
         None),
@@ -123,7 +103,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("a"))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -177,7 +157,7 @@ class DDLParserSuite extends AnalysisTest {
           LiteralValue(34, IntegerType)))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -199,7 +179,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Some(BucketSpec(5, Seq("a"), Seq("b"))),
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -217,7 +197,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       Some("abc"))
@@ -237,7 +217,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map("test" -> "test"),
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -255,7 +235,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/tmp/file"),
         None)
@@ -273,7 +253,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -334,7 +314,7 @@ class DDLParserSuite extends AnalysisTest {
           Seq.empty[Transform],
           Option.empty[BucketSpec],
           Map.empty[String, String],
-          "json",
+          Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
           None,
           None),
@@ -389,7 +369,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map("p1" -> "v1", "p2" -> "v2"),
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/user/external/page_view"),
         Some("This is the staging page view table"))
@@ -1188,6 +1168,56 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("There should be at most 1 'WHEN NOT MATCHED' clause."))
+  }
+
+  test("merge into table: the first matched clause must have a condition if there's a second") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+          |WHEN MATCHED THEN DELETE
+          |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+          |WHEN NOT MATCHED AND (target.col2='insert')
+          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("the first MATCHED clause must have a condition"))
+  }
+
+  test("merge into table: there must be a when (not) matched condition") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
+  }
+
+  test("merge into table: there can be only a single use DELETE or UPDATE") {
+    Seq("UPDATE SET *", "DELETE").foreach { op =>
+      val exc = intercept[ParseException] {
+        parsePlan(
+          s"""
+             |MERGE INTO testcat1.ns1.ns2.tbl AS target
+             |USING testcat2.ns1.ns2.tbl AS source
+             |ON target.col1 = source.col1
+             |WHEN MATCHED AND (target.col2='delete') THEN $op
+             |WHEN MATCHED THEN $op
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+           """.stripMargin)
+      }
+
+      assert(exc.getMessage.contains(
+        "UPDATE and DELETE can appear at most once in MATCHED clauses"))
+    }
   }
 
   test("show tables") {
@@ -2055,7 +2085,7 @@ class DDLParserSuite extends AnalysisTest {
       partitioning: Seq[Transform],
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
-      provider: String,
+      provider: Option[String],
       options: Map[String, String],
       location: Option[String],
       comment: Option[String])
@@ -2081,7 +2111,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.partitioning,
             replace.bucketSpec,
             replace.properties,
-            replace.provider,
+            Some(replace.provider),
             replace.options,
             replace.location,
             replace.comment)
@@ -2103,7 +2133,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.partitioning,
             rtas.bucketSpec,
             rtas.properties,
-            rtas.provider,
+            Some(rtas.provider),
             rtas.options,
             rtas.location,
             rtas.comment)
@@ -2130,5 +2160,21 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
+  }
+
+  test("create table - without using") {
+    val sql = "CREATE TABLE 1m.2g(a INT)"
+    val expectedTableSpec = TableSpec(
+      Seq("1m", "2g"),
+      Some(new StructType().add("a", IntegerType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None)
+
+    testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
   }
 }

@@ -34,6 +34,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <p>
  * The major responsibility of this interface is to return a {@link Table} for read/write.
  * </p>
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface TableProvider {

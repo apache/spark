@@ -37,25 +37,8 @@ package object config {
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
   private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
-  private[spark] val SPARK_RESOURCES_COORDINATE =
-    ConfigBuilder("spark.resources.coordinate.enable")
-      .doc("Whether to coordinate resources automatically among workers/drivers(client only) " +
-        "in Standalone. If false, the user is responsible for configuring different resources " +
-        "for workers/drivers that run on the same host.")
-      .booleanConf
-      .createWithDefault(true)
-
-  private[spark] val SPARK_RESOURCES_DIR =
-    ConfigBuilder("spark.resources.dir")
-      .doc("Directory used to coordinate resources among workers/drivers(client only) in " +
-        "Standalone. Default is SPARK_HOME. Make sure to use the same directory for worker " +
-        "and drivers in client mode that run on the same host. Don't clean up this directory " +
-        "while workers/drivers are still alive to avoid the most likely resources conflict. ")
-      .stringConf
-      .createOptional
-
   private[spark] val RESOURCES_DISCOVERY_PLUGIN =
-    ConfigBuilder("spark.resources.discovery.plugin")
+    ConfigBuilder("spark.resources.discoveryPlugin")
       .doc("Comma-separated list of class names implementing" +
         "org.apache.spark.api.resource.ResourceDiscoveryPlugin to load into the application." +
         "This is for advanced users to replace the resource discovery class with a " +
@@ -159,7 +142,7 @@ package object config {
     .createWithDefaultString("100k")
 
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
-    ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
+    ConfigBuilder("spark.eventLog.logStageExecutorMetrics")
       .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
         "to the event log.")
       .booleanConf
@@ -191,14 +174,15 @@ package object config {
 
   private[spark] val EVENT_LOG_ENABLE_ROLLING =
     ConfigBuilder("spark.eventLog.rolling.enabled")
-      .doc("Whether rolling over event log files is enabled.  If set to true, it cuts down " +
+      .doc("Whether rolling over event log files is enabled. If set to true, it cuts down " +
         "each event log file to the configured size.")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
-      .doc("The max size of event log file to be rolled over.")
+      .doc(s"When ${EVENT_LOG_ENABLE_ROLLING.key}=true, specifies the max size of event log file" +
+        " to be rolled over.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
@@ -631,7 +615,7 @@ package object config {
       .createWithDefault(128)
 
   private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
-    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.enabled")
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent")
       .internal()
       .doc("When enabled, log the event that takes too much time to process. This helps us " +
         "discover the event types that cause performance bottlenecks. The time threshold is " +
@@ -643,7 +627,7 @@ package object config {
     ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.threshold")
       .internal()
       .doc("The time threshold of whether a event is considered to be taking too much time to " +
-        "process. Log the event if spark.scheduler.listenerbus.logSlowEvent.enabled is true.")
+        s"process. Log the event if ${LISTENER_BUS_LOG_SLOW_EVENT_ENABLED.key} is true.")
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
@@ -1114,16 +1098,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
-    ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
-      .doc("The max number of executors for which the local dirs are stored. This size is " +
-        "both applied for the driver and both for the executors side to avoid having an " +
-        "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
-        "persisted RDD blocks or shuffle blocks (when `spark.shuffle.readHostLocalDisk.enabled` " +
-        "is set) from the same host.")
-      .intConf
-      .createWithDefault(1000)
-
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")
@@ -1160,12 +1134,22 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
-    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+    ConfigBuilder("spark.shuffle.readHostLocalDisk")
       .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
         "blocks requested from those block managers which are running on the same host are read " +
         "from the disk directly instead of being fetched as remote blocks over the network.")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
+    ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
+      .doc("The max number of executors for which the local dirs are stored. This size is " +
+        "both applied for the driver and both for the executors side to avoid having an " +
+        "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
+        s"persisted RDD blocks or shuffle blocks " +
+        s"(when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` is set) from the same host.")
+      .intConf
+      .createWithDefault(1000)
 
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")

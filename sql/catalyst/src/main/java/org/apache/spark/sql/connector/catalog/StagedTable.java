@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.StructType;
  * write will be committed. The job concludes with a call to {@link #commitStagedChanges()}, at
  * which point implementations are expected to commit the table's metadata into the metastore along
  * with the data that was written by the writes from the write builder this table created.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface StagedTable extends Table {

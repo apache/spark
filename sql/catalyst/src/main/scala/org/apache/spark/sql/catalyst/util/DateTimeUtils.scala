@@ -47,12 +47,6 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  // number of days between 1.1.1970 and 1.1.2001
-  final val to2001 = -11323
-
-  // this is year -17999, calculation: 50 * daysIn400Year
-  final val YearZero = -17999
-  final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
@@ -65,24 +59,22 @@ object DateTimeUtils {
     TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
 
-  // we should use the exact day as Int, for example, (year, month, day) -> day
-  def millisToDays(millisUtc: Long): SQLDate = {
-    millisToDays(millisUtc, defaultTimeZone().toZoneId)
+  def microsToDays(timestamp: SQLTimestamp): SQLDate = {
+    microsToDays(timestamp, defaultTimeZone().toZoneId)
   }
 
-  def millisToDays(millisUtc: Long, zoneId: ZoneId): SQLDate = {
-    val instant = microsToInstant(Math.multiplyExact(millisUtc, MICROS_PER_MILLIS))
+  def microsToDays(timestamp: SQLTimestamp, zoneId: ZoneId): SQLDate = {
+    val instant = microsToInstant(timestamp)
     localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
   }
 
-  // reverse of millisToDays
-  def daysToMillis(days: SQLDate): Long = {
-    daysToMillis(days, defaultTimeZone().toZoneId)
+  def daysToMicros(days: SQLDate): SQLTimestamp = {
+    daysToMicros(days, defaultTimeZone().toZoneId)
   }
 
-  def daysToMillis(days: SQLDate, zoneId: ZoneId): Long = {
+  def daysToMicros(days: SQLDate, zoneId: ZoneId): SQLTimestamp = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
-    instantToMicros(instant) / MICROS_PER_MILLIS
+    instantToMicros(instant)
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
@@ -94,14 +86,14 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    millisToDays(date.getTime)
+    microsToDays(millisToMicros(date.getTime))
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(daysToMillis(daysSinceEpoch))
+    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
   }
 
   /**
@@ -144,7 +136,7 @@ object DateTimeUtils {
    * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
    * precision, so this conversion is lossy.
    */
-  def toMillis(us: SQLTimestamp): Long = {
+  def microsToMillis(us: SQLTimestamp): Long = {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
@@ -154,8 +146,8 @@ object DateTimeUtils {
   /*
    * Converts milliseconds since epoch to SQLTimestamp.
    */
-  def fromMillis(millis: Long): SQLTimestamp = {
-    MILLISECONDS.toMicros(millis)
+  def millisToMicros(millis: Long): SQLTimestamp = {
+    Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
   def microsToEpochDays(epochMicros: SQLTimestamp, zoneId: ZoneId): SQLDate = {
@@ -413,63 +405,55 @@ object DateTimeUtils {
     }
   }
 
-  /**
-   * Returns the microseconds since year zero (-17999) from microseconds since epoch.
-   */
-  private def absoluteMicroSecond(microsec: SQLTimestamp): SQLTimestamp = {
-    microsec + toYearZero * MICROS_PER_DAY
-  }
-
-  private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
-    val zoneOffsetUs = MILLISECONDS.toMicros(timeZone.getOffset(MICROSECONDS.toMillis(microsec)))
-    absoluteMicroSecond(microsec) + zoneOffsetUs
+  private def localTimestamp(microsec: SQLTimestamp, zoneId: ZoneId): LocalDateTime = {
+    microsToInstant(microsec).atZone(zoneId).toLocalDateTime
   }
 
   /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
-  def getHours(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toHours(localTimestamp(microsec, timeZone)) % 24).toInt
+  def getHours(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+    localTimestamp(microsec, zoneId).getHour
   }
 
   /**
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toMinutes(localTimestamp(microsec, timeZone)) % 60).toInt
+  def getMinutes(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+    localTimestamp(microsec, zoneId).getMinute
   }
 
   /**
    * Returns the second value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getSeconds(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
-    (MICROSECONDS.toSeconds(localTimestamp(microsec, timeZone)) % 60).toInt
+  def getSeconds(microsec: SQLTimestamp, zoneId: ZoneId): Int = {
+    localTimestamp(microsec, zoneId).getSecond
   }
 
   /**
    * Returns the seconds part and its fractional part with microseconds.
    */
-  def getSecondsWithFraction(microsec: SQLTimestamp, timeZone: TimeZone): Decimal = {
-    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLIS)
-    Decimal(secFrac, 8, 6)
+  def getSecondsWithFraction(microsec: SQLTimestamp, zoneId: ZoneId): Decimal = {
+    Decimal(getMicroseconds(microsec, zoneId), 8, 6)
   }
 
   /**
    * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
    * is expressed in microseconds since the epoch.
    */
-  def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Decimal = {
-    Decimal(getMicroseconds(timestamp, timeZone), 8, 3)
+  def getMilliseconds(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
+    Decimal(getMicroseconds(timestamp, zoneId), 8, 3)
   }
 
   /**
    * Returns seconds, including fractional parts, multiplied by 1000000. The timestamp
    * is expressed in microseconds since the epoch.
    */
-  def getMicroseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
-    Math.floorMod(localTimestamp(timestamp, timeZone), MICROS_PER_SECOND * 60).toInt
+  def getMicroseconds(timestamp: SQLTimestamp, zoneId: ZoneId): Int = {
+    val lt = localTimestamp(timestamp, zoneId)
+    (lt.getLong(ChronoField.MICRO_OF_SECOND) + lt.getSecond * MICROS_PER_SECOND).toInt
   }
 
   /**
@@ -588,10 +572,8 @@ object DateTimeUtils {
       time2: SQLTimestamp,
       roundOff: Boolean,
       zoneId: ZoneId): Double = {
-    val millis1 = MICROSECONDS.toMillis(time1)
-    val millis2 = MICROSECONDS.toMillis(time2)
-    val date1 = millisToDays(millis1, zoneId)
-    val date2 = millisToDays(millis2, zoneId)
+    val date1 = microsToDays(time1, zoneId)
+    val date2 = microsToDays(time2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -605,8 +587,8 @@ object DateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, zoneId))
-    val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, zoneId))
+    val secondsInDay1 = MICROSECONDS.toSeconds(time1 - daysToMicros(date1, zoneId))
+    val secondsInDay2 = MICROSECONDS.toSeconds(time2 - daysToMicros(date2, zoneId))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
     val secondsInMonth = DAYS.toSeconds(31)
     val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
@@ -725,21 +707,17 @@ object DateTimeUtils {
   def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
     level match {
       case TRUNC_TO_MICROSECOND => t
+      case TRUNC_TO_MILLISECOND =>
+        t - Math.floorMod(t, MICROS_PER_MILLIS)
+      case TRUNC_TO_SECOND =>
+        t - Math.floorMod(t, MICROS_PER_SECOND)
+      case TRUNC_TO_MINUTE =>
+        t - Math.floorMod(t, MICROS_PER_MINUTE)
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
-      case _ =>
-        val millis = MICROSECONDS.toMillis(t)
-        val truncated = level match {
-          case TRUNC_TO_MILLISECOND => millis
-          case TRUNC_TO_SECOND =>
-            millis - millis % MILLIS_PER_SECOND
-          case TRUNC_TO_MINUTE =>
-            millis - millis % MILLIS_PER_MINUTE
-          case _ => // Try to truncate date levels
-            val dDays = millisToDays(millis, zoneId)
-            daysToMillis(truncDate(dDays, level), zoneId)
-        }
-        truncated * MICROS_PER_MILLIS
+      case _ => // Try to truncate date levels
+        val dDays = microsToDays(t, zoneId)
+        daysToMicros(truncDate(dDays, level), zoneId)
     }
   }
 

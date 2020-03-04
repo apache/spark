@@ -19,11 +19,13 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL has two options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
+Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
+
 When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
-When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules.
+
+When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -31,7 +33,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
   <td><code>spark.sql.ansi.enabled</code></td>
   <td>false</td>
   <td>
-    When true, Spark tries to conform to the ANSI SQL specification:
+    (Experimental) When true, Spark tries to conform to the ANSI SQL specification:
     1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
     2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
   </td>
@@ -40,7 +42,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
   <td><code>spark.sql.storeAssignmentPolicy</code></td>
   <td>ANSI</td>
   <td>
-    When inserting a value into a column with different data type, Spark will perform type coercion.
+    (Experimental) When inserting a value into a column with different data type, Spark will perform type coercion.
     Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy,
     Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.
     It disallows certain unreasonable type conversions such as converting string to int or double to boolean.

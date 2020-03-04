@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
@@ -30,12 +30,13 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     origCreateHiveTableConfig =
-      SQLConf.get.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      spark.conf.get(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
+    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, true)
   }
 
   protected override def afterAll(): Unit = {
-    SQLConf.get.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+    spark.conf.set(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key,
       origCreateHiveTableConfig)
     super.afterAll()
   }
@@ -219,7 +220,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>) USING hive"
       sql(createTable)
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == createTable.dropRight(" USING hive".length))
+      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
 
       checkCreateHiveTableOrView("t1")
     }

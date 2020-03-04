@@ -24,6 +24,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 /**
  * This interface contains logical write information that data sources can use when generating a
  * {@link WriteBuilder}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface LogicalWriteInfo {

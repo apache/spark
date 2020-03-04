@@ -135,6 +135,26 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
+    def test_all_gather(self):
+        """
+        Verify that BarrierTaskContext.allGather() performs global sync among all barrier tasks
+        within a stage and passes messages properly.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        def context_barrier(x):
+            tc = BarrierTaskContext.get()
+            time.sleep(random.randint(1, 10))
+            out = tc.allGather(str(tc.partitionId()))
+            pids = [int(e) for e in out]
+            return pids
+
+        pids = rdd.barrier().mapPartitions(f).map(context_barrier).collect()[0]
+        self.assertEqual(pids, [0, 1, 2, 3])
+
     def test_barrier_infos(self):
         """
         Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
@@ -284,7 +304,6 @@ class TaskContextTestsWithResources(unittest.TestCase):
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
-        conf = conf.set("spark.resources.dir", self.tempdir.name)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
@@ -302,7 +321,6 @@ class TaskContextTestsWithResources(unittest.TestCase):
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
-        shutil.rmtree(self.tempdir.name)
         self.sc.stop()
 
 if __name__ == "__main__":

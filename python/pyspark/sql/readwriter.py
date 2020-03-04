@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads data from a data source and returns it as a :class`DataFrame`.
+        """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.

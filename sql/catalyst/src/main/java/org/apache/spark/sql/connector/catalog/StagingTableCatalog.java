@@ -48,6 +48,8 @@ import org.apache.spark.sql.types.StructType;
  * {@link BatchWrite#commit(WriterCommitMessage[])} is called,
  * {@link StagedTable#commitStagedChanges()} is called, at which point the staged table can
  * complete both the data write and the metadata swap operation atomically.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface StagingTableCatalog extends TableCatalog {

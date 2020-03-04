@@ -19,12 +19,11 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getRegressionSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -55,8 +54,8 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       parameters: Vector,
       fitIntercept: Boolean,
       epsilon: Double): HuberAggregator = {
-    val (featuresSummarizer, _) = getRegressionSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) = Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcParameters = spark.sparkContext.broadcast(parameters)
     new HuberAggregator(fitIntercept, epsilon, bcFeaturesStd)(bcParameters)
@@ -99,8 +98,8 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("check correctness") {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
     val numFeatures = 2
-    val (featuresSummarizer, _) = getRegressionSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) = Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val epsilon = 1.35
     val weightSum = instances.map(_.weight).sum
 

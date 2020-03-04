@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 
 /**
  * Represents a field or column reference in the public logical expression API.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface NamedReference extends Expression {

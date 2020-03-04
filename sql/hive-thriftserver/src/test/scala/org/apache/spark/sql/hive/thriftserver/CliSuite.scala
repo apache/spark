@@ -400,4 +400,26 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "1.000000000000000000"
     )
   }
+
+  test("SPARK-30049 Should not complain for quotes in commented lines") {
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here
+        |;""".stripMargin -> "testcomment"
+    )
+  }
+
+  test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here \\
+        | comment continues here with single ' quote \\
+        | extra ' \\
+        |;""".stripMargin -> "testcomment"
+    )
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here \\
+        |   comment continues here with single ' quote \\
+        |   extra ' \\
+        |   ;""".stripMargin -> "testcomment"
+    )
+  }
 }
