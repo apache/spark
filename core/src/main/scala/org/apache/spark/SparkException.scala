@@ -48,4 +48,5 @@ private[spark] case class ExecutorDeadException(message: String)
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
 private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
-  extends SparkException(s"Exception for upgrading to Spark $version: $message", cause)
+  extends SparkException("You may get a different result due to the upgrading of Spark" +
+    s" $version: $message", cause)

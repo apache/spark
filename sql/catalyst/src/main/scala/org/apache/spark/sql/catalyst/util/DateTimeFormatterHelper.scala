@@ -62,9 +62,9 @@ trait DateTimeFormatterHelper {
   }
 
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
-  // between legacy format and new format. For legacy parser, DateTimeParseException will not be
-  // thrown. On the contrary, if the legacy policy set to CORRECTED, DateTimeParseException will
-  // address by the caller side.
+  // between legacy parser and new parser. If new parser fails but legacy parser works, throw a
+  // SparkUpgradeException. On the contrary, if the legacy policy set to CORRECTED,
+  // DateTimeParseException will address by the caller side.
   protected def checkDiffResult[T](
       s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
     case e: DateTimeParseException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
@@ -74,9 +74,9 @@ trait DateTimeFormatterHelper {
         case _: Throwable => None
       }
       if (res.nonEmpty) {
-        throw new SparkUpgradeException("3.0", s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to " +
-          "LEGACY to restore the behavior before Spark 3.0. Set to CORRECTED to use the new " +
-          "approach, which would return null for this record. See more details in SPARK-30668.", e)
+        throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+          s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+          s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
       } else {
         throw e
       }

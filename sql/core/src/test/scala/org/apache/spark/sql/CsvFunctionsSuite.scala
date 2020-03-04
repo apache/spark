@@ -73,8 +73,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[SparkException] {
         df2.collect()
       }.getCause.getMessage
-      assert(msg.contains(s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
-        "the behavior before Spark 3.0"))
+      assert(msg.contains("Fail to parse"))
     }
   }
 

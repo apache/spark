@@ -2304,8 +2304,19 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
     val ds = Seq("2020-1-12 3:23:34.12, 2020-1-12 T").toDS()
-    val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
-    checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
+    Seq("legacy", "corrected").foreach { config =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> config) {
+        val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
+        checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
+        csv.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
   }
 
   test("exception mode for parsing date/timestamp string") {
@@ -2318,8 +2329,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       val msg = intercept[SparkException] {
         csv.collect()
       }.getCause.getMessage
-      assert(msg.contains(s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
-        "the behavior before Spark 3.0"))
+      assert(msg.contains("Fail to parse"))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
       checkAnswer(csv, Row(Timestamp.valueOf("2020-01-27 20:06:11.847")))

@@ -2663,11 +2663,22 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
     val ds = Seq("{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T', 'd2': '12345'}").toDS()
-    val json = spark.read.schema("t timestamp, d date, d2 date").json(ds)
-    checkAnswer(json, Row(
-      Timestamp.valueOf("2020-1-12 3:23:34.12"),
-      Date.valueOf("2020-1-12"),
-      Date.valueOf(LocalDate.ofEpochDay(12345))))
+    Seq("legacy", "corrected").foreach { config =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> config) {
+        val json = spark.read.schema("t timestamp, d date, d2 date").json(ds)
+        checkAnswer(json, Row(
+          Timestamp.valueOf("2020-1-12 3:23:34.12"),
+          Date.valueOf("2020-1-12"),
+          Date.valueOf(LocalDate.ofEpochDay(12345))))
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val json = spark.read.schema("t timestamp, d date, d2 date").json(ds)
+      val msg = intercept[SparkException] {
+        json.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
   }
 
   test("exception mode for parsing date/timestamp string") {
@@ -2680,8 +2691,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val msg = intercept[SparkException] {
         json.collect()
       }.getCause.getMessage
-      assert(msg.contains(s"Set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore " +
-        "the behavior before Spark 3.0"))
+      assert(msg.contains("Fail to parse"))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
       checkAnswer(json, Row(Timestamp.valueOf("2020-01-27 20:06:11.847")))
