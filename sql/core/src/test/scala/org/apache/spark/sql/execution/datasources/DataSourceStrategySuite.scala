@@ -32,7 +32,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   ))
 
   val attrStrs = Seq(
-    'cstr.int
+    'cstr.string
   ).zip(Seq(
     "cstr"
   ))
@@ -240,17 +240,17 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-31027 test `DataSourceStrategy.pushDownColName` that finds the column name of " +
+  test("SPARK-31027 test `PushDownCol.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
-      assert(DataSourceStrategy.pushDownColName(attrInt) === Some(colName))
+      assert(PushDownCol.unapply(attrInt) === Some(PushDownCol(colName, IntegerType)))
     }
     attrStrs.foreach { case (attrStr, colName) =>
-      assert(DataSourceStrategy.pushDownColName(attrStr) === Some(colName))
+      assert(PushDownCol.unapply(attrStr) === Some(PushDownCol(colName, StringType)))
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
-    assert(DataSourceStrategy.pushDownColName(Abs('col.int)) === None)
+    assert(PushDownCol.unapply(Abs('col.int)) === None)
   }
 
   /**

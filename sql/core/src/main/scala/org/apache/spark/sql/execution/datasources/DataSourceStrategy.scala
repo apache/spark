@@ -437,76 +437,62 @@ object DataSourceStrategy {
     }
   }
 
-  /**
-   * Find the column name of an expression that can be pushed down.
-   */
-  private[sql] def pushDownColName(e: Expression): Option[String] = {
-    def helper(e: Expression) = e match {
-      case a: Attribute => Some(a.name)
-      case _ => None
-    }
-    helper(e)
-  }
-
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
-    case expressions.EqualTo(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.EqualTo(_, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.EqualTo(_, convertToScala(v, t)))
+    case expressions.EqualTo(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.EqualTo(col.name, convertToScala(v, t)))
+    case expressions.EqualTo(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.EqualTo(col.name, convertToScala(v, t)))
 
-    case expressions.EqualNullSafe(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.EqualNullSafe(_, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.EqualNullSafe(_, convertToScala(v, t)))
+    case expressions.EqualNullSafe(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.EqualNullSafe(col.name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.EqualNullSafe(col.name, convertToScala(v, t)))
 
-    case expressions.GreaterThan(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.GreaterThan(_, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.LessThan(_, convertToScala(v, t)))
+    case expressions.GreaterThan(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.GreaterThan(col.name, convertToScala(v, t)))
+    case expressions.GreaterThan(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.LessThan(col.name, convertToScala(v, t)))
 
-    case expressions.LessThan(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.LessThan(_, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.GreaterThan(_, convertToScala(v, t)))
+    case expressions.LessThan(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.LessThan(col.name, convertToScala(v, t)))
+    case expressions.LessThan(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.GreaterThan(col.name, convertToScala(v, t)))
 
-    case expressions.GreaterThanOrEqual(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.GreaterThanOrEqual(_, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.LessThanOrEqual(_, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.GreaterThanOrEqual(col.name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.LessThanOrEqual(col.name, convertToScala(v, t)))
 
-    case expressions.LessThanOrEqual(e: Expression, Literal(v, t)) =>
-      pushDownColName(e).map(sources.LessThanOrEqual(_, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), e: Expression) =>
-      pushDownColName(e).map(sources.GreaterThanOrEqual(_, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(PushDownCol(col), Literal(v, t)) =>
+      Some(sources.LessThanOrEqual(col.name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(Literal(v, t), PushDownCol(col)) =>
+      Some(sources.GreaterThanOrEqual(col.name, convertToScala(v, t)))
 
-    case expressions.InSet(e: Expression, set) =>
-      pushDownColName(e).map {
-        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-        sources.In(_, set.toArray.map(toScala))
-      }
+    case expressions.InSet(PushDownCol(col), set) =>
+      val b: PushDownCol = col
+      val toScala = CatalystTypeConverters.createToScalaConverter(col.dataType)
+      Some(sources.In(col.name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(e: Expression, list) if list.forall(_.isInstanceOf[Literal]) =>
-      pushDownColName(e).map {
-        val hSet = list.map(_.eval(EmptyRow))
-        val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-        sources.In(_, hSet.toArray.map(toScala))
-      }
+    case expressions.In(PushDownCol(col), list) if list.forall(_.isInstanceOf[Literal]) =>
+      val hSet = list.map(_.eval(EmptyRow))
+      val toScala = CatalystTypeConverters.createToScalaConverter(col.dataType)
+      Some(sources.In(col.name, hSet.toArray.map(toScala)))
 
-    case expressions.IsNull(e: Expression) =>
-      pushDownColName(e).map(sources.IsNull)
-    case expressions.IsNotNull(e: Expression) =>
-      pushDownColName(e).map(sources.IsNotNull)
-    case expressions.StartsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
-      pushDownColName(e).map(sources.StringStartsWith(_, v.toString))
+    case expressions.IsNull(PushDownCol(col)) =>
+      Some(sources.IsNull(col.name))
+    case expressions.IsNotNull(PushDownCol(col)) =>
+      Some(sources.IsNotNull(col.name))
+    case expressions.StartsWith(PushDownCol(col), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringStartsWith(col.name, v.toString))
 
-    case expressions.EndsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
-      pushDownColName(e).map(sources.StringEndsWith(_, v.toString))
+    case expressions.EndsWith(PushDownCol(col), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringEndsWith(col.name, v.toString))
 
-    case expressions.Contains(e: Expression, Literal(v: UTF8String, StringType)) =>
-      pushDownColName(e).map(sources.StringContains(_, v.toString))
+    case expressions.Contains(PushDownCol(col), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringContains(col.name, v.toString))
 
     case expressions.Literal(true, BooleanType) =>
       Some(sources.AlwaysTrue)
@@ -648,5 +634,20 @@ object DataSourceStrategy {
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
     }
+  }
+}
+
+case class PushDownCol(name: String, dataType: DataType)
+
+/**
+ * Find the column name of an expression that can be pushed down.
+ */
+object PushDownCol {
+  def unapply(e: Expression): Option[PushDownCol] = {
+    def helper(e: Expression) = e match {
+      case a: Attribute => Some(a.name)
+      case _ => None
+    }
+    helper(e).map(PushDownCol(_, e.dataType))
   }
 }
