@@ -595,11 +595,6 @@ class ResolveSessionCatalog(
           FunctionIdentifier(nameParts.head, None)
         } else {
           ident.namespace match {
-            // For name parts like `spark_catalog.t`, we need to fill in the default database so
-            // that the caller side won't treat it as a temp function.
-            case Array() if nameParts.head == CatalogManager.SESSION_CATALOG_NAME =>
-              FunctionIdentifier(
-                ident.name, Some(catalogManager.v1SessionCatalog.getCurrentDatabase))
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
             case _ =>
               throw new AnalysisException(s"Unsupported function name '$ident'")
@@ -665,14 +660,7 @@ class ResolveSessionCatalog(
   object TempViewOrV1Table {
     def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
       case _ if isTempView(nameParts) => Some(nameParts)
-      case SessionCatalogAndTable(_, tbl) =>
-        if (nameParts.head == CatalogManager.SESSION_CATALOG_NAME && tbl.length == 1) {
-          // For name parts like `spark_catalog.t`, we need to fill in the default database so
-          // that the caller side won't treat it as a temp view.
-          Some(Seq(catalogManager.v1SessionCatalog.getCurrentDatabase, tbl.head))
-        } else {
-          Some(tbl)
-        }
+      case SessionCatalogAndIdentifier(_, tbl) => Some(tbl.asMultipartIdentifier)
       case _ => None
     }
   }
