@@ -362,8 +362,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
     }
-    intercept[IllegalArgumentException] {
+    val e = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
     }
+    assert(e.getMessage === "Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
   }
 }
