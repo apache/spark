@@ -109,7 +109,6 @@ object NestedColumnAliasing {
    *
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
-   *
    */
   def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
