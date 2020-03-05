@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -789,6 +790,7 @@ abstract class ToTimestamp
               formatter.parse(
                 t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
+              case e: SparkUpgradeException => throw e
               case NonFatal(_) => null
             }
           }
@@ -802,6 +804,7 @@ abstract class ToTimestamp
               TimestampFormatter(formatString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
+              case e: SparkUpgradeException => throw e
               case NonFatal(_) => null
             }
           }

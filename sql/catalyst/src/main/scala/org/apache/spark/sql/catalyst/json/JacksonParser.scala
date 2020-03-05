@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -389,6 +390,7 @@ class JacksonParser(
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()

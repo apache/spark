@@ -2672,6 +2672,26 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       Date.valueOf(LocalDate.ofEpochDay(12345))))
   }
 
+  test("exception mode for parsing date/timestamp string") {
+    val ds = Seq("{'t': '2020-01-27T20:06:11.847-0800'}").toDS()
+    val json = spark.read
+      .schema("t timestamp")
+      .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
+      .json(ds)
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        json.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkAnswer(json, Row(Timestamp.valueOf("2020-01-27 20:06:11.847")))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkAnswer(json, Row(null))
+    }
+  }
+
   test("filters push down") {
     withTempPath { path =>
       val t = "2019-12-17 00:01:02"
@@ -2838,5 +2858,5 @@ class JsonLegacyTimeParserSuite extends JsonSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_ENABLED, true)
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
 }
