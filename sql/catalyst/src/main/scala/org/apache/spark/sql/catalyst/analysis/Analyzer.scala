@@ -1844,10 +1844,11 @@ class Analyzer(
                 case other if (isDistinct || filter.isDefined) =>
                   failAnalysis("DISTINCT or FILTER specified, " +
                     s"but ${other.prettyName} is not an aggregate function")
-                case e: StringTrim if arguments.size == 2 =>
+                case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM function signature is deprecated." +
-                      " Use SQL syntax `TRIM(trimStr FROM str)` instead.")
+                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                      " instead.")
                     trimWarningEnabled.set(false)
                   }
                   e
