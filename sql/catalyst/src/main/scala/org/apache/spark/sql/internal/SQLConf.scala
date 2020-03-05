@@ -2337,6 +2337,21 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  object MapKeyDedupPolicy extends Enumeration {
+    val EXCEPTION, LAST_WIN = Value
+  }
+
+  val MAP_KEY_DEDUP_POLICY = buildConf("spark.sql.mapKeyDedupPolicy")
+    .doc("The policy to deduplicate map keys in builtin function: CreateMap, MapFromArrays, " +
+      "MapFromEntries, StringToMap, MapConcat and TransformKeys. When EXCEPTION, the query " +
+      "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
+      "at last takes precedence.")
+    .version("3.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(MapKeyDedupPolicy.values.map(_.toString))
+    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.toString)
+
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
@@ -2454,17 +2469,6 @@ object SQLConf {
     .version("")
     .booleanConf
     .createWithDefault(false)
-
-  val LEGACY_ALLOW_DUPLICATED_MAP_KEY =
-    buildConf("spark.sql.legacy.allowDuplicatedMapKeys")
-      .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
-        "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
-        "MapFromEntries, StringToMap, MapConcat and TransformKeys. Otherwise, if this is false, " +
-        "which is the default, Spark will throw an exception when duplicated map keys are " +
-        "detected.")
-      .version("")
-      .booleanConf
-      .createWithDefault(false)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
