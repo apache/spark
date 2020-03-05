@@ -66,6 +66,7 @@ object Main extends Logging {
       .map { x => if (x.startsWith("file:")) new File(new URI(x)).getPath else x }
       .mkString(File.pathSeparator)
     val interpArguments = List(
+      "-deprecation",
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
       "-classpath", jars
