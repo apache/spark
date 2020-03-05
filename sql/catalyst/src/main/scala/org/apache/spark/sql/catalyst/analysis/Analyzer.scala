@@ -1796,7 +1796,6 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
-    val ltrimAndRtrimWarningEnabled = new AtomicBoolean(true)
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case q: LogicalPlan =>
@@ -1845,13 +1844,6 @@ class Analyzer(
                 case other if (isDistinct || filter.isDefined) =>
                   failAnalysis("DISTINCT or FILTER specified, " +
                     s"but ${other.prettyName} is not an aggregate function")
-                case e @ (_: StringTrimLeft | _: StringTrimRight) =>
-                  if (ltrimAndRtrimWarningEnabled.get) {
-                    log.warn("LTRIM and RTRIM functions are deprecated. Use SQL syntax " +
-                      "`TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)` instead.")
-                    ltrimAndRtrimWarningEnabled.set(false)
-                  }
-                  e
                 case e: StringTrim if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
                     log.warn("Two-parameter TRIM function signature is deprecated." +

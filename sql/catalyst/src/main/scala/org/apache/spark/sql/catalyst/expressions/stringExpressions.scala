@@ -853,10 +853,7 @@ object StringTrimLeft {
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
   """,
-  since = "1.5.0",
-  deprecated = """
-    Deprecated since 3.0.0. Use SQL syntax `TRIM(LEADING trimStr FROM str)` instead.
-  """)
+  since = "1.5.0")
 case class StringTrimLeft(
     srcStr: Expression,
     trimStr: Option[Expression] = None)
@@ -954,10 +951,7 @@ object StringTrimRight {
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
   """,
-  since = "1.5.0",
-  deprecated = """
-    Deprecated since 3.0.0. Use SQL syntax `TRIM(TRAILING trimStr FROM str)` instead.
-  """)
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class StringTrimRight(
     srcStr: Expression,
