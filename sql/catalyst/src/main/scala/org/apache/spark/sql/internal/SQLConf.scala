@@ -24,6 +24,7 @@ import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.util.Try
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -1659,11 +1661,17 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  private def isValidTimezone(zone: String): Boolean = {
+    Try { DateTimeUtils.getZoneId(zone) }.isSuccess
+  }
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .version("")
       .stringConf
+      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+        " ZoneId.of(_, ZoneId.SHORT_IDS)")
       .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
@@ -2339,6 +2347,21 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  object MapKeyDedupPolicy extends Enumeration {
+    val EXCEPTION, LAST_WIN = Value
+  }
+
+  val MAP_KEY_DEDUP_POLICY = buildConf("spark.sql.mapKeyDedupPolicy")
+    .doc("The policy to deduplicate map keys in builtin function: CreateMap, MapFromArrays, " +
+      "MapFromEntries, StringToMap, MapConcat and TransformKeys. When EXCEPTION, the query " +
+      "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
+      "at last takes precedence.")
+    .version("3.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(MapKeyDedupPolicy.values.map(_.toString))
+    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.toString)
+
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
     .doc("When true, the upcast will be loose and allows string to atomic types.")
@@ -2357,6 +2380,18 @@ object SQLConf {
       "AnalysisException is thrown while name conflict is detected in nested CTE. This config " +
       "will be removed in future versions and CORRECTED will be the only behavior.")
     .version("")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_TIME_PARSER_POLICY = buildConf("spark.sql.legacy.timeParserPolicy")
+    .internal()
+    .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
+      "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
+      "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
+      "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
+      "results.")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2444,17 +2479,6 @@ object SQLConf {
     .version("")
     .booleanConf
     .createWithDefault(false)
-
-  val LEGACY_ALLOW_DUPLICATED_MAP_KEY =
-    buildConf("spark.sql.legacy.allowDuplicatedMapKeys")
-      .doc("When true, use last wins policy to remove duplicated map keys in built-in functions, " +
-        "this config takes effect in below build-in functions: CreateMap, MapFromArrays, " +
-        "MapFromEntries, StringToMap, MapConcat and TransformKeys. Otherwise, if this is false, " +
-        "which is the default, Spark will throw an exception when duplicated map keys are " +
-        "detected.")
-      .version("")
-      .booleanConf
-      .createWithDefault(false)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
@@ -2755,7 +2779,9 @@ class SQLConf extends Serializable with Logging {
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
-  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
+    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
+  }
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

@@ -95,7 +95,7 @@ Then, you can supply configuration values at runtime:
 
 The Spark shell and [`spark-submit`](submitting-applications.html)
 tool support two ways to load configurations dynamically. The first is command line options,
-such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
+such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf/-c`
 flag, but uses special flags for properties that play a part in launching the Spark application.
 Running `./bin/spark-submit --help` will show the entire list of these options.
 
@@ -929,7 +929,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Spark UI
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
   <td>false</td>
@@ -1145,6 +1145,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished executors the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.retainedDrivers</code></td>
@@ -1152,6 +1153,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.ui.retainedExecutions</code></td>
