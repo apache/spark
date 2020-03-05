@@ -749,7 +749,7 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_READ_TIME = "Shuffle Read Blocked Time"
   val HEADER_SHUFFLE_TOTAL_READS = "Shuffle Read Size / Records"
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
-  val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
+  val HEADER_SHUFFLE_WRITE_TIME = "Shuffle Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
   val HEADER_MEM_SPILL = "Spill (Memory)"
   val HEADER_DISK_SPILL = "Spill (Disk)"
