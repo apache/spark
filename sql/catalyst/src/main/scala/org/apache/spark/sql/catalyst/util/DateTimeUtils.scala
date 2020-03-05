@@ -86,28 +86,30 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    microsToDays(millisToMicros(date.getTime))
+    localDateToDays(date.toLocalDate)
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+    Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
   }
 
   /**
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    Timestamp.from(microsToInstant(us))
+    val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
+    Timestamp.valueOf(ldt)
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    instantToMicros(t.toInstant)
+    val instant = ZonedDateTime.of(t.toLocalDateTime, ZoneId.systemDefault()).toInstant
+    instantToMicros(instant)
   }
 
   /**
