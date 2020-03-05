@@ -313,7 +313,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("The expression '1' must be evaluated to a valid string"))
+    assert(errMsg1.getMessage.startsWith("The expression '1' is not a valid schema string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
