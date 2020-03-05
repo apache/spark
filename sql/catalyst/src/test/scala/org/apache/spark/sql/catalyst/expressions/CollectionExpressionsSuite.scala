@@ -829,7 +829,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
   }
 
-  test("Sequence on DST boundaries") {
+  ignore("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
     val dstOffset = timeZone.getDSTSavings
 
