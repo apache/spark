@@ -32,7 +32,7 @@ object ExprUtils {
       exp.eval() match {
         case s: UTF8String if s != null => DataType.fromDDL(s.toString)
         case _ => throw new AnalysisException(
-          s"The expression '${exp.sql}' must be evaluated to a valid string.")
+          s"The expression '${exp.sql}' is not a valid schema string.")
       }
     } else {
       throw new AnalysisException(
