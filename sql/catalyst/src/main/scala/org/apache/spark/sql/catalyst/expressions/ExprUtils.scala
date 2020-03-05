@@ -27,28 +27,6 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils {
 
-  def evalSchemaExpr(exp: Expression): StructType = {
-    val dataType = if (exp.foldable) {
-      exp.eval() match {
-        case s: UTF8String if s != null =>
-          // Use `DataType.fromDDL` since the type string can be struct<...>.
-          DataType.fromDDL(s.toString)
-        case _ => throw new AnalysisException(
-          s"The expression '${exp.sql}' must be evaluated to a valid string.")
-      }
-    } else {
-      throw new AnalysisException(
-        "Schema should be specified in DDL format as a string literal or output of " +
-        s"the schema_of_csv function instead of ${exp.sql}")
-    }
-
-    if (!dataType.isInstanceOf[StructType]) {
-      throw new AnalysisException(
-        s"Schema should be struct type but got ${dataType.sql}.")
-    }
-    dataType.asInstanceOf[StructType]
-  }
-
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
       exp.eval() match {
@@ -59,8 +37,17 @@ object ExprUtils {
     } else {
       throw new AnalysisException(
         "Schema should be specified in DDL format as a string literal or output of " +
-        s"the schema_of_json function instead of ${exp.sql}")
+          s"the schema_of_json/schema_of_csv functions instead of ${exp.sql}")
     }
+  }
+
+  def evalSchemaExpr(exp: Expression): StructType = {
+    val dataType = evalTypeExpr(exp)
+    if (!dataType.isInstanceOf[StructType]) {
+      throw new AnalysisException(
+        s"Schema should be struct type but got ${dataType.sql}.")
+    }
+    dataType.asInstanceOf[StructType]
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
