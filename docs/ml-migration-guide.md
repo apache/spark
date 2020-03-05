@@ -33,7 +33,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 * `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
 * `org.apache.spark.ml.image.ImageSchema.readImages` which is deprecated in 2.3, is removed in 3.0, use `spark.read.format('image')` instead.
-* `org.apache.spark.mllib.clustering.KMeans.train` with param Int `runs` which is deprecated in 2.1, is removed in 3.0, use `train` method without `runs` instead.
+* `org.apache.spark.mllib.clustering.KMeans.train` with param Int `runs` which is deprecated in 2.1, is removed in 3.0. Use `train` method without `runs` instead.
 * `org.apache.spark.mllib.classification.LogisticRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.classification.LogisticRegression` or `spark.mllib.classification.LogisticRegressionWithLBFGS` instead.
 * `org.apache.spark.mllib.feature.ChiSqSelectorModel.isSorted ` which is deprecated in 2.1, is removed in 3.0, is not intended for subclasses to use.
 * `org.apache.spark.mllib.regression.RidgeRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` = 0.0. Note the default `regParam` is 0.01 for `RidgeRegressionWithSGD`, but is 0.0 for `LinearRegression`.
@@ -41,12 +41,12 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 * `org.apache.spark.mllib.regression.LinearRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` or `LBFGS` instead.
 * `org.apache.spark.mllib.clustering.KMeans.getRuns` and `setRuns` which are deprecated in 2.1, is removed in 3.0, have no effect since Spark 2.0.0.
 * `org.apache.spark.ml.LinearSVCModel.setWeightCol` which is deprecated in 2.4, is removed in 3.0, is not intended for users.
-* From 3.0, `org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel` extends `MultilayerPerceptronParams` to expose the training params. As a result, layers in `MultilayerPerceptronClassificationModel` has been changed from Array[Int] to IntArrayParam. Users should use `MultilayerPerceptronClassificationModel.getLayers` instead of `MultilayerPerceptronClassificationModel.layers` to retrieve the size of layers.
+* From 3.0, `org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel` extends `MultilayerPerceptronParams` to expose the training params. As a result, `layers` in `MultilayerPerceptronClassificationModel` has been changed from `Array[Int]` to `IntArrayParam`. Users should use `MultilayerPerceptronClassificationModel.getLayers` instead of `MultilayerPerceptronClassificationModel.layers` to retrieve the size of layers.
 * `org.apache.spark.ml.classification.GBTClassifier.numTrees`  which is deprecated in 2.4.5, is removed in 3.0, use `getNumTrees` instead.
 * `org.apache.spark.ml.clustering.KMeansModel.computeCost` which is deprecated in 2.4, is removed in 3.0, use `ClusteringEvaluator` instead.
-* `org.apache.spark.mllib.evaluation.MulticlassMetrics.precision` which is deprecated in 2.0, is removed in 3.0, use `accuracy` instead.
-* `org.apache.spark.mllib.evaluation.MulticlassMetrics.recall` which is deprecated in 2.0, is removed in 3.0, use `accuracy` instead.
-* `org.apache.spark.mllib.evaluation.MulticlassMetrics.fMeasure` which is deprecated in 2.0, is removed in 3.0, use `accuracy` instead.
+* The member variable `precision` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `recall` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `fMeasure` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
 * `org.apache.spark.ml.util.GeneralMLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
 * `org.apache.spark.ml.util.MLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
 * `org.apache.spark.ml.util.MLReader.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
@@ -75,11 +75,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
  restriction is lifted so `Imputer` can handle all numeric types.
 * [SPARK-23469](https://issues.apache.org/jira/browse/SPARK-23469):
 In Spark 3.0, the `HashingTF` Transformer uses a corrected implementation of the murmur3 hash
-function to hash elements to vectors. `HashingTF` fits with Spark 3.0 will map elements to
+function to hash elements to vectors. `HashingTF` in Spark 3.0 will map elements to
 different positions in vectors than in Spark 2. However, `HashingTF` created with Spark 2.x
 and loaded with Spark 3.0 will still use the previous hash function and will not change behavior.
 * [SPARK-28969](https://issues.apache.org/jira/browse/SPARK-28969):
-The `setClassifier` method in Pyspark's `OneVsRestModel` has been removed in 3.0 for parity with
+The `setClassifier` method in PySpark's `OneVsRestModel` has been removed in 3.0 for parity with
 the Scala implementation. Callers should not need to set the classifier in the model after
 creation.
 * [SPARK-25790](https://issues.apache.org/jira/browse/SPARK-25790):
