@@ -63,12 +63,37 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
+   * Writes `data` objects to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
+  protected def withParquetDFfromObjs[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
+
+  /**
+   * Writes `df` dataframe to a Parquet file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
+   */
+  protected def withParquetDFfromDF[T <: Product: ClassTag: TypeTag]
+      (df: DataFrame, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
+    withTempPath { file =>
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+      readFile(file.getCanonicalPath, testVectorized)(f)
+    }
+  }
+
+  /**
+   * Writes `df` to a Parquet file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
+   */
+  protected def toParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
+    withTempPath { file =>
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+      readFile(file.getCanonicalPath, testVectorized)(f)
+    }
+  }
 
   /**
    * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
