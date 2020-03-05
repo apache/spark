@@ -758,14 +758,10 @@ class DataSourceV2SQLSuite
         checkAnswer(sql("select i from t"), Row(1))
         checkAnswer(sql("select t.i from t"), Row(1))
         checkAnswer(sql("select default.t.i from t"), Row(1))
+        checkAnswer(sql("select spark_catalog.default.t.i from t"), Row(1))
         checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
         checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
-
-        // catalog name cannot be used for tables in the session catalog.
-        val ex = intercept[AnalysisException] {
-          sql(s"select spark_catalog.default.t.i from spark_catalog.default.t")
-        }
-        assert(ex.getMessage.contains("cannot resolve '`spark_catalog.default.t.i`"))
+        checkAnswer(sql("select spark_catalog.default.t.i from spark_catalog.default.t"), Row(1))
       }
     }
   }
