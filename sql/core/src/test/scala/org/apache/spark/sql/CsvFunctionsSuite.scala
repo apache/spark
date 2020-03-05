@@ -59,10 +59,22 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val df2 = df
       .select(from_csv($"value", schemaWithCorrField1, Map(
         "mode" -> "Permissive", "columnNameOfCorruptRecord" -> columnNameOfCorruptRecord)))
-
-    checkAnswer(df2, Seq(
-      Row(Row(0, null, "0,2013-111-11 12:13:14")),
-      Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkAnswer(df2, Seq(
+        Row(Row(0, null, "0,2013-111-11 12:13:14")),
+        Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkAnswer(df2, Seq(
+        Row(Row(0, java.sql.Date.valueOf("2022-03-11"), null)),
+        Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        df2.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
   }
 
   test("schema_of_csv - infers schemas") {
