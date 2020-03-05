@@ -396,14 +396,12 @@ object SQLConf {
 
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
-    .doc("Configures the log level for adaptive execution logging. The value can be 'trace', " +
-      "'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
+    .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
+      "can be 'trace', 'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
-      "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are 'trace', 'debug', " +
-        "'info', 'warn' and 'error'.")
+    .checkValues(Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR"))
     .createWithDefault("debug")
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =

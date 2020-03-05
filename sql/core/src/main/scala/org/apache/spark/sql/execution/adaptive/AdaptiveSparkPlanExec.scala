@@ -67,7 +67,14 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logLevel = conf.adaptiveExecutionLogLevel
+  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
+    case "TRACE" => logTrace(_)
+    case "DEBUG" => logDebug(_)
+    case "INFO" => logInfo(_)
+    case "WARN" => logWarning(_)
+    case "ERROR" => logError(_)
+    case _ => logDebug(_)
+  }
 
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new RuleExecutor[LogicalPlan] {
@@ -222,7 +229,7 @@ case class AdaptiveSparkPlanExec(
         val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-          logBasedOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
+          logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
           cleanUpTempTags(newPhysicalPlan)
           currentPhysicalPlan = newPhysicalPlan
           currentLogicalPlan = newLogicalPlan
@@ -236,7 +243,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan)
-      logBasedOnLevel(s"Final plan: $currentPhysicalPlan")
+      logOnLevel(s"Final plan: $currentPhysicalPlan")
     }
     currentPhysicalPlan
   }
@@ -552,17 +559,6 @@ case class AdaptiveSparkPlanExec(
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex
-    }
-  }
-
-  private def logBasedOnLevel(msg: => String): Unit = {
-    logLevel match {
-      case "TRACE" => logTrace(msg)
-      case "DEBUG" => logDebug(msg)
-      case "INFO" => logInfo(msg)
-      case "WARN" => logWarning(msg)
-      case "ERROR" => logError(msg)
-      case _ => logDebug(msg)
     }
   }
 }

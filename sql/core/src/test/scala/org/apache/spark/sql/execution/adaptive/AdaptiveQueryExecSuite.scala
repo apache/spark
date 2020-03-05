@@ -733,13 +733,12 @@ class AdaptiveQueryExecSuite
   }
 
   test("test log level") {
-
     def verifyLog(expectedLevel: Level): Unit = {
       val logAppender = new LogAppender("adaptive execution")
       withLogAppender(
-          logAppender,
-          loggerName = Some(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
-          level = Some(Level.TRACE)) {
+        logAppender,
+        loggerName = Some(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
+        level = Some(Level.TRACE)) {
         withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
