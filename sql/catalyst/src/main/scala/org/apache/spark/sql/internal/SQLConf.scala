@@ -397,7 +397,7 @@ object SQLConf {
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
     .doc("Configures the log level for adaptive execution logging. The value can be 'trace', " +
-      "'debug', 'info', 'warn', or 'error'. The default log level is 'trace'.")
+      "'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
