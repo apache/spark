@@ -405,9 +405,9 @@ object SQLConf {
 
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
     buildConf("spark.sql.adaptive.advisoryPartitionSizeInBytes")
-      .doc("The advisory size in bytes of the shuffle partition during adaptive optimization. " +
-        "It takes effect when Spark coalesces small shuffle partitions or splits skewed shuffle " +
-        "partition.")
+      .doc("The advisory size in bytes of the shuffle partition during adaptive optimization " +
+        s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
+        "coalesces small shuffle partitions or splits skewed shuffle partition.")
       .version("3.0.0")
       .fallbackConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
