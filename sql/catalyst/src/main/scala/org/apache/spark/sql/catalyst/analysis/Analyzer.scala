@@ -935,7 +935,7 @@ class Analyzer(
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
               SubqueryAlias(
-                ident.asMultipartIdentifier,
+                catalog.name +: ident.asMultipartIdentifier,
                 DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
