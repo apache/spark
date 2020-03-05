@@ -1107,7 +1107,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("SPARK-20364: Disable Parquet predicate pushdown for fields having dots in the names") {
+  test("SPARK-31026: Parquet predicate pushdown for fields having dots in the names") {
     import testImplicits._
 
     Seq(true, false).foreach { vectorized =>
@@ -1118,6 +1118,28 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
           val readBack = spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL")
           assert(readBack.count() == 1)
+        }
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+          // Makes sure disabling 'spark.sql.parquet.recordFilter' still enables
+          // row group level filtering.
+          SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+
+        withTempPath { path =>
+          val data = (1 to 1024)
+          data.toDF("col.dots").coalesce(1)
+            .write.option("parquet.block.size", 512)
+            .parquet(path.getAbsolutePath)
+          val df = spark.read.parquet(path.getAbsolutePath).filter("`col.dots` == 500")
+          // Here, we strip the Spark side filter and check the actual results from Parquet.
+          val actual = stripSparkFilter(df).collect().length
+          // Since those are filtered at row group level, the result count should be less
+          // than the total length but should not be a single record.
+          // Note that, if record level filtering is enabled, it should be a single record.
+          // If no filter is pushed down to Parquet, it should be the total length of data.
+          assert(actual > 1 && actual < data.length)
         }
       }
     }

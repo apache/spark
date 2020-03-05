@@ -32,6 +32,7 @@ import org.apache.spark.annotation.{Evolving, Stable}
 sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
+   * Note that, if a column contains `dots` in name, it will be quoted to avoid confusion.
    * @since 2.1.0
    */
   def references: Array[String]

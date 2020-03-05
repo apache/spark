@@ -34,6 +34,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +56,7 @@ class ParquetFilters(
     // and it does not support to create filters for them.
     val primitiveFields =
     schema.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
-      f.getName -> ParquetField(f.getName,
+      quoteIfNeeded(f.getName) -> ParquetField(f.getName,
         ParquetSchemaType(f.getOriginalType,
           f.getPrimitiveTypeName, f.getTypeLength, f.getDecimalMetadata))
     }
@@ -472,13 +473,8 @@ class ParquetFilters(
     case _ => false
   }
 
-  // Parquet does not allow dots in the column name because dots are used as a column path
-  // delimiter. Since Parquet 1.8.2 (PARQUET-389), Parquet accepts the filter predicates
-  // with missing columns. The incorrect results could be got from Parquet when we push down
-  // filters for the column having dots in the names. Thus, we do not push down such filters.
-  // See SPARK-20364.
   private def canMakeFilterOn(name: String, value: Any): Boolean = {
-    nameToParquetField.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
+    nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
   }
 
   /**

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.sources.{And, Filter}
 import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Methods that can be shared when upgrading the built-in Hive.
@@ -44,5 +46,12 @@ trait OrcFiltersBase {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
+  }
+
+  /**
+   * The key of the dataTypeMap will be quoted if it contains `dots`.
+   */
+  protected[sql] def quotedDataTypeMap(schema: StructType): Map[String, DataType] = {
+    schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
   }
 }
