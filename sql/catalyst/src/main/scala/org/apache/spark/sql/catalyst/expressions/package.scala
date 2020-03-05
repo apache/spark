@@ -228,8 +228,10 @@ package object expressions  {
               tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
             val attributes = collectMatches(name, qualified3Part.get(key)).filter { a =>
               assert(a.qualifier.length >= 2 || a.qualifier.length <= 3)
-              val qualifier = a.qualifier.takeRight(2)
-              resolver(dbPart, qualifier.head) && resolver(tblPart, qualifier.last)
+              a.qualifier match {
+                case Seq(db, tbl) => resolver(dbPart, db) && resolver(tblPart, tbl)
+                case Seq(_, db, tbl) => resolver(dbPart, db) && resolver(tblPart, tbl)
+              }
             }
             (attributes, nestedFields)
           case _ =>
