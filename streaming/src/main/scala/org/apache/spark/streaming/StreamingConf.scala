@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.streaming.util.StateMap.DELTA_CHAIN_LENGTH_THRESHOLD
 
 object StreamingConf {
 
@@ -115,7 +116,7 @@ object StreamingConf {
   private[streaming] val SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD =
     ConfigBuilder("spark.streaming.sessionByKey.deltaChainThreshold")
       .intConf
-      .createWithDefault(20)
+      .createWithDefault(DELTA_CHAIN_LENGTH_THRESHOLD)
 
   private[streaming] val BACKPRESSURE_RATE_ESTIMATOR =
     ConfigBuilder("spark.streaming.backpressure.rateEstimator")
