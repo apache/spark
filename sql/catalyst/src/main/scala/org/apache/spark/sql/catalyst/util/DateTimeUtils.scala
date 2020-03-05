@@ -47,6 +47,13 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
+  final val GREGORIAN_CUTOVER_DAY = LocalDate.of(1582, 10, 15).toEpochDay
+  final val GREGORIAN_CUTOVER_MICROS = instantToMicros(
+    LocalDateTime.of(1582, 10, 15, 0, 0, 0)
+      .atOffset(ZoneOffset.UTC)
+      .toInstant)
+  final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
+
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
@@ -86,30 +93,46 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    localDateToDays(date.toLocalDate)
+    if (date.getTime < GREGORIAN_CUTOVER_MILLIS) {
+      localDateToDays(date.toLocalDate)
+    } else {
+      microsToDays(millisToMicros(date.getTime))
+    }
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
+    if (daysSinceEpoch < GREGORIAN_CUTOVER_DAY) {
+      Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
+    } else {
+      new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+    }
   }
 
   /**
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
-    Timestamp.valueOf(ldt)
+    if (us < GREGORIAN_CUTOVER_MICROS) {
+      val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
+      Timestamp.valueOf(ldt)
+    } else {
+      Timestamp.from(microsToInstant(us))
+    }
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    val instant = ZonedDateTime.of(t.toLocalDateTime, ZoneId.systemDefault()).toInstant
-    instantToMicros(instant)
+    if (t.getTime < GREGORIAN_CUTOVER_MILLIS) {
+      val instant = ZonedDateTime.of(t.toLocalDateTime, ZoneId.systemDefault()).toInstant
+      instantToMicros(instant)
+    } else {
+      instantToMicros(t.toInstant)
+    }
   }
 
   /**
