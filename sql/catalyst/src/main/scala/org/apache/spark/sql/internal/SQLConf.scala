@@ -2112,7 +2112,6 @@ object SQLConf {
       "MapFromEntries, StringToMap, MapConcat and TransformKeys. When EXCEPTION, the query " +
       "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
       "at last takes precedence.")
-    .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(MapKeyDedupPolicy.values.map(_.toString))
