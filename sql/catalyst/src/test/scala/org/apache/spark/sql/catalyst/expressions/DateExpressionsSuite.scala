@@ -1182,7 +1182,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[SparkUpgradeException](
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
-          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Exception for upgrading to Spark 3.0")
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
   }
 }

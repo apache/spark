@@ -233,7 +233,6 @@ class JacksonParser(
           try {
             timestampFormatter.parse(parser.getText)
           } catch {
-            case e: SparkUpgradeException => throw e
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
@@ -251,7 +250,6 @@ class JacksonParser(
           try {
             dateFormatter.parse(parser.getText)
           } catch {
-            case e: SparkUpgradeException => throw e
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
