@@ -20,7 +20,7 @@ package org.apache.spark.streaming
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.config.ConfigBuilder
-import org.apache.spark.streaming.util.StateMap.DELTA_CHAIN_LENGTH_THRESHOLD
+import org.apache.spark.streaming.util.OpenHashMapBasedStateMap.DELTA_CHAIN_LENGTH_THRESHOLD
 
 object StreamingConf {
 
