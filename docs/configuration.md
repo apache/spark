@@ -95,7 +95,7 @@ Then, you can supply configuration values at runtime:
 
 The Spark shell and [`spark-submit`](submitting-applications.html)
 tool support two ways to load configurations dynamically. The first is command line options,
-such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
+such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf/-c`
 flag, but uses special flags for properties that play a part in launching the Spark application.
 Running `./bin/spark-submit --help` will show the entire list of these options.
 
