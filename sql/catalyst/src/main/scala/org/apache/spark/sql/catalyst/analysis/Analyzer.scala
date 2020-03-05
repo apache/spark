@@ -1796,6 +1796,7 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
+    val ltrimAndRtrimWarningEnabled = new AtomicBoolean(true)
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case q: LogicalPlan =>
@@ -1844,11 +1845,17 @@ class Analyzer(
                 case other if (isDistinct || filter.isDefined) =>
                   failAnalysis("DISTINCT or FILTER specified, " +
                     s"but ${other.prettyName} is not an aggregate function")
-                case e: String2TrimExpression if arguments.size == 2 =>
+                case e @ (_: StringTrimLeft | _: StringTrimRight) =>
+                  if (ltrimAndRtrimWarningEnabled.get) {
+                    log.warn("LTRIM and RTRIM functions are deprecated. Use SQL syntax " +
+                      "`TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)` instead.")
+                    ltrimAndRtrimWarningEnabled.set(false)
+                  }
+                  e
+                case e: StringTrim if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                      s" Use SQL syntax `${e.prettyName.toUpperCase(Locale.ROOT)}(trimStr" +
-                      s" FROM str)` instead of `${e.prettyName}`. Please refer SPARK-28093.")
+                    log.warn("Two-parameter TRIM function signature is deprecated." +
+                      " Use SQL syntax `TRIM(trimStr FROM str)` instead.")
                     trimWarningEnabled.set(false)
                   }
                   e

@@ -21,6 +21,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 
+import org.apache.log4j.Level
 import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -767,5 +768,46 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }.getMessage
     assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
       s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+  }
+
+  test("SPARK-30886 Deprecate LTRIM, RTRIM and two-parameter TRIM") {
+    Seq("ltrim", "rtrim").foreach { f =>
+      val logAppender = new LogAppender("deprecated LTRIM, RTRIM and two-parameter TRIM functions")
+      def check(count: Int, message: String): Unit = {
+        assert(logAppender.loggingEvents.size == count)
+        assert(logAppender.loggingEvents.exists(
+          e => e.getLevel == Level.WARN &&
+            e.getRenderedMessage.contains(message)))
+      }
+
+      // New analyzer has own deprecation atomic boolean instances.
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+      withLogAppender(logAppender) {
+        val plan1 = testRelation2.select(UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+        testAnalyzer.execute(plan1)
+        // Deprecation warning is printed out once.
+        check(1, "LTRIM and RTRIM functions are deprecated.")
+
+        val plan2 = testRelation2.select(UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+        testAnalyzer.execute(plan2)
+        // There is no change in the log.
+        check(1, "LTRIM and RTRIM functions are deprecated.")
+
+        // Atomic boolean variable for two-parameter TRIM is independent from LTRIM/RTRIM.
+        val plan3 = testRelation2.select(
+          UnresolvedFunction("trim", $"a" :: $"b" :: Nil, isDistinct = false))
+        testAnalyzer.execute(plan3)
+        // Deprecation warning is printed out once.
+        check(2, "Two-parameter TRIM function signature is deprecated.")
+
+        val plan4 = testRelation2.select(
+          UnresolvedFunction("trim", $"b" :: $"a" :: Nil, isDistinct = false))
+        testAnalyzer.execute(plan4)
+        // There is no change in the log.
+        check(2, "Two-parameter TRIM function signature is deprecated.")
+      }
+    }
   }
 }
