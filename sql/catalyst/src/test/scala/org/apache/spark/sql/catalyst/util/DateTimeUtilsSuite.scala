@@ -469,15 +469,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-//
-//    for (tz <- ALL_TIMEZONES) {
-//      withDefaultTimeZone(tz) {
-//        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
-//        test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
-//        test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
-//        test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
-//      }
-//    }
+
+    for (tz <- ALL_TIMEZONES) {
+      withDefaultTimeZone(tz) {
+        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+      }
+    }
 
     withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
       // Daylight Saving Time
