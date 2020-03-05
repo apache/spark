@@ -799,22 +799,23 @@ case class SchemaOfJson(
 }
 
 /**
- * A function that returns number of elements in outer Json Array.
+ * A function that returns the number of elements in outer Json Array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(jsonArray) - Returns length of the jsonArray",
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in outer Json Array.",
   arguments = """
-    jsonArray - A JSON array is required as argument. `Analysis Exception` is thrown if any other
-    valid JSON expression is passed. `NULL` is returned in case of invalid JSON.
+    Arguments:
+      * jsonArray - A JSON array is required as argument. `Analysis Exception` is thrown if any other
+        valid JSON expression is passed. `NULL` is returned in case of invalid JSON.
   """,
   examples = """
     Examples:
-    > SELECT _FUNC_('[1,2,3,4]');
-      4
-    > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
-      5
-    > SELECT _FUNC_('[1,2');
-      NULL
+      > SELECT _FUNC_('[1,2,3,4]');
+        4
+      > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
+        5
+      > SELECT _FUNC_('[1,2');
+        NULL
   """,
   since = "3.1.0"
 )
