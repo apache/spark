@@ -22,6 +22,9 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.0 to 3.1
+  - Since Spark 3.1, grouping_id() returns long values. In Spark version 3.0 and earlier, this function returns int values. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.integerGroupingId` to `true`.
+
 ## Upgrading from Spark SQL 2.4 to 3.0
   - Since Spark 3.0, when inserting a value into a table column with a different data type, the type coercion is performed as per ANSI SQL standard. Certain unreasonable type conversions such as converting `string` to `int` and `double` to `boolean` are disallowed. A runtime exception will be thrown if the value is out-of-range for the data type of the column. In Spark version 2.4 and earlier, type conversions during table insertion are allowed as long as they are valid `Cast`. When inserting an out-of-range value to a integral field, the low-order bits of the value is inserted(the same as Java/Scala numeric type casting). For example, if 257 is inserted to a field of byte type, the result is 1. The behavior is controlled by the option `spark.sql.storeAssignmentPolicy`, with a default value as "ANSI". Setting the option as "Legacy" restores the previous behavior.
 
@@ -340,8 +343,6 @@ license: |
     - You need to migrate your custom SerDes to Hive 2.3 or build your own Spark with `hive-1.2` profile. See HIVE-15167 for more details.
 
     - The decimal string representation can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` operator in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-
-  - Since Spark 3.0, grouping_id() returns long values. In Spark version 2.4 and earlier, this function returns int values. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.integerGroupingId` to `true`.
 
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
