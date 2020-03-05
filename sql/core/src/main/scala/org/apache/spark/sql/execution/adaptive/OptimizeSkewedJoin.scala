@@ -64,11 +64,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
    * partition size * ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR and also larger than
-   * SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.
+   * ADVISORY_PARTITION_SIZE_IN_BYTES.
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
-    size > medianSize * conf.getConf(SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR) &&
-      size > conf.getConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+    size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
+      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -87,7 +87,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    * target post-shuffle partition size if avg size is smaller than it.
    */
   private def targetSize(stats: MapOutputStatistics, medianSize: Long): Long = {
-    val targetPostShuffleSize = conf.getConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+    val targetPostShuffleSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     val nonSkewSizes = stats.bytesByPartitionId.filterNot(isSkewed(_, medianSize))
     // It's impossible that all the partitions are skewed, as we use median size to define skew.
     assert(nonSkewSizes.nonEmpty)
@@ -271,7 +271,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       rightStats: MapOutputStatistics,
       nonSkewPartitionIndices: Seq[Int]): Seq[ShufflePartitionSpec] = {
     assert(nonSkewPartitionIndices.nonEmpty)
-    val shouldCoalesce = conf.getConf(SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
+    val shouldCoalesce = conf.getConf(SQLConf.COALESCE_PARTITIONS_ENABLED)
     if (!shouldCoalesce || nonSkewPartitionIndices.length == 1) {
       nonSkewPartitionIndices.map(i => CoalescedPartitionSpec(i, i + 1))
     } else {
@@ -280,7 +280,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         firstPartitionIndex = nonSkewPartitionIndices.head,
         // `lastPartitionIndex` is exclusive.
         lastPartitionIndex = nonSkewPartitionIndices.last + 1,
-        advisoryTargetSize = conf.targetPostShuffleInputSize)
+        advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES))
     }
   }
 
@@ -300,7 +300,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED)) {
+    if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
       return plan
     }
 

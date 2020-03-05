@@ -127,7 +127,7 @@ class ShuffledRowRDD(
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
   }
 
-  if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
+  if (SQLConf.get.fetchShuffleBlocksInBatch) {
     dependency.rdd.context.setLocalProperty(
       SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
   }

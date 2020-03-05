@@ -23,14 +23,14 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A rule to reduce the post shuffle partitions based on the map output statistics, which can
+ * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
-  import ReduceNumShufflePartitions._
+case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
+  import CoalesceShufflePartitions._
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.reducePostShufflePartitionsEnabled) {
+    if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
     }
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
@@ -70,8 +70,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           validMetrics.toArray,
           firstPartitionIndex = 0,
           lastPartitionIndex = distinctNumPreShufflePartitions.head,
-          advisoryTargetSize = conf.targetPostShuffleInputSize,
-          minNumPartitions = conf.minNumPostShufflePartitions)
+          advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
+          minNumPartitions = conf.minShufflePartitionNum)
         // This transformation adds new nodes, so we must use `transformUp` here.
         val stageIds = shuffleStages.map(_.id).toSet
         plan.transformUp {
@@ -88,6 +88,6 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-object ReduceNumShufflePartitions {
+object CoalesceShufflePartitions {
   val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }
