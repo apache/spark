@@ -929,7 +929,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Spark UI
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
   <td>false</td>
@@ -1145,6 +1145,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished executors the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.retainedDrivers</code></td>
@@ -1152,6 +1153,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.ui.retainedExecutions</code></td>
