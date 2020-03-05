@@ -24,6 +24,7 @@ import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.util.Try
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -1649,11 +1651,17 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  private def isValidTimezone(zone: String): Boolean = {
+    Try { DateTimeUtils.getZoneId(zone) }.isSuccess
+  }
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .version("")
       .stringConf
+      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+        " ZoneId.of(_, ZoneId.SHORT_IDS)")
       .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
