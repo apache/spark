@@ -147,11 +147,11 @@ package object expressions  {
       val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
           a.qualifier match {
-            case Seq(db, tbl) =>
+            case Seq(_, db, tbl) =>
               (db.toLowerCase(Locale.ROOT),
                 tbl.toLowerCase(Locale.ROOT),
                 a.name.toLowerCase(Locale.ROOT))
-            case Seq(_, db, tbl) =>
+            case Seq(db, tbl) =>
               (db.toLowerCase(Locale.ROOT),
                 tbl.toLowerCase(Locale.ROOT),
                 a.name.toLowerCase(Locale.ROOT))
