@@ -1048,7 +1048,7 @@ Apart from these, the following properties are also available, and may be useful
     How often to update live entities. -1 means "never update" when replaying applications,
     meaning only the last write will happen. For live applications, this avoids a few
     operations that we can live without when rapidly processing incoming task events.
-  </td> 
+  </td>
 </tr>
 <tr>
   <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
