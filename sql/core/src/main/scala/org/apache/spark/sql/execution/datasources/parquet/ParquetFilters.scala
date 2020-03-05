@@ -34,6 +34,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +56,7 @@ class ParquetFilters(
     // and it does not support to create filters for them.
     val primitiveFields =
     schema.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
-      f.getName -> ParquetField(f.getName,
+      quoteIfNeeded(f.getName) -> ParquetField(f.getName,
         ParquetSchemaType(f.getOriginalType,
           f.getPrimitiveTypeName, f.getTypeLength, f.getDecimalMetadata))
     }

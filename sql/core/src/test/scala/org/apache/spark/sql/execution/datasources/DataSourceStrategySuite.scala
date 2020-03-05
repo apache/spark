@@ -26,15 +26,19 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 
 class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   val attrInts = Seq(
-    'cint.int
+    'cint.int,
+    Symbol("c.int").int
   ).zip(Seq(
-    "cint"
+    "cint",
+    "`c.int`" // single level field that contains `dot` in name
   ))
 
   val attrStrs = Seq(
-    'cstr.string
+    'cstr.string,
+    Symbol("c.str").string
   ).zip(Seq(
-    "cstr"
+    "cstr",
+    "`c.str`" // single level field that contains `dot` in name
   ))
 
   test("translate simple expression") { attrInts.zip(attrStrs)

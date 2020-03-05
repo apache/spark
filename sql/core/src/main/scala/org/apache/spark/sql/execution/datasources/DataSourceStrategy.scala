@@ -652,10 +652,11 @@ object DataSourceStrategy {
  */
 object PushableColumn {
   def unapply(e: Expression): Option[String] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     def helper(e: Expression) = e match {
       case a: Attribute => Some(a.name)
       case _ => None
     }
-    helper(e)
+    helper(e).map(quoteIfNeeded)
   }
 }

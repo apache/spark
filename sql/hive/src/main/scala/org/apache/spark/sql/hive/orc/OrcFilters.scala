@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => DatasourceOrcFilters}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
 import org.apache.spark.sql.hive.HiveUtils
@@ -73,7 +74,7 @@ private[orc] object OrcFilters extends Logging {
     if (HiveUtils.isHive23) {
       DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
     } else {
-      val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+      val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
       // Combines all convertible filters using `And` to produce a single conjunction
       val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
       conjunctionOptional.map { conjunction =>
