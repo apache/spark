@@ -146,16 +146,14 @@ package object expressions  {
       // key is 3 part: database name, table name and name
       val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
-          a.qualifier match {
-            case Seq(_, db, tbl) =>
-              (db.toLowerCase(Locale.ROOT),
-                tbl.toLowerCase(Locale.ROOT),
-                a.name.toLowerCase(Locale.ROOT))
-            case Seq(db, tbl) =>
-              (db.toLowerCase(Locale.ROOT),
-                tbl.toLowerCase(Locale.ROOT),
-                a.name.toLowerCase(Locale.ROOT))
+          val qualifier = if (a.qualifier.length == 2) {
+            a.qualifier
+          } else {
+            a.qualifier.takeRight(2)
           }
+          (qualifier.head.toLowerCase(Locale.ROOT),
+            qualifier.last.toLowerCase(Locale.ROOT),
+            a.name.toLowerCase(Locale.ROOT))
         }
       unique(grouped)
     }
@@ -227,11 +225,12 @@ package object expressions  {
             val key = (dbPart.toLowerCase(Locale.ROOT),
               tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
             val attributes = collectMatches(name, qualified3Part.get(key)).filter { a =>
-              assert(a.qualifier.length >= 2 || a.qualifier.length <= 3)
-              a.qualifier match {
-                case Seq(db, tbl) => resolver(dbPart, db) && resolver(tblPart, tbl)
-                case Seq(_, db, tbl) => resolver(dbPart, db) && resolver(tblPart, tbl)
+              val qualifier = if (a.qualifier.length == 2) {
+                a.qualifier
+              } else {
+                a.qualifier.takeRight(2)
               }
+              resolver(dbPart, qualifier.head) && resolver(tblPart, qualifier.last)
             }
             (attributes, nestedFields)
           case _ =>
