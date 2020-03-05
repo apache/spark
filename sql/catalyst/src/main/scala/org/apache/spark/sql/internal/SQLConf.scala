@@ -2352,6 +2352,18 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_TIME_PARSER_POLICY = buildConf("spark.sql.legacy.timeParserPolicy")
+    .internal()
+    .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
+      "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
+      "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
+      "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
+      "results.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
       .internal()
@@ -2743,7 +2755,9 @@ class SQLConf extends Serializable with Logging {
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
-  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
+    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
+  }
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
