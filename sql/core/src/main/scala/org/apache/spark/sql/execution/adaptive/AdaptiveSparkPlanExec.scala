@@ -91,7 +91,7 @@ case class AdaptiveSparkPlanExec(
     // before 'ReduceNumShufflePartitions', as the skewed partition handled
     // in 'OptimizeSkewedJoin' rule, should be omitted in 'ReduceNumShufflePartitions'.
     OptimizeSkewedJoin(conf),
-    ReduceNumShufflePartitions(conf),
+    CoalesceShufflePartitions(conf),
     // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
     // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
     OptimizeLocalShuffleReader(conf),

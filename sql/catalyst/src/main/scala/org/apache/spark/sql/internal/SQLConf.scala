@@ -380,8 +380,17 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
+    buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
+      .internal()
+      .doc("(Deprecated since Spark 3.0)")
+      .version("1.6.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("64MB")
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
-    .doc("When true, enable adaptive query execution.")
+    .doc("When true, enable adaptive query execution, which re-optimizes the query plan in the " +
+      "middle of query execution, based on accurate runtime statistics.")
     .version("1.6.0")
     .booleanConf
     .createWithDefault(false)
@@ -390,88 +399,87 @@ object SQLConf {
     .internal()
     .doc("Adaptive query execution is skipped when the query does not have exchanges or " +
       "sub-queries. By setting this config to true (together with " +
-      s"'${ADAPTIVE_EXECUTION_ENABLED.key}' enabled), Spark will force apply adaptive query " +
+      s"'${ADAPTIVE_EXECUTION_ENABLED.key}' set to true), Spark will force apply adaptive query " +
       "execution for all supported queries.")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
 
-  val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions")
-      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
-        "the number of post-shuffle partitions based on map output statistics.")
+  val ADVISORY_PARTITION_SIZE_IN_BYTES =
+    buildConf("spark.sql.adaptive.advisoryPartitionSizeInBytes")
+      .doc("The advisory size in bytes of the shuffle partition during adaptive optimization " +
+        s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
+        "coalesces small shuffle partitions or splits skewed shuffle partition.")
+      .version("3.0.0")
+      .fallbackConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+
+  val COALESCE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.coalescePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will coalesce " +
+        "contiguous shuffle partitions according to the target size (specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid too many small tasks.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
-  val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch")
-      .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
-        "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
-        "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
+  val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
+    buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
+      .doc("The minimum number of shuffle partitions after coalescing. This configuration only " +
+        s"has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
+      .version("3.0.0")
+      .intConf
+      .checkValue(_ > 0, "The minimum number of partitions must be positive.")
+      .createWithDefault(1)
+
+  val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
+    buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
+      .doc("The initial number of shuffle partitions before coalescing. By default it equals to " +
+        s"${SHUFFLE_PARTITIONS.key}. This configuration only has an effect when " +
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
+        "are both true.")
+      .version("3.0.0")
+      .intConf
+      .checkValue(_ > 0, "The initial number of partitions must be positive.")
+      .createOptional
+
+  val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
+    buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
+      .internal()
+      .doc("Whether to fetch the contiguous shuffle blocks in batch. Instead of fetching blocks " +
+        "one by one, fetching contiguous shuffle blocks for the same map task in batch can " +
+        "reduce IO and improve performance. Note, multiple contiguous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
-        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
+        s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true. This feature also depends " +
         "on a relocatable serializer, the concatenation support codec in use and the new version " +
         "shuffle fetch protocol.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
-  val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
-    buildConf("spark.sql.adaptive.shuffle.minNumPostShufflePartitions")
-      .doc("The advisory minimum number of post-shuffle partitions used when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
-        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
-      .version("3.0.0")
-      .intConf
-      .checkValue(_ > 0, "The minimum shuffle partition number " +
-        "must be a positive integer.")
-      .createWithDefault(1)
-
-  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
-      .doc("The target post-shuffle input size in bytes of a task. This configuration only has " +
-        s"an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
-        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
-      .version("1.6.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("64MB")
-
-  val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
-    buildConf("spark.sql.adaptive.shuffle.maxNumPostShufflePartitions")
-      .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution. " +
-        "This is used as the initial number of pre-shuffle partitions. By default it equals to " +
-        "spark.sql.shuffle.partitions. This configuration only has an effect when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
-        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
-      .version("3.0.0")
-      .intConf
-      .checkValue(_ > 0, "The maximum shuffle partition number " +
-        "must be a positive integer.")
-      .createOptional
-
   val LOCAL_SHUFFLE_READER_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.localShuffleReader.enabled")
-    .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables the " +
-      "optimization of converting the shuffle reader to local shuffle reader for the shuffle " +
-      "exchange of the broadcast hash join in probe side.")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(true)
+    buildConf("spark.sql.adaptive.localShuffleReader.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark tries to use local " +
+        "shuffle reader to read the shuffle data when the shuffle partitioning is not needed, " +
+        "for example, after converting sort-merge join to broadcast-hash join.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
-  val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
-    buildConf("spark.sql.adaptive.skewedJoinOptimization.enabled")
-    .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
-      "runtime.")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(true)
+  val SKEW_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.skewJoin.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark dynamically " +
+        "handles skew in sort-merge join by splitting (and replicating if needed) skewed " +
+        "partitions.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
-    buildConf("spark.sql.adaptive.skewedJoinOptimization.skewedPartitionFactor")
-      .doc("A partition is considered as a skewed partition if its size is larger than" +
-        " this factor multiple the median partition size and also larger than " +
-        s" ${SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key}")
+  val SKEW_JOIN_SKEWED_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
+      .doc("A partition is considered as skewed if its size is larger than this factor " +
+        "multiplying the median partition size and also larger than " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
@@ -479,10 +487,11 @@ object SQLConf {
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
+      .internal()
       .doc("The relation with a non-empty partition ratio lower than this config will not be " +
         "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
         "of its size.This configuration only has an effect when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled.")
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' is true.")
       .version("3.0.0")
       .doubleConf
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
@@ -2504,7 +2513,9 @@ object SQLConf {
       DeprecatedConfig(ARROW_EXECUTION_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
-        s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
+        s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
+      DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
+        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2665,19 +2676,17 @@ class SQLConf extends Serializable with Logging {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  def targetPostShuffleInputSize: Long = getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
-
-  def fetchShuffleBlocksInBatchEnabled: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED)
+  def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
-  def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
+  def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
-  def minNumPostShufflePartitions: Int = getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+  def minShufflePartitionNum: Int = getConf(COALESCE_PARTITIONS_MIN_PARTITION_NUM)
 
-  def maxNumPostShufflePartitions: Int =
-    getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
+  def initialShufflePartitionNum: Int =
+    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
