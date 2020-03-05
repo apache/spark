@@ -805,8 +805,8 @@ case class SchemaOfJson(
   usage = "_FUNC_(jsonArray) - Returns the number of elements in outer Json Array.",
   arguments = """
     Arguments:
-      * jsonArray - A JSON array is required as argument. `Analysis Exception` is thrown if any other
-        valid JSON expression is passed. `NULL` is returned in case of invalid JSON.
+      * jsonArray - A JSON array is required as argument. `Analysis Exception` is thrown if any
+        other valid JSON expression is passed. `NULL` is returned in case of invalid JSON.
   """,
   examples = """
     Examples:
