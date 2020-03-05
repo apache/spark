@@ -821,7 +821,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   test("SPARK-29655 Read bucketed tables obeys spark.sql.shuffle.partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "7")  {
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7")  {
       val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
       Seq(false, true).foreach { enableAdaptive =>
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
