@@ -26,4 +26,15 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
-exec python3 -u ./dev/run-tests.py "$@"
+set -e
+echo "==========SYSTEM INFO START=========="
+echo "==========UNAME=========="
+uname -a
+echo "==========KRB=========="
+cat /etc/krb5.conf
+echo "==========SYSTEM INFO END=========="
+for i in `seq 0 100`; do
+  build/sbt "sql-kafka-0-10/test-only *KafkaDelegationTokenSuite"
+done
+
+#exec python3 -u ./dev/run-tests.py "$@"
