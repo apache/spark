@@ -20,7 +20,7 @@ license: |
 ---
 The <code>LIMIT</code> clause is used to constrain the number of rows returned by
 the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
-is used in conjuction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
+is used in conjunction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
 ensure that the results are deterministic.
 
 ### Syntax

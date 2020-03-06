@@ -118,7 +118,7 @@ class ResolveSessionCatalog(
               .map(_._2.dataType)
               .getOrElse {
                 throw new AnalysisException(
-                  s"ALTER COLUMN cannot find column ${quote(colName)} in v1 table. " +
+                  s"ALTER COLUMN cannot find column ${quoteIfNeeded(colName)} in v1 table. " +
                     s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
               }
           }

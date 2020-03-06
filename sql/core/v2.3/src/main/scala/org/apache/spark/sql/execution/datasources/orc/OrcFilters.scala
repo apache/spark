@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -218,47 +219,49 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+    // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
+    // in order to distinguish predicate pushdown for nested columns.
     expression match {
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startAnd().equals(quotedName, getType(attribute), castedValue).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         Some(builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         Some(builder.startAnd().isNull(quotedName, getType(attribute)).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         Some(builder.startNot().isNull(quotedName, getType(attribute)).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val quotedName = quoteIfNeeded(attribute)
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
         Some(builder.startAnd().in(quotedName, getType(attribute),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())

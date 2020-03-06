@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -25,20 +27,17 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.feature.{ChiSqSelector => OldChiSqSelector}
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
+
 /**
- * Params for [[ChiSqSelector]] and [[ChiSqSelectorModel]].
+ * Params for [[FValueSelector]] and [[FValueSelectorModel]].
  */
-private[feature] trait ChiSqSelectorParams extends Params
+private[feature] trait FValueSelectorParams extends Params
   with HasFeaturesCol with HasOutputCol with HasLabelCol {
 
   /**
@@ -49,7 +48,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    *
    * @group param
    */
-  @Since("1.6.0")
+  @Since("3.1.0")
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
     "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
@@ -57,38 +56,38 @@ private[feature] trait ChiSqSelectorParams extends Params
   setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def getNumTopFeatures: Int = $(numTopFeatures)
 
   /**
-   * Percentile of features that selector will select, ordered by statistics value descending.
+   * Percentile of features that selector will select, ordered by ascending p-value.
    * Only applicable when selectorType = "percentile".
    * Default value is 0.1.
    * @group param
    */
-  @Since("2.1.0")
+  @Since("3.1.0")
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
   setDefault(percentile -> 0.1)
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def getPercentile: Double = $(percentile)
 
   /**
-   * The highest p-value for features to be kept.
+   * The lowest p-value for features to be kept.
    * Only applicable when selectorType = "fpr".
    * Default value is 0.05.
    * @group param
    */
-  @Since("2.1.0")
-  final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
+  @Since("3.1.0")
+  final val fpr = new DoubleParam(this, "fpr", "The lowest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
   setDefault(fpr -> 0.05)
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def getFpr: Double = $(fpr)
 
   /**
@@ -97,7 +96,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
-  @Since("2.2.0")
+  @Since("3.1.0")
   final val fdr = new DoubleParam(this, "fdr",
     "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
   setDefault(fdr -> 0.05)
@@ -111,7 +110,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
-  @Since("2.2.0")
+  @Since("3.1.0")
   final val fwe = new DoubleParam(this, "fwe",
     "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
   setDefault(fwe -> 0.05)
@@ -120,28 +119,29 @@ private[feature] trait ChiSqSelectorParams extends Params
   def getFwe: Double = $(fwe)
 
   /**
-   * The selector type of the ChisqSelector.
-   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe".
+   * The selector type.
+   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
    * @group param
    */
-  @Since("2.1.0")
+  @Since("3.1.0")
   final val selectorType = new Param[String](this, "selectorType",
-    "The selector type of the ChisqSelector. " +
-      "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
-    ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
-  setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
+    "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
+    ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
+      "fwe")))
+  setDefault(selectorType -> "numTopFeatures")
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def getSelectorType: String = $(selectorType)
 }
 
 /**
- * Chi-Squared feature selection, which selects categorical features to use for predicting a
- * categorical label.
+ * F Value Regression feature selector, which selects continuous features to use for predicting a
+ * continuous label.
  * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
  * `fdr`, `fwe`.
- *  - `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
+ *  - `numTopFeatures` chooses a fixed number of top features according to a F value regression
+ *  test.
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  *  - `fpr` chooses all features whose p-value are below a threshold, thus controlling the false
  *    positive rate of selection.
@@ -153,116 +153,140 @@ private[feature] trait ChiSqSelectorParams extends Params
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
-@Since("1.6.0")
-final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
+@Since("3.1.0")
+final class FValueSelector @Since("3.1.0") (override val uid: String)
+  extends Estimator[FValueSelectorModel] with FValueSelectorParams
+    with DefaultParamsWritable {
 
-  @Since("1.6.0")
-  def this() = this(Identifiable.randomUID("chiSqSelector"))
+  @Since("3.1.0")
+  def this() = this(Identifiable.randomUID("FValueSelector"))
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def setPercentile(value: Double): this.type = set(percentile, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def setFpr(value: Double): this.type = set(fpr, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("3.1.0")
   def setFdr(value: Double): this.type = set(fdr, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("3.1.0")
   def setFwe(value: Double): this.type = set(fwe, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("3.1.0")
   def setSelectorType(value: String): this.type = set(selectorType, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
+  @Since("3.1.0")
+  override def fit(dataset: Dataset[_]): FValueSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldLabeledPoint] =
-      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          OldLabeledPoint(label, OldVectors.fromML(features))
-      }
-    val selector = new feature.ChiSqSelector()
-      .setSelectorType($(selectorType))
-      .setNumTopFeatures($(numTopFeatures))
-      .setPercentile($(percentile))
-      .setFpr($(fpr))
-      .setFdr($(fdr))
-      .setFwe($(fwe))
-    val model = selector.fit(input)
-    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
+    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) =>
+        LabeledPoint(label, features)
+    }
+
+    val testResult = FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
+      .zipWithIndex
+    val features = $(selectorType) match {
+      case "numTopFeatures" =>
+        testResult
+          .sortBy { case (res, _) => res.pValue }
+          .take(getNumTopFeatures)
+      case "percentile" =>
+        testResult
+          .sortBy { case (res, _) => res.pValue }
+          .take((testResult.length * getPercentile).toInt)
+      case "fpr" =>
+        testResult
+          .filter { case (res, _) => res.pValue < getFpr }
+      case "fdr" =>
+        // This uses the Benjamini-Hochberg procedure.
+        // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
+        val tempRes = testResult
+          .sortBy { case (res, _) => res.pValue }
+        val selected = tempRes
+          .zipWithIndex
+          .filter { case ((res, _), index) =>
+            res.pValue <= getFdr * (index + 1) / testResult.length }
+        if (selected.isEmpty) {
+          Array.empty[(SelectionTestResult, Int)]
+        } else {
+          val maxIndex = selected.map(_._2).max
+          tempRes.take(maxIndex + 1)
+        }
+      case "fwe" =>
+        testResult
+          .filter { case (res, _) => res.pValue < getFwe / testResult.length }
+      case errorType =>
+        throw new IllegalStateException(s"Unknown Selector Type: $errorType")
+    }
+    val indices = features.map { case (_, index) => index }
+    copyValues(new FValueSelectorModel(uid, indices.sorted)
+      .setParent(this))
   }
 
-  @Since("1.6.0")
+  @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    val otherPairs = OldChiSqSelector.supportedSelectorTypes.filter(_ != $(selectorType))
-    otherPairs.foreach { paramName: String =>
-      if (isSet(getParam(paramName))) {
-        logWarning(s"Param $paramName will take no effect when selector type = ${$(selectorType)}.")
-      }
-    }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkNumericType(schema, $(labelCol))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
+  @Since("3.1.0")
+  override def copy(extra: ParamMap): FValueSelector = defaultCopy(extra)
 }
 
-@Since("1.6.0")
-object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
+@Since("3.1.0")
+object FValueSelector extends DefaultParamsReadable[FValueSelector] {
 
-  @Since("1.6.0")
-  override def load(path: String): ChiSqSelector = super.load(path)
+  @Since("3.1.0")
+  override def load(path: String): FValueSelector = super.load(path)
 }
 
 /**
- * Model fitted by [[ChiSqSelector]].
+ * Model fitted by [[FValueSelector]].
  */
-@Since("1.6.0")
-final class ChiSqSelectorModel private[ml] (
-    @Since("1.6.0") override val uid: String,
-    private val chiSqSelector: feature.ChiSqSelectorModel)
-  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams with MLWritable {
+@Since("3.1.0")
+class FValueSelectorModel private[ml](
+    override val uid: String,
+    val selectedFeatures: Array[Int])
+  extends Model[FValueSelectorModel] with FValueSelectorParams with MLWritable {
 
-  import ChiSqSelectorModel._
-
-  /** list of indices to select (filter). */
-  @Since("1.6.0")
-  val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
+  var prev = -1
+  selectedFeatures.foreach { i =>
+    require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+    prev = i
+  }
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  @Since("2.0.0")
+  @Since("3.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
@@ -270,10 +294,10 @@ final class ChiSqSelectorModel private[ml] (
     val func = { vector: Vector =>
       vector match {
         case SparseVector(_, indices, values) =>
-          val (newIndices, newValues) = chiSqSelector.compressSparse(indices, values)
+          val (newIndices, newValues) = compressSparse(indices, values)
           Vectors.sparse(newSize, newIndices, newValues)
         case DenseVector(values) =>
-          Vectors.dense(chiSqSelector.compressDense(values))
+          Vectors.dense(selectedFeatures.map(i => values(i)))
         case other =>
           throw new UnsupportedOperationException(
             s"Only sparse and dense vectors are supported but got ${other.getClass}.")
@@ -285,7 +309,7 @@ final class ChiSqSelectorModel private[ml] (
       outputSchema($(outputCol)).metadata)
   }
 
-  @Since("1.6.0")
+  @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
@@ -296,7 +320,7 @@ final class ChiSqSelectorModel private[ml] (
    * Prepare the output column field, including per-feature metadata.
    */
   private def prepOutputField(schema: StructType): StructField = {
-    val selector = chiSqSelector.selectedFeatures.toSet
+    val selector = selectedFeatures.toSet
     val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
@@ -307,26 +331,64 @@ final class ChiSqSelectorModel private[ml] (
     newAttributeGroup.toStructField()
   }
 
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): ChiSqSelectorModel = {
-    val copied = new ChiSqSelectorModel(uid, chiSqSelector)
-    copyValues(copied, extra).setParent(parent)
+  @Since("3.1.0")
+  override def copy(extra: ParamMap): FValueSelectorModel = {
+    val copied = new FValueSelectorModel(uid, selectedFeatures)
+      .setParent(parent)
+    copyValues(copied, extra)
   }
 
-  @Since("1.6.0")
-  override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+  @Since("3.1.0")
+  override def write: MLWriter = new FValueSelectorModel.
+  FValueSelectorModelWriter(this)
 
-  @Since("3.0.0")
+  @Since("3.1.0")
   override def toString: String = {
-    s"ChiSqSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+    s"FValueSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+  }
+
+  private[spark] def compressSparse(
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
+    val newValues = new ArrayBuilder.ofDouble
+    val newIndices = new ArrayBuilder.ofInt
+    var i = 0
+    var j = 0
+    var indicesIdx = 0
+    var filterIndicesIdx = 0
+    while (i < indices.length && j < selectedFeatures.length) {
+      indicesIdx = indices(i)
+      filterIndicesIdx = selectedFeatures(j)
+      if (indicesIdx == filterIndicesIdx) {
+        newIndices += j
+        newValues += values(i)
+        j += 1
+        i += 1
+      } else {
+        if (indicesIdx > filterIndicesIdx) {
+          j += 1
+        } else {
+          i += 1
+        }
+      }
+    }
+    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
+    (newIndices.result(), newValues.result())
   }
 }
 
-@Since("1.6.0")
-object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
+@Since("3.1.0")
+object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
 
-  private[ChiSqSelectorModel]
-  class ChiSqSelectorModelWriter(instance: ChiSqSelectorModel) extends MLWriter {
+  @Since("3.1.0")
+  override def read: MLReader[FValueSelectorModel] =
+    new FValueSelectorModelReader
+
+  @Since("3.1.0")
+  override def load(path: String): FValueSelectorModel = super.load(path)
+
+  private[FValueSelectorModel] class FValueSelectorModelWriter(
+      instance: FValueSelectorModel) extends MLWriter {
 
     private case class Data(selectedFeatures: Seq[Int])
 
@@ -338,25 +400,21 @@ object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
     }
   }
 
-  private class ChiSqSelectorModelReader extends MLReader[ChiSqSelectorModel] {
+  private class FValueSelectorModelReader extends
+    MLReader[FValueSelectorModel] {
 
-    private val className = classOf[ChiSqSelectorModel].getName
+    /** Checked against metadata when loading model */
+    private val className = classOf[FValueSelectorModel].getName
 
-    override def load(path: String): ChiSqSelectorModel = {
+    override def load(path: String): FValueSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("selectedFeatures").head()
+      val data = sparkSession.read.parquet(dataPath)
+        .select("selectedFeatures").head()
       val selectedFeatures = data.getAs[Seq[Int]](0).toArray
-      val oldModel = new feature.ChiSqSelectorModel(selectedFeatures)
-      val model = new ChiSqSelectorModel(metadata.uid, oldModel)
+      val model = new FValueSelectorModel(metadata.uid, selectedFeatures)
       metadata.getAndSetParams(model)
       model
     }
   }
-
-  @Since("1.6.0")
-  override def read: MLReader[ChiSqSelectorModel] = new ChiSqSelectorModelReader
-
-  @Since("1.6.0")
-  override def load(path: String): ChiSqSelectorModel = super.load(path)
 }
