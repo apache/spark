@@ -64,11 +64,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
    * partition size * ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR and also larger than
-   * ADVISORY_PARTITION_SIZE_IN_BYTES.
+   * ADVISORY_PARTITION_SIZE_IN_BYTES * 2.
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
     size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
-      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) * 2
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -115,10 +115,12 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     partitionStartIndices += 0
     var i = 0
     var postMapPartitionSize = 0L
+    var lastPackagedPartitionSize = -1L
     while (i < mapPartitionSizes.length) {
       val nextMapPartitionSize = mapPartitionSizes(i)
       if (i > 0 && postMapPartitionSize + nextMapPartitionSize > targetSize) {
         partitionStartIndices += i
+        lastPackagedPartitionSize = postMapPartitionSize
         postMapPartitionSize = nextMapPartitionSize
       } else {
         postMapPartitionSize += nextMapPartitionSize
@@ -126,7 +128,19 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       i += 1
     }
 
-    partitionStartIndices.toArray
+    if (lastPackagedPartitionSize > -1) {
+      val lastPartitionDiff = math.abs(targetSize - postMapPartitionSize)
+      val diffIfMergeLastPartition = math.abs(
+        lastPackagedPartitionSize + postMapPartitionSize - targetSize)
+      // If the last partition is very small, we should merge it to the previous partition.
+      if (lastPartitionDiff > diffIfMergeLastPartition * 2) {
+        partitionStartIndices.dropRight(1).toArray
+      } else {
+        partitionStartIndices.toArray
+      }
+    } else {
+      partitionStartIndices.toArray
+    }
   }
 
   private def getStatistics(stage: ShuffleQueryStageExec): MapOutputStatistics = {
