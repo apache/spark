@@ -173,15 +173,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left LIKE $right"
-    case c => s"$left LIKE $right ESCAPE '$c'"
-  }
-
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def getEscapeFunc: String =
     StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left LIKE $right"
+    case c => s"$left LIKE $right ESCAPE '$c'"
+  }
 
 }
 
@@ -287,11 +287,11 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   examples = """
     Examples:
       > SET spark.sql.parser.escapedStringLiterals=true;
-      spark.sql.parser.escapedStringLiterals  true
+      spark.sql.parser.escapedStringLiterals    true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
-      spark.sql.parser.escapedStringLiterals  false
+      spark.sql.parser.escapedStringLiterals    false
       > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\\%SystemDrive\\%\\\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
@@ -316,15 +316,15 @@ case class SimilarTo(left: Expression, right: Expression, escapeChar: Char)
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left SIMILAR TO $right"
-    case c => s"$left SIMILAR TO $right ESCAPE '$c'"
-  }
-
   override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
 
   override def getEscapeFunc: String =
     StringUtils.getClass.getName.stripSuffix("$") + ".escapeSimilarRegex"
+
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left SIMILAR TO $right"
+    case c => s"$left SIMILAR TO $right ESCAPE '$c'"
+  }
 
 }
 
