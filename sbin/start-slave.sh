@@ -22,7 +22,7 @@
 # Environment Variables
 #
 #   SPARK_WORKER_INSTANCES  The number of worker instances to run on this
-#                           slave.  Default is 1.
+#                           slave.  Default is 1. Note it has been deprecate since Spark 3.0.
 #   SPARK_WORKER_PORT       The base port number for the first worker. If set,
 #                           subsequent workers will increment this number.  If
 #                           unset, Spark will find a valid port number, but
@@ -86,7 +86,6 @@ function start_instance {
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   start_instance 1 "$@"
 else
-  echo "WARNING: Support of multiple workers on the same host is deprecated in Spark 3.0 and is going to be removed in Spark 3.1."
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
     start_instance $(( 1 + $i )) "$@"
   done

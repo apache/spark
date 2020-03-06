@@ -40,7 +40,6 @@ fi
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   "${SPARK_HOME}/sbin"/spark-daemon.sh decommission org.apache.spark.deploy.worker.Worker 1
 else
-  echo "WARNING: Support of multiple workers on the same host is deprecated in Spark 3.0 and is going to be removed in Spark 3.1."
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
     "${SPARK_HOME}/sbin"/spark-daemon.sh decommission org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
