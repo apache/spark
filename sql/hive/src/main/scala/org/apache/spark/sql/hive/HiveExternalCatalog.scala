@@ -634,10 +634,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX) ||
           k.startsWith(CREATED_SPARK_VERSION)
       }
-      val newFormatIfExists = tableDefinition.provider.map(p => Map(DATASOURCE_PROVIDER -> p))
-        .getOrElse(Map.empty)
-      val newTableProps = propsFromOldTable ++ tableDefinition.properties ++
-        newFormatIfExists + partitionProviderProp
+      val newFormatIfExists = tableDefinition.provider.flatMap { p =>
+        if (DDLUtils.isDatasourceTable(tableDefinition)) {
+          Some(DATASOURCE_PROVIDER -> p)
+        } else {
+          None
+        }
+      }
+      val newTableProps =
+        propsFromOldTable ++ tableDefinition.properties + partitionProviderProp ++ newFormatIfExists
 
       // // Add old table's owner if we need to restore
       val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
