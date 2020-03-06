@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -1795,6 +1796,7 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
+    val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case q: LogicalPlan =>
         q transformExpressions {
@@ -1839,13 +1841,19 @@ class Analyzer(
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
-                case other =>
-                  if (isDistinct || filter.isDefined) {
-                    failAnalysis("DISTINCT or FILTER specified, " +
-                      s"but ${other.prettyName} is not an aggregate function")
-                  } else {
-                    other
+                case other if (isDistinct || filter.isDefined) =>
+                  failAnalysis("DISTINCT or FILTER specified, " +
+                    s"but ${other.prettyName} is not an aggregate function")
+                case e: String2TrimExpression if arguments.size == 2 =>
+                  if (trimWarningEnabled.get) {
+                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                      " instead.")
+                    trimWarningEnabled.set(false)
                   }
+                  e
+                case other =>
+                  other
               }
             }
         }
