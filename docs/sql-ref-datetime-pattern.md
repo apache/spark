@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark uses the blow letters in date and timestamp parsing and formatting:
+Spark uses the below letters in date and timestamp parsing and formatting:
 <table class="table">
 <tr>
   <th> <b>Symbol</b> </th>
