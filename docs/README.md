@@ -31,7 +31,17 @@ whichever version of Spark you currently have checked out of revision control.
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
 Python, R and SQL.
 
-You need to have Ruby 2 and Python 3 installed. A handy way to install and manage various versions of Ruby and Python is with [`rbenv`] and [`pyenv`].
+You need to have Ruby 2 (preferably Ruby 2.6+) and Python 3 (preferably Python 3.7+) installed.
+
+You'll also need to install the following libraries:
+
+```sh
+gem install jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0
+```
+
+### Using rbenv and pyenv
+
+A handy way to install and manage various versions of Ruby and Python is with [`rbenv`] and [`pyenv`].
 
 [`rbenv`]: https://github.com/rbenv/rbenv
 [`pyenv`]: https://github.com/pyenv/pyenv
@@ -59,12 +69,6 @@ pyenv install 3.7.6
 cd /path/to/spark/root
 rbenv local 2.7.0
 pyenv local 3.7.6
-```
-
-Now you can install the following libraries:
-
-```sh
-gem install jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0
 ```
 
 ### R Documentation
