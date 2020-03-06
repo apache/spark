@@ -58,16 +58,43 @@ private[spark] object SignalUtils extends Logging {
    */
   def register(signal: String)(action: => Boolean): Unit = synchronized {
     if (SystemUtils.IS_OS_UNIX) {
-      try {
-        val handler = handlers.getOrElseUpdate(signal, {
-          logInfo("Registering signal handler for " + signal)
-          new ActionHandler(new Signal(signal))
-        })
-        handler.register(action)
-      } catch {
-        case ex: Exception => logWarning(s"Failed to register signal handler for " + signal, ex)
-      }
+      register(signal, s"Failed to register signal handler for " + signal,
+        logStackTrace = true)(action)
     }
+  }
+
+  /**
+   * Adds an action to be run when a given signal is received by this process.
+   *
+   * This method receives failMessage as additional parameter, which would be logged when it fails
+   * to register the signal. Here the failures include the cases 1) OS doesn't support signal at
+   * all 2) OS doesn't support given signal (Could be possible with non-POSIX signals)
+   *
+   * All actions for a given signal are run in a separate thread.
+   */
+  def register(
+      signal: String,
+      failMessage: => String,
+      logStackTrace: Boolean = true)(
+      action: => Boolean): Unit = synchronized {
+    try {
+      registerSignal(signal)(action)
+    } catch {
+      case ex: Exception =>
+        if (logStackTrace) {
+          logWarning(failMessage, ex)
+        } else {
+          logWarning(failMessage)
+        }
+    }
+  }
+
+  private def registerSignal(signal: String)(action: => Boolean): Unit = synchronized {
+    val handler = handlers.getOrElseUpdate(signal, {
+      logInfo("Registering signal handler for " + signal)
+      new ActionHandler(new Signal(signal))
+    })
+    handler.register(action)
   }
 
   /**
