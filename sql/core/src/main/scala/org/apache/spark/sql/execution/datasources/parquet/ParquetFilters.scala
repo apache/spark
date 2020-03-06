@@ -126,8 +126,8 @@ class ParquetFilters(
     Binary.fromConstantByteArray(fixedLengthBytes, 0, numBytes)
   }
 
-  private val makeEq
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeEq:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
@@ -178,8 +178,8 @@ class ParquetFilters(
         Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
-  private val makeNotEq
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeNotEq:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.notEq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
@@ -229,8 +229,8 @@ class ParquetFilters(
         Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
-  private val makeLt
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeLt:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) =>
         FilterApi.lt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
@@ -270,8 +270,8 @@ class ParquetFilters(
         FilterApi.lt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeLtEq
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeLtEq:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) =>
         FilterApi.ltEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
@@ -311,8 +311,8 @@ class ParquetFilters(
         FilterApi.ltEq(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeGt
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeGt:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) =>
         FilterApi.gt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
@@ -352,8 +352,8 @@ class ParquetFilters(
         FilterApi.gt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeGtEq
-  : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+  private val makeGtEq:
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) =>
         FilterApi.gtEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
