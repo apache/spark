@@ -382,7 +382,6 @@ object SQLConf {
     .internal()
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
       "can be 'trace', 'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
-    .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR"))
