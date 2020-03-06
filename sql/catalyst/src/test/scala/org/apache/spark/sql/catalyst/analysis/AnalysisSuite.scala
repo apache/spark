@@ -773,7 +773,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
       val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
-      def check(count: Int, message: String): Unit = {
+      def check(count: Int): Unit = {
+        val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
         assert(logAppender.loggingEvents.size == count)
         assert(logAppender.loggingEvents.exists(
           e => e.getLevel == Level.WARN &&
@@ -794,13 +795,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
         testAnalyzer1.execute(plan2)
         // Deprecation warning is printed out once.
-        check(1, "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated.")
+        check(1)
 
         val plan3 = testRelation2.select(
           UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
         testAnalyzer1.execute(plan3)
         // There is no change in the log.
-        check(1, "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated.")
+        check(1)
 
         // New analyzer from new SessionState
         val testAnalyzer2 = new Analyzer(
@@ -809,13 +810,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
         testAnalyzer2.execute(plan4)
         // Additional deprecation warning from new analyzer
-        check(2, "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated.")
+        check(2)
 
         val plan5 = testRelation2.select(
           UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
         testAnalyzer2.execute(plan5)
         // There is no change in the log.
-        check(2, "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated.")
+        check(2)
       }
     }
   }
