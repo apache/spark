@@ -317,7 +317,7 @@ class KubernetesSuite extends SparkFunSuite
               logDebug(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
-              // decommissioning on the first exec two pods.
+              // decommissioning on the first exec pod.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
                 logDebug("Waiting for pod to become OK prior to deletion")
