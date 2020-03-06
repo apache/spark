@@ -918,20 +918,29 @@ object DateTimeUtils {
    * @return the pattern for new parser
    */
   def convertIncompatiblePattern(pattern: String): String = {
+    val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
+      case (patternPart, index) =>
+        // Text can be quoted using single quotes, we only check the non-quote parts.
+        index % 2 == 0 && patternPart.contains("G")
+    }
     pattern.split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          patternPart
-            // The meaning of 'u' was day number of week in Java 7, it changed to year in Java 8.
-            // Substitute 'u' to 'e' and use Java 8 parser to parse the string. If parsable, return
-            // the result; otherwise, fall back to 'u', and then use the legacy Java 7 parser to
-            // parse. When it is successfully parsed, throw an exception and ask users to change
-            // the pattern strings or turn on the legacy mode; otherwise, return NULL as what Spark
-            // 2.4 does.
-            .replace("u", "e")
-            // In Java 8 API, 'u' supports negative years. We substitute 'y' to 'u' here for keeping
-            // the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
-            .replace("y", "u")
+          // The meaning of 'u' was day number of week in Java 7, it changed to year in Java 8.
+          // Substitute 'u' to 'e' and use Java 8 parser to parse the string. If parsable, return
+          // the result; otherwise, fall back to 'u', and then use the legacy Java 7 parser to
+          // parse. When it is successfully parsed, throw an exception and ask users to change
+          // the pattern strings or turn on the legacy mode; otherwise, return NULL as what Spark
+          // 2.4 does.
+          val res = patternPart.replace("u", "e")
+          // In Java 8 API, 'u' supports negative years. We substitute 'y' to 'u' here for keeping
+          // the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'. We only do
+          // this substitution when there is no era designator found in the pattern.
+          if (!eraDesignatorContained) {
+            res.replace("y", "u")
+          } else {
+            res
+          }
         } else {
             patternPart
         }
