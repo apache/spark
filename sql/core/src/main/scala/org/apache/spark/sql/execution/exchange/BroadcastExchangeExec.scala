@@ -87,9 +87,12 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= 512000000) {
+            // Since the maximum number of keys that BytesToBytesMap supports is 2 << 29,
+            // and only 70% of the slots can be used before growing in HashedRelation,
+            // here the limitation should not be over 341 million instead of 512 million.
+            if (numRows >= 512000000 / 1.5) {
               throw new SparkException(
-                s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
+                s"Cannot broadcast the table with 341 million or more rows: $numRows rows")
             }
 
             val beforeBuild = System.nanoTime()
