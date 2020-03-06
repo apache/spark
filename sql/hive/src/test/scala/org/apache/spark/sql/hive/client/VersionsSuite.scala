@@ -91,7 +91,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
     assert(!client.getConf("hive.cbo.enable", "true").toBoolean)
     assert(!client.getConf("hive.session.history.enabled", "true").toBoolean)
-    assert(client.getConf("hive.execution.engine", "tez") === "spark")
+    assert(client.getConf("hive.execution.engine", "tez") === "mr")
   }
 
   private def getNestedMessages(e: Throwable): String = {

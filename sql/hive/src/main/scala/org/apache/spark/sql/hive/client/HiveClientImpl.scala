@@ -1239,7 +1239,7 @@ private[hive] object HiveClientImpl extends Logging {
     hiveConf.setBoolean("hive.session.history.enabled", false)
     // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
     // which is useless for spark.
-    hiveConf.set("hive.execution.engine", "spark")
+    hiveConf.set("hive.execution.engine", "mr")
     hiveConf
   }
 }
