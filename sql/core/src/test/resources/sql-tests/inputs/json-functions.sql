@@ -72,5 +72,17 @@ select json_array_length('[1,2,3,[33,44],{"key":[2,3,4]}]');
 select json_array_length('{"key":"not a json array"}');
 select json_array_length('[1,2,3,4,5');
 
+-- json_object_keys
+select json_object_keys('');
+select json_object_keys('{"key": 1}');
+select json_object_keys('{}');
+select json_object_keys('{"key": "value", "key2": 2}');
+select json_object_keys('{"arrayKey": [1, 2, 3]}');
+select json_object_keys('{"key":[1,2,3,{"key":"value"},[1,2,3]]}');
+select json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+select json_object_keys('{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}');
+select json_object_keys('{[1,2]}');
+select json_object_keys('{"key": 45, "random_string"}');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

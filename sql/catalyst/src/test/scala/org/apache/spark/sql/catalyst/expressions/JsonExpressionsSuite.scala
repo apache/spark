@@ -827,8 +827,46 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       ("""{"key":"not a json array"}""", null),
       ("""{"key": 25}""", null)
     ).foreach {
-      case(literal, expectedValue) =>
+      case (literal, expectedValue) =>
         checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
     }
+  }
+
+  test("json_object_keys") {
+    val null_object = """"""
+    val empty_json_object = """{}"""
+    val simple_json_object = """{"key": 1}"""
+    val another_simple_json_object = """{"key": "value", "key2": 2}"""
+    val json_object_with_array = """{"arrayKey": [1, 2, 3]}"""
+    val another_json_object_with_array = """{"key":[1,2,3,{"key":"value"},[1,2,3]]}"""
+    val complex_json_object = """{"f1":"abc","f2":{"f3":"a", "f4":"b"}}"""
+    val another_complex_json_object = """{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}"""
+    val empty_json_array = """[]"""
+    val invalid_json_object = """{[1,2]}"""
+    val another_invalid_json_object = """{"key": 45, "random_string"}"""
+
+    checkEvaluation(JsonObjectKeys(Literal(empty_json_object)), Seq.empty[UTF8String])
+    checkEvaluation(JsonObjectKeys(Literal(simple_json_object)), Seq("key"))
+    checkEvaluation(JsonObjectKeys(Literal(another_simple_json_object)), Seq("key", "key2"))
+    checkEvaluation(JsonObjectKeys(Literal(json_object_with_array)), Seq("arrayKey"))
+    checkEvaluation(JsonObjectKeys(Literal(another_json_object_with_array)), Seq("key"))
+    checkEvaluation(JsonObjectKeys(Literal(complex_json_object)), Seq("f1", "f2"))
+    checkEvaluation(JsonObjectKeys(Literal(another_complex_json_object)), Seq("k1", "k2"))
+    checkEvaluation(JsonObjectKeys(Literal(invalid_json_object)), null)
+    checkEvaluation(JsonObjectKeys(Literal(another_invalid_json_object)), null)
+
+    val exception = intercept[TestFailedException] {
+      checkEvaluation(JsonObjectKeys(Literal(null_object)), null)
+    }.getCause
+
+    assert(exception.isInstanceOf[AnalysisException])
+    assert(exception.getMessage.contains("expect a Json Object but nothing is provided"))
+
+    val another_exception = intercept[TestFailedException] {
+      checkEvaluation(JsonObjectKeys(Literal(empty_json_array)), null)
+    }.getCause
+
+    assert(another_exception.isInstanceOf[AnalysisException])
+    assert(another_exception.getMessage.contains("can only be called on Json Object"))
   }
 }

@@ -19,11 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -822,8 +824,11 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
+
   override def dataType: DataType = IntegerType
+
   override def nullable: Boolean = true
+
   override def prettyName: String = "json_array_length"
 
   override def eval(input: InternalRow): Any = {
@@ -856,11 +861,73 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
       return null
     }
     // Keep traversing until the end of JSON array
-    while(parser.nextToken() != JsonToken.END_ARRAY) {
+    while (parser.nextToken() != JsonToken.END_ARRAY) {
       length += 1
       // skip all the child of inner object or array
       parser.skipChildren()
     }
     length
+  }
+}
+
+/**
+ * A function which returns all the keys of outer Json Object.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json_object) - returns all the keys of outer Json Object.",
+  arguments = """
+    Arguments:
+      * json_object - A json object is required as argument. `Null` is returned, if an invalid json
+        string is given. `Analysis Exception` is thrown, if null string or json array is given.
+  """,
+  examples = """
+    Examples:
+      > Select json_object_keys('{}');
+        []
+      > Select json_object_keys('{"key": "value"}');
+        ["key"]
+      > Select json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+        ["f1", "f2"]
+  """,
+  since = "3.1.0"
+)
+case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = ArrayType(StringType)
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_object_keys"
+
+  private lazy val json = child.eval().asInstanceOf[UTF8String]
+
+  override def eval(input: InternalRow): Any = {
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => getJsonKeys(parser, input)
+      }
+    } catch {
+      case _: JsonProcessingException => null
+    }
+  }
+
+  private def getJsonKeys(parser: JsonParser, input: InternalRow): Any = {
+    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+    // this handles `NULL` case
+    if (parser.nextToken() == null) {
+      throw new AnalysisException(s"$prettyName expect a Json Object but nothing is provided.")
+    }
+
+    // when a Json Array is found, throw an analysis exception
+    if (parser.currentToken() == JsonToken.START_ARRAY) {
+      throw new AnalysisException(s"$prettyName can only be called on Json Object.")
+    }
+
+    // traverse until the end of input and ensure it returns valid key
+    while(parser.nextValue() != null && parser.currentName() != null) {
+      // add current fieldName to the ArrayBuffer
+      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+
+      // skip all the children of inner object or array
+      parser.skipChildren()
+    }
+    new GenericArrayData(arrayBufferOfKeys.toArray)
   }
 }
