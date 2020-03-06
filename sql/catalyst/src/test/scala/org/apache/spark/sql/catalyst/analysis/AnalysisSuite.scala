@@ -21,6 +21,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 
+import org.apache.log4j.Level
 import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -767,5 +768,56 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }.getMessage
     assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
       s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+  }
+
+  test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
+    Seq("trim", "ltrim", "rtrim").foreach { f =>
+      val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
+      def check(count: Int): Unit = {
+        val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
+        assert(logAppender.loggingEvents.size == count)
+        assert(logAppender.loggingEvents.exists(
+          e => e.getLevel == Level.WARN &&
+            e.getRenderedMessage.contains(message)))
+      }
+
+      withLogAppender(logAppender) {
+        val testAnalyzer1 = new Analyzer(
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+        val plan1 = testRelation2.select(
+          UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan1)
+        // One-parameter is not deprecated.
+        assert(logAppender.loggingEvents.isEmpty)
+
+        val plan2 = testRelation2.select(
+          UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan2)
+        // Deprecation warning is printed out once.
+        check(1)
+
+        val plan3 = testRelation2.select(
+          UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan3)
+        // There is no change in the log.
+        check(1)
+
+        // New analyzer from new SessionState
+        val testAnalyzer2 = new Analyzer(
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+        val plan4 = testRelation2.select(
+          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+        testAnalyzer2.execute(plan4)
+        // Additional deprecation warning from new analyzer
+        check(2)
+
+        val plan5 = testRelation2.select(
+          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+        testAnalyzer2.execute(plan5)
+        // There is no change in the log.
+        check(2)
+      }
+    }
   }
 }
