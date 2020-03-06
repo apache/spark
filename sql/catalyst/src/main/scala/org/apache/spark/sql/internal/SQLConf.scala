@@ -405,6 +405,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
+    .internal()
+    .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
+      "can be 'trace', 'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
+    .version("3.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR"))
+    .createWithDefault("debug")
+
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
     buildConf("spark.sql.adaptive.advisoryPartitionSizeInBytes")
       .doc("The advisory size in bytes of the shuffle partition during adaptive optimization " +
@@ -2675,6 +2685,8 @@ class SQLConf extends Serializable with Logging {
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
 
   def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
 
