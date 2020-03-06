@@ -122,9 +122,13 @@ private[spark] object Minikube extends Logging {
     // Cleanup any old mounts
     try {
       executeMinikube("ssh", s"umount ${vmPath}")
-      executeMinikube("ssh", s"rm -rf ${vmPath}")
     } catch {
-      case _ => //
+      case _ => // No old mount to clean
+    }
+    try {
+      executeMinikube("ssh", s"rm -d ${vmPath}")
+    } catch {
+      case _ => // No old mount point to clean
     }
     // Mounting blocks and needs to keep running to keep the mount.
     val process = executeMinikubeBackground(
