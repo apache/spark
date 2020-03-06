@@ -605,7 +605,7 @@ SELECT name, age FROM unknown_age;
 In Spark, EXISTS and NOT EXISTS expressions are allowed inside a WHERE clause. 
 These are boolean expressions which return either `TRUE` or
 `FALSE`. In other words, EXISTS is a membership condition and returns `TRUE`
-when the subquery it refers to returns one or more rows. Similary, NOT EXISTS
+when the subquery it refers to returns one or more rows. Similarly, NOT EXISTS
 is a non-membership condition and returns TRUE when no rows or zero rows are
 returned from the subquery.
 
