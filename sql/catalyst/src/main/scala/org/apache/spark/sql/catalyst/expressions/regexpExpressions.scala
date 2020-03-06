@@ -153,11 +153,11 @@ abstract class EscapeRegexExpression extends StringRegexExpression {
       > SELECT _FUNC_('Spark', '_park');
       true
       > SET spark.sql.parser.escapedStringLiterals=true;
-      spark.sql.parser.escapedStringLiterals    true
+      spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
-      spark.sql.parser.escapedStringLiterals    false
+      spark.sql.parser.escapedStringLiterals	false
       > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
@@ -287,11 +287,11 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   examples = """
     Examples:
       > SET spark.sql.parser.escapedStringLiterals=true;
-      spark.sql.parser.escapedStringLiterals    true
+      spark.sql.parser.escapedStringLiterals  true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
-      spark.sql.parser.escapedStringLiterals    false
+      spark.sql.parser.escapedStringLiterals  false
       > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\\%SystemDrive\\%\\\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
