@@ -96,8 +96,8 @@ when using text as features.  Our feature vectors could then be passed to a lear
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [HashingTF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and
-the [IDF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IDF) for more details on the API.
+Refer to the [HashingTF Scala docs](api/scala/org/apache/spark/ml/feature/HashingTF.html) and
+the [IDF Scala docs](api/scala/org/apache/spark/ml/feature/IDF.html) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/TfIdfExample.scala %}
 </div>
@@ -135,7 +135,7 @@ In the following code segment, we start with a set of documents, each of which i
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
+Refer to the [Word2Vec Scala docs](api/scala/org/apache/spark/ml/feature/Word2Vec.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/Word2VecExample.scala %}
@@ -200,8 +200,8 @@ Each vector represents the token counts of the document over the vocabulary.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [CountVectorizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer)
-and the [CountVectorizerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel)
+Refer to the [CountVectorizer Scala docs](api/scala/org/apache/spark/ml/feature/CountVectorizer.html)
+and the [CountVectorizerModel Scala docs](api/scala/org/apache/spark/ml/feature/CountVectorizerModel.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/CountVectorizerExample.scala %}
@@ -286,7 +286,7 @@ The resulting feature vectors could then be passed to a learning algorithm.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [FeatureHasher Scala docs](api/scala/index.html#org.apache.spark.ml.feature.FeatureHasher)
+Refer to the [FeatureHasher Scala docs](api/scala/org/apache/spark/ml/feature/FeatureHasher.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/FeatureHasherExample.scala %}
@@ -313,9 +313,9 @@ for more details on the API.
 
 ## Tokenizer
 
-[Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer) class provides this functionality.  The example below shows how to split sentences into sequences of words.
+[Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/org/apache/spark/ml/feature/Tokenizer.html) class provides this functionality.  The example below shows how to split sentences into sequences of words.
 
-[RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
+[RegexTokenizer](api/scala/org/apache/spark/ml/feature/RegexTokenizer.html) allows more
  advanced tokenization based on regular expression (regex) matching.
  By default, the parameter "pattern" (regex, default: `"\\s+"`) is used as delimiters to split the input text.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
@@ -326,8 +326,8 @@ for more details on the API.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
-and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer)
+Refer to the [Tokenizer Scala docs](api/scala/org/apache/spark/ml/feature/Tokenizer.html)
+and the [RegexTokenizer Scala docs](api/scala/org/apache/spark/ml/feature/RegexTokenizer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/TokenizerExample.scala %}
@@ -395,7 +395,7 @@ filtered out.
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [StopWordsRemover Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
+Refer to the [StopWordsRemover Scala docs](api/scala/org/apache/spark/ml/feature/StopWordsRemover.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/StopWordsRemoverExample.scala %}
@@ -430,7 +430,7 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [NGram Scala docs](api/scala/index.html#org.apache.spark.ml.feature.NGram)
+Refer to the [NGram Scala docs](api/scala/org/apache/spark/ml/feature/NGram.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/NGramExample.scala %}
@@ -468,7 +468,7 @@ for `inputCol`.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Binarizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Binarizer)
+Refer to the [Binarizer Scala docs](api/scala/org/apache/spark/ml/feature/Binarizer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/BinarizerExample.scala %}
@@ -493,14 +493,14 @@ for more details on the API.
 
 ## PCA
 
-[PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
+[PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/org/apache/spark/ml/feature/PCA.html) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
 
 **Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [PCA Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PCA)
+Refer to the [PCA Scala docs](api/scala/org/apache/spark/ml/feature/PCA.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/PCAExample.scala %}
@@ -525,14 +525,14 @@ for more details on the API.
 
 ## PolynomialExpansion
 
-[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/org/apache/spark/ml/feature/PolynomialExpansion.html) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
 
 **Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [PolynomialExpansion Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion)
+Refer to the [PolynomialExpansion Scala docs](api/scala/org/apache/spark/ml/feature/PolynomialExpansion.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/PolynomialExpansionExample.scala %}
@@ -561,7 +561,7 @@ The [Discrete Cosine
 Transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform)
 transforms a length $N$ real-valued sequence in the time domain into
 another length $N$ real-valued sequence in the frequency domain. A
-[DCT](api/scala/index.html#org.apache.spark.ml.feature.DCT) class
+[DCT](api/scala/org/apache/spark/ml/feature/DCT.html) class
 provides this functionality, implementing the
 [DCT-II](https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II)
 and scaling the result by $1/\sqrt{2}$ such that the representing matrix
@@ -574,7 +574,7 @@ $0$th DCT coefficient and _not_ the $N/2$th).
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [DCT Scala docs](api/scala/index.html#org.apache.spark.ml.feature.DCT)
+Refer to the [DCT Scala docs](api/scala/org/apache/spark/ml/feature/DCT.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/DCTExample.scala %}
@@ -704,7 +704,7 @@ Notice that the rows containing "d" or "e" are mapped to index "3.0"
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [StringIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer)
+Refer to the [StringIndexer Scala docs](api/scala/org/apache/spark/ml/feature/StringIndexer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/StringIndexerExample.scala %}
@@ -770,7 +770,7 @@ labels (they will be inferred from the columns' metadata):
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [IndexToString Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IndexToString)
+Refer to the [IndexToString Scala docs](api/scala/org/apache/spark/ml/feature/IndexToString.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/IndexToStringExample.scala %}
@@ -809,7 +809,7 @@ for more details on the API.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder) for more details on the API.
+Refer to the [OneHotEncoder Scala docs](api/scala/org/apache/spark/ml/feature/OneHotEncoder.html) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/OneHotEncoderExample.scala %}
 </div>
@@ -835,7 +835,7 @@ Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.f
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.
 It can both automatically decide which features are categorical and convert original values to category indices.  Specifically, it does the following:
 
-1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.ml.linalg.Vector) and a parameter `maxCategories`.
+1. Take an input column of type [Vector](api/scala/org/apache/spark/ml/linalg/Vector.html) and a parameter `maxCategories`.
 2. Decide which features should be categorical based on the number of distinct values, where features with at most `maxCategories` are declared categorical.
 3. Compute 0-based category indices for each categorical feature.
 4. Index categorical features and transform original feature values to indices.
@@ -849,7 +849,7 @@ In the example below, we read in a dataset of labeled points and then use `Vecto
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VectorIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer)
+Refer to the [VectorIndexer Scala docs](api/scala/org/apache/spark/ml/feature/VectorIndexer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VectorIndexerExample.scala %}
@@ -910,7 +910,7 @@ then `interactedCol` as the output column contains:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Interaction Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
+Refer to the [Interaction Scala docs](api/scala/org/apache/spark/ml/feature/Interaction.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
@@ -944,7 +944,7 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Normalizer)
+Refer to the [Normalizer Scala docs](api/scala/org/apache/spark/ml/feature/Normalizer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/NormalizerExample.scala %}
@@ -986,7 +986,7 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [StandardScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler)
+Refer to the [StandardScaler Scala docs](api/scala/org/apache/spark/ml/feature/StandardScaler.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/StandardScalerExample.scala %}
@@ -1030,7 +1030,7 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [RobustScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RobustScaler)
+Refer to the [RobustScaler Scala docs](api/scala/org/apache/spark/ml/feature/RobustScaler.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/RobustScalerExample.scala %}
@@ -1078,8 +1078,8 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [MinMaxScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler)
-and the [MinMaxScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel)
+Refer to the [MinMaxScaler Scala docs](api/scala/org/apache/spark/ml/feature/MinMaxScaler.html)
+and the [MinMaxScalerModel Scala docs](api/scala/org/apache/spark/ml/feature/MinMaxScalerModel.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/MinMaxScalerExample.scala %}
@@ -1121,8 +1121,8 @@ The following example demonstrates how to load a dataset in libsvm format and th
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [MaxAbsScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScaler)
-and the [MaxAbsScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScalerModel)
+Refer to the [MaxAbsScaler Scala docs](api/scala/org/apache/spark/ml/feature/MaxAbsScaler.html)
+and the [MaxAbsScalerModel Scala docs](api/scala/org/apache/spark/ml/feature/MaxAbsScalerModel.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/MaxAbsScalerExample.scala %}
@@ -1157,7 +1157,7 @@ Note that if you have no idea of the upper and lower bounds of the targeted colu
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
-More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+More details can be found in the API docs for [Bucketizer](api/scala/org/apache/spark/ml/feature/Bucketizer.html).
 
 **Examples**
 
@@ -1166,7 +1166,7 @@ The following example demonstrates how to bucketize a column of `Double`s into a
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Bucketizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer)
+Refer to the [Bucketizer Scala docs](api/scala/org/apache/spark/ml/feature/Bucketizer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/BucketizerExample.scala %}
@@ -1216,7 +1216,7 @@ This example below demonstrates how to transform vectors using a transforming ve
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [ElementwiseProduct Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct)
+Refer to the [ElementwiseProduct Scala docs](api/scala/org/apache/spark/ml/feature/ElementwiseProduct.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ElementwiseProductExample.scala %}
@@ -1276,7 +1276,7 @@ This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [SQLTransformer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.SQLTransformer)
+Refer to the [SQLTransformer Scala docs](api/scala/org/apache/spark/ml/feature/SQLTransformer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/SQLTransformerExample.scala %}
@@ -1336,7 +1336,7 @@ output column to `features`, after transformation we should get the following Da
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VectorAssembler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorAssembler)
+Refer to the [VectorAssembler Scala docs](api/scala/org/apache/spark/ml/feature/VectorAssembler.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VectorAssemblerExample.scala %}
@@ -1387,7 +1387,7 @@ to avoid this kind of inconsistent state.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VectorSizeHint Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSizeHint)
+Refer to the [VectorSizeHint Scala docs](api/scala/org/apache/spark/ml/feature/VectorSizeHint.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VectorSizeHintExample.scala %}
@@ -1426,7 +1426,7 @@ NaN values, they will be handled specially and placed into their own bucket, for
 are used, then non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 
 Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
-[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
+[approxQuantile](api/scala/org/apache/spark/sql/DataFrameStatFunctions.html) for a
 detailed description). The precision of the approximation can be controlled with the
 `relativeError` parameter. When set to zero, exact quantiles are calculated
 (**Note:** Computing exact quantiles is an expensive operation). The lower and upper bin bounds
@@ -1470,7 +1470,7 @@ a categorical one. Given `numBuckets = 3`, we should get the following DataFrame
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+Refer to the [QuantileDiscretizer Scala docs](api/scala/org/apache/spark/ml/feature/QuantileDiscretizer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
@@ -1539,7 +1539,7 @@ the relevant column.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Imputer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Imputer)
+Refer to the [Imputer Scala docs](api/scala/org/apache/spark/ml/feature/Imputer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ImputerExample.scala %}
@@ -1620,7 +1620,7 @@ Suppose also that we have potential input attributes for the `userFeatures`, i.e
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VectorSlicer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer)
+Refer to the [VectorSlicer Scala docs](api/scala/org/apache/spark/ml/feature/VectorSlicer.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VectorSlicerExample.scala %}
@@ -1706,7 +1706,7 @@ id | country | hour | clicked | features         | label
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [RFormula Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RFormula)
+Refer to the [RFormula Scala docs](api/scala/org/apache/spark/ml/feature/RFormula.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/RFormulaExample.scala %}
@@ -1770,7 +1770,7 @@ id | features              | clicked | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [ChiSqSelector Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ChiSqSelector)
+Refer to the [ChiSqSelector Scala docs](api/scala/org/apache/spark/ml/feature/ChiSqSelector.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ChiSqSelectorExample.scala %}
@@ -1856,7 +1856,7 @@ Bucketed Random Projection accepts arbitrary vectors as input features, and supp
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.BucketedRandomProjectionLSH)
+Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/org/apache/spark/ml/feature/BucketedRandomProjectionLSH.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/BucketedRandomProjectionLSHExample.scala %}
@@ -1897,7 +1897,7 @@ The input sets for MinHash are represented as binary vectors, where the vector i
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [MinHashLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHashLSH)
+Refer to the [MinHashLSH Scala docs](api/scala/org/apache/spark/ml/feature/MinHashLSH.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/MinHashLSHExample.scala %}

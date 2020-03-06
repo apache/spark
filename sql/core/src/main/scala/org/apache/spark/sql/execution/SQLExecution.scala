@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
-
-import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -62,9 +60,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -172,14 +170,24 @@ object SQLExecution {
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
-      sparkSession: SparkSession, exec: ExecutionContext)(body: => T): Future[T] = {
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    Future {
+    exec.submit(() => {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
       sc.setLocalProperties(localProps)
-      body
-    }(exec)
+      val res = body
+      // reset active session and local props.
+      sc.setLocalProperties(originalLocalProps)
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
+    })
   }
 }

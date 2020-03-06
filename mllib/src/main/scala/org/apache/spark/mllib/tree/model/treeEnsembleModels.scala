@@ -292,7 +292,7 @@ private[tree] sealed class TreeEnsembleModel(
    */
   private def predictByVoting(features: Vector): Double = {
     val votes = mutable.Map.empty[Int, Double]
-    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+    trees.iterator.zip(treeWeights.iterator).foreach { case (tree, weight) =>
       val prediction = tree.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
     }

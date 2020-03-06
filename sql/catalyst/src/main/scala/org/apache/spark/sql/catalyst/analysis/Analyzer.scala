@@ -176,7 +176,15 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
-  protected val fixedPoint = FixedPoint(maxIterations)
+  /**
+   * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
+   * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
+   */
+  protected val fixedPoint =
+    FixedPoint(
+      maxIterations,
+      errorOnExceed = true,
+      maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -799,7 +807,10 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
-          .getOrElse(u)
+          .map { rel =>
+            val ident = rel.identifier.get
+            SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
+          }.getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
         CatalogV2Util.loadTable(catalog, ident)
@@ -923,7 +934,9 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+              SubqueryAlias(
+                ident.asMultipartIdentifier,
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
@@ -2151,12 +2164,31 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      def hasInnerGenerator(g: Generator): Boolean = g match {
+        // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
+        case go: GeneratorOuter =>
+          hasInnerGenerator(go.child)
+        case _ =>
+          g.children.exists { _.find {
+            case _: Generator => true
+            case _ => false
+          }.isDefined }
+      }
       CleanupAliases.trimNonTopLevelAliases(expr) match {
-        case UnresolvedAlias(_: Generator, _) => false
-        case Alias(_: Generator, _) => false
-        case MultiAlias(_: Generator, _) => false
+        case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
+        case Alias(g: Generator, _) => hasInnerGenerator(g)
+        case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
         case other => hasGenerator(other)
       }
+    }
+
+    private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
+      ne.exists(_.find {
+        case g: Generator =>
+          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+        case _ =>
+          false
+      }.nonEmpty)
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -2244,6 +2276,11 @@ class Analyzer(
 
         val newAgg = Aggregate(groupList, newAggList, child)
         Project(projectExprs.toList, newAgg)
+
+      case p @ Project(projectList, _) if hasAggFunctionInGenerator(projectList) =>
+        // If a generator has any aggregate function, we need to apply the `GlobalAggregates` rule
+        // first for replacing `Project` with `Aggregate`.
+        p
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -2424,6 +2461,10 @@ class Analyzer(
               so.copy(child = newChild)
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
+
+          case WindowExpression(ae: AggregateExpression, _) if ae.filter.isDefined =>
+            failAnalysis(
+              "window aggregate function with filter predicate is not supported yet.")
 
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
@@ -3008,9 +3049,29 @@ class Analyzer(
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
+        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
+        // normalized parent name of fields to field names that belong to the parent.
+        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
         val schema = t.schema
         val normalizedChanges = changes.flatMap {
           case add: AddColumn =>
+            def addColumn(
+                parentSchema: StructType,
+                parentName: String,
+                normalizedParentName: Seq[String]): TableChange = {
+              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
+              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
+              val field = add.fieldNames().last
+              colsToAdd(normalizedParentName) = fieldsAdded :+ field
+              TableChange.addColumn(
+                (normalizedParentName :+ field).toArray,
+                add.dataType(),
+                add.isNullable,
+                add.comment,
+                pos)
+            }
             val parent = add.fieldNames().init
             if (parent.nonEmpty) {
               // Adding a nested field, need to normalize the parent column and position
@@ -3022,27 +3083,14 @@ class Analyzer(
                 val (normalizedName, sf) = target.get
                 sf.dataType match {
                   case struct: StructType =>
-                    val pos = findColumnPosition(add.position(), parent.quoted, struct)
-                    Some(TableChange.addColumn(
-                      (normalizedName ++ Seq(sf.name, add.fieldNames().last)).toArray,
-                      add.dataType(),
-                      add.isNullable,
-                      add.comment,
-                      pos))
-
+                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
                   case other =>
                     Some(add)
                 }
               }
             } else {
               // Adding to the root. Just need to normalize position
-              val pos = findColumnPosition(add.position(), "root", schema)
-              Some(TableChange.addColumn(
-                add.fieldNames(),
-                add.dataType(),
-                add.isNullable,
-                add.comment,
-                pos))
+              Some(addColumn(schema, "root", Nil))
             }
 
           case typeChange: UpdateColumnType =>
@@ -3141,17 +3189,18 @@ class Analyzer(
 
     private def findColumnPosition(
         position: ColumnPosition,
-        field: String,
-        struct: StructType): ColumnPosition = {
+        parentName: String,
+        struct: StructType,
+        fieldsAdded: Seq[String]): ColumnPosition = {
       position match {
         case null => null
         case after: After =>
-          struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
+          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
               throw new AnalysisException("Couldn't find the reference column for " +
-                s"$after at $field")
+                s"$after at $parentName")
           }
         case other => other
       }

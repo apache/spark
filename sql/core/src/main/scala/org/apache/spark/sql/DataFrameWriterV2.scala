@@ -226,7 +226,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private def runCommand(name: String)(command: LogicalPlan): Unit = {
     val qe = sparkSession.sessionState.executePlan(command)
     // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(sparkSession, qe, Some(name))(qe.toRdd)
+    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
@@ -246,6 +246,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 /**
  * Configuration methods common to create/replace operations and insert/overwrite operations.
  * @tparam R builder type to return
+ * @since 3.0.0
  */
 trait WriteConfigMethods[R] {
   /**
@@ -293,6 +294,8 @@ trait WriteConfigMethods[R] {
 
 /**
  * Trait to restrict calls to create and replace operations.
+ *
+ * @since 3.0.0
  */
 trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   /**

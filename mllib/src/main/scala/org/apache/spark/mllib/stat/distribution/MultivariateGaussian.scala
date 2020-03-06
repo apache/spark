@@ -60,7 +60,9 @@ class MultivariateGaussian @Since("1.3.0") (
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  @transient private lazy val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
+  @transient private lazy val tuple = calculateCovarianceConstants
+  @transient private lazy val rootSigmaInv = tuple._1
+  @transient private lazy val u = tuple._2
 
   /**
    * Returns density of this multivariate Gaussian at given point, x

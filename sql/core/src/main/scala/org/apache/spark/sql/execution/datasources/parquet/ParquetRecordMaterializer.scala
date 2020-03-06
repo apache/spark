@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.TimeZone
+import java.time.ZoneId
 
 import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
@@ -36,7 +36,7 @@ private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-    convertTz: Option[TimeZone])
+    convertTz: Option[ZoneId])
   extends RecordMaterializer[InternalRow] {
 
   private val rootConverter =

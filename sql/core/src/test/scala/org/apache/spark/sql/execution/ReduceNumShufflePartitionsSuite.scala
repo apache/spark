@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.adaptive.{CoalescedShuffleReaderExec, ReduceNumShufflePartitions}
+import org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec
+import org.apache.spark.sql.execution.adaptive.ReduceNumShufflePartitions.COALESCED_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -51,212 +52,6 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       super.afterAll()
     }
   }
-
-  private def checkEstimation(
-      rule: ReduceNumShufflePartitions,
-      bytesByPartitionIdArray: Array[Array[Long]],
-      expectedPartitionStartIndices: Array[Int]): Unit = {
-    val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
-      case (bytesByPartitionId, index) =>
-        new MapOutputStatistics(index, bytesByPartitionId)
-    }
-    val estimatedPartitionStartIndices =
-      rule.estimatePartitionStartAndEndIndices(mapOutputStatistics).map(_._1)
-    assert(estimatedPartitionStartIndices === expectedPartitionStartIndices)
-  }
-
-  private def createReduceNumShufflePartitionsRule(
-      advisoryTargetPostShuffleInputSize: Long,
-      minNumPostShufflePartitions: Int = 1): ReduceNumShufflePartitions = {
-    val conf = new SQLConf().copy(
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE -> advisoryTargetPostShuffleInputSize,
-      SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS -> minNumPostShufflePartitions)
-    ReduceNumShufflePartitions(conf)
-  }
-
-  test("test estimatePartitionStartIndices - 1 Exchange") {
-    val rule = createReduceNumShufflePartitionsRule(100L)
-
-    {
-      // All bytes per partition are 0.
-      val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-
-    {
-      // Some bytes per partition are 0 and total size is less than the target size.
-      // 1 post-shuffle partition is needed.
-      val bytesByPartitionId = Array[Long](10, 0, 20, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-
-    {
-      // 2 post-shuffle partitions are needed.
-      val bytesByPartitionId = Array[Long](10, 0, 90, 20, 0)
-      val expectedPartitionStartIndices = Array[Int](0, 3)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-
-    {
-      // There are a few large pre-shuffle partitions.
-      val bytesByPartitionId = Array[Long](110, 10, 100, 110, 0)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-
-    {
-      // All pre-shuffle partitions are larger than the targeted size.
-      val bytesByPartitionId = Array[Long](100, 110, 100, 110, 110)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-
-    {
-      // The last pre-shuffle partition is in a single post-shuffle partition.
-      val bytesByPartitionId = Array[Long](30, 30, 0, 40, 110)
-      val expectedPartitionStartIndices = Array[Int](0, 4)
-      checkEstimation(rule, Array(bytesByPartitionId), expectedPartitionStartIndices)
-    }
-  }
-
-  test("test estimatePartitionStartIndices - 2 Exchanges") {
-    val rule = createReduceNumShufflePartitionsRule(100L)
-
-    {
-      // If there are multiple values of the number of pre-shuffle partitions,
-      // we should see an assertion error.
-      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
-      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0, 0)
-      val mapOutputStatistics =
-        Array(
-          new MapOutputStatistics(0, bytesByPartitionId1),
-          new MapOutputStatistics(1, bytesByPartitionId2))
-      intercept[AssertionError](rule.estimatePartitionStartAndEndIndices(
-        mapOutputStatistics))
-    }
-
-    {
-      // All bytes per partition are 0.
-      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
-      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // Some bytes per partition are 0.
-      // 1 post-shuffle partition is needed.
-      val bytesByPartitionId1 = Array[Long](0, 10, 0, 20, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 20, 0, 20)
-      val expectedPartitionStartIndices = Array[Int](0)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // 2 post-shuffle partition are needed.
-      val bytesByPartitionId1 = Array[Long](0, 10, 0, 20, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 2, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // 4 post-shuffle partition are needed.
-      val bytesByPartitionId1 = Array[Long](0, 99, 0, 20, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // 2 post-shuffle partition are needed.
-      val bytesByPartitionId1 = Array[Long](0, 100, 0, 30, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // There are a few large pre-shuffle partitions.
-      val bytesByPartitionId1 = Array[Long](0, 100, 40, 30, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 60, 0, 110)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // All pairs of pre-shuffle partitions are larger than the targeted size.
-      val bytesByPartitionId1 = Array[Long](100, 100, 40, 30, 0)
-      val bytesByPartitionId2 = Array[Long](30, 0, 60, 70, 110)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-  }
-
-  test("test estimatePartitionStartIndices and enforce minimal number of reducers") {
-    val rule = createReduceNumShufflePartitionsRule(100L, 2)
-
-    {
-      // The minimal number of post-shuffle partitions is not enforced because
-      // the size of data is 0.
-      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
-      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // The minimal number of post-shuffle partitions is enforced.
-      val bytesByPartitionId1 = Array[Long](10, 5, 5, 0, 20)
-      val bytesByPartitionId2 = Array[Long](5, 10, 0, 10, 5)
-      val expectedPartitionStartIndices = Array[Int](0, 3)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-
-    {
-      // The number of post-shuffle partitions is determined by the coordinator.
-      val bytesByPartitionId1 = Array[Long](10, 50, 20, 80, 20)
-      val bytesByPartitionId2 = Array[Long](40, 10, 0, 10, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 3, 4)
-      checkEstimation(
-        rule,
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionStartIndices)
-    }
-  }
-
-  ///////////////////////////////////////////////////////////////////////////
-  // Query tests
-  ///////////////////////////////////////////////////////////////////////////
 
   val numInputPartitions: Int = 10
 
@@ -313,7 +108,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = agg.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 1)
         minNumPostShufflePartitions match {
@@ -360,7 +155,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -412,7 +207,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -464,7 +259,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -507,7 +302,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           val shuffleReaders = finalPlan.collect {
-            case reader: CoalescedShuffleReaderExec => reader
+            case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
           }
           assert(shuffleReaders.length === 0)
         } finally {
@@ -535,7 +330,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       assert(finalPlan.collect {
         case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
       }.length == 2)
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.length == 3)
 
 
       // test case 2: a query stage has 2 parent stages.
@@ -583,7 +381,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         Seq(0, 1, 2).map(i => Row(i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 200, None)
   }
@@ -601,7 +402,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       // As the pre-shuffle partition number are different, we will skip reducing
       // the shuffle partition numbers.
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 100, None)
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
@@ -67,8 +68,12 @@ object HiveResult {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
+    case (ld: LocalDate, DateType) =>
+      dateFormatter.format(DateTimeUtils.localDateToDays(ld))
     case (t: Timestamp, TimestampType) =>
       timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
+    case (i: Instant, TimestampType) =>
+      timestampFormatter.format(DateTimeUtils.instantToMicros(i))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString

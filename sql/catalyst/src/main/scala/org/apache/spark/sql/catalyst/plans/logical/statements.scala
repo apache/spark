@@ -64,7 +64,7 @@ case class CreateTableStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -79,7 +79,7 @@ case class CreateTableAsSelectStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -153,6 +153,10 @@ case class QualifiedColType(
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
  */
 case class AlterTableAddColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
+case class AlterTableReplaceColumnsStatement(
     tableName: Seq[String],
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 

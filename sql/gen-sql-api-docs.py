@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 
-import sys
 import os
 from collections import namedtuple
+
+from pyspark.java_gateway import launch_gateway
 
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
@@ -219,8 +220,7 @@ def generate_sql_markdown(jvm, path):
 
 
 if __name__ == "__main__":
-    from pyspark.java_gateway import launch_gateway
-
     jvm = launch_gateway().jvm
-    markdown_file_path = "%s/docs/index.md" % os.path.dirname(sys.argv[0])
+    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
+    markdown_file_path = os.path.join(spark_root_dir, "sql/docs/index.md")
     generate_sql_markdown(jvm, markdown_file_path)

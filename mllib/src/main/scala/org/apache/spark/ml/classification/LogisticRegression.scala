@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -50,8 +49,7 @@ import org.apache.spark.util.VersionUtils
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth
-  with HasBlockSize  {
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -431,15 +429,6 @@ class LogisticRegression @Since("1.2.0") (
   @Since("2.2.0")
   def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
 
-  /**
-   * Set block size for stacking input data in matrices.
-   * Default is 1024.
-   *
-   * @group expertSetParam
-   */
-  @Since("3.0.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -492,26 +481,26 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  override protected[spark] def train(
-      dataset: Dataset[_]): LogisticRegressionModel = instrumented { instr =>
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    train(dataset, handlePersistence)
+  }
+
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
+    val instances = extractInstances(dataset)
+
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
       fitIntercept)
 
-    val sc = dataset.sparkSession.sparkContext
-    val instances = extractInstances(dataset)
-
-    val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
-      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
-        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
-      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
-                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = $(aggregationDepth)
-    )
+    val (summarizer, labelSummarizer) =
+      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth))
 
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
@@ -585,9 +574,8 @@ class LogisticRegression @Since("1.2.0") (
             s"dangerous ground, so the algorithm may not converge.")
         }
 
-        val featuresMean = summarizer.mean.compressed
-        val featuresStd = summarizer.std.compressed
-        val bcFeaturesStd = sc.broadcast(featuresStd)
+        val featuresMean = summarizer.mean.toArray
+        val featuresStd = summarizer.std.toArray
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -599,7 +587,8 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
-        val getAggregatorFunc = new LogisticAggregator(numFeatures, numClasses, $(fitIntercept),
+        val bcFeaturesStd = instances.context.broadcast(featuresStd)
+        val getAggregatorFunc = new LogisticAggregator(bcFeaturesStd, numClasses, $(fitIntercept),
           multinomial = isMultinomial)(_)
         val getFeaturesStd = (j: Int) => if (j >= 0 && j < numCoefficientSets * numFeatures) {
           featuresStd(j / numCoefficientSets)
@@ -615,21 +604,7 @@ class LogisticRegression @Since("1.2.0") (
           None
         }
 
-        val standardized = instances.map {
-          case Instance(label, weight, features) =>
-            val featuresStd = bcFeaturesStd.value
-            val array = Array.ofDim[Double](numFeatures)
-            features.foreachNonZero { (i, v) =>
-              val std = featuresStd(i)
-              if (std != 0) array(i) = v / std
-            }
-            Instance(label, weight, Vectors.dense(array))
-        }
-        val blocks = InstanceBlock.blokify(standardized, $(blockSize))
-          .persist(StorageLevel.MEMORY_AND_DISK)
-          .setName(s"training dataset (blockSize=${$(blockSize)})")
-
-        val costFun = new RDDLossFunction(blocks, getAggregatorFunc, regularization,
+        val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
           $(aggregationDepth))
 
         val numCoeffsPlusIntercepts = numFeaturesPlusIntercept * numCoefficientSets
@@ -823,7 +798,6 @@ class LogisticRegression @Since("1.2.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
-        blocks.unpersist()
         bcFeaturesStd.destroy()
 
         if (state == null) {
@@ -892,6 +866,8 @@ class LogisticRegression @Since("1.2.0") (
         (denseCoefficientMatrix.compressed, interceptVec.compressed, arrayBuilder.result())
       }
     }
+
+    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, isMultinomial))
@@ -1272,86 +1248,6 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       metadata.getAndSetParams(model)
       model
     }
-  }
-}
-
-
-/**
- * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
- * and validates the data to see if the labels used for k class multi-label classification
- * are in the range of {0, 1, ..., k - 1} in an online fashion.
- *
- * Two MultilabelSummarizer can be merged together to have a statistical summary of the
- * corresponding joint dataset.
- */
-private[ml] class MultiClassSummarizer extends Serializable {
-  // The first element of value in distinctMap is the actually number of instances,
-  // and the second element of value is sum of the weights.
-  private val distinctMap = new mutable.HashMap[Int, (Long, Double)]
-  private var totalInvalidCnt: Long = 0L
-
-  /**
-   * Add a new label into this MultilabelSummarizer, and update the distinct map.
-   *
-   * @param label The label for this data point.
-   * @param weight The weight of this instances.
-   * @return This MultilabelSummarizer
-   */
-  def add(label: Double, weight: Double = 1.0): MultiClassSummarizer = {
-    require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
-
-    if (weight == 0.0) return this
-
-    if (label - label.toInt != 0.0 || label < 0) {
-      totalInvalidCnt += 1
-      this
-    }
-    else {
-      val (counts: Long, weightSum: Double) = distinctMap.getOrElse(label.toInt, (0L, 0.0))
-      distinctMap.put(label.toInt, (counts + 1L, weightSum + weight))
-      this
-    }
-  }
-
-  /**
-   * Merge another MultilabelSummarizer, and update the distinct map.
-   * (Note that it will merge the smaller distinct map into the larger one using in-place
-   * merging, so either `this` or `other` object will be modified and returned.)
-   *
-   * @param other The other MultilabelSummarizer to be merged.
-   * @return Merged MultilabelSummarizer object.
-   */
-  def merge(other: MultiClassSummarizer): MultiClassSummarizer = {
-    val (largeMap, smallMap) = if (this.distinctMap.size > other.distinctMap.size) {
-      (this, other)
-    } else {
-      (other, this)
-    }
-    smallMap.distinctMap.foreach {
-      case (key, value) =>
-        val (counts: Long, weightSum: Double) = largeMap.distinctMap.getOrElse(key, (0L, 0.0))
-        largeMap.distinctMap.put(key, (counts + value._1, weightSum + value._2))
-    }
-    largeMap.totalInvalidCnt += smallMap.totalInvalidCnt
-    largeMap
-  }
-
-  /** @return The total invalid input counts. */
-  def countInvalid: Long = totalInvalidCnt
-
-  /** @return The number of distinct labels in the input dataset. */
-  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keySet.max + 1
-
-  /** @return The weightSum of each label in the input dataset. */
-  def histogram: Array[Double] = {
-    val result = Array.ofDim[Double](numClasses)
-    var i = 0
-    val len = result.length
-    while (i < len) {
-      result(i) = distinctMap.getOrElse(i, (0L, 0.0))._2
-      i += 1
-    }
-    result
   }
 }
 

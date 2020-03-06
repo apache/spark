@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -689,13 +688,13 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
+        DateTimeTestUtils.secFrac(-13, -123, -456))))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
         0,
         0,
-        13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
+        DateTimeTestUtils.secFrac(13, 123, 456))))
     checkIntervals("1.001 second",
       Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
@@ -777,15 +776,6 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
-  }
-
-  test("Support respect nulls keywords for first_value and last_value") {
-    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("timestamp literals") {

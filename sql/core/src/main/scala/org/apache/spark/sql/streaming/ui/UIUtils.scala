@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.streaming.ui
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
+
 private[ui] object UIUtils {
 
   /**
@@ -56,5 +61,17 @@ private[ui] object UIUtils {
     } else {
       query.exception.map(_ => "FAILED").getOrElse("FINISHED")
     }
+  }
+
+  private val progressTimestampFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat = {
+      val format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+      format.setTimeZone(getTimeZone("UTC"))
+      format
+    }
+  }
+
+  def parseProgressTimestamp(timestamp: String): Long = {
+    progressTimestampFormat.get.parse(timestamp).getTime
   }
 }

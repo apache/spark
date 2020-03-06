@@ -615,34 +615,33 @@ class DataFrameAggregateSuite extends QueryTest
          Seq((true, true), (true, false), (false, true), (false, false))) {
       withSQLConf(
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
-        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString),
-        (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")) {
-        // When enable AQE, the WholeStageCodegenExec is added during QueryStageExec.
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
         // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find {
+          assert(find(hashAggPlan) {
             case WholeStageCodegenExec(_: HashAggregateExec) => true
             case _ => false
           }.isDefined)
         } else {
-          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+          assert(stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec])
         }
-        hashAggDF.collect()
 
         // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        objHashAggOrSortAggDF.collect()
+        val objHashAggOrSortAggPlan =
+          stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan)
         if (useObjectHashAgg) {
           assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
           assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashAggOrSortAggDF.collect()
       }
     }
   }
@@ -957,18 +956,5 @@ class DataFrameAggregateSuite extends QueryTest
       }
       assert(error.message.contains("function count_if requires boolean type"))
     }
-  }
-
-  test("calendar interval agg support hash aggregate") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(find(df2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(find(df3.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
   }
 }

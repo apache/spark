@@ -826,6 +826,8 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
+        case _: NoSuchDatabaseException => false
+        case _: NoSuchNamespaceException => false
       }
     }
   }
@@ -1340,6 +1342,10 @@ class SessionCatalog(
       functionRegistry.functionExists(name) &&
       !FunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+  }
+
+  def isTempFunction(name: String): Boolean = {
+    isTemporaryFunction(FunctionIdentifier(name))
   }
 
   /**

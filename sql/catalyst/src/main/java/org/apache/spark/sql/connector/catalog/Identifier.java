@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 
 /**
  * Identifies an object in a catalog.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public interface Identifier {

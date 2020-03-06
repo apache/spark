@@ -28,7 +28,7 @@ import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientL
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.resource.{ResourceProfile, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
@@ -58,6 +58,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   private val maxCores = conf.get(config.CORES_MAX)
   private val totalExpectedCores = maxCores.getOrElse(0)
+  private val defaultProf = sc.resourceProfileManager.defaultResourceProfile
 
   override def start(): Unit = {
     super.start()
@@ -173,6 +174,12 @@ private[spark] class StandaloneSchedulerBackend(
     removeExecutor(fullId.split("/")(1), reason)
   }
 
+  override def executorDecommissioned(fullId: String, message: String) {
+    logInfo("Asked to decommission executor")
+    decommissionExecutor(fullId.split("/")(1))
+    logInfo("Executor %s decommissioned: %s".format(fullId, message))
+  }
+
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {
     logInfo("Worker %s removed: %s".format(workerId, message))
     removeWorker(workerId, host, message)
@@ -194,9 +201,13 @@ private[spark] class StandaloneSchedulerBackend(
    *
    * @return whether the request is acknowledged.
    */
-  protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+  protected override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    // resources profiles not supported
     Option(client) match {
-      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case Some(c) =>
+        val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
+        c.requestTotalExecutors(numExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)

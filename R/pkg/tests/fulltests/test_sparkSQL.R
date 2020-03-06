@@ -1810,7 +1810,8 @@ test_that("string operators", {
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }
@@ -1991,6 +1992,70 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
   expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, lit(1))))[, 1], c(NA, 1))
   expect_equal(collect(select(df, otherwise(when(df$a > 1, lit(1)), lit(0))))[, 1], c(0, 1))
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, lit(0), lit(1))))[, 1], c(1, 0))
+})
+
+test_that("higher order functions", {
+  df <- select(
+    createDataFrame(data.frame(id = 1)),
+    expr("CAST(array(1.0, 2.0, -3.0, -4.0) AS array<double>) xs"),
+    expr("CAST(array(0.0, 3.0, 48.0) AS array<double>) ys"),
+    expr("array('FAILED', 'SUCCEDED') as vs"),
+    expr("map('foo', 1, 'bar', 2) as mx"),
+    expr("map('foo', 42, 'bar', -1, 'baz', 0) as my")
+  )
+
+  map_to_sorted_array <- function(x) {
+    sort_array(arrays_zip(map_keys(x), map_values(x)))
+  }
+
+  result <- collect(select(
+    df,
+    array_transform("xs", function(x) x + 1) == expr("transform(xs, x -> x + 1)"),
+    array_transform("xs", function(x, i) otherwise(when(i %% 2 == 0, x), -x)) ==
+      expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
+    array_exists("vs", function(v) rlike(v, "FAILED")) ==
+      expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_forall("xs", function(x) x > 0) ==
+      expr("forall(xs, x -> x > 0)"),
+    array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==
+      expr("filter(xs, (x, i) ->  x > 0 OR i % 2 == 0)"),
+    array_filter("xs", function(x) signum(x) > 0) ==
+      expr("filter(xs, x -> signum(x) > 0)"),
+    array_aggregate("xs", lit(0.0), function(x, y) otherwise(when(x > y, x), y)) ==
+      expr("aggregate(xs, CAST(0.0 AS double), (x, y) -> CASE WHEN x > y THEN x ELSE y END)"),
+    array_aggregate(
+      "xs",
+      struct(
+        alias(lit(0.0), "count"),
+        alias(lit(0.0), "sum")
+      ),
+      function(acc, x) {
+        count <- getItem(acc, "count")
+        sum <- getItem(acc, "sum")
+        struct(alias(count + 1.0, "count"), alias(sum + x, "sum"))
+      },
+      function(acc) getItem(acc, "sum") / getItem(acc, "count")
+    ) == expr(paste0(
+      "aggregate(xs, struct(CAST(0.0 AS double) count, CAST(0.0 AS double) sum), ",
+      "(acc, x) -> ",
+      "struct(cast(acc.count + 1.0 AS double) count, CAST(acc.sum + x AS double) sum), ",
+      "acc -> acc.sum / acc.count)"
+    )),
+    arrays_zip_with("xs", "ys", function(x, y) x + y) ==
+      expr("zip_with(xs, ys, (x, y) -> x + y)"),
+    map_to_sorted_array(transform_keys("mx", function(k, v) upper(k))) ==
+      map_to_sorted_array(expr("transform_keys(mx, (k, v) -> upper(k))")),
+    map_to_sorted_array(transform_values("mx", function(k, v) v * 2)) ==
+      map_to_sorted_array(expr("transform_values(mx, (k, v) -> v * 2)")),
+    map_to_sorted_array(map_filter(column("my"), function(k, v) lower(v) != "foo")) ==
+      map_to_sorted_array(expr("map_filter(my, (k, v) -> lower(v) != 'foo')")),
+    map_to_sorted_array(map_zip_with("mx", "my", function(k, vx, vy) vx * vy)) ==
+      map_to_sorted_array(expr("map_zip_with(mx, my, (k, vx, vy) -> vx * vy)"))
+  ))
+
+  expect_true(all(unlist(result)))
+
+  expect_error(array_transform("xs", function(...) 42))
 })
 
 test_that("group by, agg functions", {

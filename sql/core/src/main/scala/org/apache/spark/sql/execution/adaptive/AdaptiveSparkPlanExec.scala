@@ -165,7 +165,7 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan)
 
-          // Start materialization of all new stages.
+          // Start materialization of all new stages and fail fast if any stages failed eagerly
           result.newStages.foreach { stage =>
             try {
               stage.materialize().onComplete { res =>
@@ -176,7 +176,10 @@ case class AdaptiveSparkPlanExec(
                 }
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
-              case e: Throwable => events.offer(StageFailure(stage, e))
+              case e: Throwable =>
+                val ex = new SparkException(
+                  s"Early failed query stage found: ${stage.treeString}", e)
+                cleanUpAndThrowException(Seq(ex), Some(stage.id))
             }
           }
         }
@@ -192,13 +195,12 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
             errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}." +
-                s" and the cause is ${ex.getMessage}", ex))
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors)
+          cleanUpAndThrowException(errors, None)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
@@ -467,7 +469,6 @@ case class AdaptiveSparkPlanExec(
   private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
-    SparkSession.setActiveSession(context.session)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(sparkPlan, preprocessingRules ++ queryStagePreparationRules)
     (newPlan, optimized)
@@ -523,9 +524,13 @@ case class AdaptiveSparkPlanExec(
    * Cancel all running stages with best effort and throw an Exception containing all stage
    * materialization errors and stage cancellation errors.
    */
-  private def cleanUpAndThrowException(errors: Seq[SparkException]): Unit = {
+  private def cleanUpAndThrowException(
+       errors: Seq[SparkException],
+       earlyFailedStage: Option[Int]): Unit = {
     val runningStages = currentPhysicalPlan.collect {
-      case s: QueryStageExec => s
+      // earlyFailedStage is the stage which failed before calling doMaterialize,
+      // so we should avoid calling cancel on it to re-trigger the failure again.
+      case s: QueryStageExec if !earlyFailedStage.contains(s.id) => s
     }
     val cancelErrors = new mutable.ArrayBuffer[SparkException]()
     try {
@@ -540,8 +545,7 @@ case class AdaptiveSparkPlanExec(
       }
     } finally {
       val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures." +
-          s" and the cause is ${errors.head.getMessage}", errors.head)
+        "Adaptive execution failed due to stage materialization failures.", errors.head)
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex

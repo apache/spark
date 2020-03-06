@@ -26,6 +26,8 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * Helper methods to create logical transforms to pass into Spark.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public class Expressions {
