@@ -178,4 +178,23 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assertThrows[QueryExecutionException](client.runSqlHive(
       "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
   }
+
+  test("SPARK-31061: alterTable should be able to change table provider") {
+    val catalog = newBasicCatalog()
+    val parquetTable = CatalogTable(
+      identifier = TableIdentifier("parq_tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = new StructType().add("col1", "int").add("col2", "string"),
+      provider = Some("parquet"))
+    catalog.createTable(parquetTable, ignoreIfExists = false)
+
+    val rawTable = externalCatalog.client.getTable("db1", "parq_tbl")
+    assert(rawTable.provider === Some("parquet"))
+
+    val fooTable = parquetTable.copy(provider = Some("foo"))
+    catalog.alterTable(fooTable)
+    val alteredTable = externalCatalog.client.getTable("db1", "parq_tbl")
+    assert(alteredTable.provider === Some("foo"))
+  }
 }
