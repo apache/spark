@@ -764,10 +764,14 @@ case class SchemaOfJson(
   @transient
   private lazy val json = child.eval().asInstanceOf[UTF8String]
 
-  override def checkInputDataTypes(): TypeCheckResult = child match {
-    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"The input json should be a string literal and not null; however, got ${child.sql}.")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && json != null) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input json should be a foldable string expression and not null; " +
+        s"however, got ${child.sql}.")
+    }
   }
 
   override def eval(v: InternalRow): Any = {

@@ -1031,6 +1031,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to run the web UI for the Spark application.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.ui.killEnabled</code></td>
@@ -1038,6 +1039,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Allows jobs and stages to be killed from the web UI.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.liveUpdate.period</code></td>
@@ -1062,6 +1064,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Port for your application's dashboard, which shows memory and workload data.
   </td>
+  <td>0.7.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedJobs</code></td>
@@ -1093,6 +1096,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enable running Spark Master as reverse proxy for worker and application UIs. In this mode, Spark master will reverse proxy the worker and application UIs to enable access without requiring direct access to their hosts. Use it with caution, as worker and application UI will not be accessible directly, you will only be able to access them through spark master/proxy public URL. This setting affects all the workers and application UIs running in the cluster and must be set on all the workers, drivers and masters.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.reverseProxyUrl</code></td>
@@ -1100,6 +1104,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.proxyRedirectUri</code></td>
@@ -1112,6 +1117,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>X-Forwarded-Context</code> request header), or by setting the proxy base in the Spark
     app's configuration.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.showConsoleProgress</code></td>
@@ -1123,6 +1129,7 @@ Apart from these, the following properties are also available, and may be useful
     <br/>
     <em>Note:</em> In shell environment, the default value of spark.ui.showConsoleProgress is true.
   </td>
+  <td>1.2.1</td>
 </tr>
 <tr>
   <td><code>spark.ui.custom.executor.log.url</code></td>
@@ -1138,6 +1145,7 @@ Apart from these, the following properties are also available, and may be useful
     <p/>
     For now, only YARN mode supports this configuration
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.retainedExecutors</code></td>
@@ -1192,6 +1200,7 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.requestHeaderSize</code></td>
@@ -1200,6 +1209,7 @@ Apart from these, the following properties are also available, and may be useful
     The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
     This setting applies for the Spark History Server too.
   </td>
+  <td>2.2.3</td>
 </tr>
 </table>
 

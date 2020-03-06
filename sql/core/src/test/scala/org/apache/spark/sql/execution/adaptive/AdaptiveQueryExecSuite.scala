@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
+import org.apache.log4j.Level
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
@@ -135,7 +137,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "10") {
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val smj = findTopLevelSortMergeJoin(plan)
@@ -167,7 +169,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val smj = findTopLevelSortMergeJoin(plan)
@@ -584,7 +586,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "700") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
@@ -609,7 +611,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "2000") {
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
@@ -728,6 +730,51 @@ class AdaptiveQueryExecSuite
       .exists(msg => msg.getRenderedMessage.contains(
         s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
         s" enabled but is not supported for")))
+  }
+
+  test("test log level") {
+    def verifyLog(expectedLevel: Level): Unit = {
+      val logAppender = new LogAppender("adaptive execution")
+      withLogAppender(
+        logAppender,
+        loggerName = Some(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
+        level = Some(Level.TRACE)) {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+          sql("SELECT * FROM testData join testData2 ON key = a where value = '1'").collect()
+        }
+      }
+      Seq("Plan changed", "Final plan").foreach { msg =>
+        assert(
+          logAppender.loggingEvents.exists { event =>
+            event.getRenderedMessage.contains(msg) && event.getLevel == expectedLevel
+          })
+      }
+    }
+
+    // Verify default log level
+    verifyLog(Level.DEBUG)
+
+    // Verify custom log level
+    val levels = Seq(
+      "TRACE" -> Level.TRACE,
+      "trace" -> Level.TRACE,
+      "DEBUG" -> Level.DEBUG,
+      "debug" -> Level.DEBUG,
+      "INFO" -> Level.INFO,
+      "info" -> Level.INFO,
+      "WARN" -> Level.WARN,
+      "warn" -> Level.WARN,
+      "ERROR" -> Level.ERROR,
+      "error" -> Level.ERROR,
+      "deBUG" -> Level.DEBUG)
+
+    levels.foreach { level =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_LOG_LEVEL.key -> level._1) {
+        verifyLog(level._2)
+      }
+    }
   }
 }
 
