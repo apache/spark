@@ -468,59 +468,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  ignore("Type conflict in primitive field values (Ignored)") {
-    val jsonDF = spark.read.json(primitiveFieldValueTypeConflict)
-    jsonDF.createOrReplaceTempView("jsonTable")
-
-    // Right now, the analyzer does not promote strings in a boolean expression.
-    // Number and Boolean conflict: resolve the type as boolean in this query.
-    checkAnswer(
-      sql("select num_bool from jsonTable where NOT num_bool"),
-      Row(false)
-    )
-
-    checkAnswer(
-      sql("select str_bool from jsonTable where NOT str_bool"),
-      Row(false)
-    )
-
-    // Right now, the analyzer does not know that num_bool should be treated as a boolean.
-    // Number and Boolean conflict: resolve the type as boolean in this query.
-    checkAnswer(
-      sql("select num_bool from jsonTable where num_bool"),
-      Row(true)
-    )
-
-    checkAnswer(
-      sql("select str_bool from jsonTable where str_bool"),
-      Row(false)
-    )
-
-    // The plan of the following DSL is
-    // Project [(CAST(num_str#65:4, DoubleType) + 1.2) AS num#78]
-    //  Filter (CAST(CAST(num_str#65:4, DoubleType), DecimalType) > 92233720368547758060)
-    //    ExistingRdd [num_bool#61,num_num_1#62L,num_num_2#63,num_num_3#64,num_str#65,str_bool#66]
-    // We should directly cast num_str to DecimalType and also need to do the right type promotion
-    // in the Project.
-    checkAnswer(
-      jsonDF.
-        where('num_str >= BigDecimal("92233720368547758060")).
-        select(('num_str + 1.2).as("num")),
-      Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue())
-    )
-
-    // The following test will fail. The type of num_str is StringType.
-    // So, to evaluate num_str + 1.2, we first need to use Cast to convert the type.
-    // In our test data, one value of num_str is 13.1.
-    // The result of (CAST(num_str#65:4, DoubleType) + 1.2) for this value is 14.299999999999999,
-    // which is not 14.3.
-    // Number and String conflict: resolve the type as number in this query.
-    checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 13"),
-      Row(BigDecimal("14.3")) :: Row(BigDecimal("92233720368547758071.2")) :: Nil
-    )
-  }
-
   test("Type conflict in complex field values") {
     val jsonDF = spark.read.json(complexFieldValueTypeConflict)
 
