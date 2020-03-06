@@ -119,7 +119,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new TestUDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  ignore(s"test all data types") {
+  test(s"test all data types") {
     val parquetDictionaryEncodingEnabledConfs = if (isParquetDataSource) {
       // Run with/without Parquet dictionary encoding enabled for Parquet data source.
       Seq(true, false)
