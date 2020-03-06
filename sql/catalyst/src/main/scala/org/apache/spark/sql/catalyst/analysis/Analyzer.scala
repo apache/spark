@@ -437,7 +437,7 @@ class Analyzer(
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1)), ByteType), toPrettySQL(e))()
+              Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
             throw new AnalysisException(s"Column of grouping ($col) can't be found " +
               s"in grouping columns ${groupByExprs.mkString(",")}")
@@ -531,8 +531,6 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
-      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
       // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
       // can be null. In such case, we derive the groupByExprs from the user supplied values for
       // grouping sets.
@@ -551,12 +549,18 @@ class Analyzer(
         groupByExprs
       }
 
+      if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
+        throw new AnalysisException(
+          s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
+      val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 

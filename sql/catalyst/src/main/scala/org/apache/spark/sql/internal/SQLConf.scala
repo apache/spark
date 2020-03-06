@@ -2496,6 +2496,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+   val LEGACY_INTEGER_GROUPING_ID =
+    buildConf("spark.sql.legacy.integerGroupingId")
+      .internal()
+      .doc("When true, grouping_id() returns int values instead of long values.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3071,6 +3078,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
   /** ********************** SQLConf functionality methods ************ */
 
