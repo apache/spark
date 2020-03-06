@@ -315,7 +315,7 @@ class ResolveSessionCatalog(
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
           orCreate = c.orCreate)
       }
 
@@ -331,7 +331,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, provider),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
           writeOptions = c.options,
           orCreate = c.orCreate)
       }
