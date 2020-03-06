@@ -73,7 +73,7 @@ pyenv local 3.7.6
 
 ### R Documentation
 
-If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
+If you'd like to generate R documentation, you'll need to install R, [install Pandoc](https://pandoc.org/installing.html),
 and install these libraries:
 
 ```sh
