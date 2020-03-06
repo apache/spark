@@ -83,6 +83,37 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 </dl>
 
 
+### ADD PARTITION
+
+`ALTER TABLE ADD PARTITION` adds a new partition to an existing, partitioned table.
+
+#### Syntax
+
+```sql
+ALTER TABLE <table_identifier> ADD [IF NOT EXISTS]
+  PARTITION <partition_spec> [LOCATION 'location']
+  [ PARTITION <partition_spec> [LOCATION 'location'] ...]
+;
+
+<table_identifier> ::=
+  [ database_name. ]table_name
+
+<partition_spec> ::=
+  (partition_column = partition_col_value, partition_column = partition_col_value, ...)
+```
+
+#### Examples
+
+```sql
+ALTER TABLE orders ADD PARTITION (date='2020-03-10');
+ALTER TABLE orders ADD PARTITION (date='2020-03-10') LOCATION 'data/orders/2020-03-10/';
+ALTER TABLE orders ADD
+  PARTITION (date='2020-03-11')
+  PARTITION (date='2020-03-12')
+  PARTITION (date='2020-03-13')
+;
+```
+
 ### SET AND UNSET
 
 #### SET TABLE PROPERTIES
