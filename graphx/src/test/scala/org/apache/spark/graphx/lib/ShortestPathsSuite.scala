@@ -40,4 +40,23 @@ class ShortestPathsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("Shortest Weighted Path Computations") {
+    withSpark { sc =>
+      val shortestPaths = Set(
+        (1, Map(1 -> 0, 4 -> 3)), (2, Map(1 -> 1, 4 -> 2)), (3, Map(1 -> 2, 4 -> 1)),
+        (4, Map(1 -> 3, 4 -> 0)), (5, Map(1 -> 1, 4 -> 3)), (6, Map(1 -> 4, 4 -> 1)))
+      val edgeSeq = Seq((1, 2, 1), (1, 5, 1), (2, 3, 1), (2, 5, 1), (3, 4, 1), (4, 5, 4), (4, 6, 1)).flatMap {
+        case (v1, v2, w) => Seq((v1, v2, w), (v2, v1, w))
+      }
+      val edges = sc.parallelize(edgeSeq).map { case (v1, v2, w) => Edge(v1.toLong, v2.toLong, w) }
+      val graph = Graph.fromEdges(edges, 1)
+      val landmarks = Seq(1, 4).map(_.toLong)
+       
+      val results = ShortestPaths.run(graph, landmarks, identity[Int]).vertices.collect.map {
+        case (v, spMap) => (v, spMap.mapValues(i => i))
+      }
+      assert(results.toSet === shortestPaths)
+    }
+  }
+
 }

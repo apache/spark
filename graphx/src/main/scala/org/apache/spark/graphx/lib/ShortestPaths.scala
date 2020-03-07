@@ -32,8 +32,6 @@ object ShortestPaths extends Serializable {
 
   private def makeMap(x: (VertexId, Int)*) = Map(x: _*)
 
-  private def incrementMap(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
-
   private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap = {
     // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
     val map = mutable.Map[VertexId, Int]()
@@ -56,6 +54,35 @@ object ShortestPaths extends Serializable {
    * each reachable landmark vertex.
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
+
+    val incrementMap: EdgeTriplet[SPMap, ED] => SPMap =
+      _.dstAttr map { case (v, d) => v -> (d + 1) }
+
+    _run(graph, landmarks, incrementMap)
+  }
+
+  /**
+   * Computes shortest paths along weighted edges to the given set of landmark vertices.
+   *
+   * @tparam ED the edge attribute type (not used in the computation)
+   *
+   * @param graph the graph for which to compute the shortest paths
+   * @param landmarks the list of landmark vertex ids. Shortest paths will be computed to each
+   * landmark.
+   * @param weight a function that provides the weight for each edge
+   *
+   * @return a graph where each vertex attribute is a map containing the shortest-path distance to
+   * each reachable landmark vertex.
+   */
+  def run[VD, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId], weight: ED => Int): Graph[SPMap, ED] = {
+
+    val incrementMap: EdgeTriplet[SPMap, ED] => SPMap =
+      edge => edge.dstAttr map { case (v, d) => v -> (d + weight(edge.attr)) }
+
+    _run(graph, landmarks, incrementMap)
+  }
+
+  private def _run[VD, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId], incrementMap: EdgeTriplet[SPMap, ED] => SPMap): Graph[SPMap, ED] = {
     val spGraph = graph.mapVertices { (vid, attr) =>
       if (landmarks.contains(vid)) makeMap(vid -> 0) else makeMap()
     }
@@ -66,8 +93,8 @@ object ShortestPaths extends Serializable {
       addMaps(attr, msg)
     }
 
-    def sendMessage(edge: EdgeTriplet[SPMap, _]): Iterator[(VertexId, SPMap)] = {
-      val newAttr = incrementMap(edge.dstAttr)
+    def sendMessage(edge: EdgeTriplet[SPMap, ED]): Iterator[(VertexId, SPMap)] = {
+      val newAttr = incrementMap(edge)
       if (edge.srcAttr != addMaps(newAttr, edge.srcAttr)) Iterator((edge.srcId, newAttr))
       else Iterator.empty
     }
