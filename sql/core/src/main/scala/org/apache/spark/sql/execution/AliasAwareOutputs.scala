@@ -20,8 +20,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 
 /**
- * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning`
- * that satisfies output distribution requirements.
+ * A trait that handles aliases in the `outputExpressions` and `orderingExpressions` to produce
+ * `outputPartitioning` and `outputOrdering` that satisfy distribution and ordering requirements.
  */
 trait AliasAwareOutputs extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
