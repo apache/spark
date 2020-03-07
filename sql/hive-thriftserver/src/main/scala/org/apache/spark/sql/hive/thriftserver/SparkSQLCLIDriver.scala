@@ -509,24 +509,40 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
+    var insideComment = false
     var escape = false
     var beginIndex = 0
+    var endIndex = line.length
     val ret = new JArrayList[String]
+
     for (index <- 0 until line.length) {
-      if (line.charAt(index) == '\'') {
+      if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         if (!escape) {
           // flip the boolean variable
           insideSingleQuote = !insideSingleQuote
         }
-      } else if (line.charAt(index) == '\"') {
+      } else if (line.charAt(index) == '\"' && !insideComment) {
         // take a look to see if it is escaped
         if (!escape) {
           // flip the boolean variable
           insideDoubleQuote = !insideDoubleQuote
         }
+      } else if (line.charAt(index) == '-') {
+        val hasNext = index + 1 < line.length
+        if (insideDoubleQuote || insideSingleQuote || insideComment) {
+          // Ignores '-' in any case of quotes or comment.
+          // Avoids to start a comment(--) within a quoted segment or already in a comment.
+          // Sample query: select "quoted value --"
+          //                                    ^^ avoids starting a comment if it's inside quotes.
+        } else if (hasNext && line.charAt(index + 1) == '-') {
+          // ignore quotes and ;
+          insideComment = true
+          // ignore eol
+          endIndex = index
+        }
       } else if (line.charAt(index) == ';') {
-        if (insideSingleQuote || insideDoubleQuote) {
+        if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
           // split, do not include ; itself
@@ -543,7 +559,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
     }
-    ret.add(line.substring(beginIndex))
+    ret.add(line.substring(beginIndex, endIndex))
     ret
   }
 }

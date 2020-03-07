@@ -55,7 +55,7 @@ class IdentifierImpl implements Identifier {
   @Override
   public String toString() {
     return Stream.concat(Stream.of(namespace), Stream.of(name))
-      .map(CatalogV2Implicits::quote)
+      .map(CatalogV2Implicits::quoteIfNeeded)
       .collect(Collectors.joining("."));
   }
 

@@ -98,18 +98,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         customCheckRules
   }
 
-  /**
-   * Logical query plan optimizer that takes into account Hive.
-   */
-  override protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
-      override def postHocOptimizationBatches: Seq[Batch] = super.postHocOptimizationBatches ++
-        Seq(Batch("Prune Hive Table Partitions", Once, new PruneHiveTablePartitions(session)))
-
-      override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
-        super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
-    }
-  }
+  override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+    Seq(new PruneHiveTablePartitions(session))
 
   /**
    * Planner that takes into account Hive-specific strategies.
