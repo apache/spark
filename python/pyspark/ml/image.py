@@ -215,7 +215,7 @@ class _ImageSchema(object):
             potentially non-deterministic.
 
         .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
-            this `readImages` will be removed in 3.0.0.
+            this `readImages` will be removed in 3.1.0.
 
         :param str path: Path to the image directory.
         :param bool recursive: Recursive search flag.
