@@ -173,19 +173,6 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
     assert(model.selectedFeatures.isEmpty)
   }
 
-  test("Load  ChiSqSelectorModel prior to Spark 3.1.0") {
-    val chiSqPath = testFile("ml-models/chisq-3.0.0")
-    val model = ChiSqSelectorModel.load(chiSqPath)
-    val selected = model.selectedFeatures
-    assert(selected(0) === 1)
-    assert(selected(1) === 3)
-    assert(selected(2) === 4)
-
-    val metadata = spark.read.json(s"$chiSqPath/metadata")
-    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
-    assert(sparkVersionStr == "3.0.0-SNAPSHOT")
-  }
-
   private def testSelector(selector: ChiSqSelector, data: Dataset[_]): ChiSqSelectorModel = {
     val selectorModel = selector.fit(data)
     testTransformer[(Double, Vector, Vector)](data.toDF(), selectorModel,

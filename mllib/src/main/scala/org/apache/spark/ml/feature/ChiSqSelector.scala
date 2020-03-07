@@ -266,7 +266,7 @@ object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
 @Since("1.6.0")
 final class ChiSqSelectorModel private[ml] (
     @Since("1.6.0") override val uid: String,
-    val selectedFeatures: Array[Int])
+    @Since("3.1.0")val selectedFeatures: Array[Int])
   extends Model[ChiSqSelectorModel] with ChiSqSelectorParams with MLWritable {
 
   import ChiSqSelectorModel._
