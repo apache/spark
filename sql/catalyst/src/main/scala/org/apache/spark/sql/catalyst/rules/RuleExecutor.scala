@@ -37,6 +37,10 @@ object RuleExecutor {
   def resetMetrics(): Unit = {
     queryExecutionMeter.resetMetrics()
   }
+
+  def getCurrentMetrics(): QueryExecutionMetrics = {
+    queryExecutionMeter.getMetrics()
+  }
 }
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {

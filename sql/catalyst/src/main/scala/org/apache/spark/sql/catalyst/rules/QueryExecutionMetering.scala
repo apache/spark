@@ -37,12 +37,24 @@ case class QueryExecutionMetering() {
     timeEffectiveRunsMap.clear()
   }
 
+  def getMetrics(): QueryExecutionMetrics = {
+    QueryExecutionMetrics(totalTime, totalNumRuns, totalNumEffectiveRuns, totalEffectiveTime)
+  }
+
   def totalTime: Long = {
     timeMap.sum()
   }
 
   def totalNumRuns: Long = {
     numRunsMap.sum()
+  }
+
+  def totalNumEffectiveRuns: Long = {
+    numEffectiveRunsMap.sum()
+  }
+
+  def totalEffectiveTime: Long = {
+    timeEffectiveRunsMap.sum()
   }
 
   def incExecutionTimeBy(ruleName: String, delta: Long): Unit = {
@@ -93,5 +105,38 @@ case class QueryExecutionMetering() {
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
      """.stripMargin
+  }
+}
+
+case class QueryExecutionMetrics(
+    time: Long,
+    numRuns: Long,
+    numEffectiveRuns: Long,
+    timeEffective: Long) {
+
+  def +(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
+    QueryExecutionMetrics(
+      this.time + metrics.time,
+      this.numRuns + metrics.numRuns,
+      this.numEffectiveRuns + metrics.numEffectiveRuns,
+      this.timeEffective + metrics.timeEffective)
+  }
+
+  def -(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
+    QueryExecutionMetrics(
+      this.time - metrics.time,
+      this.numRuns - metrics.numRuns,
+      this.numEffectiveRuns - metrics.numEffectiveRuns,
+      this.timeEffective - metrics.timeEffective)
+  }
+
+  override def toString: String = {
+    s"""
+      |=== Metrics of Analyzer/Optimizer Rules ===
+      |Total number of runs: $numRuns
+      |Total time: ${time / NANOS_PER_SECOND.toDouble} seconds
+      |Total number of effective runs: $numEffectiveRuns
+      |Total time of effective runs: ${timeEffective / NANOS_PER_SECOND.toDouble} seconds
+    """.stripMargin
   }
 }

@@ -107,6 +107,12 @@ Arguments: rangepartitioning(key#x ASC NULLS FIRST, 4), true, [id=#x]
 (9) Sort [codegen id : 3]
 Input [2]: [key#x, max(val)#x]
 Arguments: [key#x ASC NULLS FIRST], true, 0
+      
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 554
+Total time: 0.107756568 seconds
+Total number of effective runs: 11
+Total time of effective runs: 0.047615486 seconds
 
 
 -- !query
@@ -174,6 +180,12 @@ Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
 (9) Project [codegen id : 2]
 Output [2]: [key#x, max(val)#x]
 Input [3]: [key#x, max(val)#x, max(val#x)#x]
+     
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 520
+Total time: 0.038589684 seconds
+Total number of effective runs: 13
+Total time of effective runs: 0.009099632 seconds
 
 
 -- !query
@@ -254,6 +266,12 @@ Keys [2]: [key#x, val#x]
 Functions: []
 Aggregate Attributes: []
 Results [2]: [key#x, val#x]
+     
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 356
+Total time: 0.039161924 seconds
+Total number of effective runs: 10
+Total time of effective runs: 0.009895504 seconds
 
 
 -- !query
@@ -322,6 +340,12 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
+       
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 349
+Total time: 0.049333533 seconds
+Total number of effective runs: 7
+Total time of effective runs: 0.017137201 seconds
 
 
 -- !query
@@ -379,6 +403,12 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
+       
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 349
+Total time: 0.013387012 seconds
+Total number of effective runs: 6
+Total time of effective runs: 0.002188063 seconds
 
 
 -- !query
@@ -513,6 +543,13 @@ Keys: []
 Functions [1]: [max(key#x)]
 Aggregate Attributes [1]: [max(key#x)#x]
 Results [1]: [max(key#x)#x AS max(key)#x]
+     
+
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 1669
+Total time: 0.287012623 seconds
+Total number of effective runs: 34
+Total time of effective runs: 0.116483788 seconds
 
 
 -- !query
@@ -641,6 +678,13 @@ Keys: []
 Functions [1]: [avg(cast(key#x as bigint))]
 Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
 Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+     
+
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 1415
+Total time: 0.129163666 seconds
+Total number of effective runs: 32
+Total time of effective runs: 0.05316481 seconds
 
 
 -- !query
@@ -707,6 +751,13 @@ Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
 Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
+
+
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 1436
+Total time: 0.089900993 seconds
+Total number of effective runs: 29
+Total time of effective runs: 0.036042556 seconds
 
 
 -- !query
@@ -777,6 +828,12 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
+       
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 353
+Total time: 0.02910247 seconds
+Total number of effective runs: 8
+Total time of effective runs: 0.01123313 seconds
 
 
 -- !query
@@ -859,6 +916,12 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
+       
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 410
+Total time: 0.028700081 seconds
+Total number of effective runs: 12
+Total time of effective runs: 0.005110293 seconds
 
 
 -- !query
@@ -886,6 +949,12 @@ Arguments: [explain_temp1]
       
 (4) Project 
 Arguments: ['key, 'val]
+      
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 257
+Total time: 0.002319101 seconds
+Total number of effective runs: 1
+Total time of effective runs: 6.71144E-4 seconds
 
 
 -- !query
@@ -931,6 +1000,12 @@ Keys: []
 Functions [3]: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
 Aggregate Attributes [3]: [count(val#x)#xL, sum(cast(key#x as bigint))#xL, count(key#x)#xL]
 Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+     
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 370
+Total time: 0.011569491 seconds
+Total number of effective runs: 10
+Total time of effective runs: 0.001624352 seconds
 
 
 -- !query
@@ -975,6 +1050,12 @@ Keys [1]: [key#x]
 Functions [1]: [collect_set(val#x, 0, 0)]
 Aggregate Attributes [1]: [collect_set(val#x, 0, 0)#x]
 Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
+     
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 426
+Total time: 0.016272578 seconds
+Total number of effective runs: 9
+Total time of effective runs: 0.007034439 seconds
 
 
 -- !query
@@ -1029,6 +1110,12 @@ Keys [1]: [key#x]
 Functions [1]: [min(val#x)]
 Aggregate Attributes [1]: [min(val#x)#x]
 Results [2]: [key#x, min(val#x)#x AS min(val)#x]
+     
+=== Metrics of Analyzer/Optimizer Rules ===
+Total number of runs: 314
+Total time: 0.00574277 seconds
+Total number of effective runs: 7
+Total time of effective runs: 8.20742E-4 seconds
 
 
 -- !query
