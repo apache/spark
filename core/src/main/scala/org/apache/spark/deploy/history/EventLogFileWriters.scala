@@ -362,7 +362,9 @@ class RollingEventLogFilesWriter(
 
   private def createAppStatusFile(inProgress: Boolean): Unit = {
     val appStatusPath = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId, inProgress)
-    val outputStream = fileSystem.create(appStatusPath)
+    // SPARK-30860: use the class method to avoid the umask causing permission issues
+    val outputStream = FileSystem.create(fileSystem, appStatusPath,
+      EventLogFileWriter.LOG_FILE_PERMISSIONS)
     // we intentionally create zero-byte file to minimize the cost
     outputStream.close()
   }
