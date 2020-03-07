@@ -520,6 +520,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
+      .replaceAll("Total time:.*", s"Total time: $notIncludedMsg")
+      .replaceAll(
+        "Total time of effective runs:.*",
+        s"Total time of effective runs: $notIncludedMsg")
       .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")

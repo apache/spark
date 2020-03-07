@@ -110,9 +110,9 @@ Arguments: [key#x ASC NULLS FIRST], true, 0
       
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 554
-Total time: 0.107756568 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 11
-Total time of effective runs: 0.047615486 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -183,9 +183,9 @@ Input [3]: [key#x, max(val)#x, max(val#x)#x]
      
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 520
-Total time: 0.038589684 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 13
-Total time of effective runs: 0.009099632 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -269,9 +269,9 @@ Results [2]: [key#x, val#x]
      
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 356
-Total time: 0.039161924 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 10
-Total time of effective runs: 0.009895504 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -343,9 +343,9 @@ Join condition: None
        
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 349
-Total time: 0.049333533 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 7
-Total time of effective runs: 0.017137201 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -406,9 +406,9 @@ Join condition: None
        
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 349
-Total time: 0.013387012 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 6
-Total time of effective runs: 0.002188063 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -547,9 +547,9 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 1669
-Total time: 0.287012623 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 34
-Total time of effective runs: 0.116483788 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -682,9 +682,9 @@ Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
 
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 1415
-Total time: 0.129163666 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 32
-Total time of effective runs: 0.05316481 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -755,9 +755,9 @@ Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery 
 
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 1436
-Total time: 0.089900993 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 29
-Total time of effective runs: 0.036042556 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -831,9 +831,9 @@ Join condition: None
        
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 353
-Total time: 0.02910247 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 8
-Total time of effective runs: 0.01123313 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -919,9 +919,9 @@ Join condition: None
        
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 410
-Total time: 0.028700081 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 12
-Total time of effective runs: 0.005110293 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -952,9 +952,9 @@ Arguments: ['key, 'val]
       
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 257
-Total time: 0.002319101 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 1
-Total time of effective runs: 6.71144E-4 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -1003,9 +1003,9 @@ Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, cou
      
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 370
-Total time: 0.011569491 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 10
-Total time of effective runs: 0.001624352 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -1053,9 +1053,9 @@ Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_arr
      
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 426
-Total time: 0.016272578 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 9
-Total time of effective runs: 0.007034439 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
@@ -1113,9 +1113,9 @@ Results [2]: [key#x, min(val#x)#x AS min(val)#x]
      
 === Metrics of Analyzer/Optimizer Rules ===
 Total number of runs: 314
-Total time: 0.00574277 seconds
+Total time: [not included in comparison]
 Total number of effective runs: 7
-Total time of effective runs: 8.20742E-4 seconds
+Total time of effective runs: [not included in comparison]
 
 
 -- !query
