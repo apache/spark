@@ -65,7 +65,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             if (displayApplications) {
               <script src={UIUtils.prependBaseUri(
                 request, "/static/dataTables.rowsGroup.js")}></script> ++
-                <div id="history-summary" class="row"></div> ++
+                <div id="history-summary"></div> ++
                 <script src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
                 <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
