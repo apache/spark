@@ -90,22 +90,11 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 The list below highlights some of the new features and enhancements added to MLlib in the `3.0`
 release of Spark:
 
-* Multiple columns support was added to `Binarizer`, `StringIndexer`, `StopWordsRemover` and PySpark `QuantileDiscretizer`
-([SPARK-23578](https://issues.apache.org/jira/browse/SPARK-23578)),
-([SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215)),
-([SPARK-29808](https://issues.apache.org/jira/browse/SPARK-29808)),
-([SPARK-22796](https://issues.apache.org/jira/browse/SPARK-22796)).
+* Multiple columns support was added to `Binarizer` ([SPARK-23578](https://issues.apache.org/jira/browse/SPARK-23578)), `StringIndexer` ([SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215)), `StopWordsRemover` ([SPARK-29808](https://issues.apache.org/jira/browse/SPARK-29808)) and PySpark `QuantileDiscretizer` ([SPARK-22796](https://issues.apache.org/jira/browse/SPARK-22796)).
 * Support Tree-Based Feature Transformation was added
 ([SPARK-13677](https://issues.apache.org/jira/browse/SPARK-13677)).
-* Two new evaluators `MultilabelClassificationEvaluator` and `RankingEvaluator` were added
-([SPARK-16692](https://issues.apache.org/jira/browse/SPARK-16692)),
-([SPARK-28045](https://issues.apache.org/jira/browse/SPARK-28045)).
-* Sample weights support was added in `DecisionTreeClassifier/Regressor`, `RandomForestClassifier/Regressor`, `BisectingKMeans`, `KMeans` and `GaussianMixture`
-([SPARK-19591](https://issues.apache.org/jira/browse/SPARK-19591)),
-([SPARK-9478](https://issues.apache.org/jira/browse/SPARK-9478)),
-([SPARK-30351](https://issues.apache.org/jira/browse/SPARK-30351)),
-([SPARK-29967](https://issues.apache.org/jira/browse/SPARK-29967)),
-([SPARK-30102](https://issues.apache.org/jira/browse/SPARK-30102)).
+* Two new evaluators `MultilabelClassificationEvaluator` ([SPARK-16692](https://issues.apache.org/jira/browse/SPARK-16692)) and `RankingEvaluator` ([SPARK-28045](https://issues.apache.org/jira/browse/SPARK-28045)) were added.
+* Sample weights support was added in `DecisionTreeClassifier/Regressor` ([SPARK-19591](https://issues.apache.org/jira/browse/SPARK-19591)), `RandomForestClassifier/Regressor` ([SPARK-9478](https://issues.apache.org/jira/browse/SPARK-9478)), `GBTClassifier/Regressor` ([SPARK-9612](https://issues.apache.org/jira/browse/SPARK-9612)),  `RegressionEvaluator` ([SPARK-24102](https://issues.apache.org/jira/browse/SPARK-24102)), `BinaryClassificationEvaluator` ([SPARK-24103](https://issues.apache.org/jira/browse/SPARK-24103)), `BisectingKMeans` ([SPARK-30351](https://issues.apache.org/jira/browse/SPARK-30351)), `KMeans` ([SPARK-29967](https://issues.apache.org/jira/browse/SPARK-29967)) and `GaussianMixture` ([SPARK-30102](https://issues.apache.org/jira/browse/SPARK-30102)).
 * R API for `PowerIterationClustering` was added
 ([SPARK-19827](https://issues.apache.org/jira/browse/SPARK-19827)).
 * Added Spark ML listener for tracking ML pipeline status
@@ -116,10 +105,11 @@ release of Spark:
 ([SPARK-28399](https://issues.apache.org/jira/browse/SPARK-28399)).
 * [`Factorization Machines`](ml-classification-regression.html#factorization-machines) classifier and regressor were added
 ([SPARK-29224](https://issues.apache.org/jira/browse/SPARK-29224)).
-* Complement Naive Bayes Classifier was added
-([SPARK-29942](https://issues.apache.org/jira/browse/SPARK-29942)).
+* Gaussian Naive Bayes ([SPARK-16872](https://issues.apache.org/jira/browse/SPARK-16872)) and Complement Naive Bayes ([SPARK-29942](https://issues.apache.org/jira/browse/SPARK-29942)) were added.
 * ML function parity between Scala and Python
 ([SPARK-28958](https://issues.apache.org/jira/browse/SPARK-28958)).
+* `predictRaw` is made public in all the Classification models. `predictProbability` is made public in all the Classification models except `LinearSVCModel`.
+([SPARK-30358](https://issues.apache.org/jira/browse/SPARK-30358)).
 
 # Migration Guide
 
