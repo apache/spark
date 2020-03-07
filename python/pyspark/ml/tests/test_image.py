@@ -24,9 +24,43 @@ from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 
 
-class ImageFileFormatTest(SparkSessionTestCase):
+class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
+        data_path = 'data/mllib/images/origin/kittens'
+        df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        self.assertEqual(df.count(), 4)
+        first_row = df.take(1)[0][0]
+        array = ImageSchema.toNDArray(first_row)
+        self.assertEqual(len(array), first_row[1])
+        self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
+        self.assertEqual(df.schema, ImageSchema.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
+        expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
+        self.assertEqual(ImageSchema.ocvTypes, expected)
+        expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
+        self.assertEqual(ImageSchema.imageFields, expected)
+        self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "image argument should be pyspark.sql.types.Row; however",
+                lambda: ImageSchema.toNDArray("a"))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                ValueError,
+                "image argument should have attributes specified in",
+                lambda: ImageSchema.toNDArray(Row(a=1)))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "array argument should be numpy.ndarray; however, it got",
+                lambda: ImageSchema.toImage("a"))
+
+    def test_image_datasource(self):
         data_path = 'data/mllib/images/origin/kittens'
         df = self.spark.read.format("image") \
             .option("dropInvalid", True) \
