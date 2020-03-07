@@ -21,7 +21,7 @@ import java.util.EnumSet
 import java.util.concurrent.atomic.{AtomicBoolean}
 import javax.servlet.DispatcherType
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -66,7 +66,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
   private implicit val schedulerEndpointEC =
-    ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint")
+    ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
 
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
