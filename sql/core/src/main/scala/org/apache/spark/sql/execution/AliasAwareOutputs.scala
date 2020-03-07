@@ -16,15 +16,17 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 
 /**
  * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning`
  * that satisfies output distribution requirements.
  */
-trait AliasAwareOutputPartitioning extends UnaryExecNode {
+trait AliasAwareOutputs extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
+
+  protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 
   final override def outputPartitioning: Partitioning = {
     if (hasAlias) {
@@ -34,6 +36,19 @@ trait AliasAwareOutputPartitioning extends UnaryExecNode {
       }
     } else {
       child.outputPartitioning
+    }
+  }
+
+  final override def outputOrdering: Seq[SortOrder] = {
+    if (hasAlias) {
+      orderingExpressions.map { s =>
+        s.child match {
+          case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))
+          case _ => s
+        }
+      }
+    } else {
+      orderingExpressions
     }
   }
 
