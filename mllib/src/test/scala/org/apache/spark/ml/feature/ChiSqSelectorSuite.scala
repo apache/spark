@@ -110,8 +110,7 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new ChiSqSelector)
-    val model = new ChiSqSelectorModel("myModel",
-      new org.apache.spark.mllib.feature.ChiSqSelectorModel(Array(1, 3, 4)))
+    val model = new ChiSqSelectorModel("myModel", Array(1, 3, 4))
     ParamsSuite.checkParams(model)
   }
 
@@ -172,6 +171,19 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
     val selector = new ChiSqSelector().setSelectorType("fdr").setFdr(0.05)
     val model = selector.fit(inputDF)
     assert(model.selectedFeatures.isEmpty)
+  }
+
+  test("Load  ChiSqSelectorModel prior to Spark 3.1.0") {
+    val chiSqPath = testFile("ml-models/chisq-3.0.0")
+    val model = ChiSqSelectorModel.load(chiSqPath)
+    val selected = model.selectedFeatures
+    assert(selected(0) === 1)
+    assert(selected(1) === 3)
+    assert(selected(2) === 4)
+
+    val metadata = spark.read.json(s"$chiSqPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "3.0.0-SNAPSHOT")
   }
 
   private def testSelector(selector: ChiSqSelector, data: Dataset[_]): ChiSqSelectorModel = {
