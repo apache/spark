@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
@@ -59,7 +60,7 @@ case class OrcScanBuilder(
         // changed `hadoopConf` in executors.
         OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
       }
-      val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+      val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
       _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }
     filters
