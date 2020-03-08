@@ -461,68 +461,98 @@ package object config {
       .intConf
       .createWithDefault(5)
 
-  private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
-    .booleanConf.createWithDefault(false)
+  private[spark] val IS_PYTHON_APP =
+    ConfigBuilder("spark.yarn.isPython")
+      .internal()
+      .version("1.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
-  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+  private[spark] val CPUS_PER_TASK =
+    ConfigBuilder("spark.task.cpus").version("0.5.0").intConf.createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_ENABLED =
-    ConfigBuilder("spark.dynamicAllocation.enabled").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.dynamicAllocation.enabled")
+      .version("1.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_TESTING =
-    ConfigBuilder("spark.dynamicAllocation.testing").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.dynamicAllocation.testing")
+      .version("1.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
+    ConfigBuilder("spark.dynamicAllocation.minExecutors")
+      .version("1.2.0")
+      .intConf
+      .createWithDefault(0)
 
   private[spark] val DYN_ALLOCATION_INITIAL_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.initialExecutors")
+      .version("1.3.0")
       .fallbackConf(DYN_ALLOCATION_MIN_EXECUTORS)
 
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
+    ConfigBuilder("spark.dynamicAllocation.maxExecutors")
+      .version("1.2.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
-      .doubleConf.createWithDefault(1.0)
+      .version("2.4.0")
+      .doubleConf
+      .createWithDefault(1.0)
 
   private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
+      .version("1.4.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
+      .version("1.2.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.shuffleTimeout")
+      .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(Long.MaxValue)
 
   private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")
+      .version("1.2.0")
       .timeConf(TimeUnit.SECONDS).createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
+      .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
+    .version("0.5.0")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
-    ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.shuffle.service.enabled")
+      .version("1.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -530,6 +560,7 @@ package object config {
         "In case of dynamic allocation if this feature is enabled executors having only disk " +
         "persisted blocks are considered idle after " +
         "'spark.dynamicAllocation.executorIdleTimeout' and will be released accordingly.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -537,21 +568,26 @@ package object config {
     ConfigBuilder("spark.shuffle.service.db.enabled")
       .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
         "standalone mode.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
-    ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
+    ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
 
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
+    .version("3.0.0")
     .stringConf.createOptional
 
   private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
-    .stringConf.createOptional
+    .version("3.0.0")
+    .stringConf
+    .createOptional
 
   private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.kerberos.relogin.period")
+    .version("3.0.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
 
@@ -561,6 +597,7 @@ package object config {
         "Which credentials to use when renewing delegation tokens for executors. Can be either " +
         "'keytab', the default, which requires a keytab to be provided, or 'ccache', which uses " +
         "the local credentials cache.")
+      .version("3.0.0")
       .stringConf
       .checkValues(Set("keytab", "ccache"))
       .createWithDefault("keytab")
@@ -569,104 +606,124 @@ package object config {
     ConfigBuilder("spark.kerberos.access.hadoopFileSystems")
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
+    .version("3.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
+    .version("1.0.0")
     .intConf
     .createOptional
 
   private[spark] val PY_FILES = ConfigBuilder("spark.yarn.dist.pyFiles")
     .internal()
+    .version("2.2.1")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   private[spark] val TASK_MAX_DIRECT_RESULT_SIZE =
     ConfigBuilder("spark.task.maxDirectResultSize")
+      .version("2.0.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1L << 20)
 
   private[spark] val TASK_MAX_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
+      .version("0.8.0")
       .intConf
       .createWithDefault(4)
 
   private[spark] val TASK_REAPER_ENABLED =
     ConfigBuilder("spark.task.reaper.enabled")
+      .version("2.0.3")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val TASK_REAPER_KILL_TIMEOUT =
     ConfigBuilder("spark.task.reaper.killTimeout")
+      .version("2.0.3")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(-1)
 
   private[spark] val TASK_REAPER_POLLING_INTERVAL =
     ConfigBuilder("spark.task.reaper.pollingInterval")
+      .version("2.0.3")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
   private[spark] val TASK_REAPER_THREAD_DUMP =
     ConfigBuilder("spark.task.reaper.threadDump")
+      .version("2.0.3")
       .booleanConf
       .createWithDefault(true)
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")
+      .version("2.1.0")
       .booleanConf
       .createOptional
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .version("2.1.0")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .version("2.2.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
+      .version("2.2.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val BLACKLIST_TIMEOUT_CONF =
     ConfigBuilder("spark.blacklist.timeout")
+      .version("2.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val BLACKLIST_KILL_ENABLED =
     ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
+      .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
       .internal()
+      .version("1.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
   // End blacklist confs
@@ -676,6 +733,7 @@ package object config {
       .doc("Whether to un-register all the outputs on the host in condition that we receive " +
         " a FetchFailure. This is set default to false, which means, we only un-register the " +
         " outputs related to the exact executor(instead of the host) on a FetchFailure.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -685,6 +743,7 @@ package object config {
         "an event queue using capacity specified by `spark.scheduler.listenerbus" +
         ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
         "use the default capacity specified by this config.")
+      .version("2.3.0")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
@@ -692,6 +751,7 @@ package object config {
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
     ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
       .internal()
+      .version("2.3.0")
       .intConf
       .createWithDefault(128)
 
@@ -701,6 +761,7 @@ package object config {
       .doc("When enabled, log the event that takes too much time to process. This helps us " +
         "discover the event types that cause performance bottlenecks. The time threshold is " +
         "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -709,6 +770,7 @@ package object config {
       .internal()
       .doc("The time threshold of whether a event is considered to be taking too much time to " +
         s"process. Log the event if ${LISTENER_BUS_LOG_SLOW_EVENT_ENABLED.key} is true.")
+      .version("3.0.0")
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
