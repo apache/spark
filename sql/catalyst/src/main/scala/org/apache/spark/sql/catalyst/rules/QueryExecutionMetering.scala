@@ -129,14 +129,4 @@ case class QueryExecutionMetrics(
       this.numEffectiveRuns - metrics.numEffectiveRuns,
       this.timeEffective - metrics.timeEffective)
   }
-
-  override def toString: String = {
-    s"""
-      |=== Metrics of Analyzer/Optimizer Rules ===
-      |Total number of runs: $numRuns
-      |Total time: ${time / NANOS_PER_SECOND.toDouble} seconds
-      |Total number of effective runs: $numEffectiveRuns
-      |Total time of effective runs: ${timeEffective / NANOS_PER_SECOND.toDouble} seconds
-    """.stripMargin
-  }
 }

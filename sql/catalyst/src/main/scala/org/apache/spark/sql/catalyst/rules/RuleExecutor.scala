@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -125,6 +126,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger()
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
+    val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
     // Run the structural integrity checker against the initial input
     if (!isPlanIntegral(plan)) {
@@ -202,6 +204,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       }
 
       planChangeLogger.logBatch(batch.name, batchStartPlan, curPlan)
+      planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
     }
 
     curPlan
@@ -235,7 +238,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             s"""
                |=== Result of Batch ${batchName} ===
                |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
-          """.stripMargin
+            """.stripMargin
           } else {
             s"Batch ${batchName} has no effect."
           }
@@ -243,6 +246,19 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
         logBasedOnLevel(message)
       }
+    }
+
+    def logMetrics(metrics: QueryExecutionMetrics): Unit = {
+      val message =
+      s"""
+         |=== Metrics of Executed Rules ===
+         |Total number of runs: ${metrics.numRuns}
+         |Total time: ${metrics.time / NANOS_PER_SECOND.toDouble} seconds
+         |Total number of effective runs: ${metrics.numEffectiveRuns}
+         |Total time of effective runs: ${metrics.timeEffective / NANOS_PER_SECOND.toDouble} seconds
+      """.stripMargin
+
+      logBasedOnLevel(message)
     }
 
     private def logBasedOnLevel(f: => String): Unit = {

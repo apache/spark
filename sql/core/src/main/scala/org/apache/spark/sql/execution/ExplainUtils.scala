@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 object ExplainUtils {
   /**
@@ -86,7 +85,6 @@ object ExplainUtils {
       plan: => QueryPlan[T],
       append: String => Unit): Unit = {
     try {
-      val beforeMetrics = RuleExecutor.getCurrentMetrics()
       val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
       var currentOperatorID = 0
       currentOperatorID = processPlanSkippingSubqueries(plan, append, currentOperatorID)
@@ -112,7 +110,6 @@ object ExplainUtils {
         }
         append("\n")
       }
-      append((RuleExecutor.getCurrentMetrics() - beforeMetrics).toString)
     } finally {
       removeTags(plan)
     }
