@@ -528,9 +528,9 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
     val expectedValue = SQLMetrics.stringValue(driverMetric.metricType,
-      Array(expectedAccumValue), Array.empty[Long])
+      Array(expectedAccumValue))
     val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType,
-      Array(expectedAccumValue2), Array.empty[Long])
+      Array(expectedAccumValue2))
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)

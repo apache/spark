@@ -23,6 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -39,6 +40,22 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val currentTime = System.currentTimeMillis()
       val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
         executionUIData.submissionTime
+
+      def tipForMaxMetric(): Seq[Node] = {
+        val maxMetricTip = if (parent.parent
+          .conf.get(StaticSQLConf.DISPLAY_TASK_ID_FOR_MAX_METRIC)) {
+          s"value (stageAttempt:task)"
+        } else {
+          ""
+        }
+        if (maxMetricTip.nonEmpty) {
+          <li>
+            <strong>Tip for Max Metric: </strong><code>{maxMetricTip}</code>
+          </li>
+        } else {
+          Nil
+        }
+      }
 
       def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
         val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
@@ -69,6 +86,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
+            {tipForMaxMetric()}
           </ul>
         </div>
 

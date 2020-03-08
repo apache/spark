@@ -29,6 +29,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.util.collection.OpenHashMap
@@ -209,6 +210,8 @@ class SQLAppStatusListener(
 
     val allMetrics = new mutable.HashMap[Long, Array[Long]]()
 
+    val displayTask = conf.get(StaticSQLConf.DISPLAY_TASK_ID_FOR_MAX_METRIC)
+
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
     taskMetrics.foreach { case (id, values) =>
@@ -221,27 +224,32 @@ class SQLAppStatusListener(
       allMetrics(id) = updated
     }
 
-    // Find the max for each metric id between all stages.
-    maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
-      val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
-      if (value > updated(0)) {
-        updated(0) = value
-        updated(1) = stageId
-        updated(2) = attemptId
-        updated(3) = taskId
+    if (displayTask) {
+      // Find the max for each metric id between all stages.
+      maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
+        val updated = maxMetricsFromAllStages.getOrElse(id,
+          Array(value, stageId, attemptId, taskId))
+        if (value > updated(0)) {
+          updated(0) = value
+          updated(1) = stageId
+          updated(2) = attemptId
+          updated(3) = taskId
+        }
+        maxMetricsFromAllStages(id) = updated
       }
-      maxMetricsFromAllStages(id) = updated
     }
 
     exec.driverAccumUpdates.foreach { case (id, value) =>
       if (metricTypes.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
-          // If the driver updates same metrics as tasks and has higher value then remove
-          // that entry from maxMetricsFromAllStage. This would make stringValue function default
-          // to "driver" that would be displayed on UI.
-          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
-            maxMetricsFromAllStages.remove(id)
+          if (displayTask) {
+            // If the driver updates same metrics as tasks and has higher value then remove
+            // that entry from maxMetricsFromAllStage. This would make stringValue function default
+            // to "driver" that would be displayed on UI.
+            if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
+              maxMetricsFromAllStages.remove(id)
+            }
           }
           val _copy = Arrays.copyOf(prev, prev.length + 1)
           _copy(prev.length) = value
@@ -254,8 +262,18 @@ class SQLAppStatusListener(
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> SQLMetrics.stringValue(metricTypes(id), values, maxMetricsFromAllStages.getOrElse(id,
-        Array.empty[Long]))
+      val taskInfo = if (displayTask) {
+        if (maxMetricsFromAllStages.contains(id)) {
+          val Seq(stageId, stageAttemptId, taskId) =
+            maxMetricsFromAllStages(id).slice(1, 4).toSeq
+          s"($stageId.$stageAttemptId:$taskId)"
+        } else {
+          "(driver)"
+        }
+      } else {
+        ""
+      }
+      id -> SQLMetrics.stringValue(metricTypes(id), values, taskInfo)
     }.toMap
 
     // Check the execution again for whether the aggregated metrics data has been calculated.

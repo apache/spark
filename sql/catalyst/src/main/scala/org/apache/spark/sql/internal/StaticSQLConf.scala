@@ -135,6 +135,14 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val DISPLAY_TASK_ID_FOR_MAX_METRIC =
+    buildStaticConf("spark.sql.ui.displayTaskInfoForMaxMetric")
+      .doc("If turn on, Spark will display stageId-stageAttemptId-taskId of the max metrics to " +
+        "tell where the max value comes from. It's useful to help debug job quicker.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .internal()
