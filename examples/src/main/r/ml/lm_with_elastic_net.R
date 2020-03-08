@@ -24,7 +24,7 @@ library(SparkR)
 # Initialize SparkSession
 sparkR.session(appName = "SparkR-ML-lm-example")
 
-# $example on
+# $example on$
 # Load training data
 df <- read.df("data/mllib/sample_linear_regression_data.txt", source = "libsvm")
 training <- df

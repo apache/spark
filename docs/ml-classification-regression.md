@@ -618,7 +618,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 More details on parameters can be found in the [R API documentation](api/R/spark.lm.html).
 
-{% include_example binomial r/ml/lm_with_elastic_net.R %}
+{% include_example r/ml/lm_with_elastic_net.R %}
 </div>
 
 </div>
