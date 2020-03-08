@@ -249,14 +249,16 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     }
 
     def logMetrics(metrics: QueryExecutionMetrics): Unit = {
+      val totalTime = metrics.time / NANOS_PER_SECOND.toDouble
+      val totalTimeEffective = metrics.timeEffective / NANOS_PER_SECOND.toDouble
       val message =
-      s"""
-         |=== Metrics of Executed Rules ===
-         |Total number of runs: ${metrics.numRuns}
-         |Total time: ${metrics.time / NANOS_PER_SECOND.toDouble} seconds
-         |Total number of effective runs: ${metrics.numEffectiveRuns}
-         |Total time of effective runs: ${metrics.timeEffective / NANOS_PER_SECOND.toDouble} seconds
-      """.stripMargin
+        s"""
+           |=== Metrics of Executed Rules ===
+           |Total number of runs: ${metrics.numRuns}
+           |Total time: ${totalTime} seconds
+           |Total number of effective runs: ${metrics.numEffectiveRuns}
+           |Total time of effective runs: ${totalTimeEffective} seconds
+        """.stripMargin
 
       logBasedOnLevel(message)
     }
