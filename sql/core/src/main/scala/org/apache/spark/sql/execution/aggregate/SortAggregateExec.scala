@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputs, SparkPlan}
+import org.apache.spark.sql.execution.{AliasAwareOutputPartitioningAndOrdering, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -38,7 +38,7 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec with AliasAwareOutputs {
+  extends BaseAggregateExec with AliasAwareOutputPartitioningAndOrdering {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)

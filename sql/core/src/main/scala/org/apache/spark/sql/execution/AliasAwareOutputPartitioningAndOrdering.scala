@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
  * A trait that handles aliases in the `outputExpressions` and `orderingExpressions` to produce
  * `outputPartitioning` and `outputOrdering` that satisfy distribution and ordering requirements.
  */
-trait AliasAwareOutputs extends UnaryExecNode {
+trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
   protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
@@ -40,7 +40,7 @@ trait AliasAwareOutputs extends UnaryExecNode {
   }
 
   final override def outputOrdering: Seq[SortOrder] = {
-    if (hasAlias) {
+    if (false) {
       orderingExpressions.map { s =>
         s.child match {
           case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))

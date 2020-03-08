@@ -67,7 +67,7 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec with AliasAwareOutputs {
+  extends BaseAggregateExec with AliasAwareOutputPartitioningAndOrdering {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
