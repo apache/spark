@@ -42,7 +42,6 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.executor.{ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
@@ -252,15 +251,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
-  private def isClientStandalone: Boolean = {
-    val isSparkCluster = master match {
-      case SparkMasterRegex.SPARK_REGEX(_) => true
-      case SparkMasterRegex.LOCAL_CLUSTER_REGEX(_, _, _) => true
-      case _ => false
-    }
-    deployMode == "client" && isSparkCluster
-  }
-
   /**
    * @return true if context is stopped or in the midst of stopping.
    */
@@ -400,17 +390,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
-    val allResources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
-    _resources = {
-      // driver submitted in client mode under Standalone may have conflicting resources with
-      // other drivers/workers on this host. We should sync driver's resources info into
-      // SPARK_RESOURCES/SPARK_RESOURCES_COORDINATE_DIR/ to avoid collision.
-      if (isClientStandalone) {
-        acquireResources(_conf, SPARK_DRIVER_PREFIX, allResources, Utils.getProcessId)
-      } else {
-        allResources
-      }
-    }
+    _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
     logResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
@@ -2028,9 +2008,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
-    }
-    if (isClientStandalone) {
-      releaseResources(_conf, SPARK_DRIVER_PREFIX, _resources, Utils.getProcessId)
     }
     _taskScheduler = null
     // TODO: Cache.stop()?

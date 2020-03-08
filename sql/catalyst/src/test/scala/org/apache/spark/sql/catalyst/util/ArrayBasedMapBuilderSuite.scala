@@ -48,11 +48,11 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     builder.put(1, 1)
     val e = intercept[RuntimeException](builder.put(1, 2))
-    assert(e.getMessage.contains("Duplicate map key 1 was founded"))
+    assert(e.getMessage.contains("Duplicate map key 1 was found"))
   }
 
   test("remove duplicated keys with last wins policy") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
       builder.put(1, 1)
       builder.put(2, 2)
@@ -63,8 +63,15 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("binary type key") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+  test("binary type key with duplication") {
+    val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
+    builder.put(Array(1.toByte), 1)
+    builder.put(Array(2.toByte), 2)
+    val e = intercept[RuntimeException](builder.put(Array(1.toByte), 3))
+    // By default duplicated map key fails the query.
+    assert(e.getMessage.contains("Duplicate map key"))
+
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
       builder.put(Array(1.toByte), 1)
       builder.put(Array(2.toByte), 2)
@@ -79,18 +86,26 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("struct type key") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+  test("struct type key with duplication") {
+    val unsafeRow = {
+      val row = new UnsafeRow(1)
+      val bytes = new Array[Byte](16)
+      row.pointTo(bytes, 16)
+      row.setInt(0, 1)
+      row
+    }
+
+    val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
+    builder.put(InternalRow(1), 1)
+    builder.put(InternalRow(2), 2)
+    val e = intercept[RuntimeException](builder.put(unsafeRow, 3))
+    // By default duplicated map key fails the query.
+    assert(e.getMessage.contains("Duplicate map key"))
+
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
       builder.put(InternalRow(1), 1)
       builder.put(InternalRow(2), 2)
-      val unsafeRow = {
-        val row = new UnsafeRow(1)
-        val bytes = new Array[Byte](16)
-        row.pointTo(bytes, 16)
-        row.setInt(0, 1)
-        row
-      }
       builder.put(unsafeRow, 3)
       val map = builder.build()
       assert(map.numElements() == 2)
@@ -98,20 +113,28 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("array type key") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+  test("array type key with duplication") {
+    val unsafeArray = {
+      val array = new UnsafeArrayData()
+      val bytes = new Array[Byte](24)
+      Platform.putLong(bytes, Platform.BYTE_ARRAY_OFFSET, 2)
+      array.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET, 24)
+      array.setInt(0, 1)
+      array.setInt(1, 1)
+      array
+    }
+
+    val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
+    builder.put(new GenericArrayData(Seq(1, 1)), 1)
+    builder.put(new GenericArrayData(Seq(2, 2)), 2)
+    val e = intercept[RuntimeException](builder.put(unsafeArray, 3))
+    // By default duplicated map key fails the query.
+    assert(e.getMessage.contains("Duplicate map key"))
+
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
       builder.put(new GenericArrayData(Seq(1, 1)), 1)
       builder.put(new GenericArrayData(Seq(2, 2)), 2)
-      val unsafeArray = {
-        val array = new UnsafeArrayData()
-        val bytes = new Array[Byte](24)
-        Platform.putLong(bytes, Platform.BYTE_ARRAY_OFFSET, 2)
-        array.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET, 24)
-        array.setInt(0, 1)
-        array.setInt(1, 1)
-        array
-      }
       builder.put(unsafeArray, 3)
       val map = builder.build()
       assert(map.numElements() == 2)

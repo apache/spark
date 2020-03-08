@@ -23,7 +23,8 @@ if sys.version >= '3':
 from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
@@ -377,62 +378,19 @@ class JavaModel(JavaTransformer, Model):
 
 
 @inherit_doc
-class _JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
-    """
-    Params for :py:class:`JavaPredictor` and :py:class:`JavaPredictorModel`.
-
-    .. versionadded:: 3.0.0
-    """
-    pass
-
-
-@inherit_doc
-class JavaPredictor(JavaEstimator, _JavaPredictorParams):
+class JavaPredictor(Predictor, JavaEstimator, _PredictorParams):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
 
-    @since("3.0.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
+    __metaclass__ = ABCMeta
 
 
 @inherit_doc
-class JavaPredictionModel(JavaModel, _JavaPredictorParams):
+class JavaPredictionModel(PredictionModel, JavaModel, _PredictorParams):
     """
     (Private) Java Model for prediction tasks (regression and classification).
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     @property
     @since("2.1.0")

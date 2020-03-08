@@ -74,7 +74,7 @@ USING data_source
 ### Examples
 {% highlight sql %}
 
---Create table using an exsisting table
+--Create table using an existing table
 CREATE TABLE Student_Dupli like Student;
 
 --Create table like using a data source

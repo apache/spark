@@ -190,7 +190,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           example.split("  > ").toList.foreach(_ match {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(hiveResultString(df).mkString("\n"))
+              val actual = unindentAndTrim(
+                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>
@@ -2796,7 +2797,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
         assert(
-          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
+          m.contains(
+            "cannot resolve '(spark_catalog.default.t.`c` = spark_catalog.default.S.`C`)' " +
+            "due to data type mismatch"))
       }
     }
   }
