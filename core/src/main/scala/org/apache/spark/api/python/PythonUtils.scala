@@ -72,13 +72,6 @@ private[spark] object PythonUtils {
   }
 
   /**
-   * Convert list of java.lang.Double into array of Double
-   */
-  def doubleJListToArray(vs: JList[java.lang.Double]): Array[Double] = {
-    vs.asScala.map(_.doubleValue).toArray
-  }
-
-  /**
    * Convert java map of K, V into Map of K, V (for calling API with varargs)
    */
   def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {

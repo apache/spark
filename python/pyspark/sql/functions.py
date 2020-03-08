@@ -30,8 +30,8 @@ if sys.version >= '3':
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_list, _to_java_column, _to_seq, \
-    _create_column_from_literal, _create_column_from_name
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal, \
+    _create_column_from_name
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -616,8 +616,26 @@ def percentile_approx(col, percentage, accuracy=10000):
      |-- median: double (nullable = true)
     """
     sc = SparkContext._active_spark_context
+
+    # A local list
     if isinstance(percentage, (list, tuple)):
-        percentage = sc._jvm.PythonUtils.doubleJListToArray([float(x) for x in percentage])
+        percentage = sc._jvm.functions.array(_to_seq(sc, [
+            _create_column_from_literal(x) for x in percentage
+        ]))
+
+    # Already a Column
+    elif isinstance(percentage, Column):
+        percentage = _to_java_column(percentage)
+
+    # Probably scalar
+    else:
+        percentage = _create_column_from_literal(percentage)
+
+    accuracy = (
+        _to_java_column(accuracy) if isinstance(accuracy, Column)
+        else _create_column_from_literal(accuracy)
+    )
+
     return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
 
 

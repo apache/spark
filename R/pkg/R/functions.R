@@ -1426,19 +1426,31 @@ setMethod("quarter",
 #' @aliases percentile_approx percentile_approx,Column-method
 #' @note percentile_approx since 3.1.0
 setMethod("percentile_approx",
-          signature(x = "characterOrColumn", percentage = "numeric"),
+          signature(x = "characterOrColumn", percentage = "numericOrColumn"),
           function(x, percentage, accuracy = 10000) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
               column(x)@jc
             }
-            if (length(percentage) > 1) {
-              percentage <- as.list(percentage)
+
+            percentage <- if (class(percentage) == "Column") {
+              percentage@jc
+            } else if (length(percentage) > 1) {
+              do.call(create_array, lapply(percentage, lit))@jc
+            } else {
+              lit(percentage)@jc
             }
+
+            accuracy <- if (class(accuracy) == "Column") {
+              accuracy@jc
+            } else {
+              lit(as.integer(accuracy))@jc
+            }
+
             jc <- callJStatic(
               "org.apache.spark.sql.functions", "percentile_approx",
-              col, percentage, as.integer(accuracy)
+              col, percentage, accuracy
             )
             column(jc)
           })
