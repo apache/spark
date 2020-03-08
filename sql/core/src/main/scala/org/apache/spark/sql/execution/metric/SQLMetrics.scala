@@ -125,6 +125,7 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
