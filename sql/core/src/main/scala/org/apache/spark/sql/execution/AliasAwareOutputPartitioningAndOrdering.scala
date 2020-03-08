@@ -40,7 +40,7 @@ trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
   }
 
   final override def outputOrdering: Seq[SortOrder] = {
-    if (false) {
+    if (hasAlias) {
       orderingExpressions.map { s =>
         s.child match {
           case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))
