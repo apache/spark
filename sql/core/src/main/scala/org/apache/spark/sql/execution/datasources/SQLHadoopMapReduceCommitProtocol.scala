@@ -101,7 +101,7 @@ class SQLHadoopMapReduceCommitProtocol(
   override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
     logDebug(s"onTaskCommit($taskCommit)")
     if (dynamicPartitionOverwrite && hasValidPath) {
-      val (_, allPartitionPaths) =
+      val (addedAbsPathFiles, allPartitionPaths) =
         taskCommit.obj.asInstanceOf[(Map[String, String], Set[String])]
       val partitionsPerTask = allPartitionPaths.size
       if (partitionsPerTask > maxDynamicPartitionsPerTask) {
@@ -116,7 +116,7 @@ class SQLHadoopMapReduceCommitProtocol(
           s" $totalPartitionNum, which is more than $maxDynamicPartitions." +
           s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}")
       }
-      totalCreatedFiles += 1 // onTaskCommit means a file created by a task
+      totalCreatedFiles += addedAbsPathFiles.values.size
       if (totalCreatedFiles > maxCreatedFilesInDynamicPartition) {
         throw new SparkException(s"Total number of created files now is" +
           s" $totalCreatedFiles, which exceeds $maxCreatedFilesInDynamicPartition." +
