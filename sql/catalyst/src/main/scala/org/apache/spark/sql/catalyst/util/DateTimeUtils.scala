@@ -54,6 +54,8 @@ object DateTimeUtils {
       .toInstant)
   final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
 
+  final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
+
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
@@ -94,7 +96,9 @@ object DateTimeUtils {
    */
   def fromJavaDate(date: Date): SQLDate = {
     if (date.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      localDateToDays(date.toLocalDate)
+      val era = if (date.before(julianCommonEraStart)) 0 else 1
+      val localDate = date.toLocalDate.`with`(ChronoField.ERA, era)
+      localDateToDays(localDate)
     } else {
       microsToDays(millisToMicros(date.getTime))
     }
@@ -128,7 +132,9 @@ object DateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     if (t.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      val instant = ZonedDateTime.of(t.toLocalDateTime, ZoneId.systemDefault()).toInstant
+      val era = if (t.before(julianCommonEraStart)) 0 else 1
+      val localDateTime = t.toLocalDateTime.`with`(ChronoField.ERA, era)
+      val instant = ZonedDateTime.of(localDateTime, ZoneId.systemDefault()).toInstant
       instantToMicros(instant)
     } else {
       instantToMicros(t.toInstant)
