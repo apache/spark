@@ -32,6 +32,7 @@ private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
+    initMaxShare: Int,
     initWeight: Int)
   extends Schedulable with Logging {
 
@@ -42,10 +43,16 @@ private[spark] class Pool(
   var runningTasks = 0
   val priority = 0
 
+  // A weight that used to calculate the maxShare that can be used by this pool.
+  val maxShare: Int = initMaxShare
+
   // A pool's stage id is used to break the tie in scheduling.
   var stageId = -1
   val name = poolName
   var parent: Pool = null
+
+  // A map that keeps the number of slots for each binded executor.
+  val bindedExecutors = new ConcurrentHashMap[String, Int]()
 
   private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
@@ -122,5 +129,29 @@ private[spark] class Pool(
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
     }
+  }
+
+  def isThrottled: Boolean = {
+    runningTasks >= maxShare
+  }
+
+  def bindExecutor(execId: String, numSlots: Int): Pool = {
+    schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+      .collectFirst {
+        case p: Pool if p.bindedExecutors.asScala.values.sum + numSlots < maxShare => p
+      }.map { p =>
+        p.bindedExecutors.putIfAbsent(execId, numSlots)
+        p
+      }.getOrElse{
+      bindedExecutors.putIfAbsent(execId, numSlots)
+      this
+    }
+  }
+
+  def unbindExecutor(execId: String): Unit = {
+    schedulableQueue.asScala.collect { case p: Pool =>
+      p.bindedExecutors.remove(execId)
+    }
+    bindedExecutors.remove(execId)
   }
 }

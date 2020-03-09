@@ -150,7 +150,7 @@ private[spark] class TaskSchedulerImpl(
         throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
     }
 
-  val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
+  val rootPool: Pool = new Pool("", schedulingMode, 0, Int.MaxValue, 0)
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -341,7 +341,7 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       if (availableCpus(i) >= CPUS_PER_TASK &&
-        resourcesMeetTaskRequirements(availableResources(i))) {
+        resourcesMeetTaskRequirements(availableResources(i)) && taskSet.canScheduleOn(execId)) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))) {
             tasks(i) += task
@@ -404,7 +404,7 @@ private[spark] class TaskSchedulerImpl(
       }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
-        executorAdded(o.executorId, o.host)
+        executorAdded(o.executorId, o.cores, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
         newExecAvail = true
@@ -440,11 +440,16 @@ private[spark] class TaskSchedulerImpl(
         taskSet.executorAdded()
       }
     }
-
+    val nonThrottledTaskSets = sortedTaskSets.filterNot(_.parent.isThrottled)
+    val throttledPools = (sortedTaskSets -- nonThrottledTaskSets).map(_.parent).toSet
+    for (pool <- throttledPools) {
+      logInfo(s"Throttling schedule for pool ${pool.name} due to maxShare exceeded: " +
+        s"${pool.runningTasks} >= ${pool.maxShare}")
+    }
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
-    for (taskSet <- sortedTaskSets) {
+    for (taskSet <- nonThrottledTaskSets) {
       val availableSlots = availableCpus.map(c => c / CPUS_PER_TASK).sum
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
@@ -829,6 +834,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    rootPool.unbindExecutor(executorId)
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
@@ -836,7 +842,8 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.foreach(_.handleRemovedExecutor(executorId))
   }
 
-  def executorAdded(execId: String, host: String): Unit = {
+  def executorAdded(execId: String, cores: Int, host: String): Unit = {
+    rootPool.bindExecutor(execId, cores / CPUS_PER_TASK)
     dagScheduler.executorAdded(execId, host)
   }
 
