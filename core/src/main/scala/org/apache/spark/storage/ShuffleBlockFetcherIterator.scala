@@ -120,6 +120,9 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] val results = new LinkedBlockingQueue[FetchResult]
 
+  /** Current result being processed. */
+  private[this] var curBuf: Option[ManagedBuffer] = None
+
   /**
    * Current [[FetchResult]] being processed. We track this so we can release the current buffer
    * in case of a runtime exception when processing the current buffer.
@@ -223,6 +226,7 @@ final class ShuffleBlockFetcherIterator(
         case _ =>
       }
     }
+    curBuf.foreach(_.release())
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
         logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
@@ -264,7 +268,7 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        results.put(new FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
+        throwFetchFailedException(BlockId(blockId), infoMap(blockId)._2, address, e)
       }
     }
 
@@ -483,8 +487,7 @@ final class ShuffleBlockFetcherIterator(
               logError("Error occurred while fetching local blocks, " + ce.getMessage)
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          results.put(new FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
-          return
+          throwFetchFailedException(blockId, mapIndex, blockManager.blockManagerId, e)
       }
     }
   }
@@ -504,8 +507,7 @@ final class ShuffleBlockFetcherIterator(
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
-        false
+        throwFetchFailedException(blockId, mapIndex, blockManagerId, e)
     }
   }
 
@@ -548,7 +550,7 @@ final class ShuffleBlockFetcherIterator(
           logError(s"Error occurred while fetching host local blocks", throwable)
           val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
           val (blockId, _, mapIndex) = blockInfoSeq.head
-          results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+          throwFetchFailedException(blockId, mapIndex, hostLocalBmId, throwable)
       }
     }
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
@@ -625,6 +627,7 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
+          curBuf = Some(buf)
           if (address != blockManager.blockManagerId) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
@@ -658,6 +661,7 @@ final class ShuffleBlockFetcherIterator(
             // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
             // which returns a zero-size from commitAndGet() in case no records were written
             // since the last call.
+            curBuf = None
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
             throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
@@ -676,6 +680,7 @@ final class ShuffleBlockFetcherIterator(
                 case e: IOException => logError("Failed to create input stream from local block", e)
               }
               buf.release()
+              curBuf = None
               throwFetchFailedException(blockId, mapIndex, address, e)
           }
           try {
@@ -709,10 +714,10 @@ final class ShuffleBlockFetcherIterator(
               // streamWrapper
               in.close()
             }
+            curBuf = None
           }
 
-        case FailureFetchResult(blockId, mapIndex, address, e) =>
-          throwFetchFailedException(blockId, mapIndex, address, e)
+        case _ =>
       }
 
       // Send fetch requests up to maxBytesInFlight
@@ -952,18 +957,4 @@ object ShuffleBlockFetcherIterator {
     require(buf != null)
     require(size >= 0)
   }
-
-  /**
-   * Result of a fetch from a remote block unsuccessfully.
-   * @param blockId block id
-   * @param mapIndex the mapIndex for this block, which indicate the index in the map stage
-   * @param address BlockManager that the block was attempted to be fetched from
-   * @param e the failure exception
-   */
-  private[storage] case class FailureFetchResult(
-      blockId: BlockId,
-      mapIndex: Int,
-      address: BlockManagerId,
-      e: Throwable)
-    extends FetchResult
 }
