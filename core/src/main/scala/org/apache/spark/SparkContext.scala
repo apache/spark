@@ -2791,7 +2791,9 @@ object SparkContext extends Logging {
     // others its checked in ResourceProfile.
     def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      validateTaskCpusLargeEnough(sc.conf, executorCores, taskCores)
+      if (!sc.conf.get(SKIP_VALIDATE_CORES_TESTING)) {
+        validateTaskCpusLargeEnough(sc.conf, executorCores, taskCores)
+      }
       val defaultProf = sc.resourceProfileManager.defaultResourceProfile
       ResourceUtils.warnOnWastedResources(defaultProf, sc.conf, Some(executorCores))
     }

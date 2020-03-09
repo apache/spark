@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
-import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING, TASKSET_MANAGER_SPECULATION_TESTING}
+import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING, SKIP_VALIDATE_CORES_TESTING}
 import org.apache.spark.util.Utils
 
 /**
@@ -394,7 +394,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
-    if (!sparkConf.get(TASKSET_MANAGER_SPECULATION_TESTING) && (execCores < taskCpus)) {
+    if (execCores < taskCpus) {
       throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
         s"the number of cpus per task = $taskCpus.")
     }

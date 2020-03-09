@@ -34,7 +34,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.TASKSET_MANAGER_SPECULATION_TESTING
+import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -1897,7 +1897,7 @@ class TaskSetManagerSuite
     val numCoresPerTask = 2
     val conf = new SparkConf()
     // skip throwing exception when cores per task > cores per executor to emulate standalone mode
-    conf.set(TASKSET_MANAGER_SPECULATION_TESTING, true)
+    conf.set(SKIP_VALIDATE_CORES_TESTING, true)
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, "1.0")
     // Skip setting cores per executor to emulate standalone default mode
