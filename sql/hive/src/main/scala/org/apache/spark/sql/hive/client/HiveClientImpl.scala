@@ -1236,10 +1236,18 @@ private[hive] object HiveClientImpl extends Logging {
     hiveConf.setBoolean("hive.cbo.enable", false)
     // If this is true, SessionState.start will create a file to log hive job which will not be
     // deleted on exit and is useless for spark
-    hiveConf.setBoolean("hive.session.history.enabled", false)
+    if (hiveConf.getBoolean("hive.session.history.enabled", false)) {
+      logWarning("Detected HiveConf hive.session.history.enabled is true and will be reset to" +
+        " false to disable useless hive logic")
+      hiveConf.setBoolean("hive.session.history.enabled", false)
+    }
     // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
     // which is useless for spark.
-    hiveConf.set("hive.execution.engine", "mr")
+    if (hiveConf.get("hive.execution.engine") == "tez") {
+      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
+        " to disable useless hive logic")
+      hiveConf.set("hive.execution.engine", "mr")
+    }
     hiveConf
   }
 }
