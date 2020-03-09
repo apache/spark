@@ -617,7 +617,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              x.getPrimitiveWritableObject(data).getDays
+              DateTimeUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
             } else {
               null
             }
@@ -1010,7 +1010,11 @@ private[hive] trait HiveInspectors {
     }
 
   private def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
+    if (value == null) {
+      null
+    } else {
+      new hiveIo.DateWritable(DateTimeUtils.toJavaDate(value.asInstanceOf[Int]))
+    }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {
