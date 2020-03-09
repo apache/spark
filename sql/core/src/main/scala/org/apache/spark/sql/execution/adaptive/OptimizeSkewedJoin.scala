@@ -63,11 +63,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
    * partition size * ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR and also larger than
-   * ADVISORY_PARTITION_SIZE_IN_BYTES * 2.
+   * ADVISORY_PARTITION_SIZE_IN_BYTES.
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
     size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
-      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) * 2
+      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -110,7 +110,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       targetSize: Long): Array[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
-    ShufflePartitionsCoalescer.splitSizeListByTargetSize(mapPartitionSizes, targetSize)
+    ShufflePartitionsUtil.splitSizeListByTargetSize(mapPartitionSizes, targetSize)
   }
 
   private def getStatistics(stage: ShuffleQueryStageExec): MapOutputStatistics = {
@@ -195,21 +195,25 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           }
 
           val leftParts = if (isLeftSkew) {
-            leftSkewDesc.addPartitionSize(leftSize)
-            createSkewPartitions(
-              partitionIndex,
-              getMapStartIndices(left, partitionIndex, leftTargetSize),
-              getNumMappers(left))
+            val mapStartIndices = getMapStartIndices(left, partitionIndex, leftTargetSize)
+            if (mapStartIndices.length > 1) {
+              leftSkewDesc.addPartitionSize(leftSize)
+              createSkewPartitions(partitionIndex, mapStartIndices, getNumMappers(left))
+            } else {
+              Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
+            }
           } else {
             Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
           }
 
           val rightParts = if (isRightSkew) {
-            rightSkewDesc.addPartitionSize(rightSize)
-            createSkewPartitions(
-              partitionIndex,
-              getMapStartIndices(right, partitionIndex, rightTargetSize),
-              getNumMappers(right))
+            val mapStartIndices = getMapStartIndices(right, partitionIndex, rightTargetSize)
+            if (mapStartIndices.length > 1) {
+              rightSkewDesc.addPartitionSize(rightSize)
+              createSkewPartitions(partitionIndex, mapStartIndices, getNumMappers(right))
+            } else {
+              Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
+            }
           } else {
             Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
           }
@@ -259,7 +263,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     if (!shouldCoalesce || nonSkewPartitionIndices.length == 1) {
       nonSkewPartitionIndices.map(i => CoalescedPartitionSpec(i, i + 1))
     } else {
-      ShufflePartitionsCoalescer.coalescePartitions(
+      ShufflePartitionsUtil.coalescePartitions(
         Array(leftStats, rightStats),
         firstPartitionIndex = nonSkewPartitionIndices.head,
         // `lastPartitionIndex` is exclusive.

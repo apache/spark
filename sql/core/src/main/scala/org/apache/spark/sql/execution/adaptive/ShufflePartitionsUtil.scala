@@ -23,7 +23,9 @@ import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec}
 
-object ShufflePartitionsCoalescer extends Logging {
+object ShufflePartitionsUtil extends Logging {
+  final val SMALL_PARTITION_FACTOR = 0.2
+  final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
    * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
@@ -117,14 +119,14 @@ object ShufflePartitionsCoalescer extends Logging {
 
   /**
    * Given a list of size, return an array of indices to split the list into multiple partitions,
-   * so that the size sum of each partition is close to target size. Each index indicates the start
-   * of a partition.
+   * so that the size sum of each partition is close to the target size. Each index indicates the
+   * start of a partition.
    */
   def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
-    var currentSizeSum = 0L
+    var currentPartitionSize = 0L
     var lastPartitionSize = -1L
 
     def tryMergePartitions() = {
@@ -132,23 +134,28 @@ object ShufflePartitionsCoalescer extends Logging {
       // the previous partition is very small and it's better to merge the current partition into
       // the previous partition.
       val shouldMergePartitions = lastPartitionSize > -1 &&
-        ((currentSizeSum + lastPartitionSize) < targetSize * 1.3 ||
-        (currentSizeSum < targetSize * 0.3 || lastPartitionSize < targetSize * 0.3))
+        ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
+        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
+          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
       if (shouldMergePartitions) {
+        // We decide to merge the current partition into the previous one, so the start index of
+        // the current partition should be removed.
         partitionStartIndices.remove(partitionStartIndices.length - 1)
-        lastPartitionSize += currentSizeSum
+        lastPartitionSize += currentPartitionSize
       } else {
-        lastPartitionSize = currentSizeSum
+        lastPartitionSize = currentPartitionSize
       }
     }
 
     while (i < sizes.length) {
-      if (i > 0 && currentSizeSum + sizes(i) > targetSize) {
+      // If including the next size in the current partition exceeds the target size, package the
+      // current partition and start a new partition.
+      if (i > 0 && currentPartitionSize + sizes(i) > targetSize) {
         tryMergePartitions()
         partitionStartIndices += i
-        currentSizeSum = sizes(i)
+        currentPartitionSize = sizes(i)
       } else {
-        currentSizeSum += sizes(i)
+        currentPartitionSize += sizes(i)
       }
       i += 1
     }

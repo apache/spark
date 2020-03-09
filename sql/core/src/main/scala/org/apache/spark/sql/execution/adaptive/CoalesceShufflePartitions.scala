@@ -66,7 +66,7 @@ case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val partitionSpecs = ShufflePartitionsCoalescer.coalescePartitions(
+        val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
           firstPartitionIndex = 0,
           lastPartitionIndex = distinctNumPreShufflePartitions.head,

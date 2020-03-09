@@ -614,7 +614,7 @@ class AdaptiveQueryExecSuite
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
-          .range(0, 1300, 1, 10)
+          .range(0, 1000, 1, 10)
           .selectExpr("id % 2 as key1", "id as value1")
           .createOrReplaceTempView("skewData1")
         spark
@@ -635,36 +635,36 @@ class AdaptiveQueryExecSuite
         // skewed inner join optimization
         val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-        // left stats: [4297, 0, 0, 0, 4674]
+        // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, left side is divided
         //              into 2 splits and right side is divided into 4 splits, so
         //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
         // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 8 + 1 + 3)
+        checkSkewJoin(innerSmj, 8 + 1 + 2)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
-        // left stats: [4297, 0, 0, 0, 4674]
+        // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
         //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
-        // So total (2 + 1 + 3) partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
+        // So total (2 + 1 + 2) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 2 + 1 + 3)
+        checkSkewJoin(leftSmj, 2 + 1 + 2)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
-        // left stats: [4297, 0, 0, 0, 4674]
+        // left stats: [3496, 0, 0, 0, 4014]
         // right stats:[6292, 0, 0, 0, 0]
         // Partition 0: both left and right sides are skewed, but right join can't split left side,
         //              so only right side is divided into 4 splits, and thus 4 sub-partitions.
@@ -674,22 +674,6 @@ class AdaptiveQueryExecSuite
         // So total (4 + 1 + 1) partitions.
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
         checkSkewJoin(rightSmj, 4 + 1 + 1)
-
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "3000") {
-          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-            "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-          // left stats: [4297, 0, 0, 0, 4674]
-          // right stats:[6292, 0, 0, 0, 0]
-          // Partition 0: left side is smaller than 3000 * 2, so it's not skewed,
-          //              right side is skewed divided into 2 splits, so
-          //              2 sub-partitions.
-          // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-          // Partition 4: left side is smaller than 3000 * 2, so it's not skewed,
-          //              right side is not skewed either, so just 1 partition.
-          // So total (2 + 1 + 1) partitions.
-          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-          checkSkewJoin(innerSmj, 2 + 1 + 1)
-        }
       }
     }
   }

@@ -488,7 +488,7 @@ object SQLConf {
   val SKEW_JOIN_SKEWED_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
       .doc("A partition is considered as skewed if its size is larger than this factor " +
-        "multiplying the median partition size and also larger than 2 multiplying " +
+        "multiplying the median partition size and also larger than " +
         s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'")
       .version("3.0.0")
       .intConf
