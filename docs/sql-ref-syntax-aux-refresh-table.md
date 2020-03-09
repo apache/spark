@@ -26,17 +26,17 @@ lazy manner when the cached table or the query associated with it is executed ag
 
 ### Syntax
 {% highlight sql %}
-REFRESH [TABLE] tableIdentifier
+REFRESH [TABLE] table_identifier
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>tableIdentifier</em></code></dt>
+  <dt><code><em>table_identifier</em></code></dt>
   <dd>
     Specifies a table name, which is either a qualified or unqualified name that designates a table/view. If no database identifier is provided, it refers to a temporary view or a table/view in the current database.<br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]table_name
+        [ database_name. ] table_name
       </code>
   </dd>
 </dl>

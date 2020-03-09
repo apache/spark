@@ -17,21 +17,67 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)) {
-      legacyTraverseAndSubstituteCTE(plan)
-    } else {
-      traverseAndSubstituteCTE(plan, false)
+    LegacyBehaviorPolicy.withName(SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
+      case LegacyBehaviorPolicy.EXCEPTION =>
+        assertNoNameConflictsInCTE(plan, inTraverse = false)
+        traverseAndSubstituteCTE(plan, inTraverse = false)
+      case LegacyBehaviorPolicy.LEGACY =>
+        legacyTraverseAndSubstituteCTE(plan)
+      case LegacyBehaviorPolicy.CORRECTED =>
+        traverseAndSubstituteCTE(plan, inTraverse = false)
+    }
+  }
+
+  /**
+   * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
+   * child, innerChildren and subquery for the current plan.
+   */
+  private def assertNoNameConflictsInCTE(
+      plan: LogicalPlan,
+      inTraverse: Boolean,
+      cteNames: Set[String] = Set.empty): Unit = {
+    plan.foreach {
+      case w @ With(child, relations) =>
+        val newNames = relations.map {
+          case (cteName, _) =>
+            if (cteNames.contains(cteName)) {
+              throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
+                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+                "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+                "definitions will take precedence. See more details in SPARK-28228.")
+            } else {
+              cteName
+            }
+        }.toSet
+        child.transformExpressions {
+          case e: SubqueryExpression =>
+            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames ++ newNames)
+            e
+        }
+        w.innerChildren.foreach { p =>
+          assertNoNameConflictsInCTE(p, inTraverse = true, cteNames ++ newNames)
+        }
+
+      case other if inTraverse =>
+        other.transformExpressions {
+          case e: SubqueryExpression =>
+            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames)
+            e
+        }
+
+      case _ =>
     }
   }
 

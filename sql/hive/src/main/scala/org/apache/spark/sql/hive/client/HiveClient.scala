@@ -111,8 +111,8 @@ private[hive] trait HiveClient {
    * TODO(cloud-fan): it's a little hacky to introduce the schema table properties here in
    * `HiveClient`, but we don't have a cleaner solution now.
    */
-  def alterTableDataSchema(
-    dbName: String, tableName: String, newDataSchema: StructType, schemaProps: Map[String, String])
+  def alterTableDataSchema(dbName: String, tableName: String, newDataSchema: StructType,
+    schemaProps: Map[String, String]): Unit
 
   /** Creates a new database with the given name. */
   def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit

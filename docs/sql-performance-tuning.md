@@ -67,6 +67,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>134217728 (128 MB)</td>
     <td>
       The maximum number of bytes to pack into a single partition when reading files.
+      This configuration is effective only when using file-based sources such as Parquet, JSON and ORC.
     </td>
   </tr>
   <tr>
@@ -76,7 +77,8 @@ that these options will be deprecated in future release as more optimizations ar
       The estimated cost to open a file, measured by the number of bytes could be scanned in the same
       time. This is used when putting multiple files into a partition. It is better to over-estimated,
       then the partitions with small files will be faster than partitions with bigger files (which is
-      scheduled first).
+      scheduled first). This configuration is effective only when using file-based sources such as Parquet,
+      JSON and ORC.
     </td>
   </tr>
   <tr>
@@ -129,8 +131,7 @@ a specific strategy may not support all join types.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.sql.functions.broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -138,8 +139,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-import static org.apache.spark.sql.functions.broadcast;
-broadcast(spark.table("src")).join(spark.table("records"), "key").show();
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
 {% endhighlight %}
 
 </div>
@@ -147,8 +147,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-from pyspark.sql.functions import broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -158,7 +157,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 {% highlight r %}
 src <- sql("SELECT * FROM src")
 records <- sql("SELECT * FROM records")
-head(join(broadcast(src), records, src$key == records$key))
+head(join(src, hint(records, "broadcast"), src$key == records$key))
 {% endhighlight %}
 
 </div>
@@ -172,3 +171,18 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 
 </div>
 </div>
+
+## Coalesce Hints for SQL Queries
+
+Coalesce hints allows the Spark SQL users to control the number of output files just like the
+`coalesce`, `repartition` and `repartitionByRange` in Dataset API, they can be used for performance
+tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
+parameter. The "REPARTITION" hint has a partition number, columns, or both of them as parameters.
+The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional.
+
+    SELECT /*+ COALESCE(3) */ * FROM t
+    SELECT /*+ REPARTITION(3) */ * FROM t
+    SELECT /*+ REPARTITION(c) */ * FROM t
+    SELECT /*+ REPARTITION(3, c) */ * FROM t
+    SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
+    SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t

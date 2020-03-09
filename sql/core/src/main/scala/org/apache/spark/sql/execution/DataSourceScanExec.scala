@@ -43,8 +43,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 trait DataSourceScanExec extends LeafExecNode {
-  val relation: BaseRelation
-  val tableIdentifier: Option[TableIdentifier]
+  def relation: BaseRelation
+  def tableIdentifier: Option[TableIdentifier]
 
   protected val nodeNamePrefix: String = ""
 
@@ -65,10 +65,26 @@ trait DataSourceScanExec extends LeafExecNode {
       s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr")
   }
 
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
+  }
+
   /**
    * Shorthand for calling redactString() without specifying redacting rules
    */
-  private def redact(text: String): String = {
+  protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 
@@ -87,7 +103,7 @@ case class RowDataSourceScanExec(
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
-    override val tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
@@ -148,7 +164,7 @@ case class FileSourceScanExec(
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
-    override val tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -171,7 +187,7 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  val driverMetrics: HashMap[String, Long] = HashMap.empty
+  private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
@@ -214,7 +230,7 @@ case class FileSourceScanExec(
       // call the file index for the files matching all filters except dynamic partition filters
       val predicate = dynamicPartitionFilters.reduce(And)
       val partitionColumns = relation.partitionSchema
-      val boundPredicate = newPredicate(predicate.transform {
+      val boundPredicate = Predicate.create(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
@@ -309,8 +325,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-  logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
+  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -340,6 +355,31 @@ case class FileSourceScanExec(
     }
 
     withSelectedBucketsCount
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, _) if (key.equals("Location")) =>
+        val location = relation.location
+        val numPaths = location.rootPaths.length
+        val abbreviatedLoaction = if (numPaths <= 1) {
+          location.rootPaths.mkString("[", ", ", "]")
+        } else {
+          "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
+        }
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {

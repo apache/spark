@@ -302,7 +302,7 @@ private[spark] object BLAS extends Serializable {
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
    */
-  def syr(alpha: Double, x: Vector, A: DenseMatrix) {
+  def syr(alpha: Double, x: Vector, A: DenseMatrix): Unit = {
     val mA = A.numRows
     val nA = A.numCols
     require(mA == nA, s"A is not a square matrix (and hence is not symmetric). A: $mA x $nA")
@@ -316,7 +316,7 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix): Unit = {
     val nA = A.numRows
     val mA = A.numCols
 
@@ -334,7 +334,7 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix): Unit = {
     val mA = A.numCols
     val xIndices = x.indices
     val xValues = x.values
@@ -682,7 +682,6 @@ private[spark] object BLAS extends Serializable {
 
           val xTemp = xValues(k) * alpha
           while (i < indEnd) {
-            val rowIndex = Arows(i)
             yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }
@@ -734,8 +733,7 @@ private[spark] object BLAS extends Serializable {
         val indEnd = Acols(colCounterForA + 1)
         val xVal = xValues(colCounterForA) * alpha
         while (i < indEnd) {
-          val rowIndex = Arows(i)
-          yValues(rowIndex) += Avals(i) * xVal
+          yValues(Arows(i)) += Avals(i) * xVal
           i += 1
         }
         colCounterForA += 1

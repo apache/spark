@@ -55,6 +55,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
+      "spark.ui.port",
+      "spark.blockManager.port",
       "spark.kubernetes.driver.pod.name",
       "spark.kubernetes.executor.podNamePrefix",
       "spark.yarn.jars",
@@ -69,6 +71,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       .remove("spark.driver.host")
       .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
+      .remove("spark.ui.port")
+      .remove("spark.blockManager.port")
       .remove("spark.kubernetes.driver.pod.name")
       .remove("spark.kubernetes.executor.podNamePrefix")
     val newReloadConf = new SparkConf(loadDefaults = true)
@@ -90,7 +94,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     newSparkConf
   }
 
-  def validate() {
+  def validate(): Unit = {
     assert(master != null, "Checkpoint.master is null")
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
@@ -213,7 +217,7 @@ class CheckpointWriter(
       checkpointTime: Time,
       bytes: Array[Byte],
       clearCheckpointDataLater: Boolean) extends Runnable {
-    def run() {
+    def run(): Unit = {
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
       }
@@ -288,7 +292,7 @@ class CheckpointWriter(
     }
   }
 
-  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
+  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean): Unit = {
     try {
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(

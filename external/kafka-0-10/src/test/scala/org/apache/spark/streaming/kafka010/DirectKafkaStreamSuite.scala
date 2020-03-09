@@ -58,13 +58,13 @@ class DirectKafkaStreamSuite
 
   private var kafkaTestUtils: KafkaTestUtils = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       if (kafkaTestUtils != null) {
         kafkaTestUtils.teardown()
@@ -340,7 +340,7 @@ class DirectKafkaStreamSuite
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
     // Send data to Kafka
-    def sendData(data: Seq[Int]) {
+    def sendData(data: Seq[Int]): Unit = {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
     }
@@ -432,7 +432,7 @@ class DirectKafkaStreamSuite
     val committed = new ConcurrentHashMap[TopicPartition, OffsetAndMetadata]()
 
     // Send data to Kafka and wait for it to be received
-    def sendDataAndWaitForReceive(data: Seq[Int]) {
+    def sendDataAndWaitForReceive(data: Seq[Int]): Unit = {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
       eventually(timeout(10.seconds), interval(50.milliseconds)) {

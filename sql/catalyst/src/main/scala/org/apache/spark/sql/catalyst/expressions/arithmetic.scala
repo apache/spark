@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  private val checkOverflow = SQLConf.get.ansiEnabled
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -73,15 +73,17 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
         ${CodeGenerator.javaType(dt)} $originValue = (${CodeGenerator.javaType(dt)})($eval);
         ${ev.value} = (${CodeGenerator.javaType(dt)})(-($originValue));
       """})
-    case _: CalendarIntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
+    case _: CalendarIntervalType =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val method = if (checkOverflow) "negateExact" else "negate"
+      defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
   }
 
-  protected override def nullSafeEval(input: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input.asInstanceOf[CalendarInterval].negate()
-    } else {
-      numeric.negate(input)
-    }
+  protected override def nullSafeEval(input: Any): Any = dataType match {
+    case CalendarIntervalType if checkOverflow =>
+      IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
+    case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case _ => numeric.negate(input)
   }
 
   override def sql: String = s"(- ${child.sql})"
@@ -136,7 +138,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  protected val checkOverflow = SQLConf.get.ansiEnabled
 
   override def dataType: DataType = left.dataType
 
@@ -151,7 +153,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
   // Name of the function for the exact version of this expression in [[Math]].
-  // If the option "spark.sql.failOnIntegralTypeOverflow" is enabled and there is corresponding
+  // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
   def exactMathMethod: Option[String] = None
 
@@ -160,7 +162,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       // Overflow is handled in the CheckOverflow operator
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     case CalendarIntervalType =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -224,16 +227,18 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = "add"
+  override def calendarIntervalMethod: String = if (checkOverflow) "addExact" else "add"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.plus(input1, input2)
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType if checkOverflow =>
+      IntervalUtils.addExact(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case CalendarIntervalType =>
+      IntervalUtils.add(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case _ => numeric.plus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("addExact")
@@ -254,16 +259,18 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = "subtract"
+  override def calendarIntervalMethod: String = if (checkOverflow) "subtractExact" else "subtract"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.minus(input1, input2)
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType if checkOverflow =>
+      IntervalUtils.subtractExact(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case CalendarIntervalType =>
+      IntervalUtils.subtract(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case _ => numeric.minus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
@@ -396,11 +403,18 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+case class IntegralDivide(
+    left: Expression,
+    right: Expression,
+    returnLong: Boolean) extends DivModLike {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right, SQLConf.get.integralDivideReturnLong)
+  }
 
   override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
 
-  override def dataType: DataType = if (SQLConf.get.integralDivideReturnLong) {
+  override def dataType: DataType = if (returnLong) {
     LongType
   } else {
     left.dataType
@@ -409,7 +423,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
   override def decimalToDataTypeCodeGen(decimalResult: String): String = {
-    if (SQLConf.get.integralDivideReturnLong) {
+    if (returnLong) {
       s"$decimalResult.toLong()"
     } else {
       decimalResult
@@ -426,7 +440,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
     val divide = integral.quot _
-    if (SQLConf.get.integralDivideReturnLong) {
+    if (returnLong) {
       val toLong = integral.asInstanceOf[Integral[Any]].toLong _
       (x, y) => {
         val res = divide(x, y)
@@ -444,11 +458,17 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
+object IntegralDivide {
+  def apply(left: Expression, right: Expression): IntegralDivide = {
+    new IntegralDivide(left, right)
+  }
+}
+
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:
-      > SELECT 2 _FUNC_ 1.8;
+      > SELECT 2 % 1.8;
        0.2
       > SELECT MOD(2, 1.8);
        0.2

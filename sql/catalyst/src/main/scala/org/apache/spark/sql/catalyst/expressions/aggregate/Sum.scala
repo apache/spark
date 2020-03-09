@@ -61,7 +61,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val zero = Cast(Literal(0), sumDataType)
+  private lazy val zero = Literal.default(sumDataType)
 
   override lazy val aggBufferAttributes = sum :: Nil
 
@@ -91,7 +91,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   }
 
   override lazy val evaluateExpression: Expression = resultType match {
-    case d: DecimalType => CheckOverflow(sum, d, SQLConf.get.decimalOperationsNullOnOverflow)
+    case d: DecimalType => CheckOverflow(sum, d, !SQLConf.get.ansiEnabled)
     case _ => sum
   }
 

@@ -406,7 +406,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     var latestStoreVersion = 0
 
-    def generateStoreVersions() {
+    def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
         val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)
@@ -586,7 +586,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         query.processAllAvailable()
         require(query.lastProgress != null) // at least one batch processed after start
         val loadedProvidersMethod =
-          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]]('loadedProviders)
+          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
+            Symbol("loadedProviders"))
         val loadedProvidersMap = StateStore invokePrivate loadedProvidersMethod()
         val loadedProviders = loadedProvidersMap.synchronized { loadedProvidersMap.values.toSeq }
         query.stop()
@@ -781,7 +782,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider: HDFSBackedStateStoreProvider,
       version: Long,
       isSnapshot: Boolean): Boolean = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)
@@ -789,7 +790,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   def deleteFilesEarlierThanVersion(provider: HDFSBackedStateStoreProvider, version: Long): Unit = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     for (version <- 0 until version.toInt) {
       for (isSnapshot <- Seq(false, true)) {
@@ -804,7 +805,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     provider: HDFSBackedStateStoreProvider,
     version: Long,
     isSnapshot: Boolean): Unit = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)

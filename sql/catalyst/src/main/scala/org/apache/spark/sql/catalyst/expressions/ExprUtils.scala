@@ -27,34 +27,27 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils {
 
-  def evalSchemaExpr(exp: Expression): StructType = {
-    // Use `DataType.fromDDL` since the type string can be struct<...>.
-    val dataType = exp match {
-      case Literal(s, StringType) =>
-        DataType.fromDDL(s.toString)
-      case e @ SchemaOfCsv(_: Literal, _) =>
-        val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
-        DataType.fromDDL(ddlSchema.toString)
-      case e => throw new AnalysisException(
+  def evalTypeExpr(exp: Expression): DataType = {
+    if (exp.foldable) {
+      exp.eval() match {
+        case s: UTF8String if s != null => DataType.fromDDL(s.toString)
+        case _ => throw new AnalysisException(
+          s"The expression '${exp.sql}' is not a valid schema string.")
+      }
+    } else {
+      throw new AnalysisException(
         "Schema should be specified in DDL format as a string literal or output of " +
-          s"the schema_of_csv function instead of ${e.sql}")
+          s"the schema_of_json/schema_of_csv functions instead of ${exp.sql}")
     }
+  }
 
+  def evalSchemaExpr(exp: Expression): StructType = {
+    val dataType = evalTypeExpr(exp)
     if (!dataType.isInstanceOf[StructType]) {
       throw new AnalysisException(
         s"Schema should be struct type but got ${dataType.sql}.")
     }
     dataType.asInstanceOf[StructType]
-  }
-
-  def evalTypeExpr(exp: Expression): DataType = exp match {
-    case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
-      DataType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(
-      "Schema should be specified in DDL format as a string literal or output of " +
-        s"the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {

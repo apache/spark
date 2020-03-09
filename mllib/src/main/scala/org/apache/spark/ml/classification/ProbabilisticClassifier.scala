@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -90,6 +90,15 @@ abstract class ProbabilisticClassificationModel[
     set(thresholds, value).asInstanceOf[M]
   }
 
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(probabilityCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(probabilityCol), numClasses)
+    }
+    outputSchema
+  }
+
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
@@ -101,7 +110,7 @@ abstract class ProbabilisticClassificationModel[
    * @return transformed dataset
    */
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".transform() called with non-matching numClasses and thresholds.length." +
@@ -113,36 +122,39 @@ abstract class ProbabilisticClassificationModel[
     var outputData = dataset
     var numColsOutput = 0
     if ($(rawPredictionCol).nonEmpty) {
-      val predictRawUDF = udf { (features: Any) =>
+      val predictRawUDF = udf { features: Any =>
         predictRaw(features.asInstanceOf[FeaturesType])
       }
-      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)))
+      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
+        outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
     if ($(probabilityCol).nonEmpty) {
-      val probUDF = if ($(rawPredictionCol).nonEmpty) {
+      val probCol = if ($(rawPredictionCol).nonEmpty) {
         udf(raw2probability _).apply(col($(rawPredictionCol)))
       } else {
-        val probabilityUDF = udf { (features: Any) =>
+        val probabilityUDF = udf { features: Any =>
           predictProbability(features.asInstanceOf[FeaturesType])
         }
         probabilityUDF(col($(featuresCol)))
       }
-      outputData = outputData.withColumn($(probabilityCol), probUDF)
+      outputData = outputData.withColumn($(probabilityCol), probCol,
+        outputSchema($(probabilityCol)).metadata)
       numColsOutput += 1
     }
     if ($(predictionCol).nonEmpty) {
-      val predUDF = if ($(rawPredictionCol).nonEmpty) {
+      val predCol = if ($(rawPredictionCol).nonEmpty) {
         udf(raw2prediction _).apply(col($(rawPredictionCol)))
       } else if ($(probabilityCol).nonEmpty) {
         udf(probability2prediction _).apply(col($(probabilityCol)))
       } else {
-        val predictUDF = udf { (features: Any) =>
+        val predictUDF = udf { features: Any =>
           predict(features.asInstanceOf[FeaturesType])
         }
         predictUDF(col($(featuresCol)))
       }
-      outputData = outputData.withColumn($(predictionCol), predUDF)
+      outputData = outputData.withColumn($(predictionCol), predCol,
+        outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }
 
@@ -188,7 +200,8 @@ abstract class ProbabilisticClassificationModel[
    *
    * @return Estimated class conditional probabilities
    */
-  protected def predictProbability(features: FeaturesType): Vector = {
+  @Since("3.0.0")
+  def predictProbability(features: FeaturesType): Vector = {
     val rawPreds = predictRaw(features)
     raw2probabilityInPlace(rawPreds)
   }

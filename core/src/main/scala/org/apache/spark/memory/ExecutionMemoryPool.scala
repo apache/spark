@@ -91,7 +91,7 @@ private[memory] class ExecutionMemoryPool(
   private[memory] def acquireMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      maybeGrowPool: Long => Unit = (additionalSpaceNeeded: Long) => Unit,
+      maybeGrowPool: Long => Unit = (additionalSpaceNeeded: Long) => (),
       computeMaxPoolSize: () => Long = () => poolSize): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 

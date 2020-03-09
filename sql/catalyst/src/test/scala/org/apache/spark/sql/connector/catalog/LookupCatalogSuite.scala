@@ -24,18 +24,23 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private case class DummyCatalogPlugin(override val name: String) extends CatalogPlugin {
 
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = Unit
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = ()
 }
 
 class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
   import CatalystSqlParser._
 
-  private val catalogs = Seq("prod", "test").map(x => x -> DummyCatalogPlugin(x)).toMap
+  private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+  private val catalogs =
+    Seq("prod", "test", globalTempDB).map(x => x -> DummyCatalogPlugin(x)).toMap
+  private val sessionCatalog = FakeV2SessionCatalog
 
   override val catalogManager: CatalogManager = {
     val manager = mock(classOf[CatalogManager])
@@ -43,26 +48,30 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       val name = invocation.getArgument[String](0)
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
-    when(manager.defaultCatalog).thenReturn(None)
+    when(manager.currentCatalog).thenReturn(sessionCatalog)
+    when(manager.v2SessionCatalog).thenReturn(sessionCatalog)
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     manager
   }
 
-  test("catalog object identifier") {
+  test("catalog and identifier") {
     Seq(
-      ("tbl", None, Seq.empty, "tbl"),
-      ("db.tbl", None, Seq("db"), "tbl"),
-      ("prod.func", catalogs.get("prod"), Seq.empty, "func"),
-      ("ns1.ns2.tbl", None, Seq("ns1", "ns2"), "tbl"),
-      ("prod.db.tbl", catalogs.get("prod"), Seq("db"), "tbl"),
-      ("test.db.tbl", catalogs.get("test"), Seq("db"), "tbl"),
-      ("test.ns1.ns2.ns3.tbl", catalogs.get("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
-      ("`db.tbl`", None, Seq.empty, "db.tbl"),
-      ("parquet.`file:/tmp/db.tbl`", None, Seq("parquet"), "file:/tmp/db.tbl"),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", None,
+      ("tbl", sessionCatalog, Seq.empty, "tbl"),
+      ("db.tbl", sessionCatalog, Seq("db"), "tbl"),
+      (s"$globalTempDB.tbl", sessionCatalog, Seq(globalTempDB), "tbl"),
+      (s"$globalTempDB.ns1.ns2.tbl", sessionCatalog, Seq(globalTempDB, "ns1", "ns2"), "tbl"),
+      ("prod.func", catalogs("prod"), Seq.empty, "func"),
+      ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
+      ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
+      ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
+      ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
+      ("`db.tbl`", sessionCatalog, Seq.empty, "db.tbl"),
+      ("parquet.`file:/tmp/db.tbl`", sessionCatalog, Seq("parquet"), "file:/tmp/db.tbl"),
+      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", sessionCatalog,
         Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
-          case CatalogObjectIdentifier(catalog, ident) =>
+          case CatalogAndIdentifier(catalog, ident) =>
             catalog shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
         }
@@ -94,34 +103,6 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       }
     }
   }
-
-  test("temporary table identifier") {
-    Seq(
-      ("tbl", TableIdentifier("tbl")),
-      ("db.tbl", TableIdentifier("tbl", Some("db"))),
-      ("`db.tbl`", TableIdentifier("db.tbl")),
-      ("parquet.`file:/tmp/db.tbl`", TableIdentifier("file:/tmp/db.tbl", Some("parquet"))),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
-          TableIdentifier("s3://buck/tmp/abc.json", Some("org.apache.spark.sql.json")))).foreach {
-        case (sqlIdent: String, expectedTableIdent: TableIdentifier) =>
-          // when there is no catalog and the namespace has one part, the rule should match
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(ident) =>
-              ident shouldEqual expectedTableIdent
-          }
-    }
-
-    Seq("prod.func", "prod.db.tbl", "test.db.tbl", "ns1.ns2.tbl", "test.ns1.ns2.ns3.tbl")
-        .foreach { sqlIdent =>
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryViewIdentifier should not match when " +
-                  "the catalog is set or the namespace has multiple parts")
-            case _ =>
-              // expected
-          }
-    }
-  }
 }
 
 class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog with Inside {
@@ -135,26 +116,27 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
       val name = invocation.getArgument[String](0)
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
-    when(manager.defaultCatalog).thenReturn(catalogs.get("prod"))
+    when(manager.currentCatalog).thenReturn(catalogs("prod"))
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     manager
   }
 
-  test("catalog object identifier") {
+  test("catalog and identifier") {
     Seq(
-      ("tbl", catalogs.get("prod"), Seq.empty, "tbl"),
-      ("db.tbl", catalogs.get("prod"), Seq("db"), "tbl"),
-      ("prod.func", catalogs.get("prod"), Seq.empty, "func"),
-      ("ns1.ns2.tbl", catalogs.get("prod"), Seq("ns1", "ns2"), "tbl"),
-      ("prod.db.tbl", catalogs.get("prod"), Seq("db"), "tbl"),
-      ("test.db.tbl", catalogs.get("test"), Seq("db"), "tbl"),
-      ("test.ns1.ns2.ns3.tbl", catalogs.get("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
-      ("`db.tbl`", catalogs.get("prod"), Seq.empty, "db.tbl"),
-      ("parquet.`file:/tmp/db.tbl`", catalogs.get("prod"), Seq("parquet"), "file:/tmp/db.tbl"),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", catalogs.get("prod"),
+      ("tbl", catalogs("prod"), Seq.empty, "tbl"),
+      ("db.tbl", catalogs("prod"), Seq("db"), "tbl"),
+      ("prod.func", catalogs("prod"), Seq.empty, "func"),
+      ("ns1.ns2.tbl", catalogs("prod"), Seq("ns1", "ns2"), "tbl"),
+      ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
+      ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
+      ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
+      ("`db.tbl`", catalogs("prod"), Seq.empty, "db.tbl"),
+      ("parquet.`file:/tmp/db.tbl`", catalogs("prod"), Seq("parquet"), "file:/tmp/db.tbl"),
+      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", catalogs("prod"),
           Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
-          case CatalogObjectIdentifier(catalog, ident) =>
+          case CatalogAndIdentifier(catalog, ident) =>
             catalog shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
         }
@@ -177,33 +159,5 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
         case _ =>
       }
     }
-  }
-
-  test("temporary table identifier") {
-    Seq(
-      ("tbl", TableIdentifier("tbl")),
-      ("db.tbl", TableIdentifier("tbl", Some("db"))),
-      ("`db.tbl`", TableIdentifier("db.tbl")),
-      ("parquet.`file:/tmp/db.tbl`", TableIdentifier("file:/tmp/db.tbl", Some("parquet"))),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
-          TableIdentifier("s3://buck/tmp/abc.json", Some("org.apache.spark.sql.json")))).foreach {
-      case (sqlIdent: String, expectedTableIdent: TableIdentifier) =>
-        // when there is no catalog and the namespace has one part, the rule should match
-        inside(parseMultipartIdentifier(sqlIdent)) {
-          case AsTemporaryViewIdentifier(ident) =>
-            ident shouldEqual expectedTableIdent
-        }
-    }
-
-    Seq("prod.func", "prod.db.tbl", "test.db.tbl", "ns1.ns2.tbl", "test.ns1.ns2.ns3.tbl")
-        .foreach { sqlIdent =>
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryViewIdentifier should not match when " +
-                  "the catalog is set or the namespace has multiple parts")
-            case _ =>
-            // expected
-          }
-        }
   }
 }

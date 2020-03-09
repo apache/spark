@@ -20,7 +20,7 @@ SELECT key, count(*) FROM src GROUP BY key;
 
 DESC FORMATTED list_bucketing_table PARTITION (part = '1');
 
--- create a table skewed on a key which doesnt exist in the data
+-- create a table skewed on a key which doesn't exist in the data
 CREATE TABLE list_bucketing_table2 (key STRING, value STRING) 
 PARTITIONED BY (part STRING) 
 SKEWED BY (key) ON ("abc")

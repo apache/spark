@@ -29,7 +29,7 @@ import org.apache.spark.annotation.{Evolving, Stable}
  * @since 1.3.0
  */
 @Stable
-abstract class Filter {
+sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
    * @since 2.1.0
@@ -221,6 +221,8 @@ case class StringContains(attribute: String, value: String) extends Filter {
 
 /**
  * A filter that always evaluates to `true`.
+ *
+ * @since 3.0.0
  */
 @Evolving
 case class AlwaysTrue() extends Filter {
@@ -233,6 +235,8 @@ object AlwaysTrue extends AlwaysTrue {
 
 /**
  * A filter that always evaluates to `false`.
+ *
+ * @since 3.0.0
  */
 @Evolving
 case class AlwaysFalse() extends Filter {

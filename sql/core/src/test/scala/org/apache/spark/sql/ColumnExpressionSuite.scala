@@ -537,12 +537,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("sqrt") {
     checkAnswer(
-      testData.select(sqrt('key)).orderBy('key.asc),
+      testData.select(sqrt($"key")).orderBy($"key".asc),
       (1 to 100).map(n => Row(math.sqrt(n)))
     )
 
     checkAnswer(
-      testData.select(sqrt('value), 'key).orderBy('key.asc, 'value.asc),
+      testData.select(sqrt($"value"), $"key").orderBy($"key".asc, $"value".asc),
       (1 to 100).map(n => Row(math.sqrt(n), n))
     )
 
@@ -554,12 +554,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("upper") {
     checkAnswer(
-      lowerCaseData.select(upper('l)),
+      lowerCaseData.select(upper($"l")),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(upper('value), 'key),
+      testData.select(upper($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -575,12 +575,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("lower") {
     checkAnswer(
-      upperCaseData.select(lower('L)),
+      upperCaseData.select(lower($"L")),
       ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(lower('value), 'key),
+      testData.select(lower($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -753,8 +753,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("columns can be compared") {
-    assert('key.desc == 'key.desc)
-    assert('key.desc != 'key.asc)
+    assert($"key".desc == $"key".desc)
+    assert($"key".desc != $"key".asc)
   }
 
   test("alias with metadata") {
@@ -817,7 +817,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("randn") {
-    val randCol = testData.select('key, randn(5L).as("rand"))
+    val randCol = testData.select($"key", randn(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>

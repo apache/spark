@@ -58,7 +58,7 @@ class RPackageUtilsSuite
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     // scalastyle:off println
-    override def println(line: String) {
+    override def println(line: String): Unit = {
     // scalastyle:on println
       lineBuffer += line
     }

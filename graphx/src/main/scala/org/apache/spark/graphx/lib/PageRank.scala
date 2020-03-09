@@ -79,10 +79,46 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int,
-    resetProb: Double = 0.15): Graph[Double, Double] =
+  def run[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] =
   {
-    runWithOptions(graph, numIter, resetProb)
+    runWithOptions(graph, numIter, resetProb, None)
+  }
+
+  /**
+   * Run an update pass of PageRank algorithm. Update the values of every node in the
+   * pageRank
+   *
+   * @param rankGraph the current PageRank
+   * @param personalized True if personalized pageRank
+   * @param resetProb the random reset probability (alpha)
+   * @param src the source vertex for a Personalized Page Rank
+   *
+   * @return the graph containing with each vertex containing the PageRank and each edge
+   *         containing the normalized weight after a single update step.
+   *
+   */
+  private def runUpdate(rankGraph: Graph[Double, Double], personalized: Boolean,
+                resetProb: Double, src: VertexId): Graph[Double, Double] = {
+
+    def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
+    // Compute the outgoing rank contributions of each vertex, perform local preaggregation, and
+    // do the final aggregation at the receiving vertices. Requires a shuffle for aggregation.
+    val rankUpdates = rankGraph.aggregateMessages[Double](
+      ctx => ctx.sendToDst(ctx.srcAttr * ctx.attr), _ + _, TripletFields.Src)
+
+    // Apply the final rank updates to get the new ranks, using join to preserve ranks of vertices
+    // that didn't receive a message. Requires a shuffle for broadcasting updated ranks to the
+    // edge partitions.
+    val rPrb = if (personalized) {
+      (src: VertexId, id: VertexId) => resetProb * delta(src, id)
+    } else {
+      (src: VertexId, id: VertexId) => resetProb
+    }
+
+    rankGraph.outerJoinVertices(rankUpdates) {
+      (id, oldRank, msgSumOpt) => rPrb(src, id) + (1.0 - resetProb) * msgSumOpt.getOrElse(0.0)
+    }
   }
 
   /**
@@ -128,37 +164,77 @@ object PageRank extends Logging {
         if (!(id != src && personalized)) 1.0 else 0.0
       }
 
-    def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
-
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
     while (iteration < numIter) {
       rankGraph.cache()
-
-      // Compute the outgoing rank contributions of each vertex, perform local preaggregation, and
-      // do the final aggregation at the receiving vertices. Requires a shuffle for aggregation.
-      val rankUpdates = rankGraph.aggregateMessages[Double](
-        ctx => ctx.sendToDst(ctx.srcAttr * ctx.attr), _ + _, TripletFields.Src)
-
-      // Apply the final rank updates to get the new ranks, using join to preserve ranks of vertices
-      // that didn't receive a message. Requires a shuffle for broadcasting updated ranks to the
-      // edge partitions.
       prevRankGraph = rankGraph
-      val rPrb = if (personalized) {
-        (src: VertexId, id: VertexId) => resetProb * delta(src, id)
-      } else {
-        (src: VertexId, id: VertexId) => resetProb
-      }
 
-      rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
-        (id, oldRank, msgSumOpt) => rPrb(src, id) + (1.0 - resetProb) * msgSumOpt.getOrElse(0.0)
-      }.cache()
-
+      rankGraph = runUpdate(rankGraph, personalized, resetProb, src)
+      rankGraph.cache()
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       logInfo(s"PageRank finished iteration $iteration.")
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
+      iteration += 1
+    }
 
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    normalizeRankSum(rankGraph, personalized)
+  }
+
+  /**
+   * Run PageRank for a fixed number of iterations returning a graph
+   * with vertex attributes containing the PageRank and edge
+   * attributes the normalized edge weight.
+   *
+   * @tparam VD the original vertex attribute (not used)
+   * @tparam ED the original edge attribute (not used)
+   *
+   * @param graph the graph on which to compute PageRank
+   * @param numIter the number of iterations of PageRank to run
+   * @param resetProb the random reset probability (alpha)
+   * @param srcId the source vertex for a Personalized Page Rank (optional)
+   * @param preRankGraph PageRank graph from which to keep iterating
+   *
+   * @return the graph containing with each vertex containing the PageRank and each edge
+   *         containing the normalized weight.
+   *
+   */
+  def runWithOptionsWithPreviousPageRank[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double, srcId: Option[VertexId],
+      preRankGraph: Graph[Double, Double]): Graph[Double, Double] = {
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+    val graphVertices = graph.numVertices
+    val prePageRankVertices = preRankGraph.numVertices
+    require(graphVertices == prePageRankVertices, s"Graph and previous pageRankGraph" +
+      s" must have the same number of vertices but got ${graphVertices} and ${prePageRankVertices}")
+
+    val personalized = srcId.isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
+
+    // Initialize the PageRank graph with each edge attribute having
+    // weight 1/outDegree and each vertex with attribute 1.0.
+    // When running personalized pagerank, only the source vertex
+    // has an attribute 1.0. All others are set to 0.
+    var rankGraph: Graph[Double, Double] = preRankGraph
+
+    var iteration = 0
+    var prevRankGraph: Graph[Double, Double] = null
+
+    while (iteration < numIter) {
+      rankGraph.cache()
+      prevRankGraph = rankGraph
+
+      rankGraph = runUpdate(rankGraph, personalized, resetProb, src)
+      rankGraph.cache()
+      rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
+      logInfo(s"PageRank finished iteration $iteration.")
+      prevRankGraph.vertices.unpersist()
+      prevRankGraph.edges.unpersist()
       iteration += 1
     }
 

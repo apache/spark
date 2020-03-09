@@ -123,7 +123,8 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path2")))
+      assert(getPathOption("src") ==
+        Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
     }
 
     withTable("src", "src2") {

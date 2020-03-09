@@ -58,7 +58,7 @@ trait PMMLExportable {
   @Since("1.4.0")
   def toPMML(sc: SparkContext, path: String): Unit = {
     val pmml = toPMML()
-    sc.parallelize(Array(pmml), 1).saveAsTextFile(path)
+    sc.parallelize(Seq(pmml), 1).saveAsTextFile(path)
   }
 
   /**

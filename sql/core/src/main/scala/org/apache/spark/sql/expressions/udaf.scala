@@ -27,8 +27,12 @@ import org.apache.spark.sql.types._
  * The base class for implementing user-defined aggregate functions (UDAF).
  *
  * @since 1.5.0
+ * @deprecated UserDefinedAggregateFunction is deprecated.
+ * Aggregator[IN, BUF, OUT] should now be registered as a UDF via the functions.udaf(agg) method.
  */
 @Stable
+@deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+  " via the functions.udaf(agg) method.", "3.0.0")
 abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**

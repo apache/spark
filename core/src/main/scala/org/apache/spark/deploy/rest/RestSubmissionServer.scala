@@ -317,8 +317,7 @@ private class ErrorServlet extends RestServlet {
           versionMismatch = true
           s"Unknown protocol version '$unknownVersion'."
         case _ =>
-          // never reached
-          s"Malformed path $path."
+          "Malformed path."
       }
     msg += s" Please submit requests through http://[host]:[port]/$serverVersion/submissions/..."
     val error = handleError(msg)

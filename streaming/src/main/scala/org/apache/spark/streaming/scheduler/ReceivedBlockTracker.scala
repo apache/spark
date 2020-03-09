@@ -182,7 +182,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Stop the block tracker. */
-  def stop() {
+  def stop(): Unit = {
     writeAheadLogOption.foreach { _.close() }
   }
 
@@ -192,7 +192,7 @@ private[streaming] class ReceivedBlockTracker(
    */
   private def recoverPastEvents(): Unit = synchronized {
     // Insert the recovered block information
-    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
+    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo): Unit = {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
       receivedBlockInfo.setBlockIdInvalid()
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
@@ -200,7 +200,7 @@ private[streaming] class ReceivedBlockTracker(
 
     // Insert the recovered block-to-batch allocations and removes them from queue of
     // received blocks.
-    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
+    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks): Unit = {
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       allocatedBlocks.streamIdToAllocatedBlocks.foreach {
@@ -212,7 +212,7 @@ private[streaming] class ReceivedBlockTracker(
     }
 
     // Cleanup the batch allocations
-    def cleanupBatches(batchTimes: Seq[Time]) {
+    def cleanupBatches(batchTimes: Seq[Time]): Unit = {
       logTrace(s"Recovery: Cleaning up batches $batchTimes")
       timeToAllocatedBlocks --= batchTimes
     }

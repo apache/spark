@@ -267,21 +267,24 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the calendar interval type value for rowId. If the slot for rowId is null, it should
    * return null.
    *
-   * In Spark, calendar interval type value is basically an integer value representing the number of
-   * months in this interval, and a long value representing the number of microseconds in this
-   * interval. An interval type vector is the same as a struct type vector with 2 fields: `months`
-   * and `microseconds`.
+   * In Spark, calendar interval type value is basically two integer values representing the number
+   * of months and days in this interval, and a long value representing the number of microseconds
+   * in this interval. An interval type vector is the same as a struct type vector with 3 fields:
+   * `months`, `days` and `microseconds`.
    *
-   * To support interval type, implementations must implement {@link #getChild(int)} and define 2
+   * To support interval type, implementations must implement {@link #getChild(int)} and define 3
    * child vectors: the first child vector is an int type vector, containing all the month values of
-   * all the interval values in this vector. The second child vector is a long type vector,
-   * containing all the microsecond values of all the interval values in this vector.
+   * all the interval values in this vector. The second child vector is an int type vector,
+   * containing all the day values of all the interval values in this vector. The third child vector
+   * is a long type vector, containing all the microsecond values of all the interval values in this
+   * vector.
    */
   public final CalendarInterval getInterval(int rowId) {
     if (isNullAt(rowId)) return null;
     final int months = getChild(0).getInt(rowId);
-    final long microseconds = getChild(1).getLong(rowId);
-    return new CalendarInterval(months, microseconds);
+    final int days = getChild(1).getInt(rowId);
+    final long microseconds = getChild(2).getLong(rowId);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   /**

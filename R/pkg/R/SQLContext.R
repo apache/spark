@@ -148,19 +148,7 @@ getDefaultSqlSource <- function() {
 }
 
 writeToFileInArrow <- function(fileName, rdf, numPartitions) {
-  requireNamespace1 <- requireNamespace
-
-  # R API in Arrow is not yet released in CRAN. CRAN requires to add the
-  # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
-  # or not. Therefore, it works around by avoiding direct requireNamespace.
-  # Currently, as of Arrow 0.12.0, it can be installed by install_github. See ARROW-3204.
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
-    RecordBatchStreamWriter <- get(
-      "RecordBatchStreamWriter", envir = asNamespace("arrow"), inherits = FALSE)
-    FileOutputStream <- get(
-      "FileOutputStream", envir = asNamespace("arrow"), inherits = FALSE)
-
+  if (requireNamespace("arrow", quietly = TRUE)) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
@@ -176,11 +164,11 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     stream_writer <- NULL
     tryCatch({
       for (rdf_slice in rdf_slices) {
-        batch <- record_batch(rdf_slice)
+        batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- FileOutputStream(fileName)
+          stream <- arrow::FileOutputStream$create(fileName)
           schema <- batch$schema
-          stream_writer <- RecordBatchStreamWriter(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter$create(stream, schema)
         }
 
         stream_writer$write_batch(batch)
@@ -209,7 +197,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(1:length(firstRow), function(x) {
+      names <- lapply(seq_len(length(firstRow)), function(x) {
         paste0("_", as.character(x))
       })
     }
@@ -225,7 +213,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     })
 
     types <- lapply(firstRow, infer_type)
-    fields <- lapply(1:length(firstRow), function(i) {
+    fields <- lapply(seq_len(length(firstRow)), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)
@@ -568,7 +556,6 @@ tableToDF <- function(tableName) {
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
-#' @name read.df
 #' @note read.df since 1.4.0
 read.df <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
@@ -699,7 +686,6 @@ read.jdbc <- function(url, tableName,
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
-#' @name read.stream
 #' @note read.stream since 2.2.0
 #' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {

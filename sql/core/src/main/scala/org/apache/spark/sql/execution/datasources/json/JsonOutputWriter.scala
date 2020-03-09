@@ -44,20 +44,18 @@ class JsonOutputWriter(
       " which can be read back by Spark only if multiLine is enabled.")
   }
 
-  private var jacksonGenerator: Option[JacksonGenerator] = None
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
+
+  // create the Generator without separator inserted between 2 records
+  private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
 
   override def write(row: InternalRow): Unit = {
-    val gen = jacksonGenerator.getOrElse {
-      val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
-      // create the Generator without separator inserted between 2 records
-      val newGen = new JacksonGenerator(dataSchema, os, options)
-      jacksonGenerator = Some(newGen)
-      newGen
-    }
-
     gen.write(row)
     gen.writeLineEnding()
   }
 
-  override def close(): Unit = jacksonGenerator.foreach(_.close())
+  override def close(): Unit = {
+    gen.close()
+    writer.close()
+  }
 }

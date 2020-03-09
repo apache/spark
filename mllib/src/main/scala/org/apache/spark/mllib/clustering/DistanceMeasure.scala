@@ -76,7 +76,7 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double
 
   /**
@@ -85,18 +85,18 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    * @param sum the `sum` for a cluster to be updated
    */
   def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
-    axpy(1.0, point.vector, sum)
+    axpy(point.weight, point.vector, sum)
   }
 
   /**
-   * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
+   * Returns a centroid for a cluster given its `sum` vector and the weightSum of points.
    *
    * @param sum   the `sum` for a cluster
-   * @param count the number of points in the cluster
+   * @param weightSum the weightSum of points in the cluster
    * @return the centroid of the cluster
    */
-  def centroid(sum: Vector, count: Long): VectorWithNorm = {
-    scal(1.0 / count, sum)
+  def centroid(sum: Vector, weightSum: Double): VectorWithNorm = {
+    scal(1.0 / weightSum, sum)
     new VectorWithNorm(sum)
   }
 
@@ -205,9 +205,9 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   override def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double = {
-    math.max(pointsSquaredNorm - numberOfPoints * centroid.norm * centroid.norm, 0.0)
+    math.max(pointsSquaredNorm - weightSum * centroid.norm * centroid.norm, 0.0)
   }
 
   /**
@@ -251,18 +251,18 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    */
   override def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
     assert(point.norm > 0, "Cosine distance is not defined for zero-length vectors.")
-    axpy(1.0 / point.norm, point.vector, sum)
+    axpy(point.weight / point.norm, point.vector, sum)
   }
 
   /**
    * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
    *
    * @param sum   the `sum` for a cluster
-   * @param count the number of points in the cluster
+   * @param weightSum the sum of weight in the cluster
    * @return the centroid of the cluster
    */
-  override def centroid(sum: Vector, count: Long): VectorWithNorm = {
-    scal(1.0 / count, sum)
+  override def centroid(sum: Vector, weightSum: Double): VectorWithNorm = {
+    scal(1.0 / weightSum, sum)
     val norm = Vectors.norm(sum, 2)
     scal(1.0 / norm, sum)
     new VectorWithNorm(sum, 1)
@@ -274,10 +274,10 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   override def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double = {
     val costVector = pointsSum.vector.copy
-    math.max(numberOfPoints - dot(centroid.vector, costVector) / centroid.norm, 0.0)
+    math.max(weightSum - dot(centroid.vector, costVector) / centroid.norm, 0.0)
   }
 
   /**

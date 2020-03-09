@@ -34,10 +34,11 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ThreadUtils
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
@@ -86,7 +87,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(1)
@@ -119,7 +120,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 1))
@@ -146,7 +147,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
@@ -173,7 +174,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("Bug: SPARK-10251") {
     val ser = new KryoSerializer(conf.clone.set(KRYO_REGISTRATION_REQUIRED, true))
       .newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 3))
@@ -202,7 +203,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
       assert(ser.serialize(t).limit() < 200)
@@ -238,7 +239,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("custom registrator") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 
@@ -274,19 +275,19 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with parallelize for specialized tuples") {
-    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).count === 3)
+    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).count === 3)
   }
 
   test("kryo with parallelize for primitive arrays") {
-    assert (sc.parallelize( Array(1, 2, 3) ).count === 3)
+    assert(sc.parallelize(Array(1, 2, 3)).count === 3)
   }
 
   test("kryo with collect for specialized tuples") {
-    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === ((1, 11)))
+    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).collect().head === ((1, 11)))
   }
 
   test("kryo with SerializableHyperLogLog") {
-    assert(sc.parallelize( Array(1, 2, 3, 2, 3, 3, 2, 3, 1) ).countApproxDistinct(0.01) === 3)
+    assert(sc.parallelize(Array(1, 2, 3, 2, 3, 3, 2, 3, 1)).countApproxDistinct(0.01) === 3)
   }
 
   test("kryo with reduce") {
@@ -350,8 +351,31 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val denseBlockSizes = new Array[Long](5000)
     val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
+    var mapTaskId = 0
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
-      ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
+      mapTaskId += 1
+      ser.serialize(HighlyCompressedMapStatus(
+        BlockManagerId("exec-1", "host", 1234), blockSizes, mapTaskId))
+    }
+  }
+
+  test("registration of TaskCommitMessage") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    // HadoopMapReduceCommitProtocol.commitTask() returns a TaskCommitMessage containing a complex
+    // structure.
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val addedAbsPathFiles = Map("test1" -> "test1", "test2" -> "test2")
+    val partitionPaths = Set("test3")
+
+    val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles -> partitionPaths)
+    val taskCommitMessage2 = new TaskCommitMessage(Map.empty -> Set.empty)
+    Seq(taskCommitMessage1, taskCommitMessage2).foreach { taskCommitMessage =>
+      val obj1 = ser.deserialize[TaskCommitMessage](ser.serialize(taskCommitMessage)).obj
+      val obj2 = taskCommitMessage.obj
+      assert(obj1 == obj2)
     }
   }
 
@@ -460,7 +484,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
     val tests = mutable.ListBuffer[Future[Boolean]]()
 
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       tests += Future {
         val serializerInstance = ser.newInstance()
         serializerInstance.deserialize[T](serializerInstance.serialize(t)) === t
@@ -579,7 +603,7 @@ object KryoTest {
   }
 
   class MyRegistrator extends KryoRegistrator {
-    override def registerClasses(k: Kryo) {
+    override def registerClasses(k: Kryo): Unit = {
       k.register(classOf[CaseClass])
       k.register(classOf[ClassWithNoArgConstructor])
       k.register(classOf[ClassWithoutNoArgConstructor])
@@ -588,7 +612,7 @@ object KryoTest {
   }
 
   class RegistratorWithoutAutoReset extends KryoRegistrator {
-    override def registerClasses(k: Kryo) {
+    override def registerClasses(k: Kryo): Unit = {
       k.setAutoReset(false)
     }
   }

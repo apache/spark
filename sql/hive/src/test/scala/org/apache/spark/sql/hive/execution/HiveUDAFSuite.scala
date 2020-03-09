@@ -29,12 +29,14 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+class HiveUDAFSuite extends QueryTest
+  with TestHiveSingleton with SQLTestUtils with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
@@ -63,7 +65,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("built-in Hive UDAF") {
     val df = sql("SELECT key % 2, hive_max(key) FROM t GROUP BY key % 2")
 
-    val aggs = df.queryExecution.executedPlan.collect {
+    val aggs = collect(df.queryExecution.executedPlan) {
       case agg: ObjectHashAggregateExec => agg
     }
 
@@ -80,7 +82,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("customized Hive UDAF") {
     val df = sql("SELECT key % 2, mock(value) FROM t GROUP BY key % 2")
 
-    val aggs = df.queryExecution.executedPlan.collect {
+    val aggs = collect(df.queryExecution.executedPlan) {
       case agg: ObjectHashAggregateExec => agg
     }
 
@@ -99,7 +101,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       spark.range(100).createTempView("v")
       val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
-      val aggs = df.queryExecution.executedPlan.collect {
+      val aggs = collect(df.queryExecution.executedPlan) {
         case agg: ObjectHashAggregateExec => agg
       }
 

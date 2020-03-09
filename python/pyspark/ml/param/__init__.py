@@ -452,7 +452,7 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
-    def _clear(self, param):
+    def clear(self, param):
         """
         Clears a param from the param map if it has been explicitly set.
         """
@@ -484,8 +484,16 @@ class Params(Identifiable):
         :return: the target instance with param values copied
         """
         paramMap = self._paramMap.copy()
-        if extra is not None:
-            paramMap.update(extra)
+        if isinstance(extra, dict):
+            for param, value in extra.items():
+                if isinstance(param, Param):
+                    paramMap[param] = value
+                else:
+                    raise TypeError("Expecting a valid instance of Param, but received: {}"
+                                    .format(param))
+        elif extra is not None:
+            raise TypeError("Expecting a dict, but received an object of type {}."
+                            .format(type(extra)))
         for param in self.params:
             # copy default params
             if param in self._defaultParamMap and to.hasParam(param.name):

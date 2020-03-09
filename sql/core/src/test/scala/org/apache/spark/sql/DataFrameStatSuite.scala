@@ -443,9 +443,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(sketch4.confidence() === 0.99 +- 5e-3)
 
     intercept[IllegalArgumentException] {
-      df.select('id cast DoubleType as 'id)
+      df.select($"id" cast DoubleType as "id")
         .stat
-        .countMinSketch('id, depth = 10, width = 20, seed = 42)
+        .countMinSketch($"id", depth = 10, width = 20, seed = 42)
     }
   }
 

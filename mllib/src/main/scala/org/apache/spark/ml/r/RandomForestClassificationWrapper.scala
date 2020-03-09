@@ -79,7 +79,8 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       subsamplingRate: Double,
       maxMemoryInMB: Int,
       cacheNodeIds: Boolean,
-      handleInvalid: String): RandomForestClassifierWrapper = {
+      handleInvalid: String,
+      bootstrap: Boolean): RandomForestClassifierWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -107,6 +108,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+      .setBootstrap(bootstrap)
     if (seed != null && seed.length > 0) rfc.setSeed(seed.toLong)
 
     val idxToStr = new IndexToString()

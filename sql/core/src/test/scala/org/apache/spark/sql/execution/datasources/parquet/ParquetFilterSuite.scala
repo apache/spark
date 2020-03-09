@@ -33,9 +33,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFilters
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -1391,6 +1390,27 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-30826: case insensitivity of StringStartsWith attribute") {
+    import testImplicits._
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t1") {
+        withTempPath { dir =>
+          val path = dir.toURI.toString
+          Seq("42").toDF("COL").write.parquet(path)
+          spark.sql(
+            s"""
+               |CREATE TABLE t1 (col STRING)
+               |USING parquet
+               |OPTIONS (path '$path')
+           """.stripMargin)
+          checkAnswer(
+            spark.sql("SELECT * FROM t1 WHERE col LIKE '4%'"),
+            Row("42"))
+        }
+      }
+    }
+  }
 }
 
 class ParquetV1FilterSuite extends ParquetFilterSuite {
@@ -1484,12 +1504,10 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
-        DataSourceV2Relation(parquetTable: ParquetTable, _, options)) =>
+            DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
-          val scanBuilder = parquetTable.newScanBuilder(options)
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
-          scanBuilder.pushFilters(sourceFilters)
-          val pushedFilters = scanBuilder.pushedFilters()
+          val pushedFilters = scan.pushedFilters
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
           val parquetFilters = createParquetFilters(schema)

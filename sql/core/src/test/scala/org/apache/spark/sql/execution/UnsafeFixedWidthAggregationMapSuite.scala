@@ -57,7 +57,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
   private var taskContext: TaskContext = null
 
-  def testWithMemoryLeakDetection(name: String)(f: => Unit) {
+  def testWithMemoryLeakDetection(name: String)(f: => Unit): Unit = {
     def cleanup(): Unit = {
       if (taskMemoryManager != null) {
         assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)

@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.language.existentials
+
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
   extends Partition with Serializable
@@ -47,36 +52,86 @@ class DataSourceRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val inputPartition = castPartition(split).inputPartition
-    val reader: PartitionReader[_] = if (columnarReads) {
-      partitionReaderFactory.createColumnarReader(inputPartition)
+    val (iter, reader) = if (columnarReads) {
+      val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
+      val iter = new MetricsBatchIterator(new PartitionIterator[ColumnarBatch](batchReader))
+      (iter, batchReader)
     } else {
-      partitionReaderFactory.createReader(inputPartition)
+      val rowReader = partitionReaderFactory.createReader(inputPartition)
+      val iter = new MetricsRowIterator(new PartitionIterator[InternalRow](rowReader))
+      (iter, rowReader)
     }
-
     context.addTaskCompletionListener[Unit](_ => reader.close())
-    val iter = new Iterator[Any] {
-      private[this] var valuePrepared = false
-
-      override def hasNext: Boolean = {
-        if (!valuePrepared) {
-          valuePrepared = reader.next()
-        }
-        valuePrepared
-      }
-
-      override def next(): Any = {
-        if (!hasNext) {
-          throw new java.util.NoSuchElementException("End of stream")
-        }
-        valuePrepared = false
-        reader.get()
-      }
-    }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
     new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.preferredLocations()
+  }
+}
+
+private class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[T] {
+  private[this] var valuePrepared = false
+
+  override def hasNext: Boolean = {
+    if (!valuePrepared) {
+      valuePrepared = reader.next()
+    }
+    valuePrepared
+  }
+
+  override def next(): T = {
+    if (!hasNext) {
+      throw new java.util.NoSuchElementException("End of stream")
+    }
+    valuePrepared = false
+    reader.get()
+  }
+}
+
+private class MetricsHandler extends Logging with Serializable {
+  private val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
+  private val startingBytesRead = inputMetrics.bytesRead
+  private val getBytesRead = SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+
+  def updateMetrics(numRows: Int, force: Boolean = false): Unit = {
+    inputMetrics.incRecordsRead(numRows)
+    val shouldUpdateBytesRead =
+      inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0
+    if (shouldUpdateBytesRead || force) {
+      inputMetrics.setBytesRead(startingBytesRead + getBytesRead())
+    }
+  }
+}
+
+private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
+  protected val metricsHandler = new MetricsHandler
+
+  override def hasNext: Boolean = {
+    if (iter.hasNext) {
+      true
+    } else {
+      metricsHandler.updateMetrics(0, force = true)
+      false
+    }
+  }
+}
+
+private class MetricsRowIterator(
+    iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
+  override def next(): InternalRow = {
+    val item = iter.next
+    metricsHandler.updateMetrics(1)
+    item
+  }
+}
+
+private class MetricsBatchIterator(
+    iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
+  override def next(): ColumnarBatch = {
+    val batch: ColumnarBatch = iter.next
+    metricsHandler.updateMetrics(batch.numRows)
+    batch
   }
 }

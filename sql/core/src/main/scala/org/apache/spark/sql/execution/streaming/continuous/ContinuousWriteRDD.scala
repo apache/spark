@@ -80,13 +80,15 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
         logError(s"Writer for partition ${context.partitionId()} is aborting.")
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
+      }, finallyBlock = {
+        dataWriter.close()
       })
     }
 
     Iterator()
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     prev = null
   }

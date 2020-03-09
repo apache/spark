@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.{AttributeGroup, _}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -289,8 +289,7 @@ final class ChiSqSelectorModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
-    val outputFields = schema.fields :+ newField
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, newField)
   }
 
   /**
@@ -316,6 +315,11 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ChiSqSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+  }
 }
 
 @Since("1.6.0")

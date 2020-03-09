@@ -62,7 +62,7 @@ private[streaming] object HdfsUtils {
     }
   }
 
-  def checkState(state: Boolean, errorMsg: => String) {
+  def checkState(state: Boolean, errorMsg: => String): Unit = {
     if (!state) {
       throw new IllegalStateException(errorMsg)
     }

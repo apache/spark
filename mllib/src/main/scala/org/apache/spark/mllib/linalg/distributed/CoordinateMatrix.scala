@@ -153,7 +153,7 @@ class CoordinateMatrix @Since("1.0.0") (
   }
 
   /** Determines the size by computing the max row/column index. */
-  private def computeSize() {
+  private def computeSize(): Unit = {
     // Reduce will throw an exception if `entries` is empty.
     val (m1, n1) = entries.map(entry => (entry.i, entry.j)).reduce { case ((i1, j1), (i2, j2)) =>
       (math.max(i1, i2), math.max(j1, j2))
