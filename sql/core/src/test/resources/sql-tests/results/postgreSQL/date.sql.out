@@ -848,7 +848,7 @@ SELECT DATE_TRUNC('CENTURY', TO_DATE('0055-08-10 BC', 'yyyy-MM-dd G'))
 -- !query schema
 struct<date_trunc(CENTURY, CAST(to_date('0055-08-10 BC', 'yyyy-MM-dd G') AS TIMESTAMP)):timestamp>
 -- !query output
-0100-01-01 00:00:00
+-0099-01-01 00:00:00
 
 
 -- !query
@@ -864,7 +864,7 @@ SELECT DATE_TRUNC('DECADE', DATE '0004-12-25')
 -- !query schema
 struct<date_trunc(DECADE, CAST(DATE '0004-12-25' AS TIMESTAMP)):timestamp>
 -- !query output
-0001-01-01 00:00:00
+0000-01-01 00:00:00
 
 
 -- !query
@@ -872,7 +872,7 @@ SELECT DATE_TRUNC('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G'))
 -- !query schema
 struct<date_trunc(DECADE, CAST(to_date('0002-12-31 BC', 'yyyy-MM-dd G') AS TIMESTAMP)):timestamp>
 -- !query output
-0011-01-01 00:00:00
+-0010-01-01 00:00:00
 
 
 -- !query
@@ -888,7 +888,7 @@ select make_date(-44, 3, 15)
 -- !query schema
 struct<make_date(-44, 3, 15):date>
 -- !query output
-0045-03-15
+-0044-03-15
 
 
 -- !query
