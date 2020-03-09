@@ -924,7 +924,7 @@ private[spark] class TaskSetManager(
   }
 
   def canScheduleOn(executorId: String): Boolean = {
-    parent.assignedExecutorIds.contains(executorId)
+    parent.bindedExecutors.contains(executorId)
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
