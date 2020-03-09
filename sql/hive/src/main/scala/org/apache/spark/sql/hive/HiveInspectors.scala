@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
+import java.time.LocalDate
+import java.util.Calendar
 
 import scala.collection.JavaConverters._
 
@@ -617,7 +619,19 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              DateTimeUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
+              val millis = Math.multiplyExact(
+                x.getPrimitiveWritableObject(data).getDays,
+                DateTimeConstants.MILLIS_PER_DAY)
+              val utcCal = new Calendar.Builder()
+                .setCalendarType("gregory")
+                .setTimeZone(DateTimeUtils.TimeZoneUTC)
+                .setInstant(millis)
+                .build()
+              val localDate = LocalDate.of(
+                utcCal.get(Calendar.YEAR),
+                utcCal.get(Calendar.MONTH) + 1,
+                utcCal.get(Calendar.DAY_OF_MONTH))
+              Math.toIntExact(localDate.toEpochDay)
             } else {
               null
             }
@@ -1013,7 +1027,16 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      new hiveIo.DateWritable(DateTimeUtils.toJavaDate(value.asInstanceOf[Int]))
+      val localDate = LocalDate.ofEpochDay(value.asInstanceOf[Int])
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+        .build()
+      val rebasedDays = Math.toIntExact(Math.floorDiv(
+        utcCal.getTimeInMillis,
+        DateTimeConstants.MILLIS_PER_DAY))
+      new hiveIo.DateWritable(rebasedDays)
     }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
