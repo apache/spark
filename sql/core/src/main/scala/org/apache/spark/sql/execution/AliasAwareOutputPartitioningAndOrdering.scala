@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
+  protected def orderingExpressions: Seq[SortOrder] = Nil
 
   final override def outputPartitioning: Partitioning = {
     if (hasAlias) {
