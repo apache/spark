@@ -87,7 +87,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE table_identifier { ALTER | CHANGE } COLUMN col_spec alterColumnAction
+ALTER TABLE table_identifier { ALTER | CHANGE } [COLUMN] col_spec alterColumnAction
 {% endhighlight %}
 
 #### Parameters
@@ -104,7 +104,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } COLUMN col_spec alterColumnActio
 
 <dl>
   <dt><code><em>COLUMN col_spec</em></code></dt>
-  <dd>Specifies the columns to be altered to be changed.</dd>
+  <dd>Specifies the column to be altered or be changed.</dd>
 </dl>
 
 <dl>
@@ -126,7 +126,9 @@ ALTER TABLE table_identifier { ALTER | CHANGE } COLUMN col_spec alterColumnActio
 
 ##### Syntax
 {% highlight sql %}
-ALTER TABLE table_identifier ADD [ IF NOT EXISTS ] partition_spec
+ALTER TABLE table_identifier ADD [IF NOT EXISTS] 
+  PARTITION <partition_spec> 
+  [ PARTITION <partition_spec> ...]
 {% endhighlight %}
      
 ##### Parameters
@@ -318,7 +320,7 @@ SHOW PARTITIONS StudentInfo;
 | age=15     |
 +------------+--+
 
--- Add new column to a table
+-- Add new columns to a table
 
 DESC StudentInfo;
 +--------------------------+------------+----------+--+
@@ -349,7 +351,7 @@ DESC StudentInfo;
 | age                      | int        | NULL     |
 +--------------------------+------------+----------+--+
 
--- Add new partition to a table 
+-- Add a new partition to a table 
 
 SHOW PARTITIONS StudentInfo;
 +------------+--+
@@ -362,7 +364,7 @@ SHOW PARTITIONS StudentInfo;
 
 ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18);
 
--- After adding new partition to the table
+-- After adding a new partition to the table
 SHOW PARTITIONS StudentInfo;
 +------------+--+
 | partition  |
@@ -395,6 +397,31 @@ SHOW PARTITIONS StudentInfo;
 | age=11     |
 | age=12     |
 | age=15     |
++------------+--+
+
+-- Adding multiple partitions to the table
+
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
++------------+--+
+
+ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18) PARTITION (age=20);
+
+-- After adding multiple partitions to the table
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
+| age=18     |
+| age=20     |
 +------------+--+
 
 -- ALTER OR CHANGE COLUMNS
@@ -455,5 +482,6 @@ ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner')
 ### Related Statements
 - [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
 - [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+- [ALTER TABLE ... ADD PARTITION](sql-ref-syntax-ddl-alter-table.html)
 
 
