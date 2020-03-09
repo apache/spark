@@ -814,9 +814,9 @@ object DateTimeUtils {
 
   /**
    * Extracts special values from an input string ignoring case.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some special value in lower case or None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some special value in lower case or None.
    */
   private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
@@ -843,9 +843,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of microseconds since the epoch if the conversion completed
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
@@ -869,9 +869,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
     extractSpecialValue(input, zoneId).flatMap {
@@ -893,9 +893,9 @@ object DateTimeUtils {
 
   /**
    * Subtracts two dates.
-   * @param endDate - the end date, exclusive
-   * @param startDate - the start date, inclusive
-   * @return an interval between two dates. The interval can be negative
+   * @param endDate The end date, exclusive
+   * @param startDate The start date, inclusive
+   * @return An interval between two dates. The interval can be negative
    *         if the end date is before the start date.
    */
   def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {
@@ -914,8 +914,8 @@ object DateTimeUtils {
    * compatibility of Spark 2.4 and earlier when parsing datetime. This function converts all
    * incompatible pattern for the new parser in Spark 3.0. See more details in SPARK-31030.
    *
-   * @param pattern - the input pattern.
-   * @return the pattern for new parser
+   * @param pattern The input pattern.
+   * @return The pattern for new parser
    */
   def convertIncompatiblePattern(pattern: String): String = {
     val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
