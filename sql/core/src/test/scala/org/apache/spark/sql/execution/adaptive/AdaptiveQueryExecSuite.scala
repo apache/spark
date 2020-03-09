@@ -114,9 +114,13 @@ class AdaptiveQueryExecSuite
 
     val numLocalReaders = collect(plan) {
       case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
-    }.length
-
-    assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
+    }
+    numLocalReaders.foreach { r =>
+      val rdd = r.execute()
+      val parts = rdd.partitions
+      assert(parts.forall(rdd.preferredLocations(_).nonEmpty))
+    }
+    assert(numShuffles === (numLocalReaders.length + numShufflesWithoutLocalReader))
   }
 
   test("Change merge join to broadcast join") {
