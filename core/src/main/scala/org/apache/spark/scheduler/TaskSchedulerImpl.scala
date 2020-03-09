@@ -405,16 +405,15 @@ private[spark] class TaskSchedulerImpl(
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
+    if (tsResources.isEmpty) return Some(Map.empty)
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    if (tsResources.isEmpty) return Some(localTaskReqAssign.toMap)
     // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
       val taskAmount = taskSetProf.getSchedulerTaskResourceAmount(rName)
       availWorkerResources.get(rName) match {
         case Some(workerRes) =>
-          val workerAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
-          if (workerAvail >= taskAmount) {
+          if (workerRes.size >= taskAmount) {
             localTaskReqAssign.put(rName, new ResourceInformation(rName,
               workerRes.take(taskAmount).toArray))
           } else {
@@ -443,28 +442,26 @@ private[spark] class TaskSchedulerImpl(
 
     offersForResourceProfile.map { case (o, index) =>
       val numTasksPerExecCores = availableCpus(index) / taskCpus
-      // when executor cores config isn't set, we can't calculate the real limiting resource
-      // and number of tasks per executor ahead of time, so calculate it now.
-      if (!coresKnown) {
-        val numTasksPerExecCustomResource = resourceProfile.maxTasksPerExecutor(sc.getConf)
-        if (limitingResource.isEmpty ||
-          (limitingResource.nonEmpty && numTasksPerExecCores < numTasksPerExecCustomResource)) {
-          limitingResource = ResourceProfile.CPUS
-        }
-      }
-
-      if (limitingResource == ResourceProfile.CPUS) {
+      // if limiting resource is empty then we have no other resources, so it has to be CPU
+      if (limitingResource == ResourceProfile.CPUS || limitingResource.isEmpty) {
         numTasksPerExecCores
       } else {
-        val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
-          throw new SparkException("limitingResource returns from ResourceProfile" +
+        val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
+          .getOrElse(throw new SparkException("limitingResource returns from ResourceProfile" +
             s" $resourceProfile doesn't actually contain that task resource!")
-        )
+          )
         // available addresses already takes into account if there are fractional
         // task resource requests
-        val availableAddrs = availableResources(index).get(limitingResource)
-          .map(_.size).getOrElse(0)
-        (availableAddrs / taskLimit).toInt
+        val availAddrs = availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
+        val resourceLimit = (availAddrs / taskLimit).toInt
+        if (!coresKnown) {
+          // when executor cores config isn't set, we can't calculate the real limiting resource
+          // and number of tasks per executor ahead of time, so calculate it now based on what
+          // is available.
+          if (numTasksPerExecCores <= resourceLimit) numTasksPerExecCores else resourceLimit
+        } else {
+          resourceLimit
+        }
       }
     }.sum
   }
