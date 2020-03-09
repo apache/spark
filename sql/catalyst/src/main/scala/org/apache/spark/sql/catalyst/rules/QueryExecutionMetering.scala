@@ -114,14 +114,6 @@ case class QueryExecutionMetrics(
     numEffectiveRuns: Long,
     timeEffective: Long) {
 
-  def +(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
-    QueryExecutionMetrics(
-      this.time + metrics.time,
-      this.numRuns + metrics.numRuns,
-      this.numEffectiveRuns + metrics.numEffectiveRuns,
-      this.timeEffective + metrics.timeEffective)
-  }
-
   def -(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
     QueryExecutionMetrics(
       this.time - metrics.time,
