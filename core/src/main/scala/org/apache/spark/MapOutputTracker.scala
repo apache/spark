@@ -830,10 +830,6 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
     } catch {
-      case e: IOException if
-        Throwables.getCausalChain(e).asScala.exists(_.isInstanceOf[BlockNotFoundException]) =>
-        mapStatuses.clear()
-        throw new MetadataFetchFailedException(shuffleId, -1, Throwables.getStackTraceAsString(e))
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
@@ -856,8 +852,16 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         var fetchedStatuses = mapStatuses.get(shuffleId).orNull
         if (fetchedStatuses == null) {
           logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
-          val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-          fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
+          try {
+            val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
+            fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
+          } catch {
+            case e: IOException if
+            Throwables.getCausalChain(e).asScala.exists(_.isInstanceOf[BlockNotFoundException]) =>
+              mapStatuses.clear()
+              throw new MetadataFetchFailedException(
+                shuffleId, -1, Throwables.getStackTraceAsString(e))
+          }
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
         }
