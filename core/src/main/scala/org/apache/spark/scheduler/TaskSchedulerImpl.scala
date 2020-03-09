@@ -342,6 +342,21 @@ private[spark] class TaskSchedulerImpl(
       s" ${manager.parent.name}")
   }
 
+  /**
+   * Offers resources to a single [[TaskSetManager]] at a given max allowed [[TaskLocality]].
+   *
+   * @param taskSet task set to offer resources to
+   * @param maxLocality max locality to allow when scheduling
+   * @param shuffledOffers shuffled resource offers to use for scheduling,
+   *                       remaining resources are tracked by below fields as tasks are scheduled
+   * @param availableCpus  remaining cpus per offer,
+   *                       value at index 'i' corresponds to shuffledOffers[i]
+   * @param availableResources remaining resources per offer,
+   *                           value at index 'i' corresponds to shuffledOffers[i]
+   * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
+   * @param addressesWithDescs tasks scheduler per host:port, used for barrier tasks
+   * @return tuple of (had delay schedule rejects?, option of min locality of launched task)
+   */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
@@ -350,8 +365,7 @@ private[spark] class TaskSchedulerImpl(
       availableResources: Array[Map[String, Buffer[String]]],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
       addressesWithDescs: ArrayBuffer[(String, TaskDescription)])
-    : (Boolean, Boolean, Option[TaskLocality]) = {
-    var launchedTask = false
+    : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are blacklisted for the entire application have already been
@@ -376,8 +390,7 @@ private[spark] class TaskSchedulerImpl(
               tasks(i) += task
               val tid = task.taskId
               val locality = taskSet.taskInfos(task.taskId).taskLocality
-              minLaunchedLocality = minLaunchedLocality
-                .map(min => if (locality < min) locality else min).orElse(Some(locality))
+              minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
               taskIdToTaskSetManager.put(tid, taskSet)
               taskIdToExecutorId(tid) = execId
               executorIdToRunningTaskIds(execId).add(tid)
@@ -397,19 +410,18 @@ private[spark] class TaskSchedulerImpl(
                 // The executor address is expected to be non empty.
                 addressesWithDescs += (shuffledOffers(i).address.get -> task)
               }
-              launchedTask = true
             }
           } catch {
             case e: TaskNotSerializableException =>
               logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
-              return (launchedTask, noDelayScheduleRejects, minLaunchedLocality)
+              return (noDelayScheduleRejects, minLaunchedLocality)
           }
         }
       }
     }
-    (launchedTask, noDelayScheduleRejects, minLaunchedLocality)
+    (noDelayScheduleRejects, minLaunchedLocality)
   }
 
   /**
@@ -491,8 +503,9 @@ private[spark] class TaskSchedulerImpl(
     }.sum
   }
 
-  def minTaskLocality(l1: Option[TaskLocality], l2: Option[TaskLocality]) :
-  Option[TaskLocality] = {
+  def minTaskLocality(
+      l1: Option[TaskLocality],
+      l2: Option[TaskLocality]) : Option[TaskLocality] = {
     if (l1.isEmpty) {
       l2
     } else if (l2.isEmpty) {
@@ -591,10 +604,10 @@ private[spark] class TaskSchedulerImpl(
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
-            val (launched, noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
+            val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
               taskSet, currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)
-            launchedTaskAtCurrentMaxLocality = launched
+            launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
             noDelaySchedulingRejects &= noDelayScheduleReject
             globalMinLocality = minTaskLocality(globalMinLocality, minLocality)

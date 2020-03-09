@@ -228,6 +228,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host1", "exec1"))
     )
+
+    // Offer resources first so that when the taskset is submitted it can initialize
+    // with proper locality level. Otherwise, ANY would be the only locality level.
+    // See TaskSetManager.computeValidLocalityLevels()
+    // This begins the task set as PROCESS_LOCAL locality level
     taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
     taskScheduler.submitTasks(taskSet)
     taskScheduler
