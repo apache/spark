@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 
@@ -111,36 +110,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       targetSize: Long): Array[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
-    val partitionStartIndices = ArrayBuffer[Int]()
-    partitionStartIndices += 0
-    var i = 0
-    var postMapPartitionSize = 0L
-    var lastPackagedPartitionSize = -1L
-    while (i < mapPartitionSizes.length) {
-      val nextMapPartitionSize = mapPartitionSizes(i)
-      if (i > 0 && postMapPartitionSize + nextMapPartitionSize > targetSize) {
-        partitionStartIndices += i
-        lastPackagedPartitionSize = postMapPartitionSize
-        postMapPartitionSize = nextMapPartitionSize
-      } else {
-        postMapPartitionSize += nextMapPartitionSize
-      }
-      i += 1
-    }
-
-    if (lastPackagedPartitionSize > -1) {
-      val lastPartitionDiff = math.abs(targetSize - postMapPartitionSize)
-      val diffIfMergeLastPartition = math.abs(
-        lastPackagedPartitionSize + postMapPartitionSize - targetSize)
-      // If the last partition is very small, we should merge it to the previous partition.
-      if (lastPartitionDiff > diffIfMergeLastPartition * 2) {
-        partitionStartIndices.dropRight(1).toArray
-      } else {
-        partitionStartIndices.toArray
-      }
-    } else {
-      partitionStartIndices.toArray
-    }
+    ShufflePartitionsCoalescer.splitSizeListByTargetSize(mapPartitionSizes, targetSize)
   }
 
   private def getStatistics(stage: ShuffleQueryStageExec): MapOutputStatistics = {

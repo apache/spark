@@ -114,4 +114,45 @@ object ShufflePartitionsCoalescer extends Logging {
 
     partitionSpecs.toArray
   }
+
+  /**
+   * Given a list of size, return an array of indices to split the list into multiple partitions,
+   * so that the size sum of each partition is close to target size. Each index indicates the start
+   * of a partition.
+   */
+  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+    val partitionStartIndices = ArrayBuffer[Int]()
+    partitionStartIndices += 0
+    var i = 0
+    var currentSizeSum = 0L
+    var lastPartitionSize = -1L
+
+    def tryMergePartitions() = {
+      // When we are going to start a new partition, it's possible that the current partition or
+      // the previous partition is very small and it's better to merge the current partition into
+      // the previous partition.
+      val shouldMergePartitions = lastPartitionSize > -1 &&
+        ((currentSizeSum + lastPartitionSize) < targetSize * 1.3 ||
+        (currentSizeSum < targetSize * 0.3 || lastPartitionSize < targetSize * 0.3))
+      if (shouldMergePartitions) {
+        partitionStartIndices.remove(partitionStartIndices.length - 1)
+        lastPartitionSize += currentSizeSum
+      } else {
+        lastPartitionSize = currentSizeSum
+      }
+    }
+
+    while (i < sizes.length) {
+      if (i > 0 && currentSizeSum + sizes(i) > targetSize) {
+        tryMergePartitions()
+        partitionStartIndices += i
+        currentSizeSum = sizes(i)
+      } else {
+        currentSizeSum += sizes(i)
+      }
+      i += 1
+    }
+    tryMergePartitions()
+    partitionStartIndices.toArray
+  }
 }
