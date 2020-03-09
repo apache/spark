@@ -29,6 +29,12 @@ import org.apache.spark.util.SecurityUtils
 
 private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOptions)
     extends BasicConnectionProvider(driver, options) {
+  val appEntry: String = {
+    val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
+    val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
+    properties.getProperty("jaasApplicationName", "pgjdbc")
+  }
+
   def setAuthenticationConfigIfNeeded(): Unit = {
     val parent = Configuration.getConfiguration
     val configEntry = parent.getAppConfigurationEntry(appEntry)
@@ -41,12 +47,6 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
   override def getConnection(): Connection = {
     setAuthenticationConfigIfNeeded()
     super.getConnection()
-  }
-
-  def appEntry: String = {
-    val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
-    val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
-    properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 }
 
