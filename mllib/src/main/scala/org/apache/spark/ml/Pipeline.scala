@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
@@ -36,14 +36,11 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
-@DeveloperApi
 abstract class PipelineStage extends Params with Logging {
 
   /**
-   * :: DeveloperApi ::
    *
    * Check transform validity and derive the output schema from the input schema.
    *
@@ -54,18 +51,14 @@ abstract class PipelineStage extends Params with Logging {
    * Typical implementation should first conduct verification on schema change and parameter
    * validity, including complex parameter interaction checks.
    */
-  @DeveloperApi
   def transformSchema(schema: StructType): StructType
 
   /**
-   * :: DeveloperApi ::
-   *
    * Derives the output schema from the input schema and parameters, optionally with logging.
    *
    * This should be optimistic.  If it is unclear whether the schema will be valid, then it should
    * be assumed valid until proven otherwise.
    */
-  @DeveloperApi
   protected def transformSchema(
       schema: StructType,
       logging: Boolean): StructType = {
