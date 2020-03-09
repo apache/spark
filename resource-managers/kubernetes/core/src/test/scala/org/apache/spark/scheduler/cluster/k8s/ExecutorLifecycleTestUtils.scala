@@ -120,6 +120,7 @@ object ExecutorLifecycleTestUtils {
     val sparkPod = executorPodWithId(executorId)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
+        .withRestartPolicy("Never")
         .addToContainers(sparkPod.container)
         .endSpec()
       .build()

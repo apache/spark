@@ -32,15 +32,14 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
       runningExecutorWithFailedContainer(6))
 
     val snapshot = ExecutorPodsSnapshot(pods)
-    assert(snapshot.executorPods ===
-      Map(
-        0L -> PodPending(pods(0)),
-        1L -> PodRunning(pods(1)),
-        2L -> PodSucceeded(pods(2)),
-        3L -> PodFailed(pods(3)),
-        4L -> PodDeleted(pods(4)),
-        5L -> PodUnknown(pods(5)),
-        6L -> PodFailed(pods(6))))
+
+    assert(snapshot.executorPods.get(0L) == PodPending(pods(0)))
+    assert(snapshot.executorPods.get(1L) == PodRunning(pods(1)))
+    assert(snapshot.executorPods.get(2L) == PodSucceeded(pods(2)))
+    assert(snapshot.executorPods.get(3L) == PodFailed(pods(3)))
+    assert(snapshot.executorPods.get(4L) == PodDeleted(pods(4)))
+    assert(snapshot.executorPods.get(5L) == PodUnknown(pods(5)))
+    assert(snapshot.executorPods.get(6L) == PodFailed(pods(6)))
   }
 
   test("Updates add new pods for non-matching ids and edit existing pods for matching ids") {
