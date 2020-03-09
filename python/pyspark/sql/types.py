@@ -1528,6 +1528,12 @@ class Row(tuple):
 
         :param recursive: turns the nested Rows to dict (default: False).
 
+        NOTE: If a row contains duplicate field names, e.g., the rows of a join
+        between two :class:`DataFrame` that both have the fields of same names,
+        ``asDict`` will return the rightmost value among the duplicate fields. In
+        contrast, ``__getitem__`` will return the leftmost value among the duplicate
+        fields.
+
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
