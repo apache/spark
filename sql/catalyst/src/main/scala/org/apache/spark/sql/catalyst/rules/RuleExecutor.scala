@@ -204,8 +204,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       }
 
       planChangeLogger.logBatch(batch.name, batchStartPlan, curPlan)
-      planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
     }
+    planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
   }
