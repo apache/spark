@@ -663,6 +663,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
       === "uuuu-MM'u contains in quoted text'HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'HH:mm:ss")
+      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
   }
 }

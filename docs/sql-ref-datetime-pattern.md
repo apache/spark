@@ -193,7 +193,7 @@ The count of pattern letters determines the format.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
-- Fraction: Outputs the nano-of-second field as a fraction-of-second. The nano-of-second value has nine digits, thus the count of pattern letters is from 1 to 9. If it is less than 9, then the nano-of-second value is truncated, with only the most significant digits being output.
+- Fraction: Outputs the micro-of-second field as a fraction-of-second. The micro-of-second value has six digits, thus the count of pattern letters is from 1 to 6. If it is less than 6, then the micro-of-second value is truncated, with only the most significant digits being output.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded.
 
