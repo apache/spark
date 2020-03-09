@@ -79,7 +79,7 @@ class ResourceProfile(
   /*
    * This function takes into account fractional amounts for the task resource requirement.
    * Spark only supports fractional amounts < 1 to basically allow for multiple tasks
-   * to use the same resource.
+   * to use the same resource address.
    * The way the scheduler handles this is it adds the same address the number of slots per
    * address times and then the amount becomes 1. This way it re-uses the same address
    * the correct number of times. ie task requirement amount=0.25 -> addrs["0", "0", "0", "0"]

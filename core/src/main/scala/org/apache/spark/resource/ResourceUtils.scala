@@ -394,11 +394,9 @@ private[spark] object ResourceUtils extends Logging {
 
   def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
-    if (!sparkConf.get(TASKSET_MANAGER_SPECULATION_TESTING)) {
-      if (execCores < taskCpus) {
-        throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-          s"the number of cpus per task = $taskCpus.")
-      }
+    if (!sparkConf.get(TASKSET_MANAGER_SPECULATION_TESTING) && (execCores < taskCpus)) {
+      throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
+        s"the number of cpus per task = $taskCpus.")
     }
     true
   }

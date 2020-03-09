@@ -96,7 +96,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected val executorsPendingDecommission = new HashSet[String]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
-  // A map to store hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var rpHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
 
@@ -236,8 +235,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
-            (info.name,
-             new ExecutorResourceInfo(info.name, info.addresses, numParts))
+            (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,

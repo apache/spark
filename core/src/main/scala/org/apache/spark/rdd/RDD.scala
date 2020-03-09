@@ -1733,7 +1733,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Get the ResourceProfile specified with this RDD or None if it wasn't specified.
+   * Get the ResourceProfile specified with this RDD or null if it wasn't specified.
    * @return the user specified ResourceProfile or null (for Java compatibility) if
    *         none was specified
    */

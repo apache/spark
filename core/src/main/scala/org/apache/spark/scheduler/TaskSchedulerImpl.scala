@@ -515,7 +515,7 @@ private[spark] class TaskSchedulerImpl(
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue.filterNot(_.isZombie)
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
