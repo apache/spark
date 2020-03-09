@@ -86,8 +86,10 @@ object ChiSquareTest {
    * @return Array containing the SelectionTestResult for every feature against the label.
    */
   @Since("3.1.0")
-  def testChiSquare(dataset: Dataset[_], featuresCol: String, labelCol: String):
-  Array[SelectionTestResult] = {
+  def testChiSquare(
+      dataset: Dataset[_],
+      featuresCol: String,
+      labelCol: String): Array[SelectionTestResult] = {
 
     val spark = dataset.sparkSession
 
@@ -100,11 +102,6 @@ object ChiSquareTest {
             OldLabeledPoint(label, OldVectors.fromML(features))
         }
     val chiTestResult = OldStatistics.chiSqTest(input)
-    var chiTestResultArray = new Array[SelectionTestResult](chiTestResult.length)
-    for (i <- 0 until chiTestResult.length) {
-      chiTestResultArray(i) = new ChiSqTestResult(chiTestResult(i).pValue,
-        chiTestResult(i).degreesOfFreedom, chiTestResult(i).statistic)
-    }
-    chiTestResultArray
+    chiTestResult.map(r => new ChiSqTestResult(r.pValue, r.degreesOfFreedom, r.statistic))
   }
 }

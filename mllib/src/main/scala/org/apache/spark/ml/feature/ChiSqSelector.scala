@@ -271,10 +271,9 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
-  var prev = -1
-  selectedFeatures.foreach { i =>
-    require(prev < i, s"Index $i follows $prev and is not strictly increasing")
-    prev = i
+  if (selectedFeatures.length >= 2) {
+    require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
+      "Index should be strictly increasing.")
   }
 
   /** @group setParam */
@@ -296,7 +295,7 @@ final class ChiSqSelectorModel private[ml] (
           val (newIndices, newValues) = compressSparse(indices, values)
           Vectors.sparse(newSize, newIndices, newValues)
         case DenseVector(values) =>
-          Vectors.dense(selectedFeatures.map(i => values(i)))
+          Vectors.dense(selectedFeatures.map(values))
         case other =>
           throw new UnsupportedOperationException(
             s"Only sparse and dense vectors are supported but got ${other.getClass}.")
