@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
@@ -54,11 +54,14 @@ abstract class PipelineStage extends Params with Logging {
   def transformSchema(schema: StructType): StructType
 
   /**
+   * :: DeveloperApi ::
+   *
    * Derives the output schema from the input schema and parameters, optionally with logging.
    *
    * This should be optimistic.  If it is unclear whether the schema will be valid, then it should
    * be assumed valid until proven otherwise.
    */
+  @DeveloperApi
   protected def transformSchema(
       schema: StructType,
       logging: Boolean): StructType = {
