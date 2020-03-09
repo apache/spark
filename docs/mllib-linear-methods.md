@@ -184,7 +184,7 @@ training algorithm on this training data using a static method in the algorithm
 object, and make predictions with the resulting model to compute the training
 error.
 
-Refer to the [`SVMWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD) and [`SVMModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMModel) for details on the API.
+Refer to the [`SVMWithSGD` Scala docs](api/scala/org/apache/spark/mllib/classification/SVMWithSGD.html) and [`SVMModel` Scala docs](api/scala/org/apache/spark/mllib/classification/SVMModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/SVMWithSGDExample.scala %}
 
@@ -305,11 +305,11 @@ We recommend L-BFGS over mini-batch gradient descent for faster convergence.
 <div data-lang="scala" markdown="1">
 The following code illustrates how to load a sample multiclass dataset, split it into train and
 test, and use
-[LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS)
+[LogisticRegressionWithLBFGS](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html)
 to fit a logistic regression model.
 Then the model is evaluated against the test dataset and saved to disk.
 
-Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionModel) for details on the API.
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Scala docs](api/scala/org/apache/spark/mllib/classification/LogisticRegressionModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/LogisticRegressionWithLBFGSExample.scala %}
 
@@ -438,8 +438,8 @@ regularization parameter (`regParam`) along with various parameters associated w
 gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each of them, we support
 all three possible regularizations (none, L1 or L2).
 
-For Logistic Regression, [L-BFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
-version is implemented under [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
+For Logistic Regression, [L-BFGS](api/scala/org/apache/spark/mllib/optimization/LBFGS.html)
+version is implemented under [LogisticRegressionWithLBFGS](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html), and this
 version supports both binary and multinomial Logistic Regression while SGD version only supports
 binary Logistic Regression. However, L-BFGS version doesn't support L1 regularization but SGD one
 supports L1 regularization. When L1 regularization is not required, L-BFGS version is strongly
@@ -448,10 +448,10 @@ inverse Hessian matrix using quasi-Newton method.
 
 Algorithms are all implemented in Scala:
 
-* [SVMWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
-* [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS)
-* [LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
-* [LinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
-* [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-* [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+* [SVMWithSGD](api/scala/org/apache/spark/mllib/classification/SVMWithSGD.html)
+* [LogisticRegressionWithLBFGS](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html)
+* [LogisticRegressionWithSGD](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithSGD.html)
+* [LinearRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html)
+* [RidgeRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/RidgeRegressionWithSGD.html)
+* [LassoWithSGD](api/scala/org/apache/spark/mllib/regression/LassoWithSGD.html)
 

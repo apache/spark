@@ -17,8 +17,8 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 
 /**
  * LeastSquaresAggregator computes the gradient and loss for a Least-squared loss function,
@@ -157,25 +157,26 @@ private[ml] class LeastSquaresAggregator(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
-    bcFeaturesStd: Broadcast[Vector],
-    bcFeaturesMean: Broadcast[Vector])(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[InstanceBlock, LeastSquaresAggregator] {
+    bcFeaturesStd: Broadcast[Array[Double]],
+    bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
   require(labelStd > 0.0, s"${this.getClass.getName} requires the label standard " +
     s"deviation to be positive.")
 
-  private val numFeatures = bcFeaturesStd.value.size
+  private val numFeatures = bcFeaturesStd.value.length
   protected override val dim: Int = numFeatures
   // make transient so we do not serialize between aggregation stages
+  @transient private lazy val featuresStd = bcFeaturesStd.value
   @transient private lazy val effectiveCoefAndOffset = {
     val coefficientsArray = bcCoefficients.value.toArray.clone()
     val featuresMean = bcFeaturesMean.value
-    val featuresStd = bcFeaturesStd.value
     var sum = 0.0
     var i = 0
     val len = coefficientsArray.length
     while (i < len) {
       if (featuresStd(i) != 0.0) {
-        sum += coefficientsArray(i) / featuresStd(i) * featuresMean(i)
+        coefficientsArray(i) /=  featuresStd(i)
+        sum += coefficientsArray(i) * featuresMean(i)
       } else {
         coefficientsArray(i) = 0.0
       }
@@ -185,7 +186,7 @@ private[ml] class LeastSquaresAggregator(
     (Vectors.dense(coefficientsArray), offset)
   }
   // do not use tuple assignment above because it will circumvent the @transient tag
-  @transient private lazy val effectiveCoefficientsVec = effectiveCoefAndOffset._1
+  @transient private lazy val effectiveCoefficientsVector = effectiveCoefAndOffset._1
   @transient private lazy val offset = effectiveCoefAndOffset._2
 
   /**
@@ -203,64 +204,21 @@ private[ml] class LeastSquaresAggregator(
 
       if (weight == 0.0) return this
 
-      val localEffectiveCoefficientsVec = effectiveCoefficientsVec
-
-      val diff = {
-        var dot = 0.0
-        features.foreachNonZero { (index, value) =>
-          dot += localEffectiveCoefficientsVec(index) * value
-        }
-        dot - label / labelStd + offset
-      }
+      val diff = BLAS.dot(features, effectiveCoefficientsVector) - label / labelStd + offset
 
       if (diff != 0) {
         val localGradientSumArray = gradientSumArray
+        val localFeaturesStd = featuresStd
         features.foreachNonZero { (index, value) =>
-          localGradientSumArray(index) += weight * diff * value
+          val fStd = localFeaturesStd(index)
+          if (fStd != 0.0) {
+            localGradientSumArray(index) += weight * diff * value / fStd
+          }
         }
         lossSum += weight * diff * diff / 2.0
       }
       weightSum += weight
       this
     }
-  }
-
-  /**
-   * Add a new training instance block to this LeastSquaresAggregator, and update the loss
-   * and gradient of the objective function.
-   *
-   * @param block The instance block of data point to be added.
-   * @return This LeastSquaresAggregator object.
-   */
-  def add(block: InstanceBlock): LeastSquaresAggregator = {
-    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
-      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
-    require(block.weightIter.forall(_ >= 0),
-      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
-
-    if (block.weightIter.forall(_ == 0)) return this
-    val size = block.size
-
-    // vec here represents diffs
-    val vec = new DenseVector(Array.tabulate(size)(i => offset - block.getLabel(i) / labelStd))
-    BLAS.gemv(1.0, block.matrix, effectiveCoefficientsVec, 1.0, vec)
-
-    // in-place convert diffs to multipliers
-    // then, vec represents multipliers
-    var i = 0
-    while (i < size) {
-      val weight = block.getWeight(i)
-      val diff = vec(i)
-      lossSum += weight * diff * diff / 2
-      weightSum += weight
-      val multiplier = weight * diff
-      vec.values(i) = multiplier
-      i += 1
-    }
-
-    val gradSumVec = new DenseVector(gradientSumArray)
-    BLAS.gemv(1.0, block.matrix.transpose, vec, 1.0, gradSumVec)
-
-    this
   }
 }

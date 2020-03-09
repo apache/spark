@@ -19,6 +19,7 @@
   font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
+  color: black;
 }
 
 #plan-viz-graph svg g.cluster rect {
@@ -33,13 +34,8 @@
   stroke-width: 1px;
 }
 
-/* This declaration is needed to define the width of rectangles */
-#plan-viz-graph svg text :first-child {
-  font-weight: bold;
-}
-
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text .operator-name {
+#plan-viz-graph svg text :first-child {
   font-weight: bold;
 }
 

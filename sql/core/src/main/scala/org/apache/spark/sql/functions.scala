@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -2459,25 +2460,25 @@ object functions {
   def soundex(e: Column): Column = withExpr { SoundEx(e.expr) }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
-   * @param regex a string representing a regular expression. The regex string should be
-   *              a Java regular expression.
+   * @param pattern a string representing a regular expression. The regex string should be
+   *                a Java regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def split(str: Column, regex: String): Column = withExpr {
-    StringSplit(str.expr, Literal(regex), Literal(-1))
+  def split(str: Column, pattern: String): Column = withExpr {
+    StringSplit(str.expr, Literal(pattern), Literal(-1))
   }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
-   * @param regex a string representing a regular expression. The regex string should be
-   *              a Java regular expression.
+   * @param pattern a string representing a regular expression. The regex string should be
+   *                a Java regular expression.
    * @param limit an integer expression which controls the number of times the regex is applied.
    *        <ul>
    *          <li>limit greater than 0: The resulting array's length will not be more than limit,
@@ -2490,8 +2491,8 @@ object functions {
    * @group string_funcs
    * @since 3.0.0
    */
-  def split(str: Column, regex: String, limit: Int): Column = withExpr {
-    StringSplit(str.expr, Literal(regex), Literal(limit))
+  def split(str: Column, pattern: String, limit: Int): Column = withExpr {
+    StringSplit(str.expr, Literal(pattern), Literal(limit))
   }
 
   /**
@@ -2881,7 +2882,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    FromUnixTime(ut.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -2913,7 +2914,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(CurrentTimestamp(), Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -2927,7 +2928,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(s.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -4731,7 +4732,18 @@ object functions {
    * @group udf_funcs
    * @since 2.0.0
    */
+  @deprecated("Untyped Scala UDF API is deprecated, please use typed Scala UDF API such as " +
+    "'def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction' instead.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
+      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
+        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+        "argument, and the closure will see the default value of the Java type for the null " +
+        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+        "You could use other typed Scala UDF APIs to avoid this problem, or set " +
+        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
+      throw new AnalysisException(errorMsg)
+    }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
   }
 

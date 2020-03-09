@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.dynamicpruning
+package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral

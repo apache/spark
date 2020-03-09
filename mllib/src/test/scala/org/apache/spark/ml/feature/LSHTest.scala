@@ -76,9 +76,8 @@ private[ml] object LSHTest {
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
-    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
-    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0,
-      DataTypes.BooleanType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
+    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))
       .withColumn("distance", distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")))
@@ -110,7 +109,7 @@ private[ml] object LSHTest {
     val model = lsh.fit(dataset)
 
     // Compute expected
-    val distUDF = udf((x: Vector) => model.keyDistance(x, key), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector) => model.keyDistance(x, key))
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
@@ -148,7 +147,7 @@ private[ml] object LSHTest {
     val inputCol = model.getInputCol
 
     // Compute expected
-    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
     val expected = datasetA.as("a").crossJoin(datasetB.as("b"))
       .filter(distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")) < threshold)
 

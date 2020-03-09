@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.dynamicpruning
+package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -86,7 +86,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       hasBenefit: Boolean): LogicalPlan = {
-    val reuseEnabled = SQLConf.get.dynamicPartitionPruningReuseBroadcast
+    val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     if (hasBenefit || reuseEnabled) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
@@ -96,7 +96,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           filteringPlan,
           joinKeys,
           index,
-          !hasBenefit),
+          !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly),
         pruningPlan)
     } else {
       // abort dynamic partition pruning

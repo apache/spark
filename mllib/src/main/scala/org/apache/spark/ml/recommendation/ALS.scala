@@ -1049,7 +1049,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(userFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       // Preserve the partitioning because IDs are consistent with the partitioners in userInBlocks
       // and userFactors.
@@ -1061,7 +1061,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(itemFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       }, preservesPartitioning = true)
       .setName("itemFactors")
@@ -1376,7 +1376,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           Iterator.empty
         }
       } ++ {
-        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
+        builders.iterator.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
           ((srcBlockId, dstBlockId), block.build())
@@ -1695,7 +1695,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
-        srcOutBlock.view.zipWithIndex.map { case (activeIndices, dstBlockId) =>
+        srcOutBlock.iterator.zipWithIndex.map { case (activeIndices, dstBlockId) =>
           (dstBlockId, (srcBlockId, activeIndices.map(idx => srcFactors(idx))))
         }
     }

@@ -191,7 +191,7 @@ class RateStreamMicroBatchPartitionReader(
     val currValue = rangeStart + partitionId + numPartitions * count
     count += 1
     val relative = math.round((currValue - rangeStart) * relativeMsPerValue)
-    InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), currValue)
+    InternalRow(DateTimeUtils.millisToMicros(relative + localStartTimeMs), currValue)
   }
 
   override def close(): Unit = {}
