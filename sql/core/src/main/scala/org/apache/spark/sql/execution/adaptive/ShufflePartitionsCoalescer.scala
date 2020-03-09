@@ -47,7 +47,7 @@ object ShufflePartitionsCoalescer extends Logging {
    *  - coalesced partition 2: shuffle partition 2 (size 170 MiB)
    *  - coalesced partition 3: shuffle partition 3 and 4 (size 50 MiB)
    *
-   *  @return An array of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
+   *  @return A sequence of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
    *          split at indices [0, 2, 3], the returned partition specs will be:
    *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
    *          CoalescedPartitionSpec(3, 5).
@@ -57,7 +57,7 @@ object ShufflePartitionsCoalescer extends Logging {
       firstPartitionIndex: Int,
       lastPartitionIndex: Int,
       advisoryTargetSize: Long,
-      minNumPartitions: Int = 1): Array[ShufflePartitionSpec] = {
+      minNumPartitions: Int = 1): Seq[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
@@ -112,6 +112,6 @@ object ShufflePartitionsCoalescer extends Logging {
     }
     partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
 
-    partitionSpecs.toArray
+    partitionSpecs
   }
 }

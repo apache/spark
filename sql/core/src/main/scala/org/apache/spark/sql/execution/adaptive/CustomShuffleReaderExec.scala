@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExcha
  */
 case class CustomShuffleReaderExec private(
     child: SparkPlan,
-    partitionSpecs: Array[ShufflePartitionSpec],
+    partitionSpecs: Seq[ShufflePartitionSpec],
     description: String) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
@@ -71,7 +71,7 @@ case class CustomShuffleReaderExec private(
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
           new ShuffledRowRDD(
-            stage.shuffle.shuffleDependency, stage.shuffle.readMetrics, partitionSpecs)
+            stage.shuffle.shuffleDependency, stage.shuffle.readMetrics, partitionSpecs.toArray)
         case _ =>
           throw new IllegalStateException("operating on canonicalization plan")
       }
