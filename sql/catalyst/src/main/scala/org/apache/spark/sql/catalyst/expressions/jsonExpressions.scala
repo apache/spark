@@ -777,7 +777,18 @@ case class SchemaOfJson(
   override def eval(v: InternalRow): Any = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      jsonInferSchema.inferField(parser)
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+      }
     }
 
     UTF8String.fromString(dt.catalogString)

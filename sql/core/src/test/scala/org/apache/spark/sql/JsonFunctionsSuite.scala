@@ -674,4 +674,40 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       spark.range(1).select(schema_of_json(input)),
       Seq(Row("struct<id:bigint,price:double>")))
   }
+
+  test("SPARK-31065: schema_of_json - null and empty strings as strings") {
+    Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
+      checkAnswer(
+        spark.range(1).select(schema_of_json(input)),
+        Seq(Row("struct<id:string>")))
+    }
+  }
+
+  test("SPARK-31065: schema_of_json - 'dropFieldIfAllNull' option") {
+    val options = Map("dropFieldIfAllNull" -> "true")
+    // Structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""{"id": "a", "drop": {"drop": null}}"""),
+          options.asJava)),
+      Seq(Row("struct<id:string>")))
+
+    // Array of structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""[{"id": "a", "drop": {"drop": null}}]"""),
+          options.asJava)),
+      Seq(Row("array<struct<id:string>>")))
+
+    // Other types are not affected.
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""null"""),
+          options.asJava)),
+      Seq(Row("string")))
+  }
+
 }
