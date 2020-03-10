@@ -26,4 +26,10 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
-exec python3 -u ./dev/run-tests.py "$@"
+set -e
+
+for i in `seq 1 100`; do
+  build/sbt "sql-kafka-0-10/test-only *KafkaDelegationTokenSuite"
+done
+
+# exec python3 -u ./dev/run-tests.py "$@"
