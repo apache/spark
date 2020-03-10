@@ -908,13 +908,10 @@ object DateTimeUtils {
   }
 
   /**
-   * Since the Proleptic Gregorian calendar is de-facto calendar worldwide, as well as the chosen
-   * one in ANSI SQL standard, Spark 3.0 switches to it by using DateTimeFormatter classes.
-   * However, the breaking changes between SimpleDateFormat and DateTimeFormatter pattern string
-   * will also breaks the backward compatibility of Spark 2.4 and earlier when parsing datetime.
-   * This function converts all incompatible pattern for the new parser in Spark 3.0. See more
-   * details in SPARK-31030.
-   *
+   * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
+   * parsing/formatting datetime values. The pattern string is incompatible with the one defined
+   * by SimpleDateFormat in Spark 2.4 and earlier. This function converts all incompatible pattern
+   * for the new parser in Spark 3.0. See more details in SPARK-31030.
    * @param pattern The input pattern.
    * @return The pattern for new parser
    */
@@ -927,16 +924,16 @@ object DateTimeUtils {
     pattern.split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          // The meaning of 'u' was day number of week in Java 7, it was changed to year in Java 8.
-          // Substitute 'u' to 'e' and use Java 8 parser to parse the string. If parsable, return
-          // the result; otherwise, fall back to 'u', and then use the legacy Java 7 parser to
-          // parse. When it is successfully parsed, throw an exception and ask users to change
-          // the pattern strings or turn on the legacy mode; otherwise, return NULL as what Spark
-          // 2.4 does.
+          // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
+          // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
+          // string. If parsable, return the result; otherwise, fall back to 'u', and then use the
+          // legacy SimpleDateFormat parser to parse. When it is successfully parsed, throw an
+          // exception and ask users to change the pattern strings or turn on the legacy mode;
+          // otherwise, return NULL as what Spark 2.4 does.
           val res = patternPart.replace("u", "e")
-          // In Java 8 API, 'u' supports negative years. We substitute 'y' to 'u' here for keeping
-          // the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'. We only do
-          // this substitution when there is no era designator found in the pattern.
+          // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
+          // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
+          // We only do this substitution when there is no era designator found in the pattern.
           if (!eraDesignatorContained) {
             res.replace("y", "u")
           } else {
