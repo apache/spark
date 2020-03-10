@@ -77,7 +77,7 @@ private class DummySchedulerBackend extends SchedulerBackend {
 private class DummyTaskScheduler extends TaskScheduler {
   var initialized = false
   override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
-  override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
+  override def rootPool: Pool = new Pool("", schedulingMode, 0, Int.MaxValue, 0)
   override def start(): Unit = {}
   override def stop(): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}

@@ -138,7 +138,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   val taskScheduler = new TaskScheduler() {
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
-    override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
+    override def rootPool: Pool = new Pool("", schedulingMode, 0, Int.MaxValue, 0)
     override def start() = {}
     override def stop() = {}
     override def executorHeartbeatReceived(
@@ -681,7 +681,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // doesn't implement killTask()
     val noKillTaskScheduler = new TaskScheduler() {
       override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
-      override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
+      override def rootPool: Pool = new Pool("", schedulingMode, 0, Int.MaxValue, 0)
       override def start(): Unit = {}
       override def stop(): Unit = {}
       override def submitTasks(taskSet: TaskSet): Unit = {

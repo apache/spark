@@ -55,7 +55,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", FIFO, 0, 0)
+    val rootPool = new Pool("", FIFO, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
 
     val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
@@ -84,7 +84,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME, conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", FAIR, 0, 0)
+    val rootPool = new Pool("", FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -137,19 +137,19 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", FAIR, 0, 0)
-    val pool0 = new Pool("0", FAIR, 3, 1)
-    val pool1 = new Pool("1", FAIR, 4, 1)
+    val rootPool = new Pool("", FAIR, 0, Int.MaxValue, 0)
+    val pool0 = new Pool("0", FAIR, 3, Int.MaxValue, 1)
+    val pool1 = new Pool("1", FAIR, 4, Int.MaxValue, 1)
     rootPool.addSchedulable(pool0)
     rootPool.addSchedulable(pool1)
 
-    val pool00 = new Pool("00", FAIR, 2, 2)
-    val pool01 = new Pool("01", FAIR, 1, 1)
+    val pool00 = new Pool("00", FAIR, 2, Int.MaxValue, 2)
+    val pool01 = new Pool("01", FAIR, 1, Int.MaxValue, 1)
     pool0.addSchedulable(pool00)
     pool0.addSchedulable(pool01)
 
-    val pool10 = new Pool("10", FAIR, 2, 2)
-    val pool11 = new Pool("11", FAIR, 2, 1)
+    val pool10 = new Pool("10", FAIR, 2, Int.MaxValue, 2)
+    val pool11 = new Pool("11", FAIR, 2, Int.MaxValue, 1)
     pool1.addSchedulable(pool10)
     pool1.addSchedulable(pool11)
 
@@ -184,7 +184,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       .getFile()
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
 
-    val rootPool = new Pool("", FAIR, 0, 0)
+    val rootPool = new Pool("", FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, conf)
     schedulableBuilder.buildPools()
 
@@ -211,7 +211,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FIFO, initMinShare = 0, initWeight = 0)
+    val rootPool = new Pool("", SchedulingMode.FIFO, initMinShare = 0,
+      initMaxShare = Int.MaxValue, initWeight = 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
 
     val taskSetManager0 = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
@@ -236,7 +237,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0,
+      initMaxShare = Int.MaxValue, initWeight = 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -264,7 +266,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0,
+      initMaxShare = Int.MaxValue, initWeight = 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -289,7 +292,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Pool should throw IllegalArgumentException when schedulingMode is not supported") {
     intercept[IllegalArgumentException] {
-      new Pool("TestPool", SchedulingMode.NONE, 0, 1)
+      new Pool("TestPool", SchedulingMode.NONE, 0, Int.MaxValue, 1)
     }
   }
 
@@ -299,7 +302,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -314,7 +317,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf()
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -329,7 +332,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, "INVALID_FILE_PATH")
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     intercept[FileNotFoundException] {
       schedulableBuilder.buildPools()
