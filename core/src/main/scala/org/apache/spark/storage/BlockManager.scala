@@ -1922,6 +1922,7 @@ private[spark] class BlockManager(
     def stop(): Unit = {
       if (!stopped) {
         stopped = true
+        logInfo("Stopping cache replication thread")
         cacheReplicationThread.interrupt()
         cacheReplicationThread.join()
       }
