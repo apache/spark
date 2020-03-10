@@ -79,7 +79,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    * Exposed for testing only.
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
-  
+
   override def onStart(): Unit = {
     logInfo("Registering PWR handler.")
     SignalUtils.register("PWR")(decommissionSelf)
