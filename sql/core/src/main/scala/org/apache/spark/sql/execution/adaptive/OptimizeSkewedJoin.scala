@@ -52,7 +52,7 @@ import org.apache.spark.sql.internal.SQLConf
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  *
  * Note that, when this rule is enabled, it also coalesces non-skewed partitions like
- * `ReduceNumShufflePartitions` does.
+ * `CoalesceShufflePartitions` does.
  */
 case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
@@ -191,7 +191,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       // This is used to delay the creation of non-skew partitions so that we can potentially
-      // coalesce them like `ReduceNumShufflePartitions` does.
+      // coalesce them like `CoalesceShufflePartitions` does.
       val nonSkewPartitionIndices = mutable.ArrayBuffer.empty[Int]
       val leftSkewDesc = new SkewDesc
       val rightSkewDesc = new SkewDesc
