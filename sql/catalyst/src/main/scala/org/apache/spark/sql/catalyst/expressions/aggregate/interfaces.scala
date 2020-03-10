@@ -234,8 +234,11 @@ abstract class AggregateFunction extends Expression {
 
   /** String representation used in explain plans. */
   def toAggString(isDistinct: Boolean): String = {
-    val start = if (isDistinct) "(distinct " else "("
-    prettyName + flatArgumentStrings.mkString(start, ", ", ")")
+    if (isDistinct) {
+      toString.patch(prettyName.size + 1, "distinct ", 0)
+    } else {
+      toString
+    }
   }
 }
 

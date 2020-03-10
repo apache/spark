@@ -266,19 +266,20 @@ abstract class Expression extends TreeNode[Expression] {
     case single => single :: Nil
   }
 
-  protected def flatArgumentStrings: Iterator[String] = flatArguments.map {
-    case e: Expression => e.argumentString
-    case arg => s"$arg"
-  }
-
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
   final override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleString(maxFields: Int): String = toString
 
-  override def toString: String = prettyName + truncatedString(
-    flatArgumentStrings.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
+  override def toString: String = {
+    val argumentStrings = flatArguments.map {
+      case e: Expression => e.argumentString
+      case arg => s"$arg"
+    }
+    prettyName + truncatedString(
+      argumentStrings.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
+  }
 
   def argumentString: String = toString
 
