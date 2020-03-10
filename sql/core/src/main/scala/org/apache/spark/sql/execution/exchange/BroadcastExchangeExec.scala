@@ -43,6 +43,7 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
+  import BroadcastExchangeExec._
 
   private[sql] val runId: UUID = UUID.randomUUID
 
@@ -87,12 +88,9 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
-            // and only 70% of the slots can be used before growing in HashedRelation,
-            // here the limitation should not be over 341 million.
-            if (numRows >= (1 << 29) / 1.5) {
+            if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
               throw new SparkException(
-                s"Cannot broadcast the table with 341 million or more rows: $numRows rows")
+                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
             }
 
             val beforeBuild = System.nanoTime()
@@ -112,7 +110,7 @@ case class BroadcastExchangeExec(
             }
 
             longMetric("dataSize") += dataSize
-            if (dataSize >= (8L << 30)) {
+            if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
                 s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
             }
@@ -184,6 +182,13 @@ case class BroadcastExchangeExec(
 }
 
 object BroadcastExchangeExec {
+  // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
+  // and only 70% of the slots can be used before growing in HashedRelation,
+  // here the limitation should not be over 341 million.
+  val MAX_BROADCAST_TABLE_ROWS = ((1L << 29) / 1.5).toLong
+
+  val MAX_BROADCAST_TABLE_BYTES = 8L << 30
+
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
         SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
