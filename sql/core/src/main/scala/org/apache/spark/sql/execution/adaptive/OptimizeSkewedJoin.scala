@@ -108,7 +108,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def getMapStartIndices(
       stage: ShuffleQueryStageExec,
       partitionId: Int,
-      targetSize: Long): Array[Int] = {
+      targetSize: Long): Seq[Int] = {
     val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
     val partitionStartIndices = ArrayBuffer[Int]()
@@ -126,7 +126,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       i += 1
     }
 
-    partitionStartIndices.toArray
+    partitionStartIndices
   }
 
   private def getStatistics(stage: ShuffleQueryStageExec): MapOutputStatistics = {
@@ -255,10 +255,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       logDebug("number of skewed partitions: " +
         s"left ${leftSkewDesc.numPartitions}, right ${rightSkewDesc.numPartitions}")
       if (leftSkewDesc.numPartitions > 0 || rightSkewDesc.numPartitions > 0) {
-        val newLeft = CustomShuffleReaderExec(
-          left, leftSidePartitions.toArray, leftSkewDesc.toString)
-        val newRight = CustomShuffleReaderExec(
-          right, rightSidePartitions.toArray, rightSkewDesc.toString)
+        val newLeft = CustomShuffleReaderExec(left, leftSidePartitions, leftSkewDesc.toString)
+        val newRight = CustomShuffleReaderExec(right, rightSidePartitions, rightSkewDesc.toString)
         smj.copy(
           left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
       } else {
@@ -286,7 +284,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def createSkewPartitions(
       reducerIndex: Int,
-      mapStartIndices: Array[Int],
+      mapStartIndices: Seq[Int],
       numMappers: Int): Seq[PartialReducerPartitionSpec] = {
     mapStartIndices.indices.map { i =>
       val startMapIndex = mapStartIndices(i)
