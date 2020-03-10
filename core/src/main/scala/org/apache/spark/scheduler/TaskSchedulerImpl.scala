@@ -346,7 +346,8 @@ private[spark] class TaskSchedulerImpl(
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
-            val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(taskSetRpID)
+            val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
+            val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
             val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality,
               taskResAssignments)
             for (task <- taskDescOption) {
@@ -398,11 +399,11 @@ private[spark] class TaskSchedulerImpl(
       availWorkerResources: Map[String, Buffer[String]]
       ): Option[Map[String, ResourceInformation]] = {
     val rpId = taskSet.taskSet.resourceProfileId
-    val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(rpId)
+    val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(taskSetProf, conf)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
 
-    val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
     if (tsResources.isEmpty) return Some(Map.empty)
@@ -437,8 +438,8 @@ private[spark] class TaskSchedulerImpl(
       (id == resourceProfile.id)
     }
     val coresKnown = resourceProfile.isCoresLimitKnown
-    var limitingResource = resourceProfile.limitingResource(sc.getConf)
-    val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(rpId)
+    var limitingResource = resourceProfile.limitingResource(conf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(resourceProfile, conf)
 
     offersForResourceProfile.map { case (o, index) =>
       val numTasksPerExecCores = availableCpus(index) / taskCpus

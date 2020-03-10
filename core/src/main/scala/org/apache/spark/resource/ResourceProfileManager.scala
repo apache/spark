@@ -41,7 +41,6 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
 
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
-  private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isNotYarn = master.isDefined && !master.get.equals("yarn")
@@ -80,13 +79,5 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
       throw new SparkException(s"ResourceProfileId $rpId not found!")
     }
     rp
-  }
-
-  /*
-   * Get the number of cpus per task if its set in the profile, otherwise return the
-   * cpus per task for the default profile.
-   */
-  def taskCpusOrDefaultForProfileId(rpId: Int): Int = {
-    resourceProfileFromId(rpId).getTaskCpus.getOrElse(taskCpusDefaultProfile)
   }
 }

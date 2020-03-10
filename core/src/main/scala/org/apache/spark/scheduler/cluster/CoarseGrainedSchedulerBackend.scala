@@ -145,8 +145,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              val taskCpus = scheduler.sc.resourceProfileManager
-                .taskCpusOrDefaultForProfileId(executorInfo.resourceProfileId)
+              val rpId = executorInfo.resourceProfileId
+              val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+              val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
               executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
@@ -361,8 +362,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
-          val taskCpus = scheduler.sc.resourceProfileManager
-            .taskCpusOrDefaultForProfileId(executorData.resourceProfileId)
+          val rpId = executorData.resourceProfileId
+          val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+          val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
           executorData.freeCores -= taskCpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
@@ -611,7 +613,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = scheduler.sc.resourceProfileManager.taskCpusOrDefaultForProfileId(rp.id)
+    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfileId(rp, conf)
     val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
     executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
   }

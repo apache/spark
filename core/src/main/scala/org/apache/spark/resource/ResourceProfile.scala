@@ -317,4 +317,12 @@ object ResourceProfile extends Logging {
       rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
     rp.executorResources.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
   }
+
+  /*
+   * Get the number of cpus per task if its set in the profile, otherwise return the
+   * cpus per task for the default profile.
+   */
+  private[spark] def getTaskCpusOrDefaultForProfileId(rp: ResourceProfile, conf: SparkConf): Int = {
+    rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
+  }
 }
