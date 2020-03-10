@@ -2523,11 +2523,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val narrowDepD = new OneToOneDependency(rddD)
     val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
 
-    assert(scheduler.getShuffleDependencies(rddA) === Set())
-    assert(scheduler.getShuffleDependencies(rddB) === Set())
-    assert(scheduler.getShuffleDependencies(rddC) === Set(shuffleDepB))
-    assert(scheduler.getShuffleDependencies(rddD) === Set(shuffleDepC))
-    assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
+    var (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    assert(shuffleDeps === Set())
+    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(shuffleDeps === Set())
+    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(shuffleDeps === Set(shuffleDepB))
+    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(shuffleDeps === Set(shuffleDepC))
+    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(shuffleDeps === Set(shuffleDepA, shuffleDepC))
   }
 
   test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +
@@ -3097,7 +3102,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   test("test default resource profile") {
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))
-    val rp = scheduler.mergeResourceProfilesForStage(rdd)
+    val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+    val rp = scheduler.mergeResourceProfilesForStage(resourceprofiles)
     assert(rp.id == scheduler.sc.resourceProfileManager.defaultResourceProfile.id)
   }
 
@@ -3107,7 +3113,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
 
     val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
-    val rpMerged = scheduler.mergeResourceProfilesForStage(rdd)
+    val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+    val rpMerged = scheduler.mergeResourceProfilesForStage(resourceprofiles)
     val expectedid = Option(rdd.getResourceProfile).map(_.id)
     assert(expectedid.isDefined)
     assert(expectedid.get != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -3126,7 +3133,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
-      scheduler.mergeResourceProfilesForStage(rdd)
+      val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+      scheduler.mergeResourceProfilesForStage(resourceprofiles)
     }.getMessage()
 
     assert(error.contains("Multiple ResourceProfile's specified in the RDDs"))
