@@ -127,8 +127,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [COLUMN] col_spec alterColumnAct
 ##### Syntax
 {% highlight sql %}
 ALTER TABLE table_identifier ADD [IF NOT EXISTS] 
-  PARTITION <partition_spec> 
-  [ PARTITION <partition_spec> ...]
+    ( partition_spec [ partition_spec ... ] )
 {% endhighlight %}
      
 ##### Parameters
@@ -440,7 +439,7 @@ DESC StudentInfo;
 | age                      | int        | NULL     |
 +--------------------------+------------+----------+--+
 
-ALTER TABLE StudentInfo ALTER COLUMNS name COMMENT "new comment";
+ALTER TABLE StudentInfo ALTER COLUMN name COMMENT "new comment";
 
 --After ALTER or CHANGE COLUMNS
 DESC StudentInfo;
@@ -482,6 +481,5 @@ ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner')
 ### Related Statements
 - [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
 - [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
-- [ALTER TABLE ... ADD PARTITION](sql-ref-syntax-ddl-alter-table.html)
 
 
