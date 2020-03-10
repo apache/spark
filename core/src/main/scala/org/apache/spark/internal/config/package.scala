@@ -412,6 +412,14 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val STORAGE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.storage.decommission.enabled")
+      .booleanConf.createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE =
+    ConfigBuilder("spark.storage.decommission.maxReplicationFailures")
+      .intConf.createWithDefault(3)
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")

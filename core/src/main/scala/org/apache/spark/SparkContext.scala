@@ -28,9 +28,8 @@ import scala.collection.Map
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
-
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -38,7 +37,6 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -57,7 +55,7 @@ import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
@@ -1586,7 +1584,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.removeListener(listener)
   }
 
-  private[spark] def getExecutorIds(): Seq[String] = {
+  def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
         b.getExecutorIds()
@@ -1718,6 +1716,17 @@ class SparkContext(config: SparkConf) extends Logging {
       case _ =>
         logWarning("Killing executors is not supported by current scheduler.")
         false
+    }
+  }
+
+
+  @DeveloperApi
+  def decommissionExecutors(executorIds: Seq[String]): Unit = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        executorIds.foreach(b.decommissionExecutor)
+      case _ =>
+        logWarning("Decommissioning executors is not supported by current scheduler.")
     }
   }
 
