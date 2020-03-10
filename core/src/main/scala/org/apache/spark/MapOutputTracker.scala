@@ -857,7 +857,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
             fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
           } catch {
             case e: IOException if
-            Throwables.getCausalChain(e).asScala.exists(_.isInstanceOf[BlockNotFoundException]) =>
+              Throwables.getCausalChain(e).asScala.exists(_.isInstanceOf[BlockNotFoundException]) =>
               mapStatuses.clear()
               throw new MetadataFetchFailedException(
                 shuffleId, -1, Throwables.getStackTraceAsString(e))

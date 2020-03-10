@@ -19,8 +19,10 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.broadcast.BroadcastManager
@@ -28,8 +30,9 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
-import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
+import org.apache.spark.storage.{BlockManagerId, BlockNotFoundException, ShuffleBlockId}
+import org.apache.spark.util.Utils
 
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
@@ -333,4 +336,47 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-30849: throws MetadataFetchFailedException " +
+    "when map statuses broadcast block not found") {
+    val newConf = new SparkConf()
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 10240L) // 10 KiB << 1MiB framesize
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      val trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+      val workerTracker = new MapOutputTrackerWorker(newConf)
+      workerTracker.trackerEndpoint = spy(trackerEndpoint)
+
+      // Frame size should be ~1.1MB, note that the size is hand-selected here because map output
+      // statuses are compressed before being sent.
+      masterTracker.registerShuffle(20, 100)
+      (0 until 100).foreach { i =>
+        masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
+          BlockManagerId("1", "host0", 1000), Array.fill[Long](4000000)(0), 5))
+      }
+
+      doAnswer((invocationOnMock: InvocationOnMock) => {
+        val future = invocationOnMock.callRealMethod()
+        // Map status was unregistered and re-registered before the old map status broadcast
+        // block was fetched.
+        masterTracker.unregisterMapOutput(20, 0, BlockManagerId("1", "host0", 1000))
+        assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+
+        masterTracker.registerMapOutput(20, 0, new CompressedMapStatus(
+          BlockManagerId("1", "host0", 1000), Array.fill[Long](4000000)(0), 5))
+        assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+        future
+      }).when(workerTracker.trackerEndpoint)
+        .askSync(ArgumentMatchers.eq(GetMapOutputStatuses(20)))(any())
+
+      // Should throw MetadataFetchFailedException because the block is missing.
+      val exception = intercept[MetadataFetchFailedException](workerTracker.getMapSizesByExecutorId(20, 0))
+      assert(Utils.exceptionString(exception)
+        .contains(classOf[BlockNotFoundException].getSimpleName))
+    }
+  }
 }
