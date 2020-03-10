@@ -1588,9 +1588,9 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<NestedSmallBeanWithNonNullField> ds1 = spark.createDataset(beans1, encoder1);
 
     StructType schema = ds1.schema();
-    Assert.assertFalse(schema.fields()[schema.fieldIndex("nonNull_f")].nullable());
-    Assert.assertTrue(schema.fields()[schema.fieldIndex("nullable_f")].nullable());
-    Assert.assertFalse(schema.fields()[schema.fieldIndex("childMap")].nullable());
+    Assert.assertFalse(schema.apply("nonNull_f").nullable());
+    Assert.assertTrue(schema.apply("nullable_f").nullable());
+    Assert.assertFalse(schema.apply("childMap").nullable());
 
     Assert.assertEquals(beans1, ds1.collectAsList());
     Dataset<NestedSmallBeanWithNonNullField> ds2 = ds1.map(
@@ -1610,9 +1610,9 @@ public class JavaDatasetSuite implements Serializable {
     StructType nestedSchema = (StructType) ds3.schema()
       .fields()[ds3.schema().fieldIndex("f")]
       .dataType();
-    Assert.assertFalse(nestedSchema.fields()[nestedSchema.fieldIndex("nonNull_f")].nullable());
-    Assert.assertTrue(nestedSchema.fields()[nestedSchema.fieldIndex("nullable_f")].nullable());
-    Assert.assertFalse(nestedSchema.fields()[nestedSchema.fieldIndex("childMap")].nullable());
+    Assert.assertFalse(nestedSchema.apply("nonNull_f").nullable());
+    Assert.assertTrue(nestedSchema.apply("nullable_f").nullable());
+    Assert.assertFalse(nestedSchema.apply("childMap").nullable());
 
     Assert.assertEquals(beans2, ds3.collectAsList());
 
