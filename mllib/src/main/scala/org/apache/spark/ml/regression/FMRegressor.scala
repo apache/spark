@@ -409,7 +409,7 @@ class FMRegressor @Since("3.0.0") (
   @Since("3.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override protected[spark] def train(
+  override protected def train(
       dataset: Dataset[_]
     ): FMRegressionModel = instrumented { instr =>
 

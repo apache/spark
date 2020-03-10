@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Capabilities that can be provided by a {@link Table} implementation.
@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public enum TableCapability {
   /**
    * Signals that the table supports reads in batch execution mode.

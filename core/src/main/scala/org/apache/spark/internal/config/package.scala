@@ -45,6 +45,7 @@ package object config {
         "custom implementation. Spark will try each class specified until one of them " +
         "returns the resource information for that resource. It tries the discovery " +
         "script last if none of the plugins return information for that resource.")
+      .version("3.0.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -55,89 +56,113 @@ package object config {
       .doc("Path to a file containing the resources allocated to the driver. " +
         "The file should be formatted as a JSON array of ResourceAllocation objects. " +
         "Only used internally in standalone mode.")
+      .version("3.0.0")
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_CLASS_PATH =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
+      .version("1.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
+      .version("1.0.0")
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_LIBRARY_PATH =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH)
+      .version("1.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
-    ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.driver.userClassPathFirst")
+      .version("1.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
     .doc("Number of cores to use for the driver process, only in cluster mode.")
+    .version("1.3.0")
     .intConf
     .createWithDefault(1)
 
   private[spark] val DRIVER_MEMORY = ConfigBuilder(SparkLauncher.DRIVER_MEMORY)
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
+    .version("1.1.1")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
     .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
+    .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
   private[spark] val DRIVER_LOG_DFS_DIR =
-    ConfigBuilder("spark.driver.log.dfsDir").stringConf.createOptional
+    ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
 
   private[spark] val DRIVER_LOG_LAYOUT =
     ConfigBuilder("spark.driver.log.layout")
+      .version("3.0.0")
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_LOG_PERSISTTODFS =
     ConfigBuilder("spark.driver.log.persistToDfs.enabled")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DRIVER_LOG_ALLOW_EC =
     ConfigBuilder("spark.driver.log.allowErasureCoding")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
+    .version("1.0.0")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val EVENT_LOG_DIR = ConfigBuilder("spark.eventLog.dir")
+    .version("1.0.0")
     .stringConf
     .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
+      .version("1.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
     ConfigBuilder("spark.eventLog.erasureCoding.enabled")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_TESTING =
     ConfigBuilder("spark.eventLog.testing")
       .internal()
+      .version("1.0.1")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
     .doc("Buffer size to use when writing to output streams, in KiB unless otherwise specified.")
+    .version("1.0.0")
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("100k")
 
@@ -145,6 +170,7 @@ package object config {
     ConfigBuilder("spark.eventLog.logStageExecutorMetrics")
       .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
         "to the event log.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -153,6 +179,7 @@ package object config {
       .doc("Names of supported young generation garbage collector. A name usually is " +
         " the return of GarbageCollectorMXBean.getName. The built-in young generation garbage " +
         s"collectors are ${GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .version("3.0.0")
       .stringConf
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
@@ -162,20 +189,28 @@ package object config {
       .doc("Names of supported old generation garbage collector. A name usually is " +
         "the return of GarbageCollectorMXBean.getName. The built-in old generation garbage " +
         s"collectors are ${GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
+      .version("3.0.0")
       .stringConf
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
   private[spark] val EVENT_LOG_OVERWRITE =
-    ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.eventLog.overwrite")
+      .version("1.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
-    ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.eventLog.longForm.enabled")
+      .version("2.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ENABLE_ROLLING =
     ConfigBuilder("spark.eventLog.rolling.enabled")
       .doc("Whether rolling over event log files is enabled. If set to true, it cuts down " +
         "each event log file to the configured size.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -183,35 +218,46 @@ package object config {
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
       .doc(s"When ${EVENT_LOG_ENABLE_ROLLING.key}=true, specifies the max size of event log file" +
         " to be rolled over.")
+      .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
       .createWithDefaultString("128m")
 
   private[spark] val EXECUTOR_ID =
-    ConfigBuilder("spark.executor.id").stringConf.createOptional
+    ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
   private[spark] val EXECUTOR_CLASS_PATH =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      .version("1.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES =
     ConfigBuilder("spark.executor.heartbeat.dropZeroAccumulatorUpdates")
       .internal()
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val EXECUTOR_HEARTBEAT_INTERVAL =
     ConfigBuilder("spark.executor.heartbeatInterval")
+      .version("1.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
-    ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
+    ConfigBuilder("spark.executor.heartbeat.maxFailures")
+      .internal()
+      .version("1.6.2")
+      .intConf
+      .createWithDefault(60)
 
   private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
     ConfigBuilder("spark.executor.processTreeMetrics.enabled")
       .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
         "executor metrics.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -220,33 +266,44 @@ package object config {
       .doc("How often to collect executor metrics (in milliseconds). " +
         "If 0, the polling is done on executor heartbeats. " +
         "If positive, the polling is done at this interval.")
+      .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
+      .version("1.0.0")
       .stringConf
       .createOptional
 
   private[spark] val EXECUTOR_LIBRARY_PATH =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH)
+      .version("1.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
-    ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.executor.userClassPathFirst")
+      .version("1.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
+    .version("1.0.0")
     .intConf
     .createWithDefault(1)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
+    .version("0.7.0")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
     .doc("The amount of non-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
+    .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -256,12 +313,14 @@ package object config {
       "the cluster (not from each machine). If not set, the default will be " +
       "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
       "(all available cores) on Mesos.")
+    .version("0.6.0")
     .intConf
     .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
+    .version("1.6.0")
     .withAlternative("spark.unsafe.offHeap")
     .booleanConf
     .createWithDefault(false)
@@ -272,6 +331,7 @@ package object config {
       "This setting has no impact on heap memory usage, so if your executors' total memory " +
       "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
       "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
+    .version("1.6.0")
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
@@ -281,6 +341,7 @@ package object config {
       "size of the region set aside by spark.memory.fraction. The higher this is, the " +
       "less working memory may be available to execution and tasks may spill to disk more " +
       "often. Leaving this at the default value is recommended. ")
+    .version("1.6.0")
     .doubleConf
     .checkValue(v => v >= 0.0 && v < 1.0, "Storage fraction must be in [0,1)")
     .createWithDefault(0.5)
@@ -291,16 +352,19 @@ package object config {
       "The purpose of this config is to set aside memory for internal metadata, " +
       "user data structures, and imprecise size estimation in the case of sparse, " +
       "unusually large records. Leaving this at the default value is recommended.  ")
+    .version("1.6.0")
     .doubleConf
     .createWithDefault(0.6)
 
   private[spark] val STORAGE_SAFETY_FRACTION = ConfigBuilder("spark.storage.safetyFraction")
+    .version("1.1.0")
     .doubleConf
     .createWithDefault(0.9)
 
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")
+      .version("1.1.0")
       .longConf
       .createWithDefault(1024 * 1024)
 
@@ -310,6 +374,7 @@ package object config {
         "Cached RDD block replicas lost due to executor failures are replenished " +
         "if there are any existing available replicas. This tries to " +
         "get the replication level of the block to the initial number")
+      .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -320,41 +385,54 @@ package object config {
         "This prevents Spark from memory mapping very small blocks. " +
         "In general, memory mapping has high overhead for blocks close to or below " +
         "the page size of the operating system.")
+      .version("0.9.2")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2m")
 
   private[spark] val STORAGE_REPLICATION_POLICY =
     ConfigBuilder("spark.storage.replication.policy")
+      .version("2.1.0")
       .stringConf
       .createWithDefaultString(classOf[RandomBlockReplicationPolicy].getName)
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_MAPPER =
     ConfigBuilder("spark.storage.replication.topologyMapper")
+      .version("2.1.0")
       .stringConf
       .createWithDefaultString(classOf[DefaultTopologyMapper].getName)
 
   private[spark] val STORAGE_CACHED_PEERS_TTL = ConfigBuilder("spark.storage.cachedPeersTtl")
-    .intConf.createWithDefault(60 * 1000)
+    .version("1.1.1")
+    .intConf
+    .createWithDefault(60 * 1000)
 
   private[spark] val STORAGE_MAX_REPLICATION_FAILURE =
     ConfigBuilder("spark.storage.maxReplicationFailures")
-      .intConf.createWithDefault(1)
+      .version("1.1.1")
+      .intConf
+      .createWithDefault(1)
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
-    ConfigBuilder("spark.storage.replication.topologyFile").stringConf.createOptional
+    ConfigBuilder("spark.storage.replication.topologyFile")
+      .version("2.1.0")
+      .stringConf
+      .createOptional
 
   private[spark] val STORAGE_EXCEPTION_PIN_LEAK =
     ConfigBuilder("spark.storage.exceptionOnPinLeak")
+      .version("1.6.2")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL =
     ConfigBuilder("spark.storage.blockManagerTimeoutIntervalMs")
+      .version("0.7.3")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
   private[spark] val STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
+      .version("0.7.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
 
@@ -362,6 +440,7 @@ package object config {
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
       .doc("Whether or not cleanup the files not served by the external shuffle service " +
         "on executor exits.")
+      .version("2.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -369,6 +448,7 @@ package object config {
     ConfigBuilder("spark.diskStore.subDirectories")
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
+      .version("0.6.0")
       .intConf
       .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
@@ -377,6 +457,7 @@ package object config {
     ConfigBuilder("spark.block.failures.beforeLocationRefresh")
       .doc("Max number of failures before this block manager refreshes " +
         "the block locations from the driver.")
+      .version("2.0.0")
       .intConf
       .createWithDefault(5)
 
@@ -1135,7 +1216,8 @@ package object config {
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
-      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled and external " +
+        s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled), shuffle " +
         "blocks requested from those block managers which are running on the same host are read " +
         "from the disk directly instead of being fetched as remote blocks over the network.")
       .booleanConf

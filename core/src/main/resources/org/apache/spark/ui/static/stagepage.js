@@ -120,6 +120,9 @@ function getColumnNameForTaskMetricSummary(columnKey) {
         case "shuffleRemoteReads":
             return "Shuffle Remote Reads";
 
+        case "shuffleWriteTime":
+            return "Shuffle Write Time";
+
         default:
             return "NA";
     }
@@ -131,35 +134,33 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
             var str = formatBytes(row.data.bytesRead[columnIndex], type) + " / " +
               row.data.recordsRead[columnIndex];
             return str;
-            break;
 
         case 'outputMetrics':
             var str = formatBytes(row.data.bytesWritten[columnIndex], type) + " / " +
               row.data.recordsWritten[columnIndex];
             return str;
-            break;
 
         case 'shuffleReadMetrics':
             var str = formatBytes(row.data.readBytes[columnIndex], type) + " / " +
               row.data.readRecords[columnIndex];
             return str;
-            break;
 
         case 'shuffleReadBlockedTime':
             var str = formatDuration(row.data.fetchWaitTime[columnIndex]);
             return str;
-            break;
 
         case 'shuffleRemoteReads':
             var str = formatBytes(row.data.remoteBytesRead[columnIndex], type);
             return str;
-            break;
 
         case 'shuffleWriteMetrics':
             var str = formatBytes(row.data.writeBytes[columnIndex], type) + " / " +
               row.data.writeRecords[columnIndex];
             return str;
-            break;
+
+        case 'shuffleWriteTime':
+            var str = formatDuration(row.data.writeTime[columnIndex] / 1000000.0);
+            return str;
 
         default:
             return (row.columnKey == 'peakExecutionMemory' || row.columnKey == 'memoryBytesSpilled'
@@ -274,7 +275,7 @@ function getStageAttemptId() {
 var taskSummaryMetricsTableArray = [];
 var taskSummaryMetricsTableCurrentStateArray = [];
 var taskSummaryMetricsDataTable;
-var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
+var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 21];
 var taskTableSelector;
 
 $(document).ready(function () {
@@ -291,6 +292,7 @@ $(document).ready(function () {
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
         "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
         "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14'> Shuffle Remote Reads</div>" +
+        "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21'> Shuffle Write Time</div>" +
         "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
         "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
         "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
@@ -309,6 +311,9 @@ $(document).ready(function () {
     $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
         .attr("data-placement", "top")
         .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
+    $('#shuffle_write_time').attr("data-toggle", "tooltip")
+        .attr("data-placement", "top")
+        .attr("title", "Time that the task spent writing shuffle data.");
     $('#result_serialization_time').attr("data-toggle", "tooltip")
             .attr("data-placement", "top")
             .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
@@ -362,6 +367,11 @@ $(document).ready(function () {
                 $('#shuffle_read_blocked_time').remove();
                 $('#shuffle_remote_reads').remove();
                 optionalColumns.splice(2, 2);
+            }
+
+            if (!dataToShow.showShuffleWriteData) {
+                $('#shuffle_write_time').remove();
+                optionalColumns.splice(7, 1)
             }
 
             // prepare data for executor summary table
@@ -559,10 +569,13 @@ $(document).ready(function () {
                                 break;
 
                             case "shuffleWriteMetrics":
-                                var row = createRowMetadataForColumn(
+                                var row1 = createRowMetadataForColumn(
                                     columnKey, taskMetricsResponse[columnKey], 4);
+                                var row2 = createRowMetadataForColumn(
+                                    "shuffleWriteTime", taskMetricsResponse[columnKey], 21);
                                 if (dataToShow.showShuffleWriteData) {
-                                    taskSummaryMetricsTableArray.push(row);
+                                    taskSummaryMetricsTableArray.push(row1);
+                                    taskSummaryMetricsTableArray.push(row2);
                                 }
                                 break;
 
@@ -759,7 +772,7 @@ $(document).ready(function () {
                                     var allAccums = "";
                                     row.accumulatorUpdates.forEach(function(accumulator) {
                                         allAccums += accumulator.name + ': ' + accumulator.update + "<BR>";
-                                    })
+                                    });
                                     return allAccums;
                                 } else {
                                     return "";
@@ -798,12 +811,12 @@ $(document).ready(function () {
                         {
                             data : function (row, type) {
                                 if (row.taskMetrics && row.taskMetrics.shuffleWriteMetrics && row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
-                                    return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000) : row.taskMetrics.shuffleWriteMetrics.writeTime;
+                                    return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000.0) : row.taskMetrics.shuffleWriteMetrics.writeTime;
                                 } else {
                                     return "";
                                 }
                             },
-                            name: "Write Time"
+                            name: "Shuffle Write Time"
                         },
                         {
                             data : function (row, type) {
@@ -877,7 +890,8 @@ $(document).ready(function () {
                         { "visible": false, "targets": 15 },
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 }
+                        { "visible": false, "targets": 18 },
+                        { "visible": false, "targets": 21 }
                     ],
                     "deferRender": true
                 };
@@ -942,7 +956,6 @@ $(document).ready(function () {
                 // summary table
                 taskTableSelector.column(19).visible(dataToShow.showInputData);
                 taskTableSelector.column(20).visible(dataToShow.showOutputData);
-                taskTableSelector.column(21).visible(dataToShow.showShuffleWriteData);
                 taskTableSelector.column(22).visible(dataToShow.showShuffleWriteData);
                 taskTableSelector.column(23).visible(dataToShow.showShuffleReadData);
                 taskTableSelector.column(24).visible(dataToShow.showBytesSpilledData);
