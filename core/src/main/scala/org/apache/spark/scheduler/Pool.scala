@@ -51,7 +51,7 @@ private[spark] class Pool(
   val name = poolName
   var parent: Pool = null
 
-  // A map that keeps the number of slots for each binded executor.
+  // A map that keeps the number of slots for each bound executor.
   val boundExecutors = new ConcurrentHashMap[String, Int]()
 
   private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
