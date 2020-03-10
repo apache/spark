@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -78,8 +79,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    * Exposed for testing only.
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
-
-
+  
   override def onStart(): Unit = {
     logInfo("Registering PWR handler.")
     SignalUtils.register("PWR")(decommissionSelf)
