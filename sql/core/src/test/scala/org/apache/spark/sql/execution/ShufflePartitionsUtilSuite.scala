@@ -266,12 +266,14 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList2, targetSize).toSeq ==
       Seq(0, 2, 4, 5))
 
-    // merge the small partition even if it leads to a very large partition
+    // merge small partitions if the partition itself is smaller than
+    // targetSize * SMALL_PARTITION_FACTOR
     val sizeList3 = Seq[Long](15, 1000, 15, 1000)
     assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList3, targetSize).toSeq ==
       Seq(0, 3))
 
-    // merge the small partitions even if it exceeds targetSize * 0.2
+    // merge small partitions if the combined size is smaller than
+    // targetSize * MERGED_PARTITION_FACTOR
     val sizeList4 = Seq[Long](35, 75, 90, 20, 35, 35, 35)
     assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList4, targetSize).toSeq ==
       Seq(0, 2, 3))
