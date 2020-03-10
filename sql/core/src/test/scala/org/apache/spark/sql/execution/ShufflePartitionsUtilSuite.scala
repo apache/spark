@@ -274,7 +274,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
 
     // merge small partitions if the combined size is smaller than
     // targetSize * MERGED_PARTITION_FACTOR
-    val sizeList4 = Seq[Long](35, 75, 90, 20, 35, 35, 35)
+    val sizeList4 = Seq[Long](35, 75, 90, 20, 35, 25, 35)
     assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList4, targetSize).toSeq ==
       Seq(0, 2, 3))
   }
