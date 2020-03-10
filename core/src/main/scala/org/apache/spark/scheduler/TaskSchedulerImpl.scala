@@ -346,7 +346,7 @@ private[spark] class TaskSchedulerImpl(
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
-            val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
+            val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(taskSetRpID)
             val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality,
               taskResAssignments)
             for (task <- taskDescOption) {
@@ -398,7 +398,7 @@ private[spark] class TaskSchedulerImpl(
       availWorkerResources: Map[String, Buffer[String]]
       ): Option[Map[String, ResourceInformation]] = {
     val rpId = taskSet.taskSet.resourceProfileId
-    val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
+    val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(rpId)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
 
@@ -438,7 +438,7 @@ private[spark] class TaskSchedulerImpl(
     }
     val coresKnown = resourceProfile.isCoresLimitKnown
     var limitingResource = resourceProfile.limitingResource(sc.getConf)
-    val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
+    val taskCpus = sc.resourceProfileManager.taskCpusOrDefaultForProfileId(rpId)
 
     offersForResourceProfile.map { case (o, index) =>
       val numTasksPerExecCores = availableCpus(index) / taskCpus

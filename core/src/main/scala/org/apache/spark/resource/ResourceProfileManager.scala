@@ -82,7 +82,11 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
     rp
   }
 
-  def taskCpusForProfileId(rpId: Int): Int = {
+  /*
+   * Get the number of cpus per task if its set in the profile, otherwise return the
+   * cpus per task for the default profile.
+   */
+  def taskCpusOrDefaultForProfileId(rpId: Int): Int = {
     resourceProfileFromId(rpId).getTaskCpus.getOrElse(taskCpusDefaultProfile)
   }
 }
