@@ -20,14 +20,33 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 
 /**
- * A trait that handles aliases in the `outputExpressions` and `orderingExpressions` to produce
- * `outputPartitioning` and `outputOrdering` that satisfy distribution and ordering requirements.
+ * A trait that provides functionality to handle aliases in the `outputExpressions`.
  */
-trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
+trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  protected def orderingExpressions: Seq[SortOrder] = Nil
+  protected def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
 
+  protected def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.map {
+      case a: AttributeReference => replaceAlias(a).getOrElse(a)
+      case other => other
+    }
+  }
+
+  protected def replaceAlias(attr: AttributeReference): Option[Attribute] = {
+    outputExpressions.collectFirst {
+      case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
+        a.toAttribute
+    }
+  }
+}
+
+/**
+ * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning` that
+ * satisfies distribution requirements.
+ */
+trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     if (hasAlias) {
       child.outputPartitioning match {
@@ -38,6 +57,14 @@ trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
       child.outputPartitioning
     }
   }
+}
+
+/**
+ * A trait that handles aliases in the `orderingExpressions` to produce `outputOrdering` that
+ * satisfies ordering requirements.
+ */
+trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
+  protected def orderingExpressions: Seq[SortOrder]
 
   final override def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
@@ -49,22 +76,6 @@ trait AliasAwareOutputPartitioningAndOrdering extends UnaryExecNode {
       }
     } else {
       orderingExpressions
-    }
-  }
-
-  private def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
-
-  private def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map {
-      case a: AttributeReference => replaceAlias(a).getOrElse(a)
-      case other => other
-    }
-  }
-
-  private def replaceAlias(attr: AttributeReference): Option[Attribute] = {
-    outputExpressions.collectFirst {
-      case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
-        a.toAttribute
     }
   }
 }
