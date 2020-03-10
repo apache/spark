@@ -322,7 +322,7 @@ object ResourceProfile extends Logging {
    * Get the number of cpus per task if its set in the profile, otherwise return the
    * cpus per task for the default profile.
    */
-  private[spark] def getTaskCpusOrDefaultForProfileId(rp: ResourceProfile, conf: SparkConf): Int = {
+  private[spark] def getTaskCpusOrDefaultForProfile(rp: ResourceProfile, conf: SparkConf): Int = {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
   }
 }

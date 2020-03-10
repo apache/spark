@@ -414,7 +414,7 @@ private[spark] object ResourceUtils extends Logging {
     val coresKnown = rp.isCoresLimitKnown
     var limitingResource = rp.limitingResource(sparkConf)
     var maxTaskPerExec = rp.maxTasksPerExecutor(sparkConf)
-    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(rp, sparkConf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, sparkConf)
     val cores = if (execCores.isDefined) {
       execCores.get
     } else if (coresKnown) {

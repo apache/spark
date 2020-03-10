@@ -347,7 +347,7 @@ private[spark] class TaskSchedulerImpl(
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
-            val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
+            val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality,
               taskResAssignments)
             for (task <- taskDescOption) {
@@ -400,12 +400,11 @@ private[spark] class TaskSchedulerImpl(
       ): Option[Map[String, ResourceInformation]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
-    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(taskSetProf, conf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
-
-    // remove task cpus since we checked already
-    val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
+    // only look at the resource other then cpus
+    val tsResources = ResourceProfile.getCustomTaskResources(taskSetProf)
     if (tsResources.isEmpty) return Some(Map.empty)
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
     // we go through all resources here so that we can make sure they match and also get what the
@@ -439,7 +438,7 @@ private[spark] class TaskSchedulerImpl(
     }
     val coresKnown = resourceProfile.isCoresLimitKnown
     var limitingResource = resourceProfile.limitingResource(conf)
-    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(resourceProfile, conf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(resourceProfile, conf)
 
     offersForResourceProfile.map { case (o, index) =>
       val numTasksPerExecCores = availableCpus(index) / taskCpus

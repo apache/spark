@@ -147,7 +147,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             case Some(executorInfo) =>
               val rpId = executorInfo.resourceProfileId
               val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-              val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
+              val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
               executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
@@ -364,7 +364,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // finishes.
           val rpId = executorData.resourceProfileId
           val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-          val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfileId(prof, conf)
+          val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
           executorData.freeCores -= taskCpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
@@ -613,7 +613,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfileId(rp, conf)
+    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
     val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
     executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
   }
