@@ -73,12 +73,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   private var _resources = Map.empty[String, ResourceInformation]
 
   /**
-   * Map of taskId to the custom resource information allocated to
-   * that task. Please refer to [[ResourceInformation]] for specifics.
+   * Map each taskId to the information about the resource allocated to it, Please refer to
+   * [[ResourceInformation]] for specifics.
    * Exposed for testing only.
    */
-  private[executor] val taskResources =
-    new mutable.HashMap[Long, Map[String, ResourceInformation]]
+  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
 
   override def onStart(): Unit = {
