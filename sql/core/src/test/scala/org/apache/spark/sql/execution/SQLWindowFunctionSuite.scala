@@ -487,4 +487,48 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
     spark.catalog.dropTempView("nums")
   }
+
+  test("Window function set partitionSpec as order spec when orderSpec is empty") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product, lead(month) over (partition by area) as lead_month
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 5, 2),
+        (2, "a", 6, null),
+        (3, "b", 7, 4),
+        (4, "b", 8, null),
+        (5, "c", 9, 6),
+        (6, "c", 10, null)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product,
+          |lead(month) over (partition by area order by product desc) as lead_month
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 5, null),
+        (2, "a", 6, 1),
+        (3, "b", 7, null),
+        (4, "b", 8, 3),
+        (5, "c", 9, null),
+        (6, "c", 10, 5)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
 }

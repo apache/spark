@@ -1679,7 +1679,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
     // CLUSTER BY ... | PARTITION BY ... ORDER BY ...
     val partition = ctx.partition.asScala.map(expression)
-    val order = ctx.sortItem.asScala.map(visitSortItem)
+    val order = if (ctx.sortItem.asScala.nonEmpty) {
+      ctx.sortItem.asScala.map(visitSortItem)
+    } else {
+      // Same default behaviors like hive, when order spec is null
+      // set partition spec expression as order spec
+      ctx.partition.asScala.map { expr =>
+        SortOrder(expression(expr), Ascending, Ascending.defaultNullOrdering, Set.empty)
+      }
+    }
 
     // RANGE/ROWS BETWEEN ...
     val frameSpecOption = Option(ctx.windowFrame).map { frame =>
