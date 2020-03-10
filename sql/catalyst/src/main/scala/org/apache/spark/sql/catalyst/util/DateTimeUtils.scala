@@ -909,10 +909,11 @@ object DateTimeUtils {
 
   /**
    * Since the Proleptic Gregorian calendar is de-facto calendar worldwide, as well as the chosen
-   * one in ANSI SQL standard, Spark 3.0 switches to it by using Java 8 API classes. However, the
-   * breaking changes between Java 7 and Java 8 pattern string will also breaks the backward
-   * compatibility of Spark 2.4 and earlier when parsing datetime. This function converts all
-   * incompatible pattern for the new parser in Spark 3.0. See more details in SPARK-31030.
+   * one in ANSI SQL standard, Spark 3.0 switches to it by using DateTimeFormatter classes.
+   * However, the breaking changes between SimpleDateFormat and DateTimeFormatter pattern string
+   * will also breaks the backward compatibility of Spark 2.4 and earlier when parsing datetime.
+   * This function converts all incompatible pattern for the new parser in Spark 3.0. See more
+   * details in SPARK-31030.
    *
    * @param pattern The input pattern.
    * @return The pattern for new parser
@@ -926,7 +927,7 @@ object DateTimeUtils {
     pattern.split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          // The meaning of 'u' was day number of week in Java 7, it changed to year in Java 8.
+          // The meaning of 'u' was day number of week in Java 7, it was changed to year in Java 8.
           // Substitute 'u' to 'e' and use Java 8 parser to parse the string. If parsable, return
           // the result; otherwise, fall back to 'u', and then use the legacy Java 7 parser to
           // parse. When it is successfully parsed, throw an exception and ask users to change
@@ -942,7 +943,7 @@ object DateTimeUtils {
             res
           }
         } else {
-            patternPart
+          patternPart
         }
     }.mkString("'")
   }

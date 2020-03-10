@@ -19,6 +19,12 @@ license: |
   limitations under the License.
 ---
 
+There are several common scenarios for datetime usage in Spark:
+
+- CSV/JSON datasources use the pattern string for parsing and formatting time content.
+
+- Datetime functions related to convert string to/from `DateType` or `TimestampType`. For example, unix_timestamp, date_format, to_unix_timestamp, from_unixtime, to_date, to_timestamp, from_utc_timestamp, to_utc_timestamp, etc.
+
 Spark uses the below letters in date and timestamp parsing and formatting:
 <table class="table">
 <tr>
@@ -113,7 +119,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
 </tr>
 <tr>
   <td> <b>k</b> </td>
-  <td> clock-hour-of-am-pm (1-24) </td>
+  <td> clock-hour-of-day (1-24) </td>
   <td> number </td>
   <td> 0 </td>
 </tr>
@@ -187,7 +193,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
 
 The count of pattern letters determines the format.
 
-- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form.
+- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. Six or more letters will fail.
 
 - Number: If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary. The following pattern letters have constraints on the count of letters. Only one letter 'F' can be specified. Up to two letters of 'd', 'H', 'h', 'K', 'k', 'm', and 's' can be specified. Up to three letters of 'D' can be specified.
 
@@ -195,7 +201,7 @@ The count of pattern letters determines the format.
 
 - Fraction: Outputs the micro-of-second field as a fraction-of-second. The micro-of-second value has six digits, thus the count of pattern letters is from 1 to 6. If it is less than 6, then the micro-of-second value is truncated, with only the most significant digits being output.
 
-- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded.
+- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
 - Zone names: This outputs the display name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
 
@@ -210,3 +216,5 @@ More details for the text style:
 - Short Form: Short text, typically an abbreviation. For example, day-of-week Monday might output "Mon".
 
 - Full Form: Full text, typically the full description. For example, day-of-week Monday might output "Monday".
+
+- Narrow Form: Narrow text, typically a single letter. For example, day-of-week Monday might output "M".
