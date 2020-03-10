@@ -87,7 +87,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE table_identifier { ALTER | CHANGE } [COLUMN] col_spec alterColumnAction
+ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnAction
 {% endhighlight %}
 
 #### Parameters
