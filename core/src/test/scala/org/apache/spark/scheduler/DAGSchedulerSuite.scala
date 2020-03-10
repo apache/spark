@@ -2523,16 +2523,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val narrowDepD = new OneToOneDependency(rddD)
     val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
 
-    var (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
-    assert(shuffleDeps === Set())
-    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
-    assert(shuffleDeps === Set())
-    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
-    assert(shuffleDeps === Set(shuffleDepB))
-    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
-    assert(shuffleDeps === Set(shuffleDepC))
-    (shuffleDeps, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
-    assert(shuffleDeps === Set(shuffleDepA, shuffleDepC))
+    val (shuffleDepsA, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    assert(shuffleDepsA === Set())
+    val (shuffleDepsB, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(shuffleDepsB === Set())
+    val (shuffleDepsC, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(shuffleDepsC === Set(shuffleDepB))
+    val (shuffleDepsD, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(shuffleDepsD === Set(shuffleDepC))
+    val (shuffleDepsE, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
   }
 
   test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +

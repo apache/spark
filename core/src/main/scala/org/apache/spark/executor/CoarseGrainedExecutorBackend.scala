@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -74,12 +73,12 @@ private[spark] class CoarseGrainedExecutorBackend(
   private var _resources = Map.empty[String, ResourceInformation]
 
   /**
-   * Map of taskId to a tuple of the number cpus and the custom resource information allocated to
+   * Map of taskId to the custom resource information allocated to
    * that task. Please refer to [[ResourceInformation]] for specifics.
    * Exposed for testing only.
    */
   private[executor] val taskResources =
-    new mutable.HashMap[Long, (Int, Map[String, ResourceInformation])]
+    new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
 
   override def onStart(): Unit = {
@@ -178,7 +177,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        taskResources(taskDesc.taskId) = (taskDesc.cpus, taskDesc.resources)
+        taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)
       }
 
@@ -225,9 +224,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val (taskCpus, resources) =
-      taskResources.getOrElse(taskId, (1, Map.empty[String, ResourceInformation]))
-    val msg = StatusUpdate(executorId, taskId, state, data, taskCpus, resources)
+    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
+    val msg = StatusUpdate(executorId, taskId, state, data, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
     }

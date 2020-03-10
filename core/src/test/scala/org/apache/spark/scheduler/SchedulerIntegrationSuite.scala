@@ -337,8 +337,8 @@ private[spark] abstract class MockBackend(
     if (TaskState.isFinished(state)) {
       synchronized {
         runningTasks -= task.taskId
-        executorIdToExecutor(task.executorId).freeCores += task.cpus
-        freeCores += task.cpus
+        executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
+        freeCores += taskScheduler.CPUS_PER_TASK
       }
       reviveOffers()
     }
@@ -407,8 +407,8 @@ private[spark] abstract class MockBackend(
         (taskDescription, task)
       }
       newTasks.foreach { case (taskDescription, _) =>
-        freeCores -= taskDescription.cpus
-        executorIdToExecutor(taskDescription.executorId).freeCores -= taskDescription.cpus
+        freeCores -= taskScheduler.CPUS_PER_TASK
+        executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
       assignedTasksWaitingToRun ++= newTasks
     }

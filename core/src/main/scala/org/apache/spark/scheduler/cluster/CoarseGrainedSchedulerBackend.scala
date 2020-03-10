@@ -140,11 +140,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources) =>
+      case StatusUpdate(executorId, taskId, state, data, resources) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
+              val taskCpus = scheduler.sc.resourceProfileManager
+                .taskCpusForProfileId(executorInfo.resourceProfileId)
               executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
@@ -359,7 +361,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
-          executorData.freeCores -= task.cpus
+          val taskCpus = scheduler.sc.resourceProfileManager
+            .taskCpusForProfileId(executorData.resourceProfileId)
+          executorData.freeCores -= taskCpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
             executorData.resourcesInfo(rName).acquire(rInfo.addresses)
@@ -607,7 +611,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = rp.getTaskCpus.getOrElse(scheduler.CPUS_PER_TASK)
+    val cpusPerTask = scheduler.sc.resourceProfileManager.taskCpusForProfileId(rp.id)
     val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
     executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
   }

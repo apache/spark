@@ -347,7 +347,7 @@ private[spark] class TaskSchedulerImpl(
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
             val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
-            val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
+            val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality,
               taskResAssignments)
             for (task <- taskDescOption) {
               tasks(i) += task
@@ -355,7 +355,7 @@ private[spark] class TaskSchedulerImpl(
               taskIdToTaskSetManager.put(tid, taskSet)
               taskIdToExecutorId(tid) = execId
               executorIdToRunningTaskIds(execId).add(tid)
-              availableCpus(i) -= task.cpus
+              availableCpus(i) -= taskCpus
               assert(availableCpus(i) >= 0)
               task.resources.foreach { case (rName, rInfo) =>
                 // Remove the first n elements from availableResources addresses, these removed

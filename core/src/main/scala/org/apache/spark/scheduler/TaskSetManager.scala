@@ -402,7 +402,6 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : Option[TaskDescription] =
   {
@@ -467,7 +466,7 @@ private[spark] class TaskSetManager(
         val taskName = s"task ${info.id} in stage ${taskSet.id}"
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
-          s"cpus $taskCpus, taskResourceAssignments ${taskResourceAssignments}")
+          s"taskResourceAssignments ${taskResourceAssignments}")
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
@@ -477,7 +476,6 @@ private[spark] class TaskSetManager(
           taskName,
           index,
           task.partitionId,
-          taskCpus,
           addedFiles,
           addedJars,
           task.localProperties,

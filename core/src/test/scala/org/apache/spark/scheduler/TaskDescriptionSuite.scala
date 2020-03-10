@@ -68,7 +68,6 @@ class TaskDescriptionSuite extends SparkFunSuite {
       name = "task for test",
       index = 19,
       partitionId = 1,
-      cpus = 1,
       originalFiles,
       originalJars,
       originalProperties,

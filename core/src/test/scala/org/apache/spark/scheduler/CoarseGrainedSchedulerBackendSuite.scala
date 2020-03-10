@@ -191,7 +191,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     import TestUtils._
 
     val execCores = 3
-    val taskCpus = 1
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, execCores)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
@@ -246,7 +245,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, taskCpus, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+      "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
       new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(taskDescs)
@@ -260,7 +259,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
 
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")

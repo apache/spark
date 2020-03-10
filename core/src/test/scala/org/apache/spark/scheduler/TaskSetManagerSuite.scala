@@ -225,7 +225,7 @@ class TaskSetManagerSuite
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
 
     clock.advance(1)
@@ -246,7 +246,7 @@ class TaskSetManagerSuite
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
-      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === "exec1")
@@ -254,7 +254,7 @@ class TaskSetManagerSuite
     assert(sched.startedTasks.toSet === Set(0, 1, 2))
 
     // Re-offer the host -- now we should get no more tasks
-    assert(manager.resourceOffer("exec1", "host1", NO_PREF, 1) === None)
+    assert(manager.resourceOffer("exec1", "host1", NO_PREF) === None)
 
     // Finish the first two tasks
     manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdatesByTask(0)))
@@ -277,12 +277,12 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // An executor that is not NODE_LOCAL should be rejected.
-    assert(manager.resourceOffer("execC", "host2", ANY, 1) === None)
+    assert(manager.resourceOffer("execC", "host2", ANY) === None)
 
     // Because there are no alive PROCESS_LOCAL executors, the base locality level should be
     // NODE_LOCAL. So, we should schedule the task on this offered NODE_LOCAL executor before
     // any of the locality wait timers expire.
-    assert(manager.resourceOffer("execA", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("execA", "host1", ANY).get.index === 0)
   }
 
   test("basic delay scheduling") {
@@ -297,22 +297,22 @@ class TaskSetManagerSuite
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     // First offer host1, exec1: first task should be chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
-    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1) == None)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL) == None)
 
     clock.advance(LOCALITY_WAIT_MS)
     // Offer host1, exec1 again, at NODE_LOCAL level: the node local (task 3) should
     // get chosen before the noPref task
-    assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL, 1).get.index == 2)
+    assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index == 2)
 
     // Offer host2, exec2, at NODE_LOCAL level: we should choose task 2
-    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL, 1).get.index == 1)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).get.index == 1)
 
     // Offer host2, exec2 again, at NODE_LOCAL level: we should get noPref task
     // after failing to find a node_Local task
-    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL, 1) == None)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL) == None)
     clock.advance(LOCALITY_WAIT_MS)
-    assert(manager.resourceOffer("exec2", "host2", NO_PREF, 1).get.index == 3)
+    assert(manager.resourceOffer("exec2", "host2", NO_PREF).get.index == 3)
   }
 
   test("we do not need to delay scheduling when we only have noPref tasks in the queue") {
@@ -326,10 +326,10 @@ class TaskSetManagerSuite
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     // First offer host1, exec1: first task should be chosen
-    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1).get.index === 0)
-    assert(manager.resourceOffer("exec3", "host2", PROCESS_LOCAL, 1).get.index === 1)
-    assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL, 1) == None)
-    assert(manager.resourceOffer("exec3", "host2", NO_PREF, 1).get.index === 2)
+    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("exec3", "host2", PROCESS_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("exec3", "host2", NO_PREF).get.index === 2)
   }
 
   test("delay scheduling with fallback") {
@@ -347,29 +347,29 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // First offer host1: first task should be chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     // Offer host1 again: nothing should get chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1) === None)
+    assert(manager.resourceOffer("exec1", "host1", ANY) === None)
 
     clock.advance(LOCALITY_WAIT_MS)
 
     // Offer host1 again: second task (on host2) should get chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 1)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 1)
 
     // Offer host1 again: third task (on host2) should get chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 2)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 2)
 
     // Offer host2: fifth task (also on host2) should get chosen
-    assert(manager.resourceOffer("exec2", "host2", ANY, 1).get.index === 4)
+    assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 4)
 
     // Now that we've launched a local task, we should no longer launch the task for host3
-    assert(manager.resourceOffer("exec2", "host2", ANY, 1) === None)
+    assert(manager.resourceOffer("exec2", "host2", ANY) === None)
 
     clock.advance(LOCALITY_WAIT_MS)
 
     // After another delay, we can go ahead and launch that task non-locally
-    assert(manager.resourceOffer("exec2", "host2", ANY, 1).get.index === 3)
+    assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 3)
   }
 
   test("delay scheduling with failed hosts") {
@@ -385,28 +385,28 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // First offer host1: first task should be chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     // After this, nothing should get chosen, because we have separated tasks with unavailable
     // preference from the noPrefPendingTasks
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1) === None)
+    assert(manager.resourceOffer("exec1", "host1", ANY) === None)
 
     // Now mark host2 as dead
     sched.removeExecutor("exec2")
     manager.executorLost("exec2", "host2", SlaveLost())
 
     // nothing should be chosen
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1) === None)
+    assert(manager.resourceOffer("exec1", "host1", ANY) === None)
 
     clock.advance(LOCALITY_WAIT_MS * 2)
 
     // task 1 and 2 would be scheduled as nonLocal task
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 1)
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 2)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 1)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 2)
 
     // all finished
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1) === None)
-    assert(manager.resourceOffer("exec2", "host2", ANY, 1) === None)
+    assert(manager.resourceOffer("exec1", "host1", ANY) === None)
+    assert(manager.resourceOffer("exec2", "host2", ANY) === None)
   }
 
   test("task result lost") {
@@ -417,14 +417,14 @@ class TaskSetManagerSuite
     clock.advance(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     // Tell it the task has finished but the result was lost.
     manager.handleFailedTask(0, TaskState.FINISHED, TaskResultLost)
     assert(sched.endedTasks(0) === TaskResultLost)
 
     // Re-offer the host -- now we should get task 0 again.
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
   }
 
   test("repeated failures lead to task set abortion") {
@@ -438,7 +438,7 @@ class TaskSetManagerSuite
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
     // after the last failure.
     (1 to manager.maxTaskFailures).foreach { index =>
-      val offerResult = manager.resourceOffer("exec1", "host1", ANY, 1)
+      val offerResult = manager.resourceOffer("exec1", "host1", ANY)
       assert(offerResult.isDefined,
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 0)
@@ -474,7 +474,7 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
 
     {
-      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1)
+      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
       assert(offerResult.isDefined, "Expect resource offer to return a task")
 
       assert(offerResult.get.index === 0)
@@ -485,15 +485,15 @@ class TaskSetManagerSuite
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
       // Ensure scheduling on exec1 fails after failure 1 due to blacklist
-      assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL, 1).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL, 1).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", ANY, 1).isEmpty)
+      assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     }
 
     // Run the task on exec1.1 - should work, and then fail it on exec1.1
     {
-      val offerResult = manager.resourceOffer("exec1.1", "host1", NODE_LOCAL, 1)
+      val offerResult = manager.resourceOffer("exec1.1", "host1", NODE_LOCAL)
       assert(offerResult.isDefined,
         "Expect resource offer to return a task for exec1.1, offerResult = " + offerResult)
 
@@ -505,12 +505,12 @@ class TaskSetManagerSuite
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
       // Ensure scheduling on exec1.1 fails after failure 2 due to blacklist
-      assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL, 1).isEmpty)
+      assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL).isEmpty)
     }
 
     // Run the task on exec2 - should work, and then fail it on exec2
     {
-      val offerResult = manager.resourceOffer("exec2", "host2", ANY, 1)
+      val offerResult = manager.resourceOffer("exec2", "host2", ANY)
       assert(offerResult.isDefined, "Expect resource offer to return a task")
 
       assert(offerResult.get.index === 0)
@@ -521,7 +521,7 @@ class TaskSetManagerSuite
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
       // Ensure scheduling on exec2 fails after failure 3 due to blacklist
-      assert(manager.resourceOffer("exec2", "host2", ANY, 1).isEmpty)
+      assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
     }
 
     // Despite advancing beyond the time for expiring executors from within the blacklist,
@@ -529,17 +529,17 @@ class TaskSetManagerSuite
     clock.advance(rescheduleDelay)
 
     {
-      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1)
+      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
       assert(offerResult.isEmpty)
     }
 
     {
-      val offerResult = manager.resourceOffer("exec3", "host3", ANY, 1)
+      val offerResult = manager.resourceOffer("exec3", "host3", ANY)
       assert(offerResult.isDefined)
       assert(offerResult.get.index === 0)
       assert(offerResult.get.executorId === "exec3")
 
-      assert(manager.resourceOffer("exec3", "host3", ANY, 1).isEmpty)
+      assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
 
       // Cause exec3 to fail : failure 4
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
@@ -598,14 +598,14 @@ class TaskSetManagerSuite
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).isDefined)
+    assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
     manager.executorLost(
       "execA",
       "host1",
       ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
-    assert(manager.resourceOffer("execC", "host2", ANY, 1).isDefined)
+    assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
     sched.removeExecutor("execC")
     manager.executorLost(
       "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
@@ -633,12 +633,12 @@ class TaskSetManagerSuite
     clock.advance(LOCALITY_WAIT_MS * 3)
     // Offer host3
     // No task is scheduled if we restrict locality to RACK_LOCAL
-    assert(manager.resourceOffer("execC", "host3", RACK_LOCAL, 1) === None)
+    assert(manager.resourceOffer("execC", "host3", RACK_LOCAL) === None)
     // Task 0 can be scheduled with ANY
-    assert(manager.resourceOffer("execC", "host3", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("execC", "host3", ANY).get.index === 0)
     // Offer host2
     // Task 1 can be scheduled with RACK_LOCAL
-    assert(manager.resourceOffer("execB", "host2", RACK_LOCAL, 1).get.index === 1)
+    assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 1)
   }
 
   test("do not emit warning when serialized task is small") {
@@ -649,7 +649,7 @@ class TaskSetManagerSuite
 
     assert(!manager.emittedTaskSizeWarning)
 
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     assert(!manager.emittedTaskSizeWarning)
   }
@@ -664,7 +664,7 @@ class TaskSetManagerSuite
 
     assert(!manager.emittedTaskSizeWarning)
 
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).get.index === 0)
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     assert(manager.emittedTaskSizeWarning)
   }
@@ -679,7 +679,7 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
-      manager.resourceOffer("exec1", "host1", ANY, 1)
+      manager.resourceOffer("exec1", "host1", ANY)
     }
     assert(manager.isZombie)
   }
@@ -752,13 +752,13 @@ class TaskSetManagerSuite
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location
     // by the one task in the task set
-    val task1 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL, 1).get
+    val task1 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL).get
 
     // Mark the task as available for speculation, and then offer another resource,
     // which should be used to launch a speculative copy of the task.
     manager.speculatableTasks += singleTask.partitionId
     manager.addPendingTask(singleTask.partitionId, speculatable = true)
-    val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY, 1).get
+    val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
 
     assert(manager.runningTasks === 2)
     assert(manager.isZombie === false)
@@ -844,7 +844,7 @@ class TaskSetManagerSuite
         "exec1" -> "host1",
         "exec3" -> "host3",
         "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === exec)
@@ -870,7 +870,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.toSet === Set(2, 3))
 
     // Offer resource to start the speculative attempt for the running task 2.0
-    val taskOption = manager.resourceOffer("exec2", "host2", ANY, 1)
+    val taskOption = manager.resourceOffer("exec2", "host2", ANY)
     assert(taskOption.isDefined)
     val task4 = taskOption.get
     assert(task4.index === 2)
@@ -899,20 +899,20 @@ class TaskSetManagerSuite
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
-    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL, 1).get.index === 0)
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1) == None)
-    assert(manager.resourceOffer("execA", "host1", NO_PREF, 1).get.index == 1)
+    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index == 1)
 
     manager.speculatableTasks += 1
     manager.addPendingTask(1, speculatable = true)
     clock.advance(LOCALITY_WAIT_MS)
     // schedule the nonPref task
-    assert(manager.resourceOffer("execA", "host1", NO_PREF, 1).get.index === 2)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 2)
     // schedule the speculative task
-    assert(manager.resourceOffer("execB", "host2", NO_PREF, 1).get.index === 1)
+    assert(manager.resourceOffer("execB", "host2", NO_PREF).get.index === 1)
     clock.advance(LOCALITY_WAIT_MS * 3)
     // schedule non-local tasks
-    assert(manager.resourceOffer("execB", "host2", ANY, 1).get.index === 3)
+    assert(manager.resourceOffer("execB", "host2", ANY).get.index === 3)
   }
 
   test("node-local tasks should be scheduled right away " +
@@ -929,13 +929,13 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // node-local tasks are scheduled without delay
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1).get.index === 0)
-    assert(manager.resourceOffer("execA", "host2", NODE_LOCAL, 1).get.index === 1)
-    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL, 1).get.index === 3)
-    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL, 1) === None)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execA", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL).get.index === 3)
+    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL) === None)
 
     // schedule no-preference after node local ones
-    assert(manager.resourceOffer("execA", "host3", NO_PREF, 1).get.index === 2)
+    assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
   }
 
   test("SPARK-4939: node-local tasks should be scheduled right after process-local tasks finished")
@@ -951,13 +951,13 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // process-local tasks are scheduled first
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1).get.index === 2)
-    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL, 1).get.index === 3)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 2)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 3)
     // node-local tasks are scheduled without delay
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1).get.index === 0)
-    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL, 1).get.index === 1)
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1) == None)
-    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL, 1) == None)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL) == None)
   }
 
   test("SPARK-4939: no-pref tasks should be scheduled after process-local tasks finished") {
@@ -971,13 +971,13 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // process-local tasks are scheduled first
-    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL, 1).get.index === 1)
-    assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL, 1).get.index === 2)
+    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL).get.index === 2)
     // no-pref tasks are scheduled without delay
-    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL, 1) == None)
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL, 1) == None)
-    assert(manager.resourceOffer("execA", "host1", NO_PREF, 1).get.index === 0)
-    assert(manager.resourceOffer("execA", "host1", ANY, 1) == None)
+    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL) == None)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 0)
+    assert(manager.resourceOffer("execA", "host1", ANY) == None)
   }
 
   test("Ensure TaskSetManager is usable after addition of levels") {
@@ -998,9 +998,9 @@ class TaskSetManagerSuite
     assert(manager.pendingTasks.noPrefs.size === 0)
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
-    assert(manager.resourceOffer("execA", "host1", ANY, 1) !== None)
+    assert(manager.resourceOffer("execA", "host1", ANY) !== None)
     clock.advance(LOCALITY_WAIT_MS * 4)
-    assert(manager.resourceOffer("execB.2", "host2", ANY, 1) !== None)
+    assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
     sched.removeExecutor("execB.2")
     manager.executorLost("execA", "host1", SlaveLost())
@@ -1009,7 +1009,7 @@ class TaskSetManagerSuite
     sched.addExecutor("execC", "host3")
     manager.executorAdded()
     // Prior to the fix, this line resulted in an ArrayIndexOutOfBoundsException:
-    assert(manager.resourceOffer("execC", "host3", ANY, 1) !== None)
+    assert(manager.resourceOffer("execC", "host3", ANY) !== None)
   }
 
   test("Test that locations with HDFSCacheTaskLocation are treated as PROCESS_LOCAL.") {
@@ -1061,7 +1061,7 @@ class TaskSetManagerSuite
         "exec1" -> "host1",
         "exec2" -> "host2",
         "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(k, v, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === k)
@@ -1082,7 +1082,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.toSet === Set(3))
 
     // Offer resource to start the speculative attempt for the running task
-    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption5.isDefined)
     val task5 = taskOption5.get
     assert(task5.index === 3)
@@ -1121,7 +1121,7 @@ class TaskSetManagerSuite
       "exec1" -> "host1",
       "exec2" -> "host2",
       "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(k, v, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === k)
@@ -1154,7 +1154,7 @@ class TaskSetManagerSuite
         manager.handleFailedTask(task.taskId, TaskState.FAILED, endReason)
         sched.endedTasks(task.taskId) = endReason
         assert(!manager.isZombie)
-        val nextTask = manager.resourceOffer(s"exec2", s"host2", NO_PREF, 1)
+        val nextTask = manager.resourceOffer(s"exec2", s"host2", NO_PREF)
         assert(nextTask.isDefined, s"no offer for attempt $attempt of $index")
         tasks += nextTask.get
       }
@@ -1170,7 +1170,7 @@ class TaskSetManagerSuite
     assert(manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set(3, 4))
     // Offer resource to start the speculative attempt for the running task
-    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption5.isDefined)
     val speculativeTask = taskOption5.get
     assert(speculativeTask.index === 3 || speculativeTask.index === 4)
@@ -1195,7 +1195,7 @@ class TaskSetManagerSuite
     assert(!manager.isZombie)
 
     // now run another speculative task
-    val taskOpt6 = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOpt6 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOpt6.isDefined)
     val speculativeTask2 = taskOpt6.get
     assert(speculativeTask2.index === 3 || speculativeTask2.index === 4)
@@ -1226,7 +1226,7 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
     when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any(), any())).thenAnswer(
       (invocationOnMock: InvocationOnMock) => assert(manager.isZombie))
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
     // this would fail, inside our mock dag scheduler, if it calls dagScheduler.taskEnded() too soon
     manager.handleSuccessfulTask(0, createTaskResult(0))
@@ -1271,7 +1271,7 @@ class TaskSetManagerSuite
       "exec2" -> "host1"
     ).flatMap { case (exec, host) =>
       // offer each executor twice (simulating 2 cores per executor)
-      (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY, 1)}
+      (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY)}
     }
     assert(taskDescs.size === 4)
 
@@ -1308,7 +1308,7 @@ class TaskSetManagerSuite
       "exec2" -> "host2"
     ).flatMap { case (exec, host) =>
       // offer each executor twice (simulating 2 cores per executor)
-      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY, 1)}
+      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
     }
     assert(taskDescs.size === 4)
 
@@ -1344,7 +1344,7 @@ class TaskSetManagerSuite
     val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
     val taskSetManagerSpy = spy(taskSetManager)
 
-    val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY, 1)
+    val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
 
     // Assert the task has been black listed on the executor it was last executed on.
     when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), anyBoolean())).thenAnswer(
@@ -1372,9 +1372,9 @@ class TaskSetManagerSuite
     val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES, clock = new ManualClock)
 
     // all tasks from the first taskset have the same jars
-    val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption1.get.addedJars === addedJarsPreTaskSet)
-    val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption2.get.addedJars === addedJarsPreTaskSet)
 
     // even with a jar added mid-TaskSet
@@ -1382,7 +1382,7 @@ class TaskSetManagerSuite
     sc.addJar(jarPath.toString)
     val addedJarsMidTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
     assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
-    val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)
     // which should have the old version of the jars list
     assert(taskOption3.get.addedJars === addedJarsPreTaskSet)
 
@@ -1390,7 +1390,7 @@ class TaskSetManagerSuite
     val taskSet2 = FakeTask.createTaskSet(1)
     val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock = new ManualClock)
 
-    val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
@@ -1488,7 +1488,7 @@ class TaskSetManagerSuite
       "exec1" -> "host1",
       "exec3" -> "host3",
       "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === exec)
@@ -1514,7 +1514,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.toSet === Set(2, 3))
 
     // Offer resource to start the speculative attempt for the running task 2.0
-    val taskOption = manager.resourceOffer("exec2", "host2", ANY, 1)
+    val taskOption = manager.resourceOffer("exec2", "host2", ANY)
     assert(taskOption.isDefined)
     val task4 = taskOption.get
     assert(task4.index === 2)
@@ -1560,7 +1560,7 @@ class TaskSetManagerSuite
         "exec1" -> "host1",
         "exec2" -> "host2",
         "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(k, v, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === k)
@@ -1580,7 +1580,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.toSet === Set(3))
 
     // Offer resource to start the speculative attempt for the running task
-    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption5.isDefined)
     val task5 = taskOption5.get
     assert(task5.index === 3)
@@ -1640,16 +1640,16 @@ class TaskSetManagerSuite
     assert(FakeRackUtil.numBatchInvocation === 1)
     assert(FakeRackUtil.numSingleHostInvocation === 0)
     // with rack locality, reject an offer on a host with an unknown rack
-    assert(manager.resourceOffer("otherExec", "otherHost", TaskLocality.RACK_LOCAL, 1).isEmpty)
+    assert(manager.resourceOffer("otherExec", "otherHost", TaskLocality.RACK_LOCAL).isEmpty)
     (0 until 20).foreach { rackIdx =>
       (0 until 5).foreach { offerIdx =>
         // if we offer hosts which are not in preferred locations,
         // we'll reject them at NODE_LOCAL level,
         // but accept them at RACK_LOCAL level if they're on OK racks
         val hostIdx = 100 + rackIdx
-        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.NODE_LOCAL, 1)
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.NODE_LOCAL)
           .isEmpty)
-        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.RACK_LOCAL, 1)
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.RACK_LOCAL)
           .isDefined)
       }
     }
@@ -1670,7 +1670,7 @@ class TaskSetManagerSuite
 
     val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
     val taskOption =
-      manager.resourceOffer("exec1", "host1", NO_PREF, 1, taskResourceAssignments)
+      manager.resourceOffer("exec1", "host1", NO_PREF, taskResourceAssignments)
     assert(taskOption.isDefined)
     val allocatedResources = taskOption.get.resources
     assert(allocatedResources.size == 1)
@@ -1693,7 +1693,7 @@ class TaskSetManagerSuite
     // Offer resources for 4 tasks to start, 2 on each exec
     Seq("exec1" -> "host1", "exec2" -> "host2").foreach { case (exec, host) =>
       (0 until 2).foreach { _ =>
-        val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
+        val taskOption = manager.resourceOffer(exec, host, NO_PREF)
         assert(taskOption.isDefined)
         assert(taskOption.get.executorId === exec)
       }
@@ -1717,8 +1717,8 @@ class TaskSetManagerSuite
     // Offer resource to start the speculative attempt for the running task. We offer more
     // resources, and ensure that speculative tasks get scheduled appropriately -- only one extra
     // copy per speculatable task
-    val taskOption2 = manager.resourceOffer("exec1", "host1", NO_PREF, 1)
-    val taskOption3 = manager.resourceOffer("exec2", "host2", NO_PREF, 1)
+    val taskOption2 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    val taskOption3 = manager.resourceOffer("exec2", "host2", NO_PREF)
     assert(taskOption2.isDefined)
     val task2 = taskOption2.get
     // Ensure that task index 3 is launched on host1 and task index 4 on host2
@@ -1738,9 +1738,9 @@ class TaskSetManagerSuite
     assert(manager.copiesRunning(1) === 2)
     assert(manager.copiesRunning(3) === 2)
     // Offering additional resources should not lead to any speculative tasks being respawned
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).isEmpty)
-    assert(manager.resourceOffer("exec2", "host2", ANY, 1).isEmpty)
-    assert(manager.resourceOffer("exec3", "host3", ANY, 1).isEmpty)
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
+    assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
   }
 
   test("SPARK-26755 Ensure that a speculative task obeys original locality preferences") {
@@ -1763,7 +1763,7 @@ class TaskSetManagerSuite
     }
     // Offer resources for 3 tasks to start
     Seq("exec1" -> "host1", "exec2" -> "host2", "exec3" -> "host3").foreach { case (exec, host) =>
-      val taskOption = manager.resourceOffer(exec, host, NO_PREF, 1)
+      val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       assert(taskOption.get.executorId === exec)
     }
@@ -1776,17 +1776,17 @@ class TaskSetManagerSuite
     assert(manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set(0, 1))
     // Ensure that the speculatable tasks obey the original locality preferences
-    assert(manager.resourceOffer("exec4", "host4", NODE_LOCAL, 1).isEmpty)
+    assert(manager.resourceOffer("exec4", "host4", NODE_LOCAL).isEmpty)
     // task 1 does have a node-local preference for host2 -- but we've already got a regular
     // task running there, so we should not schedule a speculative there as well.
-    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL, 1).isEmpty)
-    assert(manager.resourceOffer("exec3", "host3", NODE_LOCAL, 1).isDefined)
-    assert(manager.resourceOffer("exec4", "host4", ANY, 1).isDefined)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).isEmpty)
+    assert(manager.resourceOffer("exec3", "host3", NODE_LOCAL).isDefined)
+    assert(manager.resourceOffer("exec4", "host4", ANY).isDefined)
     // Since, all speculatable tasks have been launched, making another offer
     // should not schedule any more tasks
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).isEmpty)
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(manager.resourceOffer("exec1", "host1", ANY, 1).isEmpty)
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
   private def testSpeculationDurationSetup(
@@ -1814,7 +1814,7 @@ class TaskSetManagerSuite
 
     // Offer resources for the task to start
     for (i <- 1 to numTasks) {
-      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, numCoresPerTask)
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
     }
     (manager, clock)
   }
@@ -1913,7 +1913,7 @@ class TaskSetManagerSuite
 
     // Offer resources for the task to start
     for (i <- 1 to numTasks) {
-      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, numCoresPerTask)
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
     }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
@@ -1931,7 +1931,7 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
     assert(sched.taskSetsFailed.isEmpty)
 
-    val offerResult = manager.resourceOffer("exec1", "host1", ANY, 1)
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)
     assert(offerResult.isDefined,
       "Expect resource offer on iteration 0 to return a task")
     assert(offerResult.get.index === 0)

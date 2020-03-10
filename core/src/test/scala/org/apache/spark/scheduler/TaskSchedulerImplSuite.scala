@@ -1449,11 +1449,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       assert(tDesc.resources.contains(GPU))
       if (tDesc.resources(GPU).addresses.size == 2) {
         has2Gpus += 1
-        assert(2 === tDesc.cpus)
       }
       if (tDesc.resources(GPU).addresses.size == 1) {
         has1Gpu += 1
-        assert(1 === tDesc.cpus)
       }
     }
     assert(has2Gpus == 3)
@@ -1471,7 +1469,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
-    assert(2 === taskDescriptions.head.cpus)
   }
 
   /**
