@@ -2111,7 +2111,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.partitioning,
             replace.bucketSpec,
             replace.properties,
-            Some(replace.provider),
+            replace.provider,
             replace.options,
             replace.location,
             replace.comment)
@@ -2133,7 +2133,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.partitioning,
             rtas.bucketSpec,
             rtas.properties,
-            Some(rtas.provider),
+            rtas.provider,
             rtas.options,
             rtas.location,
             rtas.comment)
