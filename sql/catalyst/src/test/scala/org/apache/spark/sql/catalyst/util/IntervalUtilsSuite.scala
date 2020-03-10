@@ -137,6 +137,15 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     failFuncWithInvalidInput("99-15", "month 15 outside range", fromYearMonthString)
     failFuncWithInvalidInput("9a9-15", "Interval string does not match year-month format",
       fromYearMonthString)
+
+    // whitespaces
+    assert(fromYearMonthString("99-10 ") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("+99-10\t") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("\t\t-8-10\t") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
+    failFuncWithInvalidInput("99\t-15", "Interval string does not match year-month format",
+      fromYearMonthString)
+    failFuncWithInvalidInput("-\t99-15", "Interval string does not match year-month format",
+      fromYearMonthString)
   }
 
   test("from day-time string - legacy") {
@@ -312,6 +321,11 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
     checkFail("5 30-12", DAY, SECOND, "must match day-time format")
     checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
+
+    // whitespaces
+    check("\t +5 12:40\t ", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    checkFail("+5\t 12:40", DAY, MINUTE, "must match day-time format")
+
   }
 
   test("interval overflow check") {
