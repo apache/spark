@@ -52,7 +52,7 @@ private[spark] class Pool(
   var parent: Pool = null
 
   // A map that keeps the number of slots for each binded executor.
-  val bindedExecutors = new ConcurrentHashMap[String, Int]()
+  val boundExecutors = new ConcurrentHashMap[String, Int]()
 
   private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
@@ -131,27 +131,40 @@ private[spark] class Pool(
     }
   }
 
-  def isThrottled: Boolean = {
-    runningTasks >= maxShare
-  }
-
-  def bindExecutor(execId: String, numSlots: Int): Pool = {
-    schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
-      .collectFirst {
-        case p: Pool if p.bindedExecutors.asScala.values.sum + numSlots < maxShare => p
-      }.map { p =>
-        p.bindedExecutors.putIfAbsent(execId, numSlots)
-        p
-      }.getOrElse{
-      bindedExecutors.putIfAbsent(execId, numSlots)
-      this
+  def bindExecutor(execId: String, numSlots: Int): Unit = {
+    var boundPoolName: String = null
+    schedulingMode match {
+      case SchedulingMode.FIFO =>
+        boundExecutors.putIfAbsent(execId, numSlots)
+        boundPoolName = name
+      case SchedulingMode.FAIR =>
+        schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+          .collectFirst {
+            case p: Pool if p.boundExecutors.asScala.values.sum + numSlots < maxShare => p
+          }.map { p =>
+          p.boundExecutors.putIfAbsent(execId, numSlots)
+          boundPoolName = p.name
+        }
+    }
+    if (boundPoolName != null) {
+      logInfo(s"Bound executor $execId($numSlots slots) with pool $boundPoolName")
     }
   }
 
   def unbindExecutor(execId: String): Unit = {
-    schedulableQueue.asScala.collect { case p: Pool =>
-      p.bindedExecutors.remove(execId)
+    var boundPoolName: String = null
+    schedulingMode match {
+      case SchedulingMode.FIFO =>
+        boundExecutors.remove(execId)
+        boundPoolName = name
+      case SchedulingMode.FAIR =>
+        schedulableQueue.asScala.collectFirst { case p: Pool =>
+          p.boundExecutors.remove(execId)
+          boundPoolName = p.name
+        }
     }
-    bindedExecutors.remove(execId)
+    if (boundPoolName != null) {
+      logInfo(s"Unbound executor $execId with pool $boundPoolName")
+    }
   }
 }

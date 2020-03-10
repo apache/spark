@@ -440,16 +440,10 @@ private[spark] class TaskSchedulerImpl(
         taskSet.executorAdded()
       }
     }
-    val nonThrottledTaskSets = sortedTaskSets.filterNot(_.parent.isThrottled)
-    val throttledPools = (sortedTaskSets -- nonThrottledTaskSets).map(_.parent).toSet
-    for (pool <- throttledPools) {
-      logInfo(s"Throttling schedule for pool ${pool.name} due to maxShare exceeded: " +
-        s"${pool.runningTasks} >= ${pool.maxShare}")
-    }
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
-    for (taskSet <- nonThrottledTaskSets) {
+    for (taskSet <- sortedTaskSets) {
       val availableSlots = availableCpus.map(c => c / CPUS_PER_TASK).sum
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {

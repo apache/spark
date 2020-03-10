@@ -113,8 +113,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_MAXIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(pool)
-      logInfo("Created default pool: %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+      logInfo(("Created default pool: %s, schedulingMode: %s, minShare: %d, maxShare: %d, " +
+        "weight: %d").format(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
+        DEFAULT_MINIMUM_SHARE, DEFAULT_MAXIMUM_SHARE, DEFAULT_WEIGHT))
     }
   }
 

@@ -21,9 +21,10 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
 import scala.xml.Node
 
-import org.apache.spark.scheduler.Schedulable
+import org.apache.spark.scheduler.{Pool, Schedulable}
 import org.apache.spark.status.PoolData
 import org.apache.spark.ui.UIUtils
 
@@ -39,9 +40,15 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
            cores">Minimum Share</span>
         </th>
         <th>
+          <span data-toggle="tooltip" data-placement="top" title="Pool's maximum share of CPU
+          cores">Maximum Share</span>
+        </th>
+        <th>
           <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster resources
            relative to others">Pool Weight</span>
         </th>
+        <th>Bound executors</th>
+        <th>Slots</th>
         <th>Active Stages</th>
         <th>Running Tasks</th>
         <th>Scheduling Mode</th>
@@ -57,12 +64,18 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
     val href = "%s/stages/pool?poolname=%s"
       .format(UIUtils.prependBaseUri(request, parent.basePath),
         URLEncoder.encode(p.name, StandardCharsets.UTF_8.name()))
+    val pool = s.asInstanceOf[Pool]
+    val numBoundExecutors = pool.boundExecutors.size()
+    val numSlots = pool.boundExecutors.asScala.values.sum
     <tr>
       <td>
         <a href={href}>{p.name}</a>
       </td>
       <td>{s.minShare}</td>
+      <td>{s.maxShare}</td>
       <td>{s.weight}</td>
+      <td>{numBoundExecutors}</td>
+      <td>{numSlots}</td>
       <td>{activeStages}</td>
       <td>{s.runningTasks}</td>
       <td>{s.schedulingMode}</td>
