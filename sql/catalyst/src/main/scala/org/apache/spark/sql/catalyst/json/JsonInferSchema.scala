@@ -92,12 +92,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     }
     json.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
-    canonicalizeType(rootType, options) match {
-      case Some(st: StructType) => st
-      case _ =>
-        // canonicalizeType erases all empty structs, including the only one we want to keep
-        StructType(Nil)
-    }
+    canonicalizeType(rootType, options)
+      .find(_.isInstanceOf[StructType])
+      // canonicalizeType erases all empty structs, including the only one we want to keep
+      .getOrElse(StructType(Nil)).asInstanceOf[StructType]
   }
 
   /**
@@ -198,7 +196,8 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
    * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields,
    * drops NullTypes or converts them to StringType based on provided options.
    */
-  private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
+  private[catalyst] def canonicalizeType(
+      tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
     case at: ArrayType =>
       canonicalizeType(at.elementType, options)
         .map(t => at.copy(elementType = t))
