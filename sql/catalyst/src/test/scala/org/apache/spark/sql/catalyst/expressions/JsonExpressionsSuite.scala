@@ -860,13 +860,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }.getCause
 
     assert(exception.isInstanceOf[AnalysisException])
-    assert(exception.getMessage.contains("expect a Json Object but nothing is provided"))
+    assert(exception.getMessage.contains("expect a JSON object but nothing is provided"))
 
     val another_exception = intercept[TestFailedException] {
       checkEvaluation(JsonObjectKeys(Literal(empty_json_array)), null)
     }.getCause
 
     assert(another_exception.isInstanceOf[AnalysisException])
-    assert(another_exception.getMessage.contains("can only be called on Json Object"))
+    assert(another_exception.getMessage.contains("can only be called on JSON object"))
   }
 }

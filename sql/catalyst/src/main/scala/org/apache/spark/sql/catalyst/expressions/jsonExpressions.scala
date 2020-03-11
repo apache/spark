@@ -871,23 +871,23 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 }
 
 /**
- * A function which returns all the keys of outer Json Object.
+ * A function which returns all the keys of outer JSON object.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_object) - returns all the keys of outer Json Object.",
+  usage = "_FUNC_(json_object) - returns all the keys of outer JSON object.",
   arguments = """
     Arguments:
-      * json_object - A json object is required as argument. `Null` is returned, if an invalid json
-        string is given. `Analysis Exception` is thrown, if null string or json array is given.
+      * json_object - A JSON object is required as argument. `Null` is returned, if an invalid JSON
+          string is given. `Analysis Exception` is thrown, if null string or JSON array is given.
   """,
   examples = """
     Examples:
-      > Select json_object_keys('{}');
+      > Select _FUNC_('{}');
         []
-      > Select json_object_keys('{"key": "value"}');
+      > Select _FUNC_('{"key": "value"}');
         ["key"]
-      > Select json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
-        ["f1", "f2"]
+      > Select _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+        ["f1","f2"]
   """,
   since = "3.1.0"
 )
@@ -912,12 +912,12 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
     // this handles `NULL` case
     if (parser.nextToken() == null) {
-      throw new AnalysisException(s"$prettyName expect a Json Object but nothing is provided.")
+      throw new AnalysisException(s"$prettyName expect a JSON object but nothing is provided.")
     }
 
-    // when a Json Array is found, throw an analysis exception
+    // when a JSON array is found, throw an analysis exception
     if (parser.currentToken() == JsonToken.START_ARRAY) {
-      throw new AnalysisException(s"$prettyName can only be called on Json Object.")
+      throw new AnalysisException(s"$prettyName can only be called on JSON object.")
     }
 
     // traverse until the end of input and ensure it returns valid key
