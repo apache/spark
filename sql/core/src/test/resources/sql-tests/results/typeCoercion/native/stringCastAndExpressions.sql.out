@@ -144,7 +144,7 @@ NULL
 -- !query
 select to_unix_timestamp(a) from t
 -- !query schema
-struct<to_unix_timestamp(a, uuuu-MM-dd HH:mm:ss):bigint>
+struct<to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
 -- !query output
 NULL
 
@@ -160,7 +160,7 @@ NULL
 -- !query
 select unix_timestamp(a) from t
 -- !query schema
-struct<unix_timestamp(a, uuuu-MM-dd HH:mm:ss):bigint>
+struct<unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
 -- !query output
 NULL
 
@@ -176,7 +176,7 @@ NULL
 -- !query
 select from_unixtime(a) from t
 -- !query schema
-struct<from_unixtime(CAST(a AS BIGINT), uuuu-MM-dd HH:mm:ss):string>
+struct<from_unixtime(CAST(a AS BIGINT), yyyy-MM-dd HH:mm:ss):string>
 -- !query output
 NULL
 

@@ -52,10 +52,11 @@ trait DateTimeFormatterHelper {
   // less synchronised.
   // The Cache.get method is not used here to avoid creation of additional instances of Callable.
   protected def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    val key = (pattern, locale)
+    val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
+    val key = (newPattern, locale)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
-      formatter = buildFormatter(pattern, locale)
+      formatter = buildFormatter(newPattern, locale)
       cache.put(key, formatter)
     }
     formatter
