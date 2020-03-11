@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -85,31 +83,6 @@ case class ExtractIntervalMicroseconds(child: Expression)
 // which is 12 digits + 6 digits for the fractional part of seconds.
 case class ExtractIntervalEpoch(child: Expression)
   extends ExtractIntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
-
-object ExtractIntervalPart {
-
-  def parseExtractField(
-      extractField: String,
-      source: Expression,
-      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => ExtractIntervalMillenniums(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => ExtractIntervalCenturies(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => ExtractIntervalDecades(source)
-    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => ExtractIntervalYears(source)
-    case "QUARTER" | "QTR" => ExtractIntervalQuarters(source)
-    case "MONTH" | "MON" | "MONS" | "MONTHS" => ExtractIntervalMonths(source)
-    case "DAY" | "D" | "DAYS" => ExtractIntervalDays(source)
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => ExtractIntervalHours(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => ExtractIntervalMinutes(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => ExtractIntervalSeconds(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      ExtractIntervalMilliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      ExtractIntervalMicroseconds(source)
-    case "EPOCH" => ExtractIntervalEpoch(source)
-    case _ => errorHandleFunc
-  }
-}
 
 abstract class IntervalNumOperation(
     interval: Expression,
