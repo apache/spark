@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.1.x
   lazy val v31excludes = v30excludes ++ Seq(
+    // [SPARK-31077] Remove ChiSqSelector dependency on mllib.ChiSqSelectorModel
+    // private constructor
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this")
   )
 
   // Exclude rules for 3.0.x
