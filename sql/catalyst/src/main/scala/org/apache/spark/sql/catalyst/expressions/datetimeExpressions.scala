@@ -2038,11 +2038,8 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
 
 object DatePart {
 
-  def parseExtractField(
-      extractField: String,
-      source: Expression,
-      errorHandleFunc: => Nothing): Expression = {
-    val ef = extractField.toUpperCase(Locale.ROOT)
+  def parseExtractField(extractField: String, source: Expression): Expression = {
+    val ef = extractField
     val dt = source.dataType
     (dt, ef) match {
       case (_, null) => Literal(null, DoubleType)
@@ -2092,7 +2089,8 @@ object DatePart {
         Microseconds(source)
       case (CalendarIntervalType, "EPOCH") => ExtractIntervalEpoch(source)
       case (_, "EPOCH") => Epoch(source)
-      case _ => errorHandleFunc
+      case _ => throw new AnalysisException(
+        s"Extract '$ef' from ${dt.catalogString} type are currently not supported")
     }
   }
 }
@@ -2163,10 +2161,9 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
 
-      val fieldStr = Option(field.eval()).map(_.asInstanceOf[UTF8String].toString).orNull
-      val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
-        s"for the ${source.dataType.catalogString} type."
-      DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+      val fieldStr =
+        Option(field.eval()).map(_.toString.toUpperCase(Locale.ROOT)).orNull
+      DatePart.parseExtractField(fieldStr, source)
     })
   }
 

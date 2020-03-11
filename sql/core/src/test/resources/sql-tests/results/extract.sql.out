@@ -512,7 +512,7 @@ select extract(not_supported from c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the string type.;; line 1 pos 7
+Extract 'NOT_SUPPORTED' from string type are currently not supported;; line 1 pos 7
 
 
 -- !query
@@ -521,4 +521,4 @@ select extract(not_supported from i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the interval type.;; line 1 pos 7
+Extract 'NOT_SUPPORTED' from interval type are currently not supported;; line 1 pos 7
