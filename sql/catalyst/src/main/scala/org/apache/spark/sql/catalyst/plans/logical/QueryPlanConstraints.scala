@@ -66,13 +66,21 @@ trait ConstraintHelper {
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
     predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+        val candidates = predicates - eq
+        inferredConstraints ++= replaceConstraints(candidates, l, r)
+        inferredConstraints ++= replaceConstraints(candidates, r, l)
+      case eq @ EqualTo(l @ Cast(la: Attribute, _, tz), r: Attribute) =>
+        val candidates = predicates - eq
+        inferredConstraints ++= replaceConstraints(candidates, la, Cast(r, la.dataType, tz))
+        inferredConstraints ++= replaceConstraints(candidates, r, l)
+      case eq @ EqualTo(l: Attribute, r @ Cast(ra: Attribute, _, tz)) =>
+        val candidates = predicates - eq
+        inferredConstraints ++= replaceConstraints(candidates, l, r)
+        inferredConstraints ++= replaceConstraints(candidates, ra, Cast(l, ra.dataType, tz))
+      case eq @ EqualTo(Cast(la: Attribute, _, ltz), Cast(ra: Attribute, _, rtz)) =>
+        val candidates = predicates - eq
+        inferredConstraints ++= replaceConstraints(candidates, la, Cast(ra, la.dataType, ltz))
+        inferredConstraints ++= replaceConstraints(candidates, ra, Cast(la, ra.dataType, rtz))
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -83,6 +91,8 @@ trait ConstraintHelper {
       source: Expression,
       destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
+  }).map(_ transform {
+    case Cast(cast @ Cast(e, _, _), dt, _) if cast == destination && dt == e.dataType => e
   })
 
   /**
