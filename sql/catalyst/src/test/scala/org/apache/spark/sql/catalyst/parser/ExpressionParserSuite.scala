@@ -284,12 +284,13 @@ class ExpressionParserSuite extends AnalysisTest {
       WindowExpression(func, WindowSpecDefinition(partitioning, ordering, frame))
     }
 
+    val defaultOrder = Seq(SortOrder('a, Ascending, Set.empty), SortOrder('b, Ascending, Set.empty))
     // Basic window testing.
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
-    assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
+    assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b), defaultOrder))
+    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b), defaultOrder))
+    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b), defaultOrder))
     assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
