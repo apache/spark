@@ -104,7 +104,11 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inArray(Array(\"euclidean\", \"cosine\"))"),
       ParamDesc[String]("validationIndicatorCol", "name of the column that indicates whether " +
         "each row is for training or for validation. False indicates training; true indicates " +
-        "validation.")
+        "validation."),
+      ParamDesc[Int]("blockSize", "block size for stacking input data in matrices. Data is " +
+        "stacked within partitions. If block size is more than remaining data in a partition " +
+        "then it is adjusted to the size of this data.",
+        isValid = "ParamValidators.gt(0)", isExpertParam = true)
     )
 
     val code = genSharedParams(params)

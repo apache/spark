@@ -125,6 +125,7 @@ class StreamingQuery(object):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
+
         :return: a map
         """
         lastProgress = self._jsq.lastProgress()
@@ -276,9 +277,9 @@ class StreamingQueryManager(object):
 
 class DataStreamReader(OptionUtils):
     """
-    Interface used to load a streaming :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
-    to access this.
+    Interface used to load a streaming :class:`DataFrame <pyspark.sql.DataFrame>` from external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
     .. note:: Evolving.
 
@@ -368,7 +369,8 @@ class DataStreamReader(OptionUtils):
 
     @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+        """Loads a data stream from a data source and returns it as a
+        :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. note:: Evolving.
 
@@ -750,8 +752,9 @@ class DataStreamReader(OptionUtils):
 
 class DataStreamWriter(object):
     """
-    Interface used to write a streaming :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
+    Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
     .. note:: Evolving.

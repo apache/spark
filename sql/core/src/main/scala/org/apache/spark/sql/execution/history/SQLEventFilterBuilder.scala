@@ -35,17 +35,17 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  * between finished job and live job without relation of SQL execution.
  */
 private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilterBuilder {
-  private val _liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
-  private val _jobToStages = new mutable.HashMap[Int, Set[Int]]
-  private val _stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  private val _stageToRDDs = new mutable.HashMap[Int, Set[Int]]
+  private val liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
+  private val jobToStages = new mutable.HashMap[Int, Set[Int]]
+  private val stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
+  private val stageToRDDs = new mutable.HashMap[Int, Set[Int]]
   private val stages = new mutable.HashSet[Int]
 
-  def liveSQLExecutions: Set[Long] = _liveExecutionToJobs.keySet.toSet
-  def liveJobs: Set[Int] = _liveExecutionToJobs.values.flatten.toSet
-  def liveStages: Set[Int] = _stageToRDDs.keySet.toSet
-  def liveTasks: Set[Long] = _stageToTasks.values.flatten.toSet
-  def liveRDDs: Set[Int] = _stageToRDDs.values.flatten.toSet
+  private[history] def liveSQLExecutions: Set[Long] = liveExecutionToJobs.keySet.toSet
+  private[history] def liveJobs: Set[Int] = liveExecutionToJobs.values.flatten.toSet
+  private[history] def liveStages: Set[Int] = stageToRDDs.keySet.toSet
+  private[history] def liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
+  private[history] def liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val executionIdString = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -57,24 +57,24 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
     val executionId = executionIdString.toLong
     val jobId = jobStart.jobId
 
-    val jobsForExecution = _liveExecutionToJobs.getOrElseUpdate(executionId,
+    val jobsForExecution = liveExecutionToJobs.getOrElseUpdate(executionId,
       mutable.HashSet[Int]())
     jobsForExecution += jobId
 
-    _jobToStages += jobStart.jobId -> jobStart.stageIds.toSet
+    jobToStages += jobStart.jobId -> jobStart.stageIds.toSet
     stages ++= jobStart.stageIds
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
     val stageId = stageSubmitted.stageInfo.stageId
     if (stages.contains(stageId)) {
-      _stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
-      _stageToTasks.getOrElseUpdate(stageId, new mutable.HashSet[Long]())
+      stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
+      stageToTasks.getOrElseUpdate(stageId, new mutable.HashSet[Long]())
     }
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-    _stageToTasks.get(taskStart.stageId).foreach { tasks =>
+    stageToTasks.get(taskStart.stageId).foreach { tasks =>
       tasks += taskStart.taskInfo.taskId
     }
   }
@@ -86,16 +86,16 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    _liveExecutionToJobs += event.executionId -> mutable.HashSet[Int]()
+    liveExecutionToJobs += event.executionId -> mutable.HashSet[Int]()
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    _liveExecutionToJobs.remove(event.executionId).foreach { jobs =>
-      val stagesToDrop = _jobToStages.filter(kv => jobs.contains(kv._1)).values.flatten
-      _jobToStages --= jobs
+    liveExecutionToJobs.remove(event.executionId).foreach { jobs =>
+      val stagesToDrop = jobToStages.filter(kv => jobs.contains(kv._1)).values.flatten
+      jobToStages --= jobs
       stages --= stagesToDrop
-      _stageToTasks --= stagesToDrop
-      _stageToRDDs --= stagesToDrop
+      stageToTasks --= stagesToDrop
+      stageToRDDs --= stagesToDrop
     }
   }
 
@@ -115,11 +115,11 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
  */
 private[spark] class SQLLiveEntitiesEventFilter(
     liveSQLExecutions: Set[Long],
-    _liveJobs: Set[Int],
-    _liveStages: Set[Int],
-    _liveTasks: Set[Long],
-    _liveRDDs: Set[Int])
-  extends JobEventFilter(None, _liveJobs, _liveStages, _liveTasks, _liveRDDs) with Logging {
+    liveJobs: Set[Int],
+    liveStages: Set[Int],
+    liveTasks: Set[Long],
+    liveRDDs: Set[Int])
+  extends JobEventFilter(None, liveJobs, liveStages, liveTasks, liveRDDs) with Logging {
 
   logDebug(s"live SQL executions : $liveSQLExecutions")
 

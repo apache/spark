@@ -175,9 +175,12 @@ private[ui] class SparkPlanGraphNode(
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "\n \n"
       builder ++= values.mkString("\n")
+      s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
+    } else {
+      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
+      // so that there won't be gaps between an edge and a small node.
+      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
     }
-
-    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
@@ -197,8 +200,8 @@ private[ui] class SparkPlanGraphCluster(
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
-      if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue(id)
+      if (metricsValue.contains(id)) {
+        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
       } else {
         name
       }

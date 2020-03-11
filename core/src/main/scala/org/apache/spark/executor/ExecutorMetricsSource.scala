@@ -32,8 +32,7 @@ import org.apache.spark.metrics.source.Source
  * spark.executor.metrics.pollingInterval=<interval in ms>.
  * (2) Procfs metrics are gathered all in one-go and only conditionally:
  * if the /proc filesystem exists
- * and spark.eventLog.logStageExecutorProcessTreeMetrics.enabled=true
- * and spark.eventLog.logStageExecutorMetrics.enabled=true.
+ * and spark.executor.processTreeMetrics.enabled=true.
  */
 private[spark] class ExecutorMetricsSource extends Source {
 

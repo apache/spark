@@ -45,6 +45,8 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
  */
 @Unstable
 public final class CalendarInterval implements Serializable {
+  // NOTE: If you're moving or renaming this file, you should also update Unidoc configuration
+  // specified in 'SparkBuild.scala'.
   public final int months;
   public final int days;
   public final long microseconds;

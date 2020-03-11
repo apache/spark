@@ -305,7 +305,7 @@ org.apache.spark.sql.AnalysisException
 
 The query operator `Join` contains one or more unsupported
 expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
+Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
 
 
 -- !query

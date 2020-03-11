@@ -18,6 +18,7 @@
 #plan-viz-graph .label {
   font-weight: normal;
   text-shadow: none;
+  color: black;
 }
 
 #plan-viz-graph svg g.cluster rect {
