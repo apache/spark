@@ -42,7 +42,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .noop()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 
@@ -56,11 +58,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def castExpr(from: String, toStr: Boolean = false): String = from match {
+  private def castExpr(from: String): String = from match {
     case "timestamp" => "cast(id as timestamp)"
     case "date" => "cast(cast(id as timestamp) as date)"
-    case "interval" if toStr => "cast((cast(cast(id as timestamp) as date) - date'0001-01-01') + " +
-      "(cast(id as timestamp) - timestamp'1000-01-01 01:02:03.123456') as string)"
     case "interval" => "(cast(cast(id as timestamp) as date) - date'0001-01-01') + " +
       "(cast(id as timestamp) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
@@ -110,7 +110,7 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark(s"Invoke $func for $dataType", N, output = output)
 
-      run(benchmark, iterNum, s"cast to $dataType", castExpr(dataType, true))
+      run(benchmark, iterNum, s"cast to $dataType", castExpr(dataType))
       fields.foreach(run(benchmark, func, iterNum, _, dataType))
 
       benchmark.run()
