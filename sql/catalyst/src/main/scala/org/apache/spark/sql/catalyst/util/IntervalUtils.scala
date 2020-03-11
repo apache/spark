@@ -136,8 +136,7 @@ object IntervalUtils {
             s"Error parsing interval year-month string: ${e.getMessage}", e)
       }
     }
-    assert(input.length == input.trim.length)
-    input match {
+    input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
         negateExact(toInterval(yearStr, monthStr))
       case yearMonthPattern(_, yearStr, monthStr) =>
@@ -300,7 +299,7 @@ object IntervalUtils {
     val regexp = dayTimePattern.get(from -> to)
     require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
     val pattern = regexp.get.pattern
-    val m = pattern.matcher(input)
+    val m = pattern.matcher(input.trim)
     require(m.matches, s"Interval string must match day-time format of '$pattern': $input, " +
       s"$fallbackNotice")
     var micros: Long = 0L

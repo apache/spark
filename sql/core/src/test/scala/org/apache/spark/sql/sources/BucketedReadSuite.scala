@@ -604,6 +604,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("sort should not be introduced when aliases are used") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        df1.repartition(1).write.format("parquet").bucketBy(8, "i").sortBy("i").saveAsTable("t")
+        val t1 = spark.table("t")
+        val t2 = t1.selectExpr("i as ii")
+        val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
+        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+      }
+    }
+  }
+
   test("bucket join should work with SubqueryAlias plan") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withTable("t") {

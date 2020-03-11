@@ -223,3 +223,5 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html

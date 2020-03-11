@@ -89,7 +89,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("SPARK-6785: java date conversion before and after epoch") {
     def format(d: Date): String = {
-      TimestampFormatter("uuuu-MM-dd", defaultTimeZone().toZoneId)
+      TimestampFormatter("yyyy-MM-dd", defaultTimeZone().toZoneId)
         .format(millisToMicros(d.getTime))
     }
     def checkFromToJavaDate(d1: Date): Unit = {
@@ -667,5 +667,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toDate("today", zoneId).get === today)
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
+  }
+
+  test("check incompatible pattern") {
+    assert(convertIncompatiblePattern("MM-DD-u") === "MM-DD-e")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
+      === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
+    assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
+      === "uuuu-MM'y contains in quoted text'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz")
+      === "uuuu-MM-dd-e'T'HH:mm:ss.SSSz")
+    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
+      === "uuuu-MM'u contains in quoted text'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
+      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
   }
 }

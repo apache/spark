@@ -47,6 +47,15 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
+  final val GREGORIAN_CUTOVER_DAY = LocalDate.of(1582, 10, 15).toEpochDay
+  final val GREGORIAN_CUTOVER_MICROS = instantToMicros(
+    LocalDateTime.of(1582, 10, 15, 0, 0, 0)
+      .atOffset(ZoneOffset.UTC)
+      .toInstant)
+  final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
+
+  final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
+
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
@@ -86,28 +95,50 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    microsToDays(millisToMicros(date.getTime))
+    if (date.getTime < GREGORIAN_CUTOVER_MILLIS) {
+      val era = if (date.before(julianCommonEraStart)) 0 else 1
+      val localDate = date.toLocalDate.`with`(ChronoField.ERA, era)
+      localDateToDays(localDate)
+    } else {
+      microsToDays(millisToMicros(date.getTime))
+    }
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+    if (daysSinceEpoch < GREGORIAN_CUTOVER_DAY) {
+      Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
+    } else {
+      new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+    }
   }
 
   /**
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    Timestamp.from(microsToInstant(us))
+    if (us < GREGORIAN_CUTOVER_MICROS) {
+      val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
+      Timestamp.valueOf(ldt)
+    } else {
+      Timestamp.from(microsToInstant(us))
+    }
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    instantToMicros(t.toInstant)
+    if (t.getTime < GREGORIAN_CUTOVER_MILLIS) {
+      val era = if (t.before(julianCommonEraStart)) 0 else 1
+      val localDateTime = t.toLocalDateTime.`with`(ChronoField.ERA, era)
+      val instant = ZonedDateTime.of(localDateTime, ZoneId.systemDefault()).toInstant
+      instantToMicros(instant)
+    } else {
+      instantToMicros(t.toInstant)
+    }
   }
 
   /**
@@ -813,9 +844,9 @@ object DateTimeUtils {
 
   /**
    * Extracts special values from an input string ignoring case.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some special value in lower case or None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some special value in lower case or None.
    */
   private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
@@ -842,9 +873,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of microseconds since the epoch if the conversion completed
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
@@ -868,9 +899,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
     extractSpecialValue(input, zoneId).flatMap {
@@ -892,9 +923,9 @@ object DateTimeUtils {
 
   /**
    * Subtracts two dates.
-   * @param endDate - the end date, exclusive
-   * @param startDate - the start date, inclusive
-   * @return an interval between two dates. The interval can be negative
+   * @param endDate The end date, exclusive
+   * @param startDate The start date, inclusive
+   * @return An interval between two dates. The interval can be negative
    *         if the end date is before the start date.
    */
   def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {
@@ -904,5 +935,43 @@ object DateTimeUtils {
     val months = period.getMonths + 12 * period.getYears
     val days = period.getDays
     new CalendarInterval(months, days, 0)
+  }
+
+  /**
+   * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
+   * parsing/formatting datetime values. The pattern string is incompatible with the one defined
+   * by SimpleDateFormat in Spark 2.4 and earlier. This function converts all incompatible pattern
+   * for the new parser in Spark 3.0. See more details in SPARK-31030.
+   * @param pattern The input pattern.
+   * @return The pattern for new parser
+   */
+  def convertIncompatiblePattern(pattern: String): String = {
+    val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
+      case (patternPart, index) =>
+        // Text can be quoted using single quotes, we only check the non-quote parts.
+        index % 2 == 0 && patternPart.contains("G")
+    }
+    pattern.split("'").zipWithIndex.map {
+      case (patternPart, index) =>
+        if (index % 2 == 0) {
+          // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
+          // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
+          // string. If parsable, return the result; otherwise, fall back to 'u', and then use the
+          // legacy SimpleDateFormat parser to parse. When it is successfully parsed, throw an
+          // exception and ask users to change the pattern strings or turn on the legacy mode;
+          // otherwise, return NULL as what Spark 2.4 does.
+          val res = patternPart.replace("u", "e")
+          // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
+          // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
+          // We only do this substitution when there is no era designator found in the pattern.
+          if (!eraDesignatorContained) {
+            res.replace("y", "u")
+          } else {
+            res
+          }
+        } else {
+          patternPart
+        }
+    }.mkString("'")
   }
 }

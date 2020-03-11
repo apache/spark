@@ -23,7 +23,9 @@ import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec}
 
-object ShufflePartitionsCoalescer extends Logging {
+object ShufflePartitionsUtil extends Logging {
+  final val SMALL_PARTITION_FACTOR = 0.2
+  final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
    * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
@@ -47,7 +49,7 @@ object ShufflePartitionsCoalescer extends Logging {
    *  - coalesced partition 2: shuffle partition 2 (size 170 MiB)
    *  - coalesced partition 3: shuffle partition 3 and 4 (size 50 MiB)
    *
-   *  @return An array of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
+   *  @return A sequence of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
    *          split at indices [0, 2, 3], the returned partition specs will be:
    *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
    *          CoalescedPartitionSpec(3, 5).
@@ -57,7 +59,7 @@ object ShufflePartitionsCoalescer extends Logging {
       firstPartitionIndex: Int,
       lastPartitionIndex: Int,
       advisoryTargetSize: Long,
-      minNumPartitions: Int = 1): Array[ShufflePartitionSpec] = {
+      minNumPartitions: Int = 1): Seq[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
@@ -112,6 +114,52 @@ object ShufflePartitionsCoalescer extends Logging {
     }
     partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
 
-    partitionSpecs.toArray
+    partitionSpecs
+  }
+
+  /**
+   * Given a list of size, return an array of indices to split the list into multiple partitions,
+   * so that the size sum of each partition is close to the target size. Each index indicates the
+   * start of a partition.
+   */
+  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+    val partitionStartIndices = ArrayBuffer[Int]()
+    partitionStartIndices += 0
+    var i = 0
+    var currentPartitionSize = 0L
+    var lastPartitionSize = -1L
+
+    def tryMergePartitions() = {
+      // When we are going to start a new partition, it's possible that the current partition or
+      // the previous partition is very small and it's better to merge the current partition into
+      // the previous partition.
+      val shouldMergePartitions = lastPartitionSize > -1 &&
+        ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
+        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
+          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
+      if (shouldMergePartitions) {
+        // We decide to merge the current partition into the previous one, so the start index of
+        // the current partition should be removed.
+        partitionStartIndices.remove(partitionStartIndices.length - 1)
+        lastPartitionSize += currentPartitionSize
+      } else {
+        lastPartitionSize = currentPartitionSize
+      }
+    }
+
+    while (i < sizes.length) {
+      // If including the next size in the current partition exceeds the target size, package the
+      // current partition and start a new partition.
+      if (i > 0 && currentPartitionSize + sizes(i) > targetSize) {
+        tryMergePartitions()
+        partitionStartIndices += i
+        currentPartitionSize = sizes(i)
+      } else {
+        currentPartitionSize += sizes(i)
+      }
+      i += 1
+    }
+    tryMergePartitions()
+    partitionStartIndices.toArray
   }
 }

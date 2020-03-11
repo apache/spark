@@ -673,7 +673,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
   examples = """
@@ -707,7 +707,7 @@ case class ToUnixTimestamp(
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
  * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
- * If the second parameter is missing, use "uuuu-MM-dd HH:mm:ss".
+ * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
@@ -718,7 +718,7 @@ case class ToUnixTimestamp(
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
   examples = """
