@@ -1909,7 +1909,7 @@ case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
 
 case class InvalidInJava(`abstract`: Int)
-private[sql] case class InvalidInJavaForNumber(`1something`: String)
+private case class InvalidInJavaForNumber(`1something`: String)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
