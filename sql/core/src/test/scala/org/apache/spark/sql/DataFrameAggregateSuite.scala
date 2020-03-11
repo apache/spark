@@ -1009,7 +1009,7 @@ class DataFrameAggregateSuite extends QueryTest
         .agg(aggExprs.head, aggExprs.tail: _*)
 
       // We are only interested in whether the code compilation fails or not, so skipping
-      // verificaion on outputs.
+      // verification on outputs.
       aggDf.collect()
     }
   }
