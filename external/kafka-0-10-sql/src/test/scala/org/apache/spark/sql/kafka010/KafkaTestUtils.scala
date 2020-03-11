@@ -74,6 +74,7 @@ class KafkaTestUtils(
   logInfo(s"Local host name is $localCanonicalHostName")
 
   private var kdc: MiniKdc = _
+  private var kdcDataDir: File = _
 
   // Zookeeper related configurations
   private val zkHost = localCanonicalHostName
@@ -170,6 +171,7 @@ class KafkaTestUtils(
 
     kdc.getKrb5conf.delete()
     Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
   private def addedKrb5Config(key: String, value: String): String = {
@@ -178,28 +180,28 @@ class KafkaTestUtils(
 
   private def createKeytabsAndJaasConfigFile(): String = {
     assert(kdcReady, "KDC should be set up beforehand")
-    val baseDir = Utils.createTempDir()
+    kdcDataDir = Utils.createTempDir()
 
     val zkServerUser = s"zookeeper/$localCanonicalHostName"
-    val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
+    val zkServerKeytabFile = new File(kdcDataDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
     val zkClientUser = s"zkclient/$localCanonicalHostName"
-    val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
+    val zkClientKeytabFile = new File(kdcDataDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
     val kafkaServerUser = s"kafka/$localCanonicalHostName"
-    val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
+    val kafkaServerKeytabFile = new File(kdcDataDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
 
-    clientKeytabFile = new File(baseDir, "client.keytab")
+    clientKeytabFile = new File(kdcDataDir, "client.keytab")
     kdc.createPrincipal(clientKeytabFile, clientUser)
     logDebug(s"Created keytab file: ${clientKeytabFile.getAbsolutePath()}")
 
-    val file = new File(baseDir, "jaas.conf");
+    val file = new File(kdcDataDir, "jaas.conf");
     val realm = kdc.getRealm()
     val content =
       s"""
@@ -309,6 +311,7 @@ class KafkaTestUtils(
     }
     brokerReady = false
     zkReady = false
+    kdcReady = false
 
     if (producer != null) {
       producer.close()
@@ -317,6 +320,7 @@ class KafkaTestUtils(
 
     if (adminClient != null) {
       adminClient.close()
+      adminClient = null
     }
 
     if (server != null) {
@@ -351,6 +355,11 @@ class KafkaTestUtils(
     Configuration.getConfiguration.refresh()
     if (kdc != null) {
       kdc.stop()
+      kdc = null
+    }
+    if (kdcDataDir != null) {
+      kdcDataDir.delete()
+      kdcDataDir = null
     }
     UserGroupInformation.reset()
     teardownKrbDebug()
@@ -688,4 +697,8 @@ class KafkaTestUtils(
       System.clearProperty(ZOOKEEPER_AUTH_PROVIDER)
     }
   }
+}
+
+object KafkaTestUtils {
+  var c = 0
 }
