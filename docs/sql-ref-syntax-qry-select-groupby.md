@@ -24,8 +24,10 @@ aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP`
 
 ### Syntax
 {% highlight sql %}
-GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [ , ... ] ]
-    [ ( WITH ROLLUP | WITH CUBE | GROUPING SETS grouping_sets ) ]
+GROUP BY group_expression [ , group_expression [ , ... ] ]
+  [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+
+GROUP BY GROUPING SETS (grouping_set [ , ...])
 {% endhighlight %}
 
 ### Parameters
@@ -38,13 +40,12 @@ GROUP BY [ GROUPING SETS grouping_sets ] group_expression [ , group_expression [
     is a shorthand for a <code>UNION ALL</code> where each leg of the <code>UNION ALL</code>
     operator performs aggregation of subset of the columns specified in the <code>GROUPING SETS</code> clause.
   </dd>
-  <dt><code><em>grouping_sets</em></code></dt>
+  <dt><code><em>grouping_set</em></code></dt>
   <dd>
-    Specifies one of more groupings based on which the <code>GROUP BY</code> clause performs aggregations. A grouping
-    set is specified by a list of comma-separated expressions in parentheses.<br><br>
+    A grouping set is specified by zero or more comma-separated expressions in parentheses.<br><br>
     <b>Syntax:</b>
       <code>
-        ( '()' | ( expression [ , ... ] ) )
+        ([expression [, ...]])
       </code>
   </dd>
   <dt><code><em>grouping_expression</em></code></dt>
