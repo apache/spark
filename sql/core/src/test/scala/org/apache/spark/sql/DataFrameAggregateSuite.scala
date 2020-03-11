@@ -978,8 +978,7 @@ class DataFrameAggregateSuite extends QueryTest
       (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true"),
       (SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key, "10000"),
       (SQLConf.CODEGEN_FALLBACK.key, "false"),
-      (SQLConf.CODEGEN_LOGGING_MAX_LINES.key, "-1"),
-      (SQLConf.CODEGEN_USE_SWITCH_STATEMENT.key, "false")
+      (SQLConf.CODEGEN_LOGGING_MAX_LINES.key, "-1")
     ) {
       var df = Seq(("1", "2", 1), ("1", "2", 2), ("2", "3", 3), ("2", "3", 4)).toDF("a", "b", "c")
 

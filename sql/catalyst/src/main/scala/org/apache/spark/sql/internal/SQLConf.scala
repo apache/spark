@@ -1130,23 +1130,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val CODEGEN_USE_SWITCH_STATEMENT =
-    buildConf("spark.sql.codegen.useSwitchStatement")
-      .internal()
-      .doc("When true, Spark leverages switch statement while generating code. Otherwise Spark " +
-        "will leverage if ~ else if ~ else statement as an alternative. In normal case, " +
-        "'switch' statement is preferred against if ~ else if ~ else. This configuration is " +
-        "required to avoid Janino bug (https://github.com/janino-compiler/janino/issues/113); " +
-        "If InternalCompilerException has been thrown and following conditions are met, you " +
-        "may want to turn this off and try executing the query again." +
-        "1) The generated code contains 'switch' statement." +
-        "2) Exception message contains 'Operand stack inconsistent at offset xxx: Previous size 1" +
-        ", now 0'." +
-        "The configuration will be no-op and maybe removed once Spark upgrades Janino containing" +
-        " the fix.")
-      .booleanConf
-      .createWithDefault(true)
-
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
@@ -2780,8 +2763,6 @@ class SQLConf extends Serializable with Logging {
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
-
-  def codegenUseSwitchStatement: Boolean = getConf(CODEGEN_USE_SWITCH_STATEMENT)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)

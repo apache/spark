@@ -629,6 +629,10 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
+    (ctx, doCodeGen(ctx))
+  }
+
+  private def doCodeGen(ctx: CodegenContext): CodeAndComment = {
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
     // main next function.
@@ -647,7 +651,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       }
 
       ${ctx.registerComment(
-        s"""Codegend pipeline for stage (id=$codegenStageId)
+        s"""Codegen pipeline for stage (id=$codegenStageId)
            |${this.treeString.trim}""".stripMargin,
          "wsc_codegenPipeline")}
       ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
@@ -679,7 +683,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
-    (ctx, cleanedSource)
+    cleanedSource
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
@@ -688,11 +692,56 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     child.executeColumnar()
   }
 
-  override def doExecute(): RDD[InternalRow] = {
+  private type CompileResult = (CodegenContext, CodeAndComment, GeneratedClass, ByteCodeStats)
+
+  /**
+   * NOTE: This method handles the known Janino bug:
+   * - https://github.com/janino-compiler/janino/issues/113
+   *
+   * It tries to generate code and compile in normal path. If the compilation fails and the reason
+   * is due to the known bug, it generates workaround code via touching flag in CodegenContext and
+   * compile again.
+   */
+  private def doGenCodeAndCompile(): CompileResult = {
+    def containsMsg(exception: Throwable, msg: String): Boolean = {
+      def contain(msg1: String, msg2: String): Boolean = {
+        msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+      }
+
+      var e = exception
+      var contains = contain(e.getMessage, msg)
+      while (e.getCause != null && !contains) {
+        e = e.getCause
+        contains = contain(e.getMessage, msg)
+      }
+      contains
+    }
+
     val (ctx, cleanedSource) = doCodeGen()
+    try {
+      val (genClass, maxCodeSize) = CodeGenerator.compile(cleanedSource)
+      (ctx, cleanedSource, genClass, maxCodeSize)
+    } catch {
+      case NonFatal(e) if cleanedSource.body.contains("switch") &&
+        containsMsg(e, "Operand stack inconsistent at offset") =>
+        // It might hit known Janino bug (https://github.com/janino-compiler/janino/issues/113)
+        // Try to disallow "switch" statement during codegen, and compile again.
+        // The log level is matched with the log level for compilation error log message in
+        // Codegenerator.compile() to ensure the log message is shown if end users see the log
+        // for compilation error.
+        logError("Generated code hits known Janino bug - applying workaround and recompiling...")
+
+        val newCtx = new CodegenContext(disallowSwitchStatement = true)
+        val newCleanedSource = doCodeGen(newCtx)
+        val (genClass, maxCodeSize) = CodeGenerator.compile(newCleanedSource)
+        (newCtx, newCleanedSource, genClass, maxCodeSize)
+    }
+  }
+
+  override def doExecute(): RDD[InternalRow] = {
     // try to compile and fallback if it failed
-    val (_, compiledCodeStats) = try {
-      CodeGenerator.compile(cleanedSource)
+    val (ctx, cleanedSource, _, compiledCodeStats) = try {
+      doGenCodeAndCompile()
     } catch {
       case NonFatal(_) if !Utils.isTesting && sqlContext.conf.codegenFallback =>
         // We should already saw the error message

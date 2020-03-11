@@ -113,7 +113,7 @@ private[codegen] case class NewFunctionSpec(
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
-class CodegenContext extends Logging {
+class CodegenContext(val disallowSwitchStatement: Boolean = false) extends Logging {
 
   import CodeGenerator._
 

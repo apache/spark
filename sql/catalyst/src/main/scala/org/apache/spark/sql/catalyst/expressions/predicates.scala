@@ -456,7 +456,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sqlConf = SQLConf.get
     if (canBeComputedUsingSwitch && hset.size <= sqlConf.optimizerInSetSwitchThreshold &&
-      sqlConf.codegenUseSwitchStatement) {
+      !ctx.disallowSwitchStatement) {
       genCodeWithSwitch(ctx, ev)
     } else {
       genCodeWithSet(ctx, ev)

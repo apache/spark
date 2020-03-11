@@ -54,8 +54,6 @@ case class ExpandExec(
   private[this] val projection =
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
 
-  private val useSwitchStatement: Boolean = sqlContext.conf.codegenUseSwitchStatement
-
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -169,7 +167,7 @@ case class ExpandExec(
       }
     }
 
-    // Part 2: switch/case statements, or if/else if statements via configuration
+    // Part 2: switch/case statements(, or if ~ else if statements when needed)
 
     val updates = projections.map { exprs =>
       var updateCode = ""
@@ -189,7 +187,7 @@ case class ExpandExec(
 
     // the name needs to be known to build conditions
     val i = ctx.freshName("i")
-    val loopContent = if (useSwitchStatement) {
+    val loopContent = if (!ctx.disallowSwitchStatement) {
       val cases = updates.zipWithIndex.map { case (updateCode, row) =>
         s"""
            |case $row:
