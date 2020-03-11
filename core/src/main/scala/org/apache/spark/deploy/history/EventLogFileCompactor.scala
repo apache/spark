@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
 import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.util.Utils
 
@@ -49,9 +48,11 @@ import org.apache.spark.util.Utils
 class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    fs: FileSystem) extends Logging {
-  private val maxFilesToRetain: Int = sparkConf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN)
-  private val compactionThresholdScore: Double = sparkConf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD)
+    fs: FileSystem,
+    maxFilesToRetain: Int,
+    compactionThresholdScore: Double) extends Logging {
+
+  require(maxFilesToRetain > 0, "Max event log files to retain should be higher than 0.")
 
   /**
    * Compacts the old event log files into one compact file, and clean old event log files being

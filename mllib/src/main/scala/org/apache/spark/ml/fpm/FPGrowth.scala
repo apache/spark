@@ -29,10 +29,10 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
-  FPGrowth => MLlibFPGrowth}
+import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -286,14 +286,17 @@ class FPGrowthModel private[ml] (
 
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[Any]) => {
+    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
           .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }}, dt)
+      }},
+      dt,
+      Nil
+    )
     dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 

@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.util.{Locale, TimeZone}
+import java.util.regex.Pattern
 
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -62,7 +64,12 @@ import org.apache.spark.tags.ExtendedSQLTest
  * }}}
  *
  * The format for input files is simple:
- *  1. A list of SQL queries separated by semicolon.
+ *  1. A list of SQL queries separated by semicolons by default. If the semicolon cannot effectively
+ *     separate the SQL queries in the test file(e.g. bracketed comments), please use
+ *     --QUERY-DELIMITER-START and --QUERY-DELIMITER-END. Lines starting with
+ *     --QUERY-DELIMITER-START and --QUERY-DELIMITER-END represent the beginning and end of a query,
+ *     respectively. Code that is not surrounded by lines that begin with --QUERY-DELIMITER-START
+ *     and --QUERY-DELIMITER-END is still separated by semicolons.
  *  2. Lines starting with -- are treated as comments and ignored.
  *  3. Lines starting with --SET are used to specify the configs when running this testing file. You
  *     can set multiple configs in one --SET, using comma to separate them. Or you can use multiple
@@ -246,9 +253,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** Run a test case. */
   protected def runTest(testCase: TestCase): Unit = {
+    def splitWithSemicolon(seq: Seq[String]) = {
+      seq.mkString("\n").split("(?<=[^\\\\]);")
+    }
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
+    val (comments, code) = input.split("\n").partition { line =>
+      val newLine = line.trim
+      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
+    }
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -261,10 +274,38 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       }
     }.flatten
 
+    val allCode = importedCode ++ code
+    val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      // Although the loop is heavy, only used for bracketed comments test.
+      val querys = new ArrayBuffer[String]
+      val otherCodes = new ArrayBuffer[String]
+      var tempStr = ""
+      var start = false
+      for (c <- allCode) {
+        if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
+          start = true
+          querys ++= splitWithSemicolon(otherCodes.toSeq)
+          otherCodes.clear()
+        } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
+          start = false
+          querys += s"\n${tempStr.stripSuffix(";")}"
+          tempStr = ""
+        } else if (start) {
+          tempStr += s"\n$c"
+        } else {
+          otherCodes += c
+        }
+      }
+      if (otherCodes.nonEmpty) {
+        querys ++= splitWithSemicolon(otherCodes.toSeq)
+      }
+      querys.toSeq
+    } else {
+      splitWithSemicolon(allCode).toSeq
+    }
+
     // List of SQL queries to run
-    // note: this is not a robust way to split queries using semicolon, but works for now.
-    val queries = (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);")
-      .map(_.trim).filter(_ != "").toSeq
+    val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
@@ -469,7 +510,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-    val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+    val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
       hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
     }
 

@@ -24,6 +24,8 @@
   subitems:
     - text: "Generic Load/Save Functions"
       url: sql-data-sources-load-save-functions.html
+    - text: "Generic File Source Options"
+      url: sql-data-sources-generic-options.html
     - text: Parquet Files
       url: sql-data-sources-parquet.html
     - text: ORC Files
@@ -78,6 +80,15 @@
       url: sql-ref-null-semantics.html
     - text: NaN Semantics
       url: sql-ref-nan-semantics.html
+    - text: ANSI Compliance
+      url: sql-ref-ansi-compliance.html
+      subitems:
+        - text: Arithmetic Operations
+          url: sql-ref-ansi-compliance.html#arithmetic-operations
+        - text: Type Conversion
+          url: sql-ref-ansi-compliance.html#type-conversion
+        - text: SQL Keywords
+          url: sql-ref-ansi-compliance.html#sql-keywords
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -123,45 +134,35 @@
             - text: SELECT 
               url: sql-ref-syntax-qry-select.html 
               subitems:
-                - text: DISTINCT Clause
-                  url: sql-ref-syntax-qry-select-distinct.html
-                - text: Joins
-                  url: sql-ref-syntax-qry-select-join.html
-                - text: ORDER BY Clause 
-                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: WHERE Clause 
+                  url: sql-ref-syntax-qry-select-where.html
                 - text: GROUP BY Clause 
                   url: sql-ref-syntax-qry-select-groupby.html
                 - text: HAVING Clause 
                   url: sql-ref-syntax-qry-select-having.html
+                - text: ORDER BY Clause 
+                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: SORT BY Clause 
+                  url: sql-ref-syntax-qry-select-sortby.html
+                - text: CLUSTER BY Clause 
+                  url: sql-ref-syntax-qry-select-clusterby.html
+                - text: DISTRIBUTE BY Clause 
+                  url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
-                - text: Set operations
-                  url: sql-ref-syntax-qry-select-setops.html
                 - text: USE database
                   url: sql-ref-syntax-qry-select-usedb.html
-                - text: Common Table Expression(CTE)
-                  url: sql-ref-syntax-qry-select-cte.html
-                - text: Subqueries
-                  url: sql-ref-syntax-qry-select-subqueries.html
-                - text: Query hints
-                  url: sql-ref-syntax-qry-select-hints.html
-            - text: SAMPLING
-              url: sql-ref-syntax-qry-sampling.html
-            - text: WINDOWING ANALYTIC FUNCTIONS 
-              url: sql-ref-syntax-qry-window.html
-            - text: AGGREGATION (CUBE/ROLLUP/GROUPING)
-              url: sql-ref-syntax-qry-aggregation.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
-        - text: Auxilarry Statements
+        - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:
-            - text: Analyze statement
+            - text: ANALYZE
               url: sql-ref-syntax-aux-analyze.html
               subitems: 
                 - text: ANALYZE TABLE
                   url: sql-ref-syntax-aux-analyze-table.html
-            - text: Caching statements 
+            - text: CACHE
               url: sql-ref-syntax-aux-cache.html
               subitems:
                 - text: CACHE TABLE
@@ -174,7 +175,7 @@
                   url: sql-ref-syntax-aux-refresh-table.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.md
-            - text: Describe Commands
+            - text: DESCRIBE
               url: sql-ref-syntax-aux-describe.html
               subitems:
                 - text: DESCRIBE DATABASE
@@ -185,7 +186,7 @@
                   url: sql-ref-syntax-aux-describe-function.html
                 - text: DESCRIBE QUERY
                   url: sql-ref-syntax-aux-describe-query.html
-            - text: Show commands
+            - text: SHOW
               url: sql-ref-syntax-aux-show.html
               subitems:
                 - text: SHOW COLUMNS 
@@ -204,14 +205,14 @@
                   url: sql-ref-syntax-aux-show-partitions.html
                 - text: SHOW CREATE TABLE
                   url: sql-ref-syntax-aux-show-create-table.html
-            - text: Configuration Management Commands
+            - text: CONFIGURATION MANAGEMENT
               url: sql-ref-syntax-aux-conf-mgmt.html
               subitems:
                 - text: SET 
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
-            - text: Resource Management Commands
+            - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:
                 - text: ADD FILE
@@ -222,22 +223,3 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
-    - text: Functions
-      url: sql-ref-functions.html
-      subitems:
-        - text: Builtin Functions
-          url: sql-ref-functions-builtin.html
-          subitems:
-            - text: Scalar functions
-              url: sql-ref-functions-builtin-scalar.html
-            - text: Aggregate functions
-              url: sql-ref-functions-builtin-aggregate.html
-        - text: User defined Functions
-          url: sql-ref-functions-udf.html
-          subitems:
-            - text: Scalar functions
-              url: sql-ref-functions-udf-scalar.html
-            - text: Aggregate functions
-              url: sql-ref-functions-udf-aggregate.html
-    - text: Arithmetic operations
-      url: sql-ref-arithmetic-ops.html

@@ -35,6 +35,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+object Statistics {
+  val DUMMY = Statistics(Long.MaxValue)
+}
 
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the

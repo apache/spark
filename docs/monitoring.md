@@ -95,19 +95,62 @@ The history server can be configured as follows:
   </tr>
 </table>
 
+### Applying compaction on rolling event log files
+
+A long-running application (e.g. streaming) can bring a huge single event log file which may cost a lot to maintain and
+also requires a bunch of resource to replay per each update in Spark History Server.
+
+Enabling <code>spark.eventLog.rolling.enabled</code> and <code>spark.eventLog.rolling.maxFileSize</code> would
+let you have rolling event log files instead of single huge event log file which may help some scenarios on its own,
+but it still doesn't help you reducing the overall size of logs.
+
+Spark History Server can apply compaction on the rolling event log files to reduce the overall size of
+logs, via setting the configuration <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> on the
+Spark History Server.
+
+Details will be described below, but please note in prior that compaction is LOSSY operation.
+Compaction will discard some events which will be no longer seen on UI - you may want to check which events will be discarded
+before enabling the option.
+
+When the compaction happens, the History Server lists all the available event log files for the application, and considers
+the event log files having less index than the file with smallest index which will be retained as target of compaction.
+For example, if the application A has 5 event log files and <code>spark.history.fs.eventLog.rolling.maxFilesToRetain</code> is set to 2, then first 3 log files will be selected to be compacted.
+
+Once it selects the target, it analyzes them to figure out which events can be excluded, and rewrites them
+into one compact file with discarding events which are decided to exclude.
+
+The compaction tries to exclude the events which point to the outdated data. As of now, below describes the candidates of events to be excluded:
+
+* Events for the job which is finished, and related stage/tasks events
+* Events for the executor which is terminated
+* Events for the SQL execution which is finished, and related job/stage/tasks events
+
+Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
+the original log files, but it will not affect the operation of the History Server.
+
+Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
+would be reduced during compaction. For streaming query we normally expect compaction
+will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
+in many cases for batch query.
+
+Please also note that this is a new feature introduced in Spark 3.0, and may not be completely stable. Under some circumstances,
+the compaction may exclude more events than you expect, leading some UI issues on History Server for the application.
+Use it with caution.
+
 ### Spark History Server Configuration Options
 
 Security options for the Spark History Server are covered more detail in the
 [Security](security.html#web-ui) page.
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td>spark.history.provider</td>
     <td><code>org.apache.spark.deploy.history.FsHistoryProvider</code></td>
     <td>Name of the class implementing the application history backend. Currently there is only
     one implementation, provided by Spark, which looks for application logs stored in the
     file system.</td>
+    <td>1.1.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.logDirectory</td>
@@ -118,6 +161,7 @@ Security options for the Spark History Server are covered more detail in the
     an HDFS path <code>hdfs://namenode/shared/spark-logs</code>
     or that of an alternative filesystem supported by the Hadoop APIs.
     </td>
+    <td>1.1.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.update.interval</td>
@@ -129,6 +173,7 @@ Security options for the Spark History Server are covered more detail in the
       As soon as an update has completed, listings of the completed and incomplete applications
       will reflect the changes.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td>spark.history.retainedApplications</td>
@@ -138,6 +183,7 @@ Security options for the Spark History Server are covered more detail in the
       the oldest applications will be removed from the cache. If an application is not in the cache,
       it will have to be loaded from disk if it is accessed from the UI.
     </td>
+    <td>1.0.0</td>
   </tr>
   <tr>
     <td>spark.history.ui.maxApplications</td>
@@ -146,6 +192,7 @@ Security options for the Spark History Server are covered more detail in the
       The number of applications to display on the history summary page. Application UIs are still
       available by accessing their URLs directly even if they are not displayed on the history summary page.
     </td>
+    <td>2.0.1</td>
   </tr>
   <tr>
     <td>spark.history.ui.port</td>
@@ -153,30 +200,32 @@ Security options for the Spark History Server are covered more detail in the
     <td>
       The port to which the web interface of the history server binds.
     </td>
+    <td>1.0.0</td>
   </tr>
   <tr>
     <td>spark.history.kerberos.enabled</td>
     <td>false</td>
     <td>
       Indicates whether the history server should use kerberos to login. This is required
-      if the history server is accessing HDFS files on a secure Hadoop cluster. If this is
-      true, it uses the configs <code>spark.history.kerberos.principal</code> and
-      <code>spark.history.kerberos.keytab</code>.
+      if the history server is accessing HDFS files on a secure Hadoop cluster.
     </td>
+    <td>1.0.1</td>
   </tr>
   <tr>
     <td>spark.history.kerberos.principal</td>
     <td>(none)</td>
     <td>
-      Kerberos principal name for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies kerberos principal name for the History Server.
     </td>
+    <td>1.0.1</td>
   </tr>
   <tr>
     <td>spark.history.kerberos.keytab</td>
     <td>(none)</td>
     <td>
-      Location of the kerberos keytab file for the History Server.
+      When <code>spark.history.kerberos.enabled=true</code>, specifies location of the kerberos keytab file for the History Server.
     </td>
+    <td>1.0.1</td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.enabled</td>
@@ -184,35 +233,39 @@ Security options for the Spark History Server are covered more detail in the
     <td>
       Specifies whether the History Server should periodically clean up event logs from storage.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.interval</td>
     <td>1d</td>
     <td>
-      How often the filesystem job history cleaner checks for files to delete.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies how often the filesystem job history cleaner checks for files to delete.
       Files are deleted if at least one of two conditions holds.
       First, they're deleted if they're older than <code>spark.history.fs.cleaner.maxAge</code>.
       They are also deleted if the number of files is more than
       <code>spark.history.fs.cleaner.maxNum</code>, Spark tries to clean up the completed attempts
       from the applications based on the order of their oldest attempt time.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.maxAge</td>
     <td>7d</td>
     <td>
-      Job history files older than this will be deleted when the filesystem history cleaner runs.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, job history files older than this will be deleted when the filesystem history cleaner runs.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.maxNum</td>
     <td>Int.MaxValue</td>
     <td>
-      The maximum number of files in the event log directory.
+      When <code>spark.history.fs.cleaner.enabled=true</code>, specifies the maximum number of files in the event log directory.
       Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
       This should be smaller than the underlying file system limit like
       `dfs.namenode.fs-limits.max-directory-items` in HDFS.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.endEventReparseChunkSize</td>
@@ -222,6 +275,7 @@ Security options for the Spark History Server are covered more detail in the
       This is used to speed up generation of application listings by skipping unnecessary
       parts of event log files. It can be disabled by setting this config to 0.
     </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.inProgressOptimization.enabled</td>
@@ -230,6 +284,7 @@ Security options for the Spark History Server are covered more detail in the
       Enable optimized handling of in-progress logs. This option may leave finished
       applications that fail to rename their event logs listed as in-progress.
     </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.driverlog.cleaner.enabled</td>
@@ -237,21 +292,24 @@ Security options for the Spark History Server are covered more detail in the
     <td>
       Specifies whether the History Server should periodically clean up driver logs from storage.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.driverlog.cleaner.interval</td>
     <td><code>spark.history.fs.cleaner.interval</code></td>
     <td>
-      How often the filesystem driver log cleaner checks for files to delete.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, specifies how often the filesystem driver log cleaner checks for files to delete.
       Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.driverlog.cleaner.maxAge</td>
     <td><code>spark.history.fs.cleaner.maxAge</code></td>
     <td>
-      Driver log files older than this will be deleted when the driver log cleaner runs.
+      When <code>spark.history.fs.driverlog.cleaner.enabled=true</code>, driver log files older than this will be deleted when the driver log cleaner runs.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.numReplayThreads</td>
@@ -259,6 +317,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>
       Number of threads that will be used by history server to process event logs.
     </td>
+    <td>2.0.0</td>
   </tr>
   <tr>
     <td>spark.history.store.maxDiskUsage</td>
@@ -267,6 +326,7 @@ Security options for the Spark History Server are covered more detail in the
       Maximum disk usage for the local directory where the cache application history information
       are stored.
     </td>
+    <td>2.3.0</td>
   </tr>
   <tr>
     <td>spark.history.store.path</td>
@@ -276,6 +336,7 @@ Security options for the Spark History Server are covered more detail in the
         server will store application data on disk instead of keeping it in memory. The data
         written to disk will be re-used in the event of a history server restart.
     </td>
+    <td>2.3.0</td>
   </tr>
   <tr>
     <td>spark.history.custom.executor.log.url</td>
@@ -289,6 +350,7 @@ Security options for the Spark History Server are covered more detail in the
         <p/>
         For now, only YARN mode supports this configuration
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
@@ -299,8 +361,18 @@ Security options for the Spark History Server are covered more detail in the
         Please note that incomplete applications may include applications which didn't shutdown gracefully.
         Even this is set to `true`, this configuration has no effect on a live application, it only affects the history server.
     </td>
+    <td>3.0.0</td>
   </tr>
-
+  <tr>
+    <td>spark.history.fs.eventLog.rolling.maxFilesToRetain</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The maximum number of event log files which will be retained as non-compacted. By default,
+      all event log files will be retained. The lowest value is 1 for technical reason.<br/>
+      Please read the section of "Applying compaction of old event log files" for more details.
+    </td>
+    <td>3.0.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -640,7 +712,10 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information. Metrics `peakExecutorMetrics.*` are only enabled if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
+Executor metric values and their measured peak values per executor are exposed via the REST API at the end point `/applications/[app-id]/executors`.
+In addition, aggregated per-stage peak values of the executor metrics are written to the event log if `spark.eventLog.logStageExecutorMetrics` is true.
+Executor metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
 A list of the available metrics, with a short description:
 
 <table class="table">
@@ -736,7 +811,7 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMVMemory</td>
-    <td>Virtual memory size in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMRSSMemory</td>
@@ -744,23 +819,23 @@ A list of the available metrics, with a short description:
       in real memory.  This is just the pages which count
       toward text, data, or stack space.  This does not
       include pages which have not been demand-loaded in,
-      or which are swapped out. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+      or which are swapped out. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonVMemory</td>
-    <td>Virtual memory size for Python in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size for Python in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonRSSMemory</td>
-    <td>Resident Set Size for Python. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Resident Set Size for Python. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherVMemory</td>
-    <td>Virtual memory size for other kind of process in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Virtual memory size for other kind of process in bytes. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherRSSMemory</td>
-    <td>Resident Set Size for other kind of process. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+    <td>Resident Set Size for other kind of process. Enabled if spark.executor.processTreeMetrics.enabled is true.</td>
   </tr>
     <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.MinorGCCount</td>
@@ -1083,8 +1158,7 @@ when running in local mode.
     - ProcessTreeOtherRSSMemory
     - **note:** "ProcessTree*" metrics are collected only under certain conditions.
       The conditions are the logical AND of the following: `/proc` filesystem exists,
-      `spark.eventLog.logStageExecutorProcessTreeMetrics.enabled=true`,
-      `spark.eventLog.logStageExecutorMetrics.enabled=true`.
+      `spark.executor.processTreeMetrics.enabled=true`.
       "ProcessTree*" metrics report 0 when those conditions are not met.
 
 - namespace=JVMCPU

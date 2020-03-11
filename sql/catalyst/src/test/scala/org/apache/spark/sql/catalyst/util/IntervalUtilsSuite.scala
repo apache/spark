@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
@@ -34,27 +35,17 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(safeStringToInterval(UTF8String.fromString(input)) === expected)
   }
 
-  private def checkFromStringWithFunc(
-      input: String,
-      months: Int,
-      days: Int,
-      us: Long,
-      func: CalendarInterval => CalendarInterval): Unit = {
-    val expected = new CalendarInterval(months, days, us)
-    assert(func(stringToInterval(UTF8String.fromString(input))) === expected)
-    assert(func(safeStringToInterval(UTF8String.fromString(input))) === expected)
+  private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
+    failFuncWithInvalidInput(input, errorMsg, s => stringToInterval(UTF8String.fromString(s)))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
-  private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
-    try {
-      stringToInterval(UTF8String.fromString(input))
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        val msg = e.getMessage
-        assert(msg.contains(errorMsg))
+  private def failFuncWithInvalidInput(
+      input: String, errorMsg: String, converter: String => CalendarInterval): Unit = {
+    withClue("Expected to throw an exception for the invalid input") {
+      val e = intercept[IllegalArgumentException](converter(input))
+      assert(e.getMessage.contains(errorMsg))
     }
-    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
   private def testSingleUnit(
@@ -76,7 +67,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     testSingleUnit("HouR", 3, 0, 0, 3 * MICROS_PER_HOUR)
     testSingleUnit("MiNuTe", 3, 0, 0, 3 * MICROS_PER_MINUTE)
     testSingleUnit("Second", 3, 0, 0, 3 * MICROS_PER_SECOND)
-    testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLIS)
+    testSingleUnit("MilliSecond", 3, 0, 0, millisToMicros(3))
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
     checkFromInvalidString(null, "cannot be null")
@@ -85,7 +76,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       checkFromInvalidString(input, "Error parsing")
     }
   }
-
 
   test("string to interval: multiple units") {
     Seq(
@@ -144,22 +134,18 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
+    failFuncWithInvalidInput("99-15", "month 15 outside range", fromYearMonthString)
+    failFuncWithInvalidInput("9a9-15", "Interval string does not match year-month format",
+      fromYearMonthString)
 
-    try {
-      fromYearMonthString("99-15")
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("month 15 outside range"))
-    }
-
-    try {
-      fromYearMonthString("9a9-15")
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("Interval string does not match year-month format"))
-    }
+    // whitespaces
+    assert(fromYearMonthString("99-10 ") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("+99-10\t") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("\t\t-8-10\t") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
+    failFuncWithInvalidInput("99\t-15", "Interval string does not match year-month format",
+      fromYearMonthString)
+    failFuncWithInvalidInput("-\t99-15", "Interval string does not match year-month format",
+      fromYearMonthString)
   }
 
   test("from day-time string - legacy") {
@@ -175,32 +161,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         new CalendarInterval(
           0,
           10,
-          12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
+          12 * MICROS_PER_MINUTE + millisToMicros(888)))
       assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
-      try {
-        fromDayTimeString("5 30:12:20")
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("hour 30 outside range"))
-      }
-
-      try {
-        fromDayTimeString("5 30-12")
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("must match day-time format"))
-      }
-
-      try {
-        fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
-        fail("Expected to throw an exception for the invalid convention type")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("Cannot support (interval"))
-      }
+      failFuncWithInvalidInput("5 30:12:20", "hour 30 outside range", fromDayTimeString)
+      failFuncWithInvalidInput("5 30-12", "must match day-time format", fromDayTimeString)
+      failFuncWithInvalidInput("5 1:12:20", "Cannot support (interval",
+        s => fromDayTimeString(s, HOUR, MICROSECOND))
     }
   }
 
@@ -214,13 +181,10 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(duration("1 microsecond", TimeUnit.MICROSECONDS, 30) === 1)
     assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
 
-    try {
+    val e = intercept[ArithmeticException] {
       duration(Integer.MAX_VALUE + " month", TimeUnit.SECONDS, 31)
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: ArithmeticException =>
-        assert(e.getMessage.contains("overflow"))
     }
+    assert(e.getMessage.contains("overflow"))
   }
 
   test("negative interval") {
@@ -267,41 +231,49 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("multiply by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === multiplyExact(interval, 0))
-    interval = new CalendarInterval(123, 456, 789)
-    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiplyExact(interval, 42))
-    interval = new CalendarInterval(-123, -456, -789)
-    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiplyExact(interval, 42))
-    assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
-      multiplyExact(new CalendarInterval(1, 5, 0), 1.5))
-    assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
-      multiplyExact(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
-
-    try {
-      multiplyExact(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
-      fail("Expected to throw an exception on months overflow")
-    } catch {
-      case e: ArithmeticException => assert(e.getMessage.contains("overflow"))
+    Seq[(CalendarInterval, Double) => CalendarInterval](multiply, multiplyExact).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 0))
+      interval = new CalendarInterval(123, 456, 789)
+      assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === func(interval, 42))
+      interval = new CalendarInterval(-123, -456, -789)
+      assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === func(interval, 42))
+      interval = new CalendarInterval(1, 5, 0)
+      assert(new CalendarInterval(1, 7, 12 * MICROS_PER_HOUR) === func(interval, 1.5))
+      interval = new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR)
+      assert(new CalendarInterval(2, 2, 12 * MICROS_PER_HOUR) === func(interval, 1.2))
     }
+
+    val interval = new CalendarInterval(2, 0, 0)
+    assert(multiply(interval, Integer.MAX_VALUE) === new CalendarInterval(Int.MaxValue, 0, 0))
+
+    val e = intercept[ArithmeticException](multiplyExact(interval, Integer.MAX_VALUE))
+    assert(e.getMessage.contains("overflow"))
   }
 
   test("divide by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === divideExact(interval, 10))
-    interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-      divideExact(interval, 2))
-    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divideExact(interval, 0.5))
-    interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divideExact(interval, 2))
-    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divideExact(interval, 0.5))
-    try {
-      divideExact(new CalendarInterval(123, 456, 789), 0)
-      fail("Expected to throw an exception on divide by zero")
-    } catch {
-      case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))
+    Seq[(CalendarInterval, Double) => CalendarInterval](divide, divideExact).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 10))
+      interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, 1, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+        func(interval, 2))
+      assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === func(interval, 0.5))
+      interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, 0, -15 * MICROS_PER_SECOND) === func(interval, 2))
+      assert(new CalendarInterval(-2, 0, -MICROS_PER_MINUTE) === func(interval, 0.5))
     }
+
+    var interval = new CalendarInterval(Int.MaxValue, Int.MaxValue, 0)
+    assert(divide(interval, 0.9) === new CalendarInterval(Int.MaxValue, Int.MaxValue,
+      ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
+    val e1 = intercept[ArithmeticException](divideExact(interval, 0.9))
+    assert(e1.getMessage.contains("integer overflow"))
+
+    interval = new CalendarInterval(123, 456, 789)
+    assert(divide(interval, 0) === null)
+    val e2 = intercept[ArithmeticException](divideExact(interval, 0))
+    assert(e2.getMessage.contains("divide by zero"))
   }
 
   test("from day-time string") {
@@ -311,18 +283,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         assert(fromDayTimeString(input, from, to) === safeStringToInterval(expectedUtf8))
       }
     }
-    def checkFail(
-        input: String,
-        from: IntervalUnit,
-        to: IntervalUnit,
-        errMsg: String): Unit = {
-      try {
-        fromDayTimeString(input, from, to)
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains(errMsg))
-      }
+    def checkFail(input: String, from: IntervalUnit, to: IntervalUnit, errMsg: String): Unit = {
+      failFuncWithInvalidInput(input, errMsg, s => fromDayTimeString(s, from, to))
     }
 
     check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
@@ -359,6 +321,11 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
     checkFail("5 30-12", DAY, SECOND, "must match day-time format")
     checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
+
+    // whitespaces
+    check("\t +5 12:40\t ", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    checkFail("+5\t 12:40", DAY, MINUTE, "must match day-time format")
+
   }
 
   test("interval overflow check") {

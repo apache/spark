@@ -148,20 +148,6 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("view") {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
-  test("view with output columns") {
-    withView("v1") {
-      sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
   test("temp view") {
     val viewName = "spark_28383"
     withTempView(viewName) {
@@ -187,7 +173,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == createTable)
+      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
 
       checkCreateTable("t1")
     }
@@ -225,7 +211,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+  protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     def normalize(table: CatalogTable): CatalogTable = {
       val nondeterministicProps = Set(
         "CreateTime",

@@ -460,6 +460,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
       }
     }
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
+      throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
+    }
+    // children being empty means that the condition is not set
+    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
+      throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
+        "the first MATCHED clause must have a condition", ctx)
+    }
+    if (matchedActions.groupBy(_.getClass).mapValues(_.size).exists(_._2 > 1)) {
+      throw new ParseException(
+        "UPDATE and DELETE can appear at most once in MATCHED clauses in a MERGE statement", ctx)
+    }
 
     MergeIntoTable(
       aliasedTarget,
@@ -1402,12 +1414,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL =>
         IsNull(e)
       case SqlBaseParser.TRUE => ctx.NOT match {
-        case null => IsTrue(e)
-        case _ => IsNotTrue(e)
+        case null => EqualNullSafe(e, Literal(true))
+        case _ => Not(EqualNullSafe(e, Literal(true)))
       }
       case SqlBaseParser.FALSE => ctx.NOT match {
-        case null => IsFalse(e)
-        case _ => IsNotFalse(e)
+        case null => EqualNullSafe(e, Literal(false))
+        case _ => Not(EqualNullSafe(e, Literal(false)))
       }
       case SqlBaseParser.UNKNOWN => ctx.NOT match {
         case null => IsUnknown(e)
@@ -2759,9 +2771,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
     }
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val defaultProvider = conf.defaultDataSourceName
-    val provider =
-      Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
@@ -2821,7 +2831,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val provider = ctx.tableProvider.multipartIdentifier.getText
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
@@ -2948,55 +2958,61 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command.
+   * Parse a [[AlterTableAlterColumnStatement]] command to alter a column's property.
    *
    * For example:
    * {{{
    *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint COMMENT 'new comment'
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
    *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c FIRST
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c AFTER x
    * }}}
    */
-  override def visitAlterTableColumn(
-      ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
-    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
-    if (ctx.dataType == null && ctx.commentSpec() == null && ctx.colPosition == null) {
+  override def visitAlterTableAlterColumn(
+      ctx: AlterTableAlterColumnContext): LogicalPlan = withOrigin(ctx) {
+    val action = ctx.alterColumnAction
+    if (action == null) {
+      val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
       operationNotAllowed(
-        s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT or a FIRST/AFTER", ctx)
+        s"ALTER TABLE table $verb COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER",
+        ctx)
     }
+
+    val dataType = if (action.dataType != null) {
+      Some(typedVisit[DataType](action.dataType))
+    } else {
+      None
+    }
+    val nullable = if (action.setOrDrop != null) {
+      action.setOrDrop.getType match {
+        case SqlBaseParser.SET => Some(false)
+        case SqlBaseParser.DROP => Some(true)
+      }
+    } else {
+      None
+    }
+    val comment = if (action.commentSpec != null) {
+      Some(visitCommentSpec(action.commentSpec()))
+    } else {
+      None
+    }
+    val position = if (action.colPosition != null) {
+      Some(typedVisit[ColumnPosition](action.colPosition))
+    } else {
+      None
+    }
+
+    assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
-      dataType = Option(ctx.dataType).map(typedVisit[DataType]),
-      nullable = None,
-      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
-  }
-
-  /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to change column nullability.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c SET NOT NULL
-   *   ALTER TABLE table1 ALTER COLUMN a.b.c DROP NOT NULL
-   * }}}
-   */
-  override def visitAlterColumnNullability(ctx: AlterColumnNullabilityContext): LogicalPlan = {
-    withOrigin(ctx) {
-      val nullable = ctx.setOrDrop.getType match {
-        case SqlBaseParser.SET => false
-        case SqlBaseParser.DROP => true
-      }
-      AlterTableAlterColumnStatement(
-        visitMultipartIdentifier(ctx.table),
-        typedVisit[Seq[String]](ctx.column),
-        dataType = None,
-        nullable = Some(nullable),
-        comment = None,
-        position = None)
-    }
+      dataType = dataType,
+      nullable = nullable,
+      comment = comment,
+      position = position)
   }
 
   /**
@@ -3030,6 +3046,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       nullable = None,
       comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
       position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+  }
+
+  override def visitHiveReplaceColumns(
+      ctx: HiveReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
+    }
+    AlterTableReplaceColumnsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
+        if (colType.NULL != null) {
+          throw new AnalysisException(
+            "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+        }
+        if (colType.colPosition != null) {
+          throw new AnalysisException(
+            "Column position is not supported in Hive-style REPLACE COLUMNS")
+        }
+        typedVisit[QualifiedColType](colType)
+      }
+    )
   }
 
   /**
@@ -3167,7 +3204,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
+        ctx.identifier())
     }
 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
@@ -3223,7 +3261,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Creates a [[ShowCreateTableStatement]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()), ctx.SERDE != null)
   }
 
   /**

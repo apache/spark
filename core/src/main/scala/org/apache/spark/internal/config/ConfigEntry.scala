@@ -17,6 +17,35 @@
 
 package org.apache.spark.internal.config
 
+// ====================================================================================
+//                      The guideline for naming configurations
+// ====================================================================================
+/*
+In general, the config name should be a noun that describes its basic purpose. It's
+recommended to add prefix to the config name to make the scope clearer. For example,
+`spark.scheduler.mode` clearly indicates that this config is for the scheduler.
+
+A config name can have multiple prefixes that are structured, which is similar to a
+qualified Java class name. Each prefix behaves like a namespace. We should only create
+a namespace if it's meaningful and can be shared by multiple configs. For example,
+`buffer.inMemoryThreshold` is preferred over `buffer.in.memory.threshold`.
+
+The followings are best practices of naming configs for some common cases:
+1. When adding configs for a big feature, it's better to create an umbrella config that
+   can turn the feature on/off, with a name like `featureName.enabled`. The other configs
+   of this feature should be put under the `featureName` namespace. For example:
+     - spark.sql.cbo.enabled
+     - spark.sql.cbo.starSchemaDetection
+     - spark.sql.cbo.joinReorder.enabled
+     - spark.sql.cbo.joinReorder.dp.threshold
+2. When adding a boolean config, the name should be a verb that describes what
+   happens if this config is set to true, e.g. `spark.shuffle.sort.useRadixSort`.
+3. When adding a config to specify a time duration, it's better to put the time unit
+   in the config name. For example, `featureName.timeoutMs`, which clearly indicates
+   that the time unit is millisecond. The config entry should be created with
+   `ConfigBuilder#timeConf`, to support time strings like `2 minutes`.
+*/
+
 /**
  * An entry contains all meta information for a configuration.
  *
@@ -39,6 +68,7 @@ package org.apache.spark.internal.config
  * @param doc the documentation for the configuration
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
+ * @param version the spark version when the configuration was released.
  * @tparam T the value type
  */
 private[spark] abstract class ConfigEntry[T] (
@@ -49,7 +79,8 @@ private[spark] abstract class ConfigEntry[T] (
     val valueConverter: String => T,
     val stringConverter: T => String,
     val doc: String,
-    val isPublic: Boolean) {
+    val isPublic: Boolean,
+    val version: String) {
 
   import ConfigEntry._
 
@@ -74,7 +105,8 @@ private[spark] abstract class ConfigEntry[T] (
   def defaultValue: Option[T] = None
 
   override def toString: String = {
-    s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, public=$isPublic)"
+    s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, " +
+      s"public=$isPublic, version=$version)"
   }
 }
 
@@ -87,7 +119,8 @@ private class ConfigEntryWithDefault[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -96,7 +129,8 @@ private class ConfigEntryWithDefault[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
@@ -117,7 +151,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -126,7 +161,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultFunction())
@@ -147,7 +183,8 @@ private class ConfigEntryWithDefaultString[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -156,7 +193,8 @@ private class ConfigEntryWithDefaultString[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
@@ -181,7 +219,8 @@ private[spark] class OptionalConfigEntry[T](
     val rawValueConverter: String => T,
     val rawStringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry[Option[T]](
     key,
     prependedKey,
@@ -190,7 +229,8 @@ private[spark] class OptionalConfigEntry[T](
     s => Some(rawValueConverter(s)),
     v => v.map(rawStringConverter).orNull,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValueString: String = ConfigEntry.UNDEFINED
@@ -210,6 +250,7 @@ private[spark] class FallbackConfigEntry[T] (
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
+    version: String,
     val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
     key,
@@ -219,7 +260,8 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.valueConverter,
     fallback.stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"

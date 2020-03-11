@@ -19,12 +19,10 @@ package org.apache.spark.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 import org.apache.spark.util.ManualClock
 
 /**
@@ -214,7 +212,7 @@ class DStreamScopeSuite
       rddScope: RDDOperationScope,
       batchTime: Long): Unit = {
     val (baseScopeId, baseScopeName) = (baseScope.id, baseScope.name)
-    val formattedBatchTime = UIUtils.formatBatchTime(
+    val formattedBatchTime = SparkUIUtils.formatBatchTime(
       batchTime, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
     assert(rddScope.id === s"${baseScopeId}_$batchTime")
     assert(rddScope.name.replaceAll("\\n", " ") === s"$baseScopeName @ $formattedBatchTime")

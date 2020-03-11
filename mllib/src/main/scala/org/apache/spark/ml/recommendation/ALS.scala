@@ -54,7 +54,8 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * Common params for ALS and ALSModel.
  */
-private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
+private[recommendation] trait ALSModelParams extends Params with HasPredictionCol
+  with HasBlockSize {
   /**
    * Param for the column name for user ids. Ids must be integers. Other
    * numeric types are supported for this column, but will be cast to integers as long as they
@@ -125,6 +126,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(blockSize -> 4096)
 }
 
 /**
@@ -288,6 +291,15 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
     if (featuresA != null && featuresB != null) {
       var dotProduct = 0.0f
@@ -351,7 +363,7 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllUsers(numItems: Int): DataFrame = {
-    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems)
+    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems, $(blockSize))
   }
 
   /**
@@ -366,7 +378,7 @@ class ALSModel private[ml] (
   @Since("2.3.0")
   def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
     val srcFactorSubset = getSourceFactorSubset(dataset, userFactors, $(userCol))
-    recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems)
+    recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems, $(blockSize))
   }
 
   /**
@@ -377,7 +389,7 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
-    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
   }
 
   /**
@@ -392,7 +404,7 @@ class ALSModel private[ml] (
   @Since("2.3.0")
   def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
     val srcFactorSubset = getSourceFactorSubset(dataset, itemFactors, $(itemCol))
-    recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers)
+    recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
   }
 
   /**
@@ -441,11 +453,12 @@ class ALSModel private[ml] (
       dstFactors: DataFrame,
       srcOutputColumn: String,
       dstOutputColumn: String,
-      num: Int): DataFrame = {
+      num: Int,
+      blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
 
-    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])])
-    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])])
+    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
+    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
       .as[(Seq[(Int, Array[Float])], Seq[(Int, Array[Float])])]
       .flatMap { case (srcIter, dstIter) =>
@@ -483,11 +496,10 @@ class ALSModel private[ml] (
 
   /**
    * Blockifies factors to improve the efficiency of cross join
-   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
       factors: Dataset[(Int, Array[Float])],
-      blockSize: Int = 4096): Dataset[Seq[(Int, Array[Float])]] = {
+      blockSize: Int): Dataset[Seq[(Int, Array[Float])]] = {
     import factors.sparkSession.implicits._
     factors.mapPartitions(_.grouped(blockSize))
   }
@@ -655,6 +667,15 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    *
    * @group setParam
@@ -683,7 +704,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     instr.logDataset(dataset)
     instr.logParams(this, rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
-      seed, intermediateStorageLevel, finalStorageLevel)
+      seed, intermediateStorageLevel, finalStorageLevel, blockSize)
 
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
@@ -694,7 +715,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
-    val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
+    val model = new ALSModel(uid, $(rank), userDF, itemDF).setBlockSize($(blockSize))
+      .setParent(this)
     copyValues(model)
   }
 
@@ -1027,7 +1049,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(userFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       // Preserve the partitioning because IDs are consistent with the partitioners in userInBlocks
       // and userFactors.
@@ -1039,7 +1061,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(itemFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       }, preservesPartitioning = true)
       .setName("itemFactors")
@@ -1354,7 +1376,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           Iterator.empty
         }
       } ++ {
-        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
+        builders.iterator.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
           ((srcBlockId, dstBlockId), block.build())
@@ -1673,7 +1695,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
-        srcOutBlock.view.zipWithIndex.map { case (activeIndices, dstBlockId) =>
+        srcOutBlock.iterator.zipWithIndex.map { case (activeIndices, dstBlockId) =>
           (dstBlockId, (srcBlockId, activeIndices.map(idx => srcFactors(idx))))
         }
     }

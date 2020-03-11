@@ -32,15 +32,20 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
+import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils.GPU
+import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with LocalSparkContext {
 
   override def afterEach(): Unit = {
     TestSparkPlugin.reset()
+    NonLocalModeSparkPlugin.reset()
     super.afterEach()
   }
 
@@ -61,6 +66,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     verify(TestSparkPlugin.executorPlugin).init(any(), meq(TestSparkPlugin.extraConf))
 
     assert(TestSparkPlugin.executorContext != null)
+    assert(TestSparkPlugin.executorContext.resources.isEmpty)
 
     // One way messages don't block, so need to loop checking whether it arrives.
     TestSparkPlugin.executorContext.send("oneway")
@@ -105,7 +111,8 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     val conf = new SparkConf()
     val env = mock(classOf[SparkEnv])
     when(env.conf).thenReturn(conf)
-    assert(PluginContainer(env) === None)
+    val container = PluginContainer(env, Map.empty[String, ResourceInformation].asJava)
+    assert(container === None)
   }
 
   test("merging of config options") {
@@ -132,12 +139,59 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       .set(NonLocalModeSparkPlugin.TEST_PATH_CONF, path.getAbsolutePath())
 
     sc = new SparkContext(conf)
-    TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     eventually(timeout(10.seconds), interval(100.millis)) {
       val children = path.listFiles()
       assert(children != null)
       assert(children.length >= 3)
+    }
+  }
+
+  test("plugin initialization in non-local mode with resources") {
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+
+      val workerScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
+        """{"name": "gpu","addresses":["3", "4"]}""")
+
+      val conf = new SparkConf()
+        .setAppName(getClass().getName())
+        .set(SparkLauncher.SPARK_MASTER, "local-cluster[1,1,1024]")
+        .set(PLUGINS, Seq(classOf[NonLocalModeSparkPlugin].getName()))
+        .set(NonLocalModeSparkPlugin.TEST_PATH_CONF, dir.getAbsolutePath())
+        .set(DRIVER_GPU_ID.amountConf, "2")
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(WORKER_GPU_ID.amountConf, "2")
+        .set(WORKER_GPU_ID.discoveryScriptConf, workerScript)
+        .set(EXECUTOR_GPU_ID.amountConf, "2")
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      var children = Array.empty[File]
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        children = dir.listFiles()
+        assert(children != null)
+        // we have 2 discovery scripts and then expect 1 driver and 1 executor file
+        assert(children.length >= 4)
+      }
+      val execFiles =
+        children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
+      assert(execFiles.size === 1)
+      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
+      assert(allLines.size === 1)
+      val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
+      assert(addrs.size === 2)
+      assert(addrs.sorted === Array("3", "4"))
+
+      assert(NonLocalModeSparkPlugin.driverContext != null)
+      val driverResources = NonLocalModeSparkPlugin.driverContext.resources()
+      assert(driverResources.size === 1)
+      assert(driverResources.get(GPU).addresses === Array("5", "6"))
+      assert(driverResources.get(GPU).name === GPU)
     }
   }
 }
@@ -147,8 +201,10 @@ class NonLocalModeSparkPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = {
     new DriverPlugin() {
       override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
-        NonLocalModeSparkPlugin.writeFile(ctx.conf(), ctx.executorID())
-        Map.empty.asJava
+        NonLocalModeSparkPlugin.writeDriverFile(NonLocalModeSparkPlugin.driverFileStr, ctx.conf(),
+          ctx.executorID())
+        NonLocalModeSparkPlugin.driverContext = ctx
+        Map.empty[String, String].asJava
       }
     }
   }
@@ -156,7 +212,8 @@ class NonLocalModeSparkPlugin extends SparkPlugin {
   override def executorPlugin(): ExecutorPlugin = {
     new ExecutorPlugin() {
       override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
-        NonLocalModeSparkPlugin.writeFile(ctx.conf(), ctx.executorID())
+        NonLocalModeSparkPlugin.writeFile(NonLocalModeSparkPlugin.executorFileStr, ctx.conf(),
+          ctx.executorID(), ctx.resources().asScala.toMap)
       }
     }
   }
@@ -164,10 +221,50 @@ class NonLocalModeSparkPlugin extends SparkPlugin {
 
 object NonLocalModeSparkPlugin {
   val TEST_PATH_CONF = "spark.nonLocalPlugin.path"
+  var driverContext: PluginContext = _
+  val executorFileStr = "EXECUTOR_FILE_"
+  val driverFileStr = "DRIVER_FILE_"
 
-  def writeFile(conf: SparkConf, id: String): Unit = {
+  private def createFileStringWithGpuAddrs(
+      id: String,
+      resources: Map[String, ResourceInformation]): String = {
+    // try to keep this simple and only write the gpus addresses, if we add more resources need to
+    // make more complex
+    val resourcesString = resources.filterKeys(_.equals(GPU)).map {
+      case (_, ri) =>
+        s"${ri.addresses.mkString(",")}"
+    }.mkString(",")
+    s"$id&$resourcesString"
+  }
+
+  def extractGpuAddrs(str: String): Array[String] = {
+    val idAndAddrs = str.split("&")
+    if (idAndAddrs.size > 1) {
+      idAndAddrs(1).split(",")
+    } else {
+      Array.empty[String]
+    }
+  }
+
+  def writeDriverFile(
+      filePrefix: String,
+      conf: SparkConf,
+      id: String): Unit = {
+    writeFile(filePrefix, conf, id, Map.empty)
+  }
+
+  def writeFile(
+      filePrefix: String,
+      conf: SparkConf,
+      id: String,
+      resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
-    Files.write(id, new File(path, id), StandardCharsets.UTF_8)
+    val strToWrite = createFileStringWithGpuAddrs(id, resources)
+    Files.write(strToWrite, new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8)
+  }
+
+  def reset(): Unit = {
+    driverContext = null
   }
 }
 

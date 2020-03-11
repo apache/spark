@@ -180,6 +180,8 @@ private[spark] class StandaloneAppClient(
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
+        } else if (state == ExecutorState.DECOMMISSIONED) {
+          listener.executorDecommissioned(fullId, message.getOrElse(""))
         }
 
       case WorkerRemoved(id, host, message) =>

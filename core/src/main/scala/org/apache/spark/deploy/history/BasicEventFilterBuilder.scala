@@ -31,43 +31,43 @@ import org.apache.spark.storage.BlockManagerId
  * and dead executors.
  */
 private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
-  private val _liveJobToStages = new mutable.HashMap[Int, Set[Int]]
-  private val _stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  private val _stageToRDDs = new mutable.HashMap[Int, Set[Int]]
+  private val liveJobToStages = new mutable.HashMap[Int, Set[Int]]
+  private val stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
+  private val stageToRDDs = new mutable.HashMap[Int, Set[Int]]
   private val _liveExecutors = new mutable.HashSet[String]
 
   private var totalJobs: Long = 0L
   private var totalStages: Long = 0L
   private var totalTasks: Long = 0L
 
-  def liveJobs: Set[Int] = _liveJobToStages.keySet.toSet
-  def liveStages: Set[Int] = _stageToRDDs.keySet.toSet
-  def liveTasks: Set[Long] = _stageToTasks.values.flatten.toSet
-  def liveRDDs: Set[Int] = _stageToRDDs.values.flatten.toSet
-  def liveExecutors: Set[String] = _liveExecutors.toSet
+  private[history] def liveJobs: Set[Int] = liveJobToStages.keySet.toSet
+  private[history] def liveStages: Set[Int] = stageToRDDs.keySet.toSet
+  private[history] def liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
+  private[history] def liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
+  private[history] def liveExecutors: Set[String] = _liveExecutors.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     totalJobs += 1
     totalStages += jobStart.stageIds.length
-    _liveJobToStages += jobStart.jobId -> jobStart.stageIds.toSet
+    liveJobToStages += jobStart.jobId -> jobStart.stageIds.toSet
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-    val stages = _liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
-    _liveJobToStages -= jobEnd.jobId
-    _stageToTasks --= stages
-    _stageToRDDs --= stages
+    val stages = liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
+    liveJobToStages -= jobEnd.jobId
+    stageToTasks --= stages
+    stageToRDDs --= stages
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
     val stageId = stageSubmitted.stageInfo.stageId
-    _stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
-    _stageToTasks.getOrElseUpdate(stageId, new mutable.HashSet[Long]())
+    stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
+    stageToTasks.getOrElseUpdate(stageId, new mutable.HashSet[Long]())
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
     totalTasks += 1
-    _stageToTasks.get(taskStart.stageId).foreach { tasks =>
+    stageToTasks.get(taskStart.stageId).foreach { tasks =>
       tasks += taskStart.taskInfo.taskId
     }
   }
@@ -140,18 +140,18 @@ private[spark] abstract class JobEventFilter(
  * will be considered as "Don't mind".
  */
 private[spark] class BasicEventFilter(
-    _stats: FilterStatistics,
-    _liveJobs: Set[Int],
-    _liveStages: Set[Int],
-    _liveTasks: Set[Long],
-    _liveRDDs: Set[Int],
+    stats: FilterStatistics,
+    liveJobs: Set[Int],
+    liveStages: Set[Int],
+    liveTasks: Set[Long],
+    liveRDDs: Set[Int],
     liveExecutors: Set[String])
   extends JobEventFilter(
-    Some(_stats),
-    _liveJobs,
-    _liveStages,
-    _liveTasks,
-    _liveRDDs) with Logging {
+    Some(stats),
+    liveJobs,
+    liveStages,
+    liveTasks,
+    liveRDDs) with Logging {
 
   logDebug(s"live executors : $liveExecutors")
 

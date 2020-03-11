@@ -85,7 +85,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     fi
     # Upgrade pip & friends if using virtual env
     if [ ! -n "$USE_CONDA" ]; then
-      pip install --upgrade pip pypandoc wheel numpy
+      pip install --upgrade pip wheel numpy
     fi
 
     echo "Creating pip installable source dist"
