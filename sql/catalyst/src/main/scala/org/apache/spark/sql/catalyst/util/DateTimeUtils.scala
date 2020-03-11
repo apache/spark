@@ -152,6 +152,21 @@ object DateTimeUtils {
     instantToMicros(localDateTime.atZone(zoneId).toInstant)
   }
 
+  // A method called by JSON/CSV parser to clean up the legacy timestamp string by removing the
+  // "GMT" string.
+  def cleanLegacyTimestampStr(s: String): String = {
+    val indexOfGMT = s.indexOf("GMT")
+    if (indexOfGMT != -1) {
+      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
+      val s0 = s.substring(0, indexOfGMT)
+      val s1 = s.substring(indexOfGMT + 3)
+      // Mapped to 2000-01-01T00:00+01:00
+      s0 + s1
+    } else {
+      s
+    }
+  }
+
   /**
    * Trim and parse a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
@@ -161,28 +176,28 @@ object DateTimeUtils {
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
    * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   *
+   * where `zone_id` should have one of the forms:
+   *   - Z - Zulu time zone UTC+0
+   *   - +|-[h]h:[m]m
+   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
+   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
+   *     and a suffix in the formats:
+   *     - +|-h[h]
+   *     - +|-hh[:]mm
+   *     - +|-hh:mm:ss
+   *     - +|-hhmmss
+   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     if (s == null) {
       return None
     }
-    var tz: Option[Byte] = None
+    var tz: Option[String] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
@@ -233,22 +248,21 @@ object DateTimeUtils {
             return None
           }
         } else if (i == 5 || i == 6) {
-          if (b == 'Z') {
+          if (b == '-' || b == '+') {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
-            tz = Some(43)
-          } else if (b == '-' || b == '+') {
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
-            i += 1
-            tz = Some(b)
+            tz = Some(new String(bytes, j, 1))
           } else if (b == '.' && i == 5) {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
           } else {
-            return None
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            tz = Some(new String(bytes, j, bytes.length - j))
+            j = bytes.length - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -288,11 +302,11 @@ object DateTimeUtils {
       digitsMilli -= 1
     }
     try {
-      val zoneId = if (tz.isEmpty) {
-        timeZoneId
-      } else {
-        val sign = if (tz.get.toChar == '-') -1 else 1
-        ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8))
+      val zoneId = tz match {
+        case None => timeZoneId
+        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+        case Some(zoneName: String) => getZoneId(zoneName.trim)
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
@@ -791,9 +805,9 @@ object DateTimeUtils {
 
   /**
    * Extracts special values from an input string ignoring case.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some special value in lower case or None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some special value in lower case or None.
    */
   private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
@@ -820,9 +834,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of microseconds since the epoch if the conversion completed
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
@@ -846,9 +860,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
     extractSpecialValue(input, zoneId).flatMap {
@@ -870,9 +884,9 @@ object DateTimeUtils {
 
   /**
    * Subtracts two dates.
-   * @param endDay - the end date, exclusive
-   * @param startDay - the start date, inclusive
-   * @return an interval between two dates. The interval can be negative
+   * @param endDay The end date, exclusive
+   * @param startDay The start date, inclusive
+   * @return An interval between two dates. The interval can be negative
    *         if the end date is before the start date.
    */
   def subtractDates(endDay: Int, startDay: Int): CalendarInterval = {
@@ -882,5 +896,43 @@ object DateTimeUtils {
     val months = period.getMonths + 12 * period.getYears
     val days = period.getDays
     new CalendarInterval(months, days, 0)
+  }
+
+  /**
+   * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
+   * parsing/formatting datetime values. The pattern string is incompatible with the one defined
+   * by SimpleDateFormat in Spark 2.4 and earlier. This function converts all incompatible pattern
+   * for the new parser in Spark 3.0. See more details in SPARK-31030.
+   * @param pattern The input pattern.
+   * @return The pattern for new parser
+   */
+  def convertIncompatiblePattern(pattern: String): String = {
+    val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
+      case (patternPart, index) =>
+        // Text can be quoted using single quotes, we only check the non-quote parts.
+        index % 2 == 0 && patternPart.contains("G")
+    }
+    pattern.split("'").zipWithIndex.map {
+      case (patternPart, index) =>
+        if (index % 2 == 0) {
+          // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
+          // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
+          // string. If parsable, return the result; otherwise, fall back to 'u', and then use the
+          // legacy SimpleDateFormat parser to parse. When it is successfully parsed, throw an
+          // exception and ask users to change the pattern strings or turn on the legacy mode;
+          // otherwise, return NULL as what Spark 2.4 does.
+          val res = patternPart.replace("u", "e")
+          // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
+          // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
+          // We only do this substitution when there is no era designator found in the pattern.
+          if (!eraDesignatorContained) {
+            res.replace("y", "u")
+          } else {
+            res
+          }
+        } else {
+          patternPart
+        }
+    }.mkString("'")
   }
 }
