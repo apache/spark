@@ -26,7 +26,7 @@ of a query along with examples.
 ### Syntax
 {% highlight sql %}
 [ WITH with_query [ , ... ] ]
-select_statement [ { UNION | INTERSECT | EXCEPT } select_statement, ... ]
+select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_statement, ... ]
 [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
 [ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
 [ CLUSTER BY { expression [ , ...] } ]
