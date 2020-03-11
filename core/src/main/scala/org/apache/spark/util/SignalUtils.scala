@@ -58,7 +58,7 @@ private[spark] object SignalUtils extends Logging {
    */
   def register(signal: String)(action: => Boolean): Unit = synchronized {
     if (SystemUtils.IS_OS_UNIX) {
-      register(signal, s"Failed to register signal handler for " + signal,
+      register(signal, s"Failed to register signal handler for $signal",
         logStackTrace = true)(action)
     }
   }
@@ -74,11 +74,15 @@ private[spark] object SignalUtils extends Logging {
    */
   def register(
       signal: String,
-      failMessage: => String,
+      failMessage: String,
       logStackTrace: Boolean = true)(
       action: => Boolean): Unit = synchronized {
     try {
-      registerSignal(signal)(action)
+      val handler = handlers.getOrElseUpdate(signal, {
+        logInfo(s"Registering signal handler for $signal")
+        new ActionHandler(new Signal(signal))
+      })
+      handler.register(action)
     } catch {
       case ex: Exception =>
         if (logStackTrace) {
@@ -87,14 +91,6 @@ private[spark] object SignalUtils extends Logging {
           logWarning(failMessage)
         }
     }
-  }
-
-  private def registerSignal(signal: String)(action: => Boolean): Unit = synchronized {
-    val handler = handlers.getOrElseUpdate(signal, {
-      logInfo("Registering signal handler for " + signal)
-      new ActionHandler(new Signal(signal))
-    })
-    handler.register(action)
   }
 
   /**
