@@ -42,7 +42,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .noop()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 
