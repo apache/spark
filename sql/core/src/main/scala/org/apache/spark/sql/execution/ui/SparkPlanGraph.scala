@@ -21,11 +21,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -161,57 +159,27 @@ private[ui] class SparkPlanGraphNode(
     val desc: String,
     val metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode(metricsValue: Map[Long, String], isCodegen: Boolean = false): String = {
+  def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder(name)
-    val statisticHeader = Seq(Seq("name", "total", "min", "med", "max"))
-    val statisticRows: Seq[Seq[String]] = statisticHeader ++
-      metrics.filter { metric => metricsValue.contains(metric.accumulatorId) }
-        .map { metric =>
-          val cells = Array.fill[String](4)("n/a")
-          val statistics = Seq.empty ++ metricsValue(metric.accumulatorId).split(";").toSeq
-          statistics match {
-            case sum :: Nil => cells(0) = sum
-            case min :: med :: max :: Nil =>
-              cells(1) = min; cells(2) = med; cells(3) = max
-            case sum :: min :: med :: max :: Nil =>
-              cells(0) = sum; cells(1) = min; cells(2) = med; cells(3) = max
-            case _ => throw new IllegalArgumentException(
-              s"Unknown SQLMetric statistics ${statistics.mkString(",")}")
-          }
-          Seq(metric.name) ++ cells.toSeq
-        }
 
-    // Initialise the width of each column to a minimum value
-    val colWidths = Array.fill(5)(5)
-    val sb = new mutable.StringBuilder()
-    // Compute the width of each column
-    for (row <- statisticRows) {
-      for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), Utils.stringHalfWidth(cell))
-      }
+    val values = for {
+      metric <- metrics
+      value <- metricsValue.get(metric.accumulatorId)
+    } yield {
+      metric.name + ": " + value
     }
-    val paddedRows = statisticRows.map { row =>
-      row.zipWithIndex.map { case (cell, i) =>
-        StringUtils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
-      }
-    }
-    paddedRows.foreach(_.addString(sb, "", " ", "\n"))
 
-    if (isCodegen) {
-      sb.toString
+    if (values.nonEmpty) {
+      // If there are metrics, display each entry in a separate line.
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      builder ++= "\n \n"
+      builder ++= values.mkString("\n")
+      s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
     } else {
-      if (statisticRows.size > 1) {
-        // If there are metrics, display each entry in a separate line.
-        // Note: whitespace between two "\n"s is to create an empty line between the name of
-        // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-        builder ++= "\n \n"
-        builder ++= sb.toString
-        s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
-      } else {
-        // SPARK-30684: when there is no metrics, add empty lines to increase the height of the
-        // node, so that there won't be gaps between an edge and a small node.
-        s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
-      }
+      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
+      // so that there won't be gaps between an edge and a small node.
+      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
     }
   }
 }
@@ -227,13 +195,13 @@ private[ui] class SparkPlanGraphCluster(
     metrics: Seq[SQLPlanMetric])
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
-  override def makeDotNode(metricsValue: Map[Long, String], isCodegen: Boolean = false): String = {
+  override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(id)) {
-        name + "\n \n" + super.makeDotNode(Map(id -> metricsValue(id)), true)
+        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
       } else {
         name
       }

@@ -141,7 +141,7 @@ object StaticSQLConf {
         "tell where the max value comes from. It's useful to help debug job quicker.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")

@@ -210,7 +210,7 @@ class SQLAppStatusListener(
 
     val allMetrics = new mutable.HashMap[Long, Array[Long]]()
 
-    val displayTask = conf.get(StaticSQLConf.DISPLAY_TASK_ID_FOR_MAX_METRIC)
+    val displayTaskId = conf.get(StaticSQLConf.DISPLAY_TASK_ID_FOR_MAX_METRIC)
 
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
@@ -224,7 +224,7 @@ class SQLAppStatusListener(
       allMetrics(id) = updated
     }
 
-    if (displayTask) {
+    if (displayTaskId) {
       // Find the max for each metric id between all stages.
       maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
         val updated = maxMetricsFromAllStages.getOrElse(id,
@@ -243,7 +243,7 @@ class SQLAppStatusListener(
       if (metricTypes.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
-          if (displayTask) {
+          if (displayTaskId) {
             // If the driver updates same metrics as tasks and has higher value then remove
             // that entry from maxMetricsFromAllStage. This would make stringValue function default
             // to "driver" that would be displayed on UI.
@@ -262,18 +262,18 @@ class SQLAppStatusListener(
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      val taskInfo = if (displayTask) {
+      val taskId = if (displayTaskId) {
         if (maxMetricsFromAllStages.contains(id)) {
           val Seq(stageId, stageAttemptId, taskId) =
             maxMetricsFromAllStages(id).slice(1, 4).toSeq
-          s"($stageId.$stageAttemptId:$taskId)"
+          s" (stage $stageId (attempt $stageAttemptId): task $taskId)"
         } else {
-          "(driver)"
+          " (driver)"
         }
       } else {
         ""
       }
-      id -> SQLMetrics.stringValue(metricTypes(id), values, taskInfo)
+      id -> SQLMetrics.stringValue(metricTypes(id), values, taskId)
     }.toMap
 
     // Check the execution again for whether the aggregated metrics data has been calculated.

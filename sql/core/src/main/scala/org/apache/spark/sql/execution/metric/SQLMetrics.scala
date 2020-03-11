@@ -22,9 +22,10 @@ import java.util.{Arrays, Locale}
 
 import scala.concurrent.duration._
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 
@@ -116,7 +117,8 @@ object SQLMetrics {
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-      acc.register(sc, name = Some(name), countFailedValues = false)
+      acc.register(sc, name = Some(s"$name total (min, med, ${attachTaskId("max", sc.conf)})"),
+        countFailedValues = false)
     acc
   }
 
@@ -125,14 +127,16 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name total (min, med, ${attachTaskId("max", sc.conf)})"),
+      countFailedValues = false)
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
     val acc = new SQLMetric(NS_TIMING_METRIC, -1)
-      acc.register(sc, name = Some(s"name"), countFailedValues = false)
+      acc.register(sc, name = Some(s"$name total (min, med, ${attachTaskId("max", sc.conf)})"),
+        countFailedValues = false)
     acc
   }
 
@@ -147,7 +151,8 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc.register(sc, name = Some(s"$name (min, med, ${attachTaskId("max", sc.conf)})"),
+      countFailedValues = false)
     acc
   }
 
@@ -164,7 +169,7 @@ object SQLMetrics {
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
     */
-  def stringValue(metricsType: String, values: Array[Long], taskInfo: String = ""): String = {
+  def stringValue(metricsType: String, values: Array[Long], taskId: String = ""): String = {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
@@ -177,11 +182,11 @@ object SQLMetrics {
         } else {
           Arrays.sort(validValues)
           Seq(toNumberFormat(validValues(0)), toNumberFormat(validValues(validValues.length / 2)),
-            s"${toNumberFormat(validValues(validValues.length - 1))} $taskInfo")
+            s"${toNumberFormat(validValues(validValues.length - 1))}$taskId")
         }
         metric
       }
-      s"$min;$med;$max"
+      s"\n($min, $med, $max)"
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
@@ -202,11 +207,11 @@ object SQLMetrics {
           Arrays.sort(validValues)
           Seq(strFormat(validValues.sum), strFormat(validValues(0)),
             strFormat(validValues(validValues.length / 2)),
-            s"${strFormat(validValues(validValues.length - 1))} $taskInfo")
+            s"${strFormat(validValues(validValues.length - 1))}$taskId")
         }
         metric
       }
-      s"$sum;$min;$med;$max"
+      s"\n$sum ($min, $med, $max)"
     }
   }
 
@@ -221,6 +226,15 @@ object SQLMetrics {
     if (executionId != null) {
       sc.listenerBus.post(
         SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
+    }
+  }
+
+  private def attachTaskId(name: String, conf: SparkConf): String = {
+    val display = conf.get(StaticSQLConf.DISPLAY_TASK_ID_FOR_MAX_METRIC)
+    if (display) {
+      s"$name (stageId (attemptId): taskId)"
+    } else {
+      name
     }
   }
 }
