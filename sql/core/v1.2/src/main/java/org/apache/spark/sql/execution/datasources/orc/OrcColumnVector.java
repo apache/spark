@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 
 import org.apache.orc.storage.ql.exec.vector.*;
 
@@ -138,9 +137,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   public long getLong(int rowId) {
     int index = getRowIndex(rowId);
     if (isTimestamp) {
-      Timestamp ts = new Timestamp(timestampData.time[index]);
-      ts.setNanos(timestampData.nanos[index]);
-      return DateTimeUtils.fromJavaTimestamp(ts);
+      return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
     } else {
       return longData.vector[index];
     }
