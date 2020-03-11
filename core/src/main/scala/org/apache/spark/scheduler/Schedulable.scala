@@ -35,7 +35,8 @@ private[spark] trait Schedulable {
   def weight: Int
   def minShare: Int
   def runningTasks: Int
-  def priority: Int
+  def priority: Long
+  def jobId: Int
   def stageId: Int
   def name: String
 

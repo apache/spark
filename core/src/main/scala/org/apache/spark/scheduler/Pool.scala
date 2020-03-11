@@ -42,6 +42,7 @@ private[spark] class Pool(
   var runningTasks = 0
   val priority = 0
 
+  val jobId = -1
   // A pool's stage id is used to break the tie in scheduling.
   var stageId = -1
   val name = poolName

@@ -34,12 +34,12 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val APP_NAME = "PoolSuite"
   val TEST_POOL = "testPool"
 
-  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
-    : TaskSetManager = {
+  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl,
+      properties: Properties = null): TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
     }
-    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null), 0)
+    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, properties), 0)
   }
 
   def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {
@@ -343,5 +343,37 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(selectedPool.minShare === expectedInitMinShare)
     assert(selectedPool.weight === expectedInitWeight)
     assert(selectedPool.schedulingMode === expectedSchedulingMode)
+  }
+
+  test("SPARK-31105: FIFO Scheduler should respect execution id") {
+    val conf = new SparkConf()
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", FIFO, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, conf)
+    schedulableBuilder.buildPools()
+
+    val prop1 = new Properties()
+    val prop2 = new Properties()
+    prop1.setProperty("spark.sql.execution.id", "1")
+    prop2.setProperty("spark.sql.execution.id", "2")
+
+    val tsm1 = createTaskSetManager(1, 5, taskScheduler, prop1)
+    val tsm2 = createTaskSetManager(2, 5, taskScheduler, prop2)
+    val tsm3 = createTaskSetManager(3, 5, taskScheduler, prop2)
+    val tsm4 = createTaskSetManager(4, 5, taskScheduler, prop1)
+
+    schedulableBuilder.addTaskSetManager(tsm1, tsm1.taskSet.properties)
+    schedulableBuilder.addTaskSetManager(tsm2, tsm2.taskSet.properties)
+    schedulableBuilder.addTaskSetManager(tsm3, tsm3.taskSet.properties)
+    schedulableBuilder.addTaskSetManager(tsm4, tsm4.taskSet.properties)
+
+    val sortedSchedulable = rootPool.getSortedTaskSetQueue
+    assert(sortedSchedulable.length === 4)
+    assert(sortedSchedulable(0).stageId === 1)
+    assert(sortedSchedulable(1).stageId === 4)
+    assert(sortedSchedulable(2).stageId === 2)
+    assert(sortedSchedulable(3).stageId === 3)
   }
 }

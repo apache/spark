@@ -111,8 +111,11 @@ private[spark] class TaskSetManager(
 
   val weight = 1
   val minShare = 0
-  var priority = taskSet.priority
-  var stageId = taskSet.stageId
+  val priority = if (taskSet.properties != null) {
+    taskSet.properties.getProperty("spark.sql.execution.id", "0").toLong
+  } else 0L
+  val jobId = taskSet.priority
+  val stageId = taskSet.stageId
   val name = "TaskSet_" + taskSet.id
   var parent: Pool = null
   private var totalResultSize = 0L
