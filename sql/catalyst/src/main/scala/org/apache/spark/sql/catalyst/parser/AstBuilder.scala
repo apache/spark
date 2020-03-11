@@ -1693,8 +1693,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val partition = ctx.partition.asScala.map(expression)
     val order = if (ctx.sortItem.asScala.nonEmpty) {
       ctx.sortItem.asScala.map(visitSortItem)
-    } else if (ctx.windowFrame != null &&
-      ctx.windowFrame.frameType.getType == SqlBaseParser.RANGE) {
+    } else if (ctx.windowFrame != null) {
       ctx.sortItem.asScala.map(visitSortItem)
     } else {
       // Same default behaviors like hive, when order spec is null
