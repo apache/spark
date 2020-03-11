@@ -23,7 +23,9 @@ import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec}
 
-object ShufflePartitionsCoalescer extends Logging {
+object ShufflePartitionsUtil extends Logging {
+  final val SMALL_PARTITION_FACTOR = 0.2
+  final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
    * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
@@ -113,5 +115,51 @@ object ShufflePartitionsCoalescer extends Logging {
     partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
 
     partitionSpecs
+  }
+
+  /**
+   * Given a list of size, return an array of indices to split the list into multiple partitions,
+   * so that the size sum of each partition is close to the target size. Each index indicates the
+   * start of a partition.
+   */
+  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+    val partitionStartIndices = ArrayBuffer[Int]()
+    partitionStartIndices += 0
+    var i = 0
+    var currentPartitionSize = 0L
+    var lastPartitionSize = -1L
+
+    def tryMergePartitions() = {
+      // When we are going to start a new partition, it's possible that the current partition or
+      // the previous partition is very small and it's better to merge the current partition into
+      // the previous partition.
+      val shouldMergePartitions = lastPartitionSize > -1 &&
+        ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
+        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
+          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
+      if (shouldMergePartitions) {
+        // We decide to merge the current partition into the previous one, so the start index of
+        // the current partition should be removed.
+        partitionStartIndices.remove(partitionStartIndices.length - 1)
+        lastPartitionSize += currentPartitionSize
+      } else {
+        lastPartitionSize = currentPartitionSize
+      }
+    }
+
+    while (i < sizes.length) {
+      // If including the next size in the current partition exceeds the target size, package the
+      // current partition and start a new partition.
+      if (i > 0 && currentPartitionSize + sizes(i) > targetSize) {
+        tryMergePartitions()
+        partitionStartIndices += i
+        currentPartitionSize = sizes(i)
+      } else {
+        currentPartitionSize += sizes(i)
+      }
+      i += 1
+    }
+    tryMergePartitions()
+    partitionStartIndices.toArray
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.{MapOutputStatistics, SparkFunSuite}
-import org.apache.spark.sql.execution.adaptive.ShufflePartitionsCoalescer
+import org.apache.spark.sql.execution.adaptive.ShufflePartitionsUtil
 
-class ShufflePartitionsCoalescerSuite extends SparkFunSuite {
+class ShufflePartitionsUtilSuite extends SparkFunSuite {
 
   private def checkEstimation(
       bytesByPartitionIdArray: Array[Array[Long]],
@@ -31,7 +31,7 @@ class ShufflePartitionsCoalescerSuite extends SparkFunSuite {
       case (bytesByPartitionId, index) =>
         new MapOutputStatistics(index, bytesByPartitionId)
     }
-    val estimatedPartitionStartIndices = ShufflePartitionsCoalescer.coalescePartitions(
+    val estimatedPartitionStartIndices = ShufflePartitionsUtil.coalescePartitions(
       mapOutputStatistics,
       0,
       bytesByPartitionIdArray.head.length,
@@ -251,5 +251,31 @@ class ShufflePartitionsCoalescerSuite extends SparkFunSuite {
         expectedPartitionSpecs,
         targetSize, minNumPartitions)
     }
+  }
+
+  test("splitSizeListByTargetSize") {
+    val targetSize = 100
+
+    // merge the small partitions at the beginning/end
+    val sizeList1 = Seq[Long](15, 90, 15, 15, 15, 90, 15)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList1, targetSize).toSeq ==
+      Seq(0, 2, 5))
+
+    // merge the small partitions in the middle
+    val sizeList2 = Seq[Long](30, 15, 90, 10, 90, 15, 30)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList2, targetSize).toSeq ==
+      Seq(0, 2, 4, 5))
+
+    // merge small partitions if the partition itself is smaller than
+    // targetSize * SMALL_PARTITION_FACTOR
+    val sizeList3 = Seq[Long](15, 1000, 15, 1000)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList3, targetSize).toSeq ==
+      Seq(0, 3))
+
+    // merge small partitions if the combined size is smaller than
+    // targetSize * MERGED_PARTITION_FACTOR
+    val sizeList4 = Seq[Long](35, 75, 90, 20, 35, 25, 35)
+    assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList4, targetSize).toSeq ==
+      Seq(0, 2, 3))
   }
 }

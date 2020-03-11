@@ -645,11 +645,11 @@ class AdaptiveQueryExecSuite
         //              into 2 splits and right side is divided into 4 splits, so
         //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
         // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 8 + 1 + 3)
+        checkSkewJoin(innerSmj, 8 + 1 + 2)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -659,11 +659,11 @@ class AdaptiveQueryExecSuite
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
         //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
-        // So total (2 + 1 + 3) partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
+        // So total (2 + 1 + 2) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 2 + 1 + 3)
+        checkSkewJoin(leftSmj, 2 + 1 + 2)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
