@@ -65,7 +65,7 @@ the [tuning guide](tuning.html) for tips on how to reduce it.
 Finally, note that the Java VM does not always behave well with more than 200 GiB of RAM. If you
 purchase machines with more RAM than this, you can launch multiple executors in a single node. In
 Spark's [standalone mode](spark-standalone.html), a worker is responsible for launching multiple
-executors according to its available memory and cores. And each executor will be launched in a
+executors according to its available memory and cores, and each executor will be launched in a
 separate Java VM.
 
 # Network
