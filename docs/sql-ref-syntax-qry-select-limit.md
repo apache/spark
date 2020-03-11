@@ -76,7 +76,7 @@ SELECT name, age FROM person ORDER BY name LIMIT ALL;
   |Zen Hui|25 |
   +-------+---+
 
--- A function expression as an input to limit.
+-- A function expression as an input to LIMIT.
 SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
 
   +-------+---+
@@ -89,7 +89,7 @@ SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
   |Shone S| 16|
   +-------+---+
 
--- A non-foldable expression as an input to limit is not allowed.
+-- A non-foldable expression as an input to LIMIT is not allowed.
 SELECT name, age FROM person ORDER BY name LIMIT length(name)
 
 org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...

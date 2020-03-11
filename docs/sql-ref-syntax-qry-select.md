@@ -28,7 +28,7 @@ of a query along with examples.
 [ WITH with_query [ , ... ] ]
 select_statement [ { UNION | INTERSECT | EXCEPT } select_statement, ... ]
 [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-[ SORT  BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+[ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
 [ CLUSTER BY { expression [ , ...] } ]
 [ DISTRIBUTE BY { expression [, ...] } ]
 [ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
