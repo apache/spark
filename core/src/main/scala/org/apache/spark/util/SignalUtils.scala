@@ -56,7 +56,7 @@ private[spark] object SignalUtils extends Logging {
    *
    * All actions for a given signal are run in a separate thread.
    */
-  def register(signal: String)(action: => Boolean): Unit = synchronized {
+  def register(signal: String)(action: => Boolean): Unit = {
     if (SystemUtils.IS_OS_UNIX) {
       register(signal, s"Failed to register signal handler for $signal",
         logStackTrace = true)(action)
