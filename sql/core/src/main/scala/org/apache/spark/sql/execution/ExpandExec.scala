@@ -54,6 +54,8 @@ case class ExpandExec(
   private[this] val projection =
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
 
+  private val useSwitchStatement: Boolean = sqlContext.conf.codegenUseSwitchStatement
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -167,8 +169,9 @@ case class ExpandExec(
       }
     }
 
-    // Part 2: switch/case statements
-    val cases = projections.zipWithIndex.map { case (exprs, row) =>
+    // Part 2: switch/case statements, or if/else if statements via configuration
+
+    val updates = projections.map { exprs =>
       var updateCode = ""
       for (col <- exprs.indices) {
         if (!sameOutput(col)) {
@@ -178,27 +181,48 @@ case class ExpandExec(
                |${ev.code}
                |${outputColumns(col).isNull} = ${ev.isNull};
                |${outputColumns(col).value} = ${ev.value};
-            """.stripMargin
+             """.stripMargin
         }
+      }
+      updateCode.trim
+    }
+
+    // the name needs to be known to build conditions
+    val i = ctx.freshName("i")
+    val loopContent = if (useSwitchStatement) {
+      val cases = updates.zipWithIndex.map { case (updateCode, row) =>
+        s"""
+           |case $row:
+           |  ${updateCode.trim}
+           |  break;
+         """.stripMargin
       }
 
       s"""
-         |case $row:
-         |  ${updateCode.trim}
-         |  break;
+         |switch ($i) {
+         |  ${cases.mkString("\n").trim}
+         |}
        """.stripMargin
+    } else {
+      val conditions = updates.zipWithIndex.map { case (updateCode, row) =>
+        (if (row > 0) "else " else "") +
+          s"""
+             |if ($i == $row) {
+             |  ${updateCode.trim}
+             |}
+           """.stripMargin
+      }
+
+      conditions.mkString("\n").trim
     }
 
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
     s"""
        |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
-       |  switch ($i) {
-       |    ${cases.mkString("\n").trim}
-       |  }
+       |  $loopContent
        |  $numOutput.add(1);
        |  ${consume(ctx, outputColumns)}
        |}

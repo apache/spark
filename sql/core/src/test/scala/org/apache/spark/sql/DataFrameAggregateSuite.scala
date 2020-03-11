@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -955,6 +954,63 @@ class DataFrameAggregateSuite extends QueryTest
         sql("SELECT COUNT_IF(x) FROM tempView")
       }
       assert(error.message.contains("function count_if requires boolean type"))
+    }
+  }
+
+  /**
+   * NOTE: The test code tries to control the size of for/switch statement in expand_doConsume,
+   * as well as the overall size of expand_doConsume, so that the query triggers known Janino
+   * bug - https://github.com/janino-compiler/janino/issues/113.
+   *
+   * The expected exception message from Janino when we use switch statement for "ExpandExec":
+   * - "Operand stack inconsistent at offset xxx: Previous size 1, now 0"
+   * which will not happen when we use if-else-if statement for "ExpandExec".
+   *
+   * "The number of fields" and "The number of distinct aggregation functions" are the major
+   * factors to increase the size of generated code: while these values should be large enough
+   * to trigger the Janino bug, these values should not also too big; otherwise one of below
+   * exceptions might be thrown:
+   * - "expand_doConsume would be beyond 64KB"
+   * - "java.lang.ClassFormatError: Too many arguments in method signature in class file"
+   */
+  test("SPARK-31115 Lots of columns and distinct aggregations shouldn't break code generation") {
+    withSQLConf(
+      (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true"),
+      (SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key, "10000"),
+      (SQLConf.CODEGEN_FALLBACK.key, "false"),
+      (SQLConf.CODEGEN_LOGGING_MAX_LINES.key, "-1"),
+      (SQLConf.CODEGEN_USE_SWITCH_STATEMENT.key, "false")
+    ) {
+      var df = Seq(("1", "2", 1), ("1", "2", 2), ("2", "3", 3), ("2", "3", 4)).toDF("a", "b", "c")
+
+      // The value is tested under commit "e807118eef9e0214170ff62c828524d237bd58e3":
+      // the query fails with switch statement, whereas it passes with if-else statement.
+      // Note that the value depends on the Spark logic as well - different Spark versions may
+      // require different value to ensure the test failing with switch statement.
+      val numNewFields = 100
+
+      df = df.withColumns(
+        (1 to numNewFields).map { idx => s"a$idx" },
+        (1 to numNewFields).map { idx =>
+          when(col("c").mod(lit(2)).===(lit(0)), lit(idx)).otherwise(col("c"))
+        }
+      )
+
+      val aggExprs: Array[Column] = Range(1, numNewFields).map { idx =>
+        if (idx % 2 == 0) {
+          coalesce(countDistinct(s"a$idx"), lit(0))
+        } else {
+          coalesce(count(s"a$idx"), lit(0))
+        }
+      }.toArray
+
+      val aggDf = df
+        .groupBy("a", "b")
+        .agg(aggExprs.head, aggExprs.tail: _*)
+
+      // We are only interested in whether the code compilation fails or not, so skipping
+      // verificaion on outputs.
+      aggDf.collect()
     }
   }
 }
