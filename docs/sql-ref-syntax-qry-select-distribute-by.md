@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,7 +20,7 @@ license: |
 ---
 The <code>DISTRIBUTE BY</code> clause is used to repartition the data based
 on the input expressions. Unlike the [CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)
-clause, this does not sort the data within each partition. 
+clause, this does not sort the data within each partition.
 
 ### Syntax
 {% highlight sql %}
@@ -39,19 +39,19 @@ DISTRIBUTE BY { expression [ , ... ] }
 {% highlight sql %}
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
-    ('Zen Hui', 25), 
-    ('Anil B', 18), 
-    ('Shone S', 16), 
+    ('Zen Hui', 25),
+    ('Anil B', 18),
+    ('Shone S', 16),
     ('Mike A', 25),
-    ('John A', 18), 
+    ('John A', 18),
     ('Jack N', 16);
 
 -- Reduce the number of shuffle partitions to 2 to illustrate the behavior of `DISTRIBUTE BY`.
 -- It's easier to see the clustering and sorting behavior with less number of partitions.
 SET spark.sql.shuffle.partitions = 2;
-                        
+
 -- Select the rows with no ordering. Please note that without any sort directive, the result
--- of the query is not deterministic. It's included here to just contrast it with the 
+-- of the query is not deterministic. It's included here to just contrast it with the
 -- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
 -- clustered together.
 SELECT age, name FROM person;
