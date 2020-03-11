@@ -243,9 +243,8 @@ from t1 where f1 = f2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY default.t1.`f1` RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
-
+1	1
+2	2
 
 -- !query
 select f1, sum(f1) over (partition by f1 order by f2
