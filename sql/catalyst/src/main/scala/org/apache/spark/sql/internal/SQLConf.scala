@@ -440,7 +440,7 @@ object SQLConf {
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The minimum number of partitions must be positive.")
-      .createWithDefault(1)
+      .createOptional
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
@@ -2702,8 +2702,6 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
-
-  def minShufflePartitionNum: Int = getConf(COALESCE_PARTITIONS_MIN_PARTITION_NUM)
 
   def initialShufflePartitionNum: Int =
     getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
