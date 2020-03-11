@@ -799,10 +799,10 @@ case class SchemaOfJson(
 }
 
 /**
- * A function that returns the number of elements in outer JSON Array.
+ * A function that returns the number of elements in outer JSON array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(jsonArray) - Returns the number of elements in outer JSON Array.",
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in outer JSON array.",
   arguments = """
     Arguments:
       * jsonArray - A JSON array is required as argument. An Exception is thrown if any
@@ -845,15 +845,15 @@ case class LengthOfJsonArray(child: Expression)
 
   private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
     var length: Int = 0;
-    // Only json array are supported for this function.
+    // Only JSON array are supported for this function.
     if (parser.currentToken != JsonToken.START_ARRAY) {
-      throw new AnalysisException(s"$prettyName can only be called on JSON Array.")
+      throw new AnalysisException(s"$prettyName can only be called on JSON array.")
     }
-    // Keep traversing until the end of Json Array
+    // Keep traversing until the end of JSON array
     while(parser.nextToken() != JsonToken.END_ARRAY) {
       // Null indicates end of input.
       if (parser.currentToken == null) {
-        throw new AnalysisException("Please provide a valid JSON Array.")
+        throw new AnalysisException("Please provide a valid JSON array.")
       }
       length += 1
       // skip all the child of inner object or array

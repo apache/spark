@@ -791,7 +791,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }
   }
 
-  test("Length of Json Array") {
+  test("Length of JSON array") {
     val null_json_array = """"""
     val simple_json_array = """[1,2,3]"""
     val empty_json_array = """[]"""
@@ -814,6 +814,6 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }.getCause
 
     assert(exception.isInstanceOf[AnalysisException])
-    assert(exception.getMessage.contains("can only be called on Json Array"))
+    assert(exception.getMessage.contains("can only be called on JSON array"))
   }
 }
