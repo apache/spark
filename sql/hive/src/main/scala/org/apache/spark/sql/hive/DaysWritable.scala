@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{DataInput, DataOutput, IOException}
+import java.sql.Date
 import java.time.LocalDate
 import java.util.Calendar
 
@@ -40,25 +41,21 @@ private[hive] class DaysWritable(var gregorianDays: Int = 0) extends DateWritabl
     rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
 
   override def getDays: Int = gregorianDays
+  override def get(): Date = {
+    val days = rebaseGregorianToJulianDays(gregorianDays)
+    new Date(DateWritable.daysToMillis(days))
+  }
 
   @throws[IOException]
   override def readFields(in: DataInput): Unit = {
-    val days = WritableUtils.readVInt(in)
-    gregorianDays = if (days < JULIAN_CUTOVER_DAY) {
-      rebaseJulianToGregorianDays(days)
-    } else {
-      days
-    }
+    val readDays = WritableUtils.readVInt(in)
+    gregorianDays = rebaseJulianToGregorianDays(readDays)
   }
 
   @throws[IOException]
   override def write(out: DataOutput): Unit = {
-    val rebasedDays = if (gregorianDays < DateTimeUtils.GREGORIAN_CUTOVER_DAY) {
-      rebaseGregorianToJulianDays(gregorianDays)
-    } else {
-      gregorianDays
-    }
-    WritableUtils.writeVInt(out, rebasedDays)
+    val writeDays = rebaseGregorianToJulianDays(gregorianDays)
+    WritableUtils.writeVInt(out, writeDays)
   }
 
   // Rebasing days since the epoch to store the same number of days
@@ -72,26 +69,34 @@ private[hive] class DaysWritable(var gregorianDays: Int = 0) extends DateWritabl
   // Julian calendar: 1582-01-01 -> -141704
   // The code below converts -141714 to -141704.
   private def rebaseGregorianToJulianDays(daysSinceEpoch: Int): Int = {
-    val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
-      .setInstant(millis)
-      .build()
-    val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH))
-    Math.toIntExact(localDate.toEpochDay)
+    if (daysSinceEpoch < DateTimeUtils.GREGORIAN_CUTOVER_DAY) {
+      val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setInstant(millis)
+        .build()
+      val localDate = LocalDate.of(
+        utcCal.get(Calendar.YEAR),
+        utcCal.get(Calendar.MONTH) + 1,
+        utcCal.get(Calendar.DAY_OF_MONTH))
+      Math.toIntExact(localDate.toEpochDay)
+    } else {
+      daysSinceEpoch
+    }
   }
 
   private def rebaseJulianToGregorianDays(daysSinceEpoch: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
-      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-      .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
+    if (daysSinceEpoch < JULIAN_CUTOVER_DAY) {
+      val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+        .build()
+      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
+    } else {
+      daysSinceEpoch
+    }
   }
 }
