@@ -2257,7 +2257,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowUntypedScalaUDF")
       .internal()
       .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
-        "udf(f: AnyRef, dataType: DataType). Otherwise, exception will be throw.")
+        "udf(f: AnyRef, dataType: DataType). Otherwise, an exception will be thrown at runtime.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
