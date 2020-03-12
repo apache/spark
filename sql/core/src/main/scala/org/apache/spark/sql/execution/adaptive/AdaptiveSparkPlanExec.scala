@@ -96,13 +96,10 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, context.subqueryCache),
-    // Here the 'OptimizeSkewedJoin' rule should be executed
-    // before 'CoalesceShufflePartitions', as the skewed partition handled
-    // in 'OptimizeSkewedJoin' rule, should be omitted in 'CoalesceShufflePartitions'.
-    OptimizeSkewedJoin(conf),
     CoalesceShufflePartitions(context.session),
-    // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
-    // in 'CoalesceShufflePartitions' rule. So it must be after 'CoalesceShufflePartitions' rule.
+    // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
+    // added by `CoalesceShufflePartitions`. So they must be executed after it.
+    OptimizeSkewedJoin(conf),
     OptimizeLocalShuffleReader(conf),
     ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
