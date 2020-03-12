@@ -1520,13 +1520,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val ext_tbl = "SPARK_30269_external"
     withTempDir { dir =>
       withTable(tbl, ext_tbl) {
-        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
-        sql(
-          s"""
-             | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
-             | PARTITIONED BY (ds)
-             | LOCATION '${dir.toURI}'
-           """.stripMargin)
+        withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
+          sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
+          sql(
+            s"""
+               | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+               | PARTITIONED BY (ds)
+               | LOCATION '${dir.toURI}'
+             """.stripMargin)
+        }
 
         Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
