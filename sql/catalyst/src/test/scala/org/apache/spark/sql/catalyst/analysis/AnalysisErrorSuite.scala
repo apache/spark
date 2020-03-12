@@ -429,29 +429,31 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
-    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
-      :: Nil
+    "Nested generators are supported only when inner generators have single input/output and " +
+      "they are adjacent between each other, but got: (explode(list) + 1)" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators",
     listRelation.select(Stack(Explode($"list") :: Nil)),
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "stack(explode(list))" :: Nil
+    "Nested generators are supported only when inner generators have single input/output and " +
+      "they are adjacent between each other, but got: stack(explode(list))" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators for aggregates",
     testRelation.select(Stack(Explode(
       CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)) :: Nil)),
-    "Generators are not supported when it's nested in expressions, but got: " +
+    "Nested generators are supported only when inner generators have single input/output and " +
+      "they are adjacent between each other, but got: " +
       "stack(explode(array(array(min(a), max(a)))))" :: Nil
   )
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
-    "Generators are not supported when it's nested in expressions, but got: " +
+    "Nested generators are supported only when inner generators have single input/output and " +
+      "they are adjacent between each other, but got: " +
       "(explode(array(min(a), max(a))) + 1)" :: Nil
   )
 

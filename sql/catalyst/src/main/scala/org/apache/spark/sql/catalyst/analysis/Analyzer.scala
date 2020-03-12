@@ -2182,20 +2182,24 @@ class Analyzer(
     }
 
     private def hasUnsupportedNestedGenerator(expr: NamedExpression): Boolean = {
-      def isAdjacentGenerators(g: Generator): Boolean = g match {
+      def hasAdjacentInnerGenerators(g: Generator, outermost: Boolean = true): Boolean = g match {
         // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
         case go: GeneratorOuter =>
-          isAdjacentGenerators(go.child)
+          hasAdjacentInnerGenerators(go.child)
         case _ =>
-          g.isInstanceOf[UnaryExpression] && (g.children.head match {
-            case ig: Generator => isAdjacentGenerators(ig)
-            case e => e.find(hasGenerator).isEmpty
-          })
+          g.isInstanceOf[UnaryExpression] &&
+            // If the generator is not outermost, it should have single output
+            (outermost || g.elementSchema.length == 1) &&
+            (g.children.head match {
+              case ig: Generator => hasAdjacentInnerGenerators(ig, outermost = false)
+              case e => e.find(hasGenerator).isEmpty
+            })
       }
       def hasUnsupportedInnerGenerator(g: Generator): Boolean = g match {
         // This is the case where we can support nested inner generators;
-        // they are adjacent and unary, e.g., `explode(explode(array(array(1, 2), array(3))))`.
-        case g if isAdjacentGenerators(g) => false
+        // inner generators have single input/output and they are adjacent between each other,
+        // e.g., `explode(explode(array(array(1, 2), array(3))))`.
+        case g if hasAdjacentInnerGenerators(g) => false
         case _ =>
           g.children.exists { _.find {
             case _: Generator => true
@@ -2226,6 +2230,34 @@ class Analyzer(
       case _ => expr
     }
 
+    private def createGenerate(
+        generator: Generator,
+        outer: Boolean,
+        names: Seq[String],
+        child: LogicalPlan): Generate = {
+      Generate(
+        generator,
+        unrequiredChildIndex = Nil,
+        outer = outer,
+        qualifier = None,
+        generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+        child)
+    }
+
+    private def collectAdjacentGenerators(children: Seq[Expression]): Seq[(Generator, Boolean)] = {
+      // We've already checked that all the `Generator` has unary nodes only
+      // in `hasUnsupportedNestedGenerator`.
+      assert(children.size == 1)
+      children.head match {
+        case GeneratorOuter(g: Generator) =>
+          collectAdjacentGenerators(g.children) :+ (g, true)
+        case g: Generator =>
+          collectAdjacentGenerators(g.children) :+ (g, false)
+        case _ =>
+          Nil
+      }
+    }
+
     private object AliasedGenerator {
       /**
        * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
@@ -2249,8 +2281,9 @@ class Analyzer(
 
       case Project(projectList, _) if projectList.exists(hasUnsupportedNestedGenerator) =>
         val nestedGenerator = projectList.find(hasUnsupportedNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw new AnalysisException("Nested generators are supported only when inner generators " +
+          "have single input/output and they are adjacent between each other, but got: " +
+          toPrettySQL(trimAlias(nestedGenerator)))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
@@ -2259,8 +2292,9 @@ class Analyzer(
 
       case Aggregate(_, aggList, _) if aggList.exists(hasUnsupportedNestedGenerator) =>
         val nestedGenerator = aggList.find(hasUnsupportedNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw new AnalysisException("Nested generators are supported only when inner generators " +
+          "have single input/output and they are adjacent between each other, but got: " +
+          toPrettySQL(trimAlias(nestedGenerator)))
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
@@ -2318,16 +2352,6 @@ class Analyzer(
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
 
-        def createGenerate(g: Generator, outer: Boolean, names: Seq[String], child: LogicalPlan) = {
-          Generate(
-            g,
-            unrequiredChildIndex = Nil,
-            outer = outer,
-            qualifier = None,
-            generatorOutput = ResolveGenerate.makeGeneratorOutput(g, names),
-            child)
-        }
-
         val newProjectList = projectList
           .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
           .flatMap {
@@ -2338,21 +2362,6 @@ class Analyzer(
 
               if (hasInnerGenerator(generator)) {
                 // The case of multiple nested inner generators
-                def collectAdjacentGenerators(children: Seq[Expression])
-                  : Seq[(Generator, Boolean)] = {
-                  // We've already checked that all the `Generator` has unary nodes only
-                  // in `hasUnsupportedNestedGenerator`.
-                  assert(children.size == 1)
-                  children.head match {
-                    case GeneratorOuter(g: Generator) =>
-                      collectAdjacentGenerators(g.children) :+ (g, true)
-                    case g: Generator =>
-                      collectAdjacentGenerators(g.children) :+ (g, false)
-                    case _ =>
-                      Nil
-                  }
-                }
-
                 val generators = collectAdjacentGenerators(generator.children)
                 val newChild = generators.foldLeft(child) { case (curChild, (g, outer)) =>
                   val newGenerator = if (g.children.head.isInstanceOf[Generator]) {

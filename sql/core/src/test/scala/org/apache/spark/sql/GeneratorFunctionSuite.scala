@@ -330,7 +330,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       val msg1 = intercept[AnalysisException] {
         sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
       }.getMessage
-      assert(msg1.contains("Generators are not supported when it's nested in expressions"))
+      assert(msg1.contains("Nested generators are supported only when inner generators " +
+        "have single input/output and they are adjacent between each other"))
 
       val msg2 = intercept[AnalysisException] {
         sql(
@@ -345,13 +346,24 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Supported nested inner generators") {
+    // Project cases
     checkAnswer(
       sql("SELECT explode(explode(array(array(1, 2), array(3))))"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
     checkAnswer(
       sql("SELECT array(array(4), array(5)) v").select(explode_outer(explode_outer($"v"))),
       Row(4) :: Row(5) :: Nil)
+    checkAnswer(
+      sql("SELECT posexplode(explode(array(array(1, 2), array(3))))"),
+      Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Nil)
+    checkAnswer(
+      sql("SELECT array(array(4), array(5)) v").select(posexplode_outer(explode($"v"))),
+      Row(0, 4) :: Row(0, 5) :: Nil)
+    checkAnswer(
+      sql("SELECT inline(explode(array(array(struct(1, 'a'), struct(2, 'b')))))"),
+      Row(1, "a") :: Row(2, "b") :: Nil)
 
+    // Aggregate cases
     checkAnswer(
       sql("SELECT explode_outer(explode(array(array(min(v), max(v))))) FROM VALUES 1, 2, 3 t(v)"),
       Row(1) :: Row(3) :: Nil)
@@ -362,17 +374,26 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30998: Unsupported nested inner generators") {
+    val expectedErrMsg = "Nested generators are supported only when inner generators " +
+      "have single input/output and they are adjacent between each other"
+
+    // Multiple input generator (e.g., stack) case
     val errMsg1 = intercept[AnalysisException] {
       sql("SELECT stack(explode(array(array(1, 2), array(3))))")
     }.getMessage
-    assert(errMsg1.contains("Generators are not supported when it's nested in expressions, " +
-      "but got: stack(explode(array(array(1, 2), array(3))))"))
+    assert(errMsg1.contains(expectedErrMsg))
 
+    // Multiple output inner generator (e.g., posexplode) case
     val errMsg2 = intercept[AnalysisException] {
+      sql("SELECT explode(posexplode(array(array(1, 2), array(3))))")
+    }.getMessage
+    assert(errMsg2.contains(expectedErrMsg))
+
+    // Non-adjacent case
+    val errMsg3 = intercept[AnalysisException] {
       sql("SELECT explode(concat(explode(array(array(1))), explode(array(array(2)))))")
     }.getMessage
-    assert(errMsg2.contains("Generators are not supported when it's nested in expressions, " +
-      "but got: explode(concat(explode(array(array(1))), explode(array(array(2)))))"))
+    assert(errMsg3.contains(expectedErrMsg))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
