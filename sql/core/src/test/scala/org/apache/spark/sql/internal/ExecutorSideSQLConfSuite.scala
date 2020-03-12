@@ -107,7 +107,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
-          (code.contains("* Codegend pipeline") == flag) &&
+          (code.contains("* Codegen pipeline") == flag) &&
             (code.contains("// input[") == flag)
         })
       }
