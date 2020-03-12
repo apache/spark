@@ -2402,7 +2402,7 @@ object SQLConf {
       "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
       "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
       "results.")
-    .version("3.1.0")
+    .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2481,15 +2481,6 @@ object SQLConf {
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
-
-  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
-    .internal()
-    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
-      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
-      "java.time.* packages are used for the same purpose.")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
