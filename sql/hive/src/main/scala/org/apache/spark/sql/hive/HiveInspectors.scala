@@ -189,7 +189,7 @@ private[hive] trait HiveInspectors {
     val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
     val utcCal = new Calendar.Builder()
       .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
+      .setTimeZone(DateTimeUtils.getTimeZone("UTC"))
       .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
       .build()
     Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
@@ -199,7 +199,7 @@ private[hive] trait HiveInspectors {
     val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
     val utcCal = new Calendar.Builder()
       .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
+      .setTimeZone(DateTimeUtils.getTimeZone("UTC"))
       .setInstant(millis)
       .build()
     val localDate = LocalDate.of(
