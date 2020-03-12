@@ -933,6 +933,7 @@
         <artifactId>docker-client</artifactId>
         <version>8.14.1</version>
         <scope>test</scope>
+        <classifier>shaded</classifier>
         <exclusions>
           <exclusion>
             <artifactId>guava</artifactId>
