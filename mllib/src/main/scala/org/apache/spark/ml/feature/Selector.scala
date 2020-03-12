@@ -261,8 +261,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
     val indices = features.map { case (_, index) => index }
     val pValues = features.map(_._1.pValue)
     val statistic = features.map(_._1.statistic)
-    // copyValues(createSelectorModel(uid, indices.sorted, pValues, statistic).setParent(this))
-    copyValues(new SelectorModel(uid, indices, pValues, statistic).setParent(this))
+    copyValues(createSelectorModel(uid, indices.sorted, pValues, statistic).setParent(this))
   }
 
   @Since("3.1.0")
@@ -280,7 +279,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
  * Model fitted by [[Selector]].
  */
 @Since("3.1.0")
-private[ml] class SelectorModel[T <: SelectorModel[T]] (
+private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
     @Since("3.1.0") val uid: String,
     @Since("3.1.0") val selectedFeatures: Array[Int],
     @Since("3.1.0") val pValues: Array[Double],
