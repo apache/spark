@@ -295,7 +295,7 @@ private[hive] class SparkExecuteStatementOperation(
           resultList.get.iterator
         }
       }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+      dataTypes = result.schema.fields.map(_.dataType)
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.

@@ -384,7 +384,9 @@ private[spark] class TaskSchedulerImpl(
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
     val resourcesFree = resources.map(r => r._1 -> r._2.length)
-    ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
+    val meetsReqs = ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
+    logDebug(s"Resources meet task requirements is: $meetsReqs")
+    meetsReqs
   }
 
   /**
@@ -730,6 +732,11 @@ private[spark] class TaskSchedulerImpl(
     if (shouldRevive) {
       backend.reviveOffers()
     }
+  }
+
+  override def executorDecommission(executorId: String): Unit = {
+    rootPool.executorDecommission(executorId)
+    backend.reviveOffers()
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {

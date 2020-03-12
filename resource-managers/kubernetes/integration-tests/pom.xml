@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
@@ -39,6 +39,7 @@
     <spark.kubernetes.test.sparkTgz></spark.kubernetes.test.sparkTgz>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
+    <spark.kubernetes.test.javaImageTag>8-jre-slim</spark.kubernetes.test.javaImageTag>
     <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
@@ -108,6 +109,9 @@
 
                 <argument>--image-tag</argument>
                 <argument>${spark.kubernetes.test.imageTag}</argument>
+
+                <argument>--java-image-tag</argument>
+                <argument>${spark.kubernetes.test.javaImageTag}</argument>
 
                 <argument>--image-tag-output-file</argument>
                 <argument>${spark.kubernetes.test.imageTagFile}</argument>

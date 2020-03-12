@@ -61,6 +61,22 @@ grammar SqlBase;
    * When true, the behavior of keywords follows ANSI SQL standard.
    */
   public boolean SQL_standard_keyword_behavior = false;
+
+  /**
+   * This method will be called when we see '/*' and try to match it as a bracketed comment.
+   * If the next character is '+', it should be parsed as hint later, and we cannot match
+   * it as a bracketed comment.
+   *
+   * Returns true if the next character is '+'.
+   */
+  public boolean isHint() {
+    int nextChar = _input.LA(1);
+    if (nextChar == '+') {
+      return true;
+    } else {
+      return false;
+    }
+  }
 }
 
 singleStatement
@@ -164,6 +180,9 @@ statement
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
+    | ALTER TABLE table=multipartIdentifier partitionSpec?
+        REPLACE COLUMNS
+        '(' columns=qualifiedColTypeWithPositionList ')'               #hiveReplaceColumns
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?
@@ -1793,12 +1812,8 @@ SIMPLE_COMMENT
     : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
     ;
 
-BRACKETED_EMPTY_COMMENT
-    : '/**/' -> channel(HIDDEN)
-    ;
-
 BRACKETED_COMMENT
-    : '/*' ~[+] .*? '*/' -> channel(HIDDEN)
+    : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
     ;
 
 WS

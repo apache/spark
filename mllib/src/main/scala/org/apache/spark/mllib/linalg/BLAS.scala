@@ -663,7 +663,6 @@ private[spark] object BLAS extends Serializable with Logging {
 
           val xTemp = xValues(k) * alpha
           while (i < indEnd) {
-            val rowIndex = Arows(i)
             yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }
@@ -715,8 +714,7 @@ private[spark] object BLAS extends Serializable with Logging {
         val indEnd = Acols(colCounterForA + 1)
         val xVal = xValues(colCounterForA) * alpha
         while (i < indEnd) {
-          val rowIndex = Arows(i)
-          yValues(rowIndex) += Avals(i) * xVal
+          yValues(Arows(i)) += Avals(i) * xVal
           i += 1
         }
         colCounterForA += 1

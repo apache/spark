@@ -125,6 +125,7 @@ class StreamingQuery(object):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
+
         :return: a map
         """
         lastProgress = self._jsq.lastProgress()
@@ -276,9 +277,9 @@ class StreamingQueryManager(object):
 
 class DataStreamReader(OptionUtils):
     """
-    Interface used to load a streaming :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
-    to access this.
+    Interface used to load a streaming :class:`DataFrame <pyspark.sql.DataFrame>` from external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
     .. note:: Evolving.
 
@@ -368,7 +369,8 @@ class DataStreamReader(OptionUtils):
 
     @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+        """Loads a data stream from a data source and returns it as a
+        :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. note:: Evolving.
 
@@ -459,12 +461,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -671,12 +673,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -750,8 +752,9 @@ class DataStreamReader(OptionUtils):
 
 class DataStreamWriter(object):
     """
-    Interface used to write a streaming :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
+    Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
     .. note:: Evolving.

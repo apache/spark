@@ -42,7 +42,7 @@ import org.apache.spark.util.collection.BitSet
 class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 }
 
@@ -604,6 +604,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("sort should not be introduced when aliases are used") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        df1.repartition(1).write.format("parquet").bucketBy(8, "i").sortBy("i").saveAsTable("t")
+        val t1 = spark.table("t")
+        val t2 = t1.selectExpr("i as ii")
+        val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
+        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+      }
+    }
+  }
+
   test("bucket join should work with SubqueryAlias plan") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withTable("t") {
@@ -821,7 +833,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   test("SPARK-29655 Read bucketed tables obeys spark.sql.shuffle.partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "7")  {
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7")  {
       val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
       Seq(false, true).foreach { enableAdaptive =>
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {

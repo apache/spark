@@ -75,13 +75,8 @@ case class BroadcastExchangeExec(
 
   @transient
   private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
-    // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val task = new Callable[broadcast.Broadcast[Any]]() {
-      override def call(): broadcast.Broadcast[Any] = {
-        // This will run in another thread. Set the execution id so that we can connect these jobs
-        // with the correct execution.
-        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+    SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
+      sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
           try {
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
@@ -123,7 +118,7 @@ case class BroadcastExchangeExec(
             val broadcasted = sparkContext.broadcast(relation)
             longMetric("broadcastTime") += NANOSECONDS.toMillis(
               System.nanoTime() - beforeBroadcast)
-
+            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
             SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
             promise.success(broadcasted)
             broadcasted
@@ -148,10 +143,7 @@ case class BroadcastExchangeExec(
               promise.failure(e)
               throw e
           }
-        }
-      }
     }
-    BroadcastExchangeExec.executionContext.submit[broadcast.Broadcast[Any]](task)
   }
 
   override protected def doPrepare(): Unit = {

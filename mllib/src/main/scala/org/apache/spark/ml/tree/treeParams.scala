@@ -47,6 +47,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * (default = "")
    * @group param
    */
+  @Since("3.0.0")
   final val leafCol: Param[String] =
     new Param[String](this, "leafCol", "Leaf indices column name. " +
       "Predicted leaf index of each instance in each tree by preorder")
@@ -139,9 +140,11 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
+  @Since("3.0.0")
   final def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group getParam */
+  @Since("3.0.0")
   final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */

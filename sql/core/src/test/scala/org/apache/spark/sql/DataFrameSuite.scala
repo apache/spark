@@ -196,7 +196,7 @@ class DataFrameSuite extends QueryTest
   test("explode on output of array-valued function") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     checkAnswer(
-      df.select(explode(split($"csv", ","))),
+      df.select(explode(split($"csv", pattern = ","))),
       Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 
@@ -330,7 +330,7 @@ class DataFrameSuite extends QueryTest
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 0)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -2297,6 +2297,14 @@ class DataFrameSuite extends QueryTest
       case _ =>
         fail("emptyDataFrame should be foldable")
     }
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val e = intercept[AnalysisException] {
+      sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
   }
 }
 

@@ -318,7 +318,15 @@ private[hive] class HiveClientImpl(
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
     shim.setCurrentSessionState(state)
-    val ret = try f finally {
+    val ret = try {
+      f
+    } catch {
+      case e: NoClassDefFoundError
+        if HiveUtils.isHive23 && e.getMessage.contains("org/apache/hadoop/hive/serde2/SerDe") =>
+        throw new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
+          " Please migrate your custom SerDes to Hive 2.3 or build your own Spark with" +
+          " hive-1.2 profile. See HIVE-15167 for more details.", e)
+    } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
       HiveCatalogMetrics.incrementHiveClientCalls(1)
@@ -831,7 +839,12 @@ private[hive] class HiveClientImpl(
             state.out.println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
-          Seq(proc.run(cmd_1).getResponseCode.toString)
+          val response: CommandProcessorResponse = proc.run(cmd_1)
+          // Throw an exception if there is an error in query processing.
+          if (response.getResponseCode != 0) {
+            throw new QueryExecutionException(response.getErrorMessage)
+          }
+          Seq(response.getResponseCode.toString)
       }
     } catch {
       case e: Exception =>
