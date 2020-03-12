@@ -19,28 +19,30 @@ package org.apache.spark.scheduler.cluster.k8s
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
+import io.fabric8.kubernetes.api.model.Pod
+
 class ExecutorPodsSnapshotSuite extends SparkFunSuite {
 
   test("States are interpreted correctly from pod metadata.") {
-    val pods = Seq(
-      pendingExecutor(0),
-      runningExecutor(1),
-      succeededExecutor(2),
-      failedExecutorWithoutDeletion(3),
-      deletedExecutor(4),
-      unknownExecutor(5),
-      runningExecutorWithFailedContainer(6))
 
-    val snapshot = ExecutorPodsSnapshot(pods)
+    def testCase(pod: Pod, state: Pod => ExecutorPodState) = (pod, state(pod))
 
-    assert(snapshot.executorPods.get(0L) == PodPending(pods(0)))
-    assert(snapshot.executorPods.get(1L) == PodRunning(pods(1)))
-    assert(snapshot.executorPods.get(2L) == PodSucceeded(pods(2)))
-    assert(snapshot.executorPods.get(3L) == PodFailed(pods(3)))
-    assert(snapshot.executorPods.get(4L) == PodDeleted(pods(4)))
-    assert(snapshot.executorPods.get(5L) == PodUnknown(pods(5)))
-    assert(snapshot.executorPods.get(6L) == PodFailed(pods(6)))
+    val testCases = Seq(
+      testCase(pendingExecutor(0), PodPending),
+      testCase(runningExecutor(1), PodRunning),
+      testCase(succeededExecutor(2), PodSucceeded),
+      testCase(failedExecutorWithoutDeletion(3), PodFailed),
+      testCase(deletedExecutor(4), PodDeleted),
+      testCase(unknownExecutor(5), PodUnknown),
+      testCase(runningExecutorWithFailedContainer(6), PodFailed))
+
+    val snapshot = ExecutorPodsSnapshot(testCases.map(_._1))
+
+    for (((_, state), i) <- testCases.zipWithIndex) {
+      assertResult(state.getClass.getName, s"executor ID ${i}")(snapshot.executorPods.get(i).get.getClass.getName)
+    }
   }
+
 
   test("Updates add new pods for non-matching ids and edit existing pods for matching ids") {
     val originalPods = Seq(
