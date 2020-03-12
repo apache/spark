@@ -78,8 +78,6 @@ case "$1" in
     ;;
   executor)
     shift 1
-    # The container may restart, so start with a randomized ID
-    id_suffix=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c8)
     CMD=(
       ${JAVA_HOME}/bin/java
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
@@ -88,7 +86,7 @@ case "$1" in
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
       org.apache.spark.executor.CoarseGrainedExecutorBackend
       --driver-url $SPARK_DRIVER_URL
-      --executor-id $SPARK_EXECUTOR_ID-$id_suffix
+      --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
