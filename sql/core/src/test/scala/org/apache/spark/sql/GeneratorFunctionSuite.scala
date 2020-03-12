@@ -331,7 +331,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
       }.getMessage
       assert(msg1.contains("Nested generators are supported only when inner generators " +
-        "have single input/output and they are adjacent between each other"))
+        "are unary and adjacent with single output"))
 
       val msg2 = intercept[AnalysisException] {
         sql(
@@ -375,7 +375,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-30998: Unsupported nested inner generators") {
     val expectedErrMsg = "Nested generators are supported only when inner generators " +
-      "have single input/output and they are adjacent between each other"
+      "are unary and adjacent with single output"
 
     // Multiple input generator (e.g., stack) case
     val errMsg1 = intercept[AnalysisException] {

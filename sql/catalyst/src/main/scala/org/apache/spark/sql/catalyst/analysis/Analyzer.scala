@@ -2196,9 +2196,8 @@ class Analyzer(
             })
       }
       def hasUnsupportedInnerGenerator(g: Generator): Boolean = g match {
-        // This is the case where we can support nested inner generators;
-        // inner generators have single input/output and they are adjacent between each other,
-        // e.g., `explode(explode(array(array(1, 2), array(3))))`.
+        // This is the case where we can support nested inner generators; inner generators are unary
+        // and adjacent with single output, e.g., `explode(explode(array(array(1, 2), array(3))))`.
         case g if hasAdjacentInnerGenerators(g) => false
         case _ =>
           g.children.exists { _.find {
@@ -2282,7 +2281,7 @@ class Analyzer(
       case Project(projectList, _) if projectList.exists(hasUnsupportedNestedGenerator) =>
         val nestedGenerator = projectList.find(hasUnsupportedNestedGenerator).get
         throw new AnalysisException("Nested generators are supported only when inner generators " +
-          "have single input/output and they are adjacent between each other, but got: " +
+          "are unary and adjacent with single output, but got: " +
           toPrettySQL(trimAlias(nestedGenerator)))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
@@ -2293,7 +2292,7 @@ class Analyzer(
       case Aggregate(_, aggList, _) if aggList.exists(hasUnsupportedNestedGenerator) =>
         val nestedGenerator = aggList.find(hasUnsupportedNestedGenerator).get
         throw new AnalysisException("Nested generators are supported only when inner generators " +
-          "have single input/output and they are adjacent between each other, but got: " +
+          "are unary and adjacent with single output, but got: " +
           toPrettySQL(trimAlias(nestedGenerator)))
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>

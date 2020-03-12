@@ -425,36 +425,35 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
       "The slide duration" :: " must be greater than 0." :: Nil
   )
-
+"Nested generators are supported only when inner generators " +
+          "are unary and adjacent with single output, but got: "
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
-    "Nested generators are supported only when inner generators have single input/output and " +
-      "they are adjacent between each other, but got: (explode(list) + 1)" :: Nil
+    "Nested generators are supported only when inner generators are unary and adjacent " +
+      "with single output, but got: (explode(list) + 1)" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators",
     listRelation.select(Stack(Explode($"list") :: Nil)),
-    "Nested generators are supported only when inner generators have single input/output and " +
-      "they are adjacent between each other, but got: stack(explode(list))" :: Nil
+    "Nested generators are supported only when inner generators are unary and adjacent " +
+      "with single output, but got: stack(explode(list))" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators for aggregates",
     testRelation.select(Stack(Explode(
       CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)) :: Nil)),
-    "Nested generators are supported only when inner generators have single input/output and " +
-      "they are adjacent between each other, but got: " +
-      "stack(explode(array(array(min(a), max(a)))))" :: Nil
+    "Nested generators are supported only when inner generators are unary and adjacent " +
+      "with single output, but got: stack(explode(array(array(min(a), max(a)))))" :: Nil
   )
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
-    "Nested generators are supported only when inner generators have single input/output and " +
-      "they are adjacent between each other, but got: " +
-      "(explode(array(min(a), max(a))) + 1)" :: Nil
+    "Nested generators are supported only when inner generators are unary and adjacent " +
+      "with single output, but got: (explode(array(min(a), max(a))) + 1)" :: Nil
   )
 
   errorTest(
