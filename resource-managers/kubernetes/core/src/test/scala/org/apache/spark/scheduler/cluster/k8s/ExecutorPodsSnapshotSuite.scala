@@ -16,16 +16,17 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.Pod
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
-
-import io.fabric8.kubernetes.api.model.Pod
 
 class ExecutorPodsSnapshotSuite extends SparkFunSuite {
 
   test("States are interpreted correctly from pod metadata.") {
 
-    def testCase(pod: Pod, state: Pod => ExecutorPodState) = (pod, state(pod))
+    def testCase(pod: Pod, state: Pod => ExecutorPodState): (Pod, ExecutorPodState) =
+      (pod, state(pod))
 
     val testCases = Seq(
       testCase(pendingExecutor(0), PodPending),
@@ -39,7 +40,9 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
     val snapshot = ExecutorPodsSnapshot(testCases.map(_._1))
 
     for (((_, state), i) <- testCases.zipWithIndex) {
-      assertResult(state.getClass.getName, s"executor ID ${i}")(snapshot.executorPods.get(i).get.getClass.getName)
+      assertResult(state.getClass.getName, s"executor ID ${i}") {
+        snapshot.executorPods.get(i).get.getClass.getName
+      }
     }
   }
 
