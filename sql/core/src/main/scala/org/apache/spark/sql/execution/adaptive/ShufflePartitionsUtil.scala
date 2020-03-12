@@ -59,7 +59,7 @@ object ShufflePartitionsUtil extends Logging {
       firstPartitionIndex: Int,
       lastPartitionIndex: Int,
       advisoryTargetSize: Long,
-      minNumPartitions: Int = 1): Seq[ShufflePartitionSpec] = {
+      minNumPartitions: Int): Seq[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
