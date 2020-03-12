@@ -2157,7 +2157,7 @@ object SQLConf {
       "The size function returns null for null input if the flag is disabled.")
     .version("2.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")

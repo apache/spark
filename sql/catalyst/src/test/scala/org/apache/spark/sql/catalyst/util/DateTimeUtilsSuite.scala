@@ -623,10 +623,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       "MIT" -> Set(15338))
     for (tz <- ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
-      (-20000 to 20000).foreach { d =>
+      val testingData = Seq(-20000, 20000) ++
+        (1 to 1000).map(_ => (math.random() * 40000 - 20000).toInt)
+      testingData.foreach { d =>
         if (!skipped.contains(d)) {
           assert(microsToDays(daysToMicros(d, tz.toZoneId), tz.toZoneId) === d,
-            s"Round trip of ${d} did not work in tz ${tz}")
+            s"Round trip of $d did not work in tz $tz")
         }
       }
     }
