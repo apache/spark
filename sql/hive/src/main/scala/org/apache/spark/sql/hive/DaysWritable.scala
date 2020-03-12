@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
  * @param gregorianDays The number of days since the epoch 1970-01-01 in
  *                      Gregorian calendar.
  */
-class DaysWritable(var gregorianDays: Int = 0) extends DateWritable {
+private[hive] class DaysWritable(var gregorianDays: Int = 0) extends DateWritable {
 
   private final val JULIAN_CUTOVER_DAY =
     rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
