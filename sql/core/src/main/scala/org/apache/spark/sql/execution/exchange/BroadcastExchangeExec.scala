@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
@@ -185,7 +186,7 @@ object BroadcastExchangeExec {
   // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
   // and only 70% of the slots can be used before growing in HashedRelation,
   // here the limitation should not be over 341 million.
-  val MAX_BROADCAST_TABLE_ROWS = ((1L << 29) / 1.5).toLong
+  val MAX_BROADCAST_TABLE_ROWS = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
 
   val MAX_BROADCAST_TABLE_BYTES = 8L << 30
 
