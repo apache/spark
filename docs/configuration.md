@@ -516,7 +516,7 @@ Apart from these, the following properties are also available, and may be useful
     backwards-compatibility with older versions of Spark. Users typically should not need to set
     this option.
   </td>
-  <td>1.0.0</td> 
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.defaultJavaOptions</code></td>
@@ -1054,6 +1054,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many DAG graph nodes the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.enabled</code></td>
@@ -1079,6 +1080,7 @@ Apart from these, the following properties are also available, and may be useful
     meaning only the last write will happen. For live applications, this avoids a few
     operations that we can live without when rapidly processing incoming task events.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
@@ -1087,6 +1089,7 @@ Apart from these, the following properties are also available, and may be useful
     Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
     task events are not fired frequently.
   </td>
+  <td>2.4.2</td>
 </tr>
 <tr>
   <td><code>spark.ui.port</code></td>
@@ -1103,6 +1106,7 @@ Apart from these, the following properties are also available, and may be useful
     How many jobs the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedStages</code></td>
@@ -1111,6 +1115,7 @@ Apart from these, the following properties are also available, and may be useful
     How many stages the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedTasks</code></td>
@@ -1119,6 +1124,7 @@ Apart from these, the following properties are also available, and may be useful
     How many tasks in one stage the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
+  <td>2.0.1</td>
 </tr>
 <tr>
   <td><code>spark.ui.reverseProxy</code></td>
@@ -1213,6 +1219,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many dead executors the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
@@ -1583,13 +1590,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-    <td><code>spark.executor.heartbeatInterval</code></td>
-    <td>10s</td>
-    <td>Interval between each executor's heartbeats to the driver.  Heartbeats let
+  <td><code>spark.executor.heartbeatInterval</code></td>
+  <td>10s</td>
+  <td>
+    Interval between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
     tasks. spark.executor.heartbeatInterval should be significantly less than
-    spark.network.timeout</td>
-    <td>1.1.0</td>
+    spark.network.timeout
+  </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
