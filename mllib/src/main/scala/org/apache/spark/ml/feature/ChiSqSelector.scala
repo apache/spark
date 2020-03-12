@@ -21,8 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.stat.SelectionTest
-import org.apache.spark.ml.stat.SelectionTestResult
+import org.apache.spark.ml.stat.{ChiSquareTest, SelectionTestResult}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -92,10 +91,9 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  @Since("3.1.0")
   protected[this] override def getSelectionTestResult(dataset: Dataset[_]):
-  Array[SelectionTestResult] = {
-    SelectionTest.chiSquareTest(dataset, getFeaturesCol, getLabelCol)
+    Array[SelectionTestResult] = {
+    ChiSquareTest.testChiSquare(dataset, getFeaturesCol, getLabelCol)
   }
 
   /**
@@ -105,7 +103,6 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
    * @param statistics The chi square statistic of the selected features
    * @return A new SelectorModel instance
    */
-  @Since("3.1.0")
   protected[this] def createSelectorModel(
       uid: String,
       indices: Array[Int],
@@ -136,7 +133,7 @@ final class ChiSqSelectorModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("3.1.0") override val selectedFeatures: Array[Int],
     @Since("3.1.0") override val pValues: Array[Double],
-    @Since("3.1.0")override val statistic: Array[Double])
+    @Since("3.1.0") override val statistic: Array[Double])
   extends SelectorModel[ChiSqSelectorModel](uid, selectedFeatures, pValues, statistic)  {
 
   import ChiSqSelectorModel._

@@ -159,7 +159,6 @@ private[feature] trait SelectorParams extends Params
 @Since("3.1.0")
 private[ml] abstract class Selector[T <: SelectorModel[T]]
   extends Estimator[T] with SelectorParams with DefaultParamsWritable {
-  self: Estimator[T] =>
 
   /** @group setParam */
   @Since("3.1.0")
@@ -200,7 +199,6 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  @Since("3.1.0")
   protected[this] def getSelectionTestResult(dataset: Dataset[_]): Array[SelectionTestResult]
 
   /**
@@ -210,7 +208,6 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
    * @param statistics The statistics of the selected features
    * @return A new SelectorModel instance
    */
-  @Since("3.1.0")
   protected[this] def createSelectorModel(
       uid: String,
       indices: Array[Int],
@@ -264,7 +261,8 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
     val indices = features.map { case (_, index) => index }
     val pValues = features.map(_._1.pValue)
     val statistic = features.map(_._1.statistic)
-    copyValues(createSelectorModel(uid, indices.sorted, pValues, statistic).setParent(this))
+    // copyValues(createSelectorModel(uid, indices.sorted, pValues, statistic).setParent(this))
+    copyValues(new SelectorModel(uid, indices, pValues, statistic).setParent(this))
   }
 
   @Since("3.1.0")
@@ -282,7 +280,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
  * Model fitted by [[Selector]].
  */
 @Since("3.1.0")
-private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
+private[ml] class SelectorModel[T <: SelectorModel[T]] (
     @Since("3.1.0") val uid: String,
     @Since("3.1.0") val selectedFeatures: Array[Int],
     @Since("3.1.0") val pValues: Array[Double],

@@ -21,8 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.stat.SelectionTest
-import org.apache.spark.ml.stat.SelectionTestResult
+import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 
@@ -91,10 +90,9 @@ final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: St
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  @Since("3.1.0")
   protected[this] override def getSelectionTestResult(dataset: Dataset[_]):
-  Array[SelectionTestResult] = {
-    SelectionTest.fValueTest(dataset, getFeaturesCol, getLabelCol)
+    Array[SelectionTestResult] = {
+    FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
   }
 
   /**
@@ -104,7 +102,6 @@ final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: St
    * @param statistics The f value of the selected features
    * @return A new SelectorModel instance
    */
-  @Since("3.1.0")
   protected[this] def createSelectorModel(
       uid: String,
       indices: Array[Int],
@@ -170,8 +167,7 @@ object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
   override def load(path: String): FValueSelectorModel = super.load(path)
 
   private[FValueSelectorModel] class FValueSelectorModelWriter(
-      instance:
-      FValueSelectorModel) extends MLWriter {
+      instance: FValueSelectorModel) extends MLWriter {
 
     private case class Data(selectedFeatures: Seq[Int],
                             pValue: Seq[Double],
