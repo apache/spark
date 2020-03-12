@@ -2375,4 +2375,84 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-29295: insert overwrite external partition should not have old data") {
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("spark29295") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE spark29295(id int) PARTITIONED BY (name string) STORED AS " +
+            s"PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet) {
+            sql("INSERT OVERWRITE TABLE spark29295 PARTITION(name='n1') SELECT 1")
+            sql("ALTER TABLE spark29295 DROP PARTITION(name='n1')")
+            sql("INSERT OVERWRITE TABLE spark29295 PARTITION(name='n1') SELECT 2")
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE name = 'n1' ORDER BY id"),
+              Array(Row(2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-29295: dynamic insert overwrite external partition should not have old data") {
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("spark29295") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE spark29295(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE spark29295 PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (1, 'n2'), (2, 'n3') AS t(id, p2)
+              """.stripMargin)
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(1)))
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
+              Array(Row(2)))
+
+            sql("INSERT OVERWRITE TABLE spark29295 PARTITION(p1='n1', p2) SELECT 4, 'n4'")
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
+
+            sql("ALTER TABLE spark29295 DROP PARTITION(p1='n1',p2='n2')")
+            sql("ALTER TABLE spark29295 DROP PARTITION(p1='n1',p2='n3')")
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE spark29295 PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (5, 'n2'), (6, 'n3') AS t(id, p2)
+              """.stripMargin)
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(5)))
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
+              Array(Row(6)))
+            // Partition not overwritten should not be deleted.
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
+          }
+        }
+      }
+
+      withTable("spark29295") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE spark29295(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            // We should unescape partition value.
+            sql("INSERT OVERWRITE TABLE spark29295 PARTITION(p1='n1', p2) SELECT 1, '/'")
+            sql("ALTER TABLE spark29295 DROP PARTITION(p1='n1',p2='/')")
+            sql("INSERT OVERWRITE TABLE spark29295 PARTITION(p1='n1', p2) SELECT 2, '/'")
+            checkAnswer(sql("SELECT id FROM spark29295 WHERE p1 = 'n1' and p2 = '/' ORDER BY id"),
+              Array(Row(2)))
+          }
+        }
+      }
+    }
+  }
 }
