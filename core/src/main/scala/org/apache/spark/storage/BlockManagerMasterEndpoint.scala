@@ -68,7 +68,6 @@ class BlockManagerMasterEndpoint(
   // Set of block managers which are decommissioning
   private val decommissioningBlockManagerSet = new mutable.HashSet[BlockManagerId]
 
-
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
@@ -317,9 +316,7 @@ class BlockManagerMasterEndpoint(
    *    - Adds these block managers to decommissioningBlockManagerSet Set
    *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerSlaveEndpoint]]
    */
-  def decommissionBlockManagers(
-      blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
-
+  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
     val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
     val futures = newBlockManagersToDecommission.map { blockManagerId =>
       decommissioningBlockManagerSet.add(blockManagerId)
@@ -334,8 +331,7 @@ class BlockManagerMasterEndpoint(
    * @param blockManagerId - block manager id for which ReplicateBlock info is needed
    * @return Seq of ReplicateBlock
    */
-  private def getReplicateInfoForRDDBlocks(
-      blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
+  private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
     val info = blockManagerInfo(blockManagerId)
 
     val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)

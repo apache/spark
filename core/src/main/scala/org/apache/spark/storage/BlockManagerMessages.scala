@@ -36,8 +36,7 @@ private[spark] object BlockManagerMessages {
   case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
     extends ToBlockManagerSlave
 
-  case object DecommissionBlockManager
-    extends ToBlockManagerSlave
+  case object DecommissionBlockManager extends ToBlockManagerSlave
 
   // Remove all blocks belonging to a specific RDD.
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave

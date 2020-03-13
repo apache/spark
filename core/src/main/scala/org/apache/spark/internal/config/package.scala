@@ -414,11 +414,18 @@ package object config {
 
   private[spark] val STORAGE_DECOMMISSION_ENABLED =
     ConfigBuilder("spark.storage.decommission.enabled")
-      .booleanConf.createWithDefault(false)
+      .doc("Whether to decommission the block manager when decommissioning executor")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
-  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE =
-    ConfigBuilder("spark.storage.decommission.maxReplicationFailures")
-      .intConf.createWithDefault(3)
+  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
+    ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
+      .doc("Maximum number of failures to tolerate for offloading " +
+        "one block in single decommission cache blocks iteration")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(3)
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")

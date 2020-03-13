@@ -49,12 +49,9 @@ class BlockManagerMaster(
   }
 
   /** Get Replication Info for all the RDD blocks stored in given blockManagerId */
-  def getReplicateInfoForRDDBlocks(
-      blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
-    driverEndpoint.askSync[Seq[ReplicateBlock]](
-      GetReplicateInfoForRDDBlocks(blockManagerId))
+  def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
+    driverEndpoint.askSync[Seq[ReplicateBlock]](GetReplicateInfoForRDDBlocks(blockManagerId))
   }
-
 
   /** Request removal of a dead executor from the driver endpoint.
    *  This is only called on the driver side. Non-blocking

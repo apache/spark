@@ -1681,7 +1681,7 @@ private[spark] class BlockManager(
       return false
     }
 
-    logInfo(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
+    logDebug(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
     return true
   }
 
@@ -1782,6 +1782,8 @@ private[spark] class BlockManager(
       blockManagerDecommissioning = true
       decommissionManager = Some(new BlockManagerDecommissionManager)
       decommissionManager.foreach(_.start())
+    } else {
+      logDebug(s"Block manager already in decommissioning state")
     }
   }
 
@@ -1802,7 +1804,7 @@ private[spark] class BlockManager(
     // Maximum number of storage replication failure which replicateBlock can handle
     // before giving up for one block
     val maxReplicationFailures = conf.get(
-      config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE)
+      config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
     val blocksFailedReplication = replicateBlocksInfo.filterNot {
       case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
@@ -1895,7 +1897,11 @@ private[spark] class BlockManager(
     data.dispose()
   }
 
-  class BlockManagerDecommissionManager {
+  /**
+   * Class to handle block manager decommissioning retries
+   * It creates a Thread to retry offloading all RDD cache blocks
+   */
+  private class BlockManagerDecommissionManager {
     @volatile private var stopped = false
     private val cacheReplicationThread = new Thread {
       override def run(): Unit = {
