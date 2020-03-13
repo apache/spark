@@ -89,7 +89,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("SPARK-6785: java date conversion before and after epoch") {
     def format(d: Date): String = {
-      TimestampFormatter("yyyy-MM-dd", defaultTimeZone().toZoneId)
+      TimestampFormatter("yyyy-MM-dd", defaultTimeZone().toZoneId, varLenEnabled = false)
         .format(millisToMicros(d.getTime))
     }
     def checkFromToJavaDate(d1: Date): Unit = {

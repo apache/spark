@@ -82,7 +82,7 @@ private[sql] class JacksonGenerator(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT, varLenEnabled = false)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,

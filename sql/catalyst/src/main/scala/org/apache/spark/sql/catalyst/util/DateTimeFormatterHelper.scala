@@ -51,12 +51,15 @@ trait DateTimeFormatterHelper {
   // In this way, synchronised is intentionally omitted in this method to make parallel calls
   // less synchronised.
   // The Cache.get method is not used here to avoid creation of additional instances of Callable.
-  protected def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+  protected def getOrCreateFormatter(
+      pattern: String,
+      locale: Locale,
+      varLenEnabled: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val key = (newPattern, locale)
+    val key = (newPattern, locale, varLenEnabled)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
-      formatter = buildFormatter(newPattern, locale)
+      formatter = buildFormatter(newPattern, locale, varLenEnabled)
       cache.put(key, formatter)
     }
     formatter
@@ -87,7 +90,9 @@ trait DateTimeFormatterHelper {
 private object DateTimeFormatterHelper {
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
-    .build[(String, Locale), DateTimeFormatter]()
+    .build[(String, Locale, Boolean), DateTimeFormatter]()
+
+  final val extractor = "^([^S]*)(S*)(.*)$".r
 
   def createBuilder(): DateTimeFormatterBuilder = {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
@@ -102,11 +107,39 @@ private object DateTimeFormatterHelper {
       .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
-      .withResolverStyle(ResolverStyle.STRICT)
+      .withResolverStyle(ResolverStyle.SMART)
   }
 
-  def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    val builder = createBuilder().appendPattern(pattern)
+  /**
+   * Building a formatter for parsing seconds fraction with variable length
+   */
+  def appendPattern(
+      pattern: String,
+      builder: DateTimeFormatterBuilder): DateTimeFormatterBuilder = {
+    var rest = pattern
+    while (rest.nonEmpty) {
+      rest match {
+        case extractor(prefix, sss, suffix) =>
+          builder.appendPattern(prefix)
+          if (sss.nonEmpty) {
+            builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, sss.length, false)
+          }
+          rest = suffix
+        case _ => // never reach
+      }
+    }
+    builder
+  }
+
+  def buildFormatter(
+      pattern: String,
+      locale: Locale,
+      varLenEnabled: Boolean): DateTimeFormatter = {
+    val builder = if (varLenEnabled) {
+      appendPattern(pattern, createBuilder())
+    } else {
+      createBuilder().appendPattern(pattern)
+    }
     toFormatter(builder, locale)
   }
 
@@ -121,3 +154,4 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 }
+

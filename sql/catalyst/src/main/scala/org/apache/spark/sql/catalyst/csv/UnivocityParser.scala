@@ -89,7 +89,8 @@ class UnivocityParser(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    varLenEnabled = options.timestampFormat.contains('S'))
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,

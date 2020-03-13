@@ -75,3 +75,16 @@ select date '2001-09-28' - null;
 -- subtract dates
 select null - date '2019-10-06';
 select date '2001-10-01' - date '2001-09-28';
+
+select to_timestamp(v, 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]') from values
+ ('2019-10-06 10:11:12.'),
+ ('2019-10-06 10:11:12.0'),
+ ('2019-10-06 10:11:12.1'),
+ ('2019-10-06 10:11:12.12'),
+ ('2019-10-06 10:11:12.123UTC'),
+ ('2019-10-06 10:11:12.1234'),
+ ('2019-10-06 10:11:12.12345CST'),
+ ('2019-10-06 10:11:12.123456PST') t(v);
+
+-- exceeded max variable length
+select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
