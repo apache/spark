@@ -76,6 +76,10 @@ object ExecutorPodsSnapshot extends Logging {
 
   private def isDeleted(pod: Pod): Boolean = {
     (pod.getMetadata.getDeletionTimestamp != null &&
-     pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating")
+      (
+        pod.getStatus == null ||
+        pod.getStatus.getPhase == null ||
+        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+      ))
   }
 }
