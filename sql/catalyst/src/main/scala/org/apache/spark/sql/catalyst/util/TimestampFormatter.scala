@@ -71,14 +71,10 @@ class Iso8601TimestampFormatter(
         val parsed = formatter.parse(s)
         val parsedZoneId = parsed.query(TemporalQueries.zone())
         val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-        // Parsed input might not have time related part. In that case, time component is set to
-        // zeros.
-        val parsedLocalTime = parsed.query(TemporalQueries.localTime)
-        val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-        val localDate = getLocalDate(s, parsed)
-        val zonedDateTime = ZonedDateTime.of(localDate, localTime, timeZoneId)
+        val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
         val epochSeconds = zonedDateTime.toEpochSecond
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
+
         Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
       } catch checkDiffResult(s, legacyFormatter.parse)
     }
