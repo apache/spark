@@ -133,7 +133,7 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
       caseSensitive,
-      schemaPruningEnabled)
+      schemaPruningEnabled && !enableVectorizedReader)
   }
 }
 
