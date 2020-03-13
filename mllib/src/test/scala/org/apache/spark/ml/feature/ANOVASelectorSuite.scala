@@ -127,8 +127,6 @@ class ANOVASelectorSuite extends MLTest with DefaultReadWriteTest {
         5.16336729e-01, 9.99776159e-01, 3.15769738e-01), Vectors.dense(-2.99454508e-01)))
 
     dataset = spark.createDataFrame(data).toDF("label", "features", "topFeature")
-    dataset.show(false)
-
   }
 
   test("params") {

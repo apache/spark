@@ -47,7 +47,7 @@ object ANOVATest {
    * @return DataFrame containing the test result for every feature against the label.
    *         This DataFrame will contain a single Row with the following fields:
    *          - `pValues: Vector`
-   *          - `degreesOfFreedom: Array[Int]`
+   *          - `degreesOfFreedom: Array[Long]`
    *          - `fValues: Vector`
    *         Each of these fields has one value per feature.
    */
