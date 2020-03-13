@@ -57,7 +57,7 @@ private class CountingQueryExecutionListener extends QueryExecutionListener {
     CALLBACK_COUNT.incrementAndGet()
   }
 
-  override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {
+  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
     CALLBACK_COUNT.incrementAndGet()
   }
 
