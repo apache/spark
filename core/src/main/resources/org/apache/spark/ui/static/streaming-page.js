@@ -41,7 +41,7 @@ function showBootstrapTooltip(node, text) {
 
 // Hide the tooltip for "node"
 function hideBootstrapTooltip(node) {
-    $(node).tooltip("destroy");
+    $(node).tooltip("dispose");
 }
 
 // Register a timeline graph. All timeline graphs should be register before calling any
