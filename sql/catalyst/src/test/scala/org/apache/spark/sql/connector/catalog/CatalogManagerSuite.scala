@@ -18,6 +18,9 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
+import java.util
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
@@ -108,14 +111,34 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(v1SessionCatalog.getCurrentDatabase == "default")
     catalogManager.setCurrentNamespace(Array("test2"))
     assert(v1SessionCatalog.getCurrentDatabase == "default")
+
+    intercept[NoSuchNamespaceException] {
+      catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
+    }
   }
 }
 
-class DummyCatalog extends CatalogPlugin {
+class DummyCatalog extends CatalogPlugin with SupportsNamespaces {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = name
   }
   private var _name: String = null
   override def name(): String = _name
   override def defaultNamespace(): Array[String] = Array("a", "b")
+  override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
+    case Array("a") | Array("a", "b") | Array("test2") => true
+    case _ => false
+  }
+  // empty namespace functions
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = Unit
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] =
+    Map.empty[String, String].asJava
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = Unit
+  override def dropNamespace(namespace: Array[String]): Boolean = false
+  override def listNamespaces(): Array[Array[String]] =
+    Array[Array[String]]()
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] =
+    Array[Array[String]]()
 }

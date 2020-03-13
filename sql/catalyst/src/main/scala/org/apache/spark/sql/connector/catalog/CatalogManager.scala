@@ -106,13 +106,14 @@ class CatalogManager(
   }
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
-    if (currentCatalog.name() == SESSION_CATALOG_NAME) {
-      if (namespace.length != 1) {
+    currentCatalog match {
+      case _ if currentCatalog.name() == SESSION_CATALOG_NAME && namespace.length == 1 =>
+        v1SessionCatalog.setCurrentDatabase(namespace.head)
+      case catalog: SupportsNamespaces if catalog.namespaceExists(namespace) =>
+        logInfo(s"set current namespace to ${namespace.mkString(".")}")
+        _currentNamespace = Some(namespace)
+      case _ =>
         throw new NoSuchNamespaceException(namespace)
-      }
-      v1SessionCatalog.setCurrentDatabase(namespace.head)
-    } else {
-      _currentNamespace = Some(namespace)
     }
   }
 
