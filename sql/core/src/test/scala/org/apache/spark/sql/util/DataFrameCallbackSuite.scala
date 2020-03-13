@@ -20,13 +20,16 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.{functions, AnalysisException, Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StringType
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -213,4 +216,31 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       assert(exceptions.head._2 == e)
     }
   }
+
+  testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
+    var e: Exception = null
+    val listener = new QueryExecutionListener {
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        e = exception
+      }
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+
+    intercept[Error] {
+      Dataset.ofRows(spark, ErrorTestCommand("foo")).collect()
+    }
+    assert(e != null && e.isInstanceOf[QueryExecutionException]
+      && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
+    spark.listenerManager.unregister(listener)
+  }
+}
+
+/** A test command that throws `java.lang.Error` during execution. */
+case class ErrorTestCommand(foo: String) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] =
+    throw new java.lang.Error(foo)
 }

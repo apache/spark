@@ -3373,7 +3373,7 @@ class Dataset[T] private[sql](
       sparkSession.listenerManager.onSuccess(name, qe, end - start)
       result
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         sparkSession.listenerManager.onFailure(name, qe, e)
         throw e
     }

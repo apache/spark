@@ -677,7 +677,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val end = System.nanoTime()
       session.listenerManager.onSuccess(name, qe, end - start)
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         session.listenerManager.onFailure(name, qe, e)
         throw e
     }
