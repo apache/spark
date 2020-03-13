@@ -29,6 +29,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
@@ -99,7 +100,8 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def eval(input: InternalRow): Any = currentTimestamp()
 
-  override def prettyName: String = "current_timestamp"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_timestamp")
 }
 
 /**
