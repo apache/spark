@@ -2208,15 +2208,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-
-  val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
-    .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
-      "inherited from Hive. Otherwise, the return type is the data type of the operands.")
-    .version("3.0.0")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
-
   val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
     buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
       .internal()
@@ -3048,8 +3039,6 @@ class SQLConf extends Serializable with Logging {
 
   def createHiveTableByDefaultEnabled: Boolean =
     getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
-  def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
