@@ -76,6 +76,7 @@ select date '2001-09-28' - null;
 select null - date '2019-10-06';
 select date '2001-10-01' - date '2001-09-28';
 
+-- variable-length tests
 select to_timestamp(v, 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]') from values
  ('2019-10-06 10:11:12.'),
  ('2019-10-06 10:11:12.0'),
@@ -85,6 +86,12 @@ select to_timestamp(v, 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]') from values
  ('2019-10-06 10:11:12.1234'),
  ('2019-10-06 10:11:12.12345CST'),
  ('2019-10-06 10:11:12.123456PST') t(v);
-
 -- exceeded max variable length
 select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
+-- special cases
+select to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
+select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
+select to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.[SSSSSS]');
+select to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]');
+select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]');
+select to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]');
