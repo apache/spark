@@ -686,4 +686,19 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
   }
+
+  test("rebase gregorian to julian micros") {
+    val timeZone = DateTimeUtils.TimeZoneUTC
+    withDefaultTimeZone(timeZone) {
+      val julianTs = Timestamp.valueOf("1000-01-01 01:02:03.123456")
+      val gregorianTs = instantToMicros(LocalDateTime.parse("1000-01-01T01:02:03.123456")
+        .atZone(timeZone.toZoneId)
+        .toInstant)
+      val rebased = rebaseGregorianToJulianMicros(gregorianTs)
+
+      assert(microsToMillis(rebased) === julianTs.getTime)
+      assert(Math.floorMod(rebased, MICROS_PER_SECOND) ===
+        Math.floorDiv(julianTs.getNanos, NANOS_PER_MICROS))
+    }
+  }
 }

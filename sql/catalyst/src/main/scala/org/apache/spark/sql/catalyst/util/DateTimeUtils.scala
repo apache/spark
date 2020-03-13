@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
-import java.util.{Locale, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
@@ -973,5 +973,28 @@ object DateTimeUtils {
           patternPart
         }
     }.mkString("'")
+  }
+
+  /**
+   * Converts the given micros to a local date-time in UTC time zone in Proleptic Gregorian
+   * calendar, interprets the result as a local date-time in Julian calendar in UTC time zone.
+   * And takes micros since the epoch from the Julian timestamp.
+   *
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   * @return rebased micros since the epoch in Julian calendar.
+   */
+  def rebaseGregorianToJulianMicros(micros: Long): Long = {
+    if (micros < GREGORIAN_CUTOVER_MICROS) {
+      val ldt = microsToInstant(micros).atOffset(ZoneOffset.UTC).toLocalDateTime
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
+        .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+        .build()
+      millisToMicros(utcCal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+    } else {
+      micros
+    }
   }
 }
