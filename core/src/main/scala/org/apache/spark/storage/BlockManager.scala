@@ -1785,10 +1785,12 @@ private[spark] class BlockManager(
     }
   }
 
-  // Visible for testing
-  def replicateRddCacheBlocks(): Unit = {
-    val replicateBlocksInfo: Seq[ReplicateBlock] =
-      master.getReplicateInfoForRDDBlocks(blockManagerId)
+  /**
+   * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
+   * Visible for testing
+   */
+  def offloadRddCacheBlocks(): Unit = {
+    val replicateBlocksInfo = master.getReplicateInfoForRDDBlocks(blockManagerId)
 
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
@@ -1820,7 +1822,8 @@ private[spark] class BlockManager(
         replicatedSuccessfully
     }
     if (blocksFailedReplication.nonEmpty) {
-      logWarning(s"Blocks failed replication: ${blocksFailedReplication.mkString(",")}")
+      logWarning(s"Blocks failed replication in cache decommissioning " +
+        s"process: ${blocksFailedReplication.mkString(",")}")
     }
   }
 
@@ -1899,7 +1902,7 @@ private[spark] class BlockManager(
         while (blockManagerDecommissioning && !stopped) {
           try {
             logDebug(s"Attempting to replicate all cached RDD blocks")
-            replicateRddCacheBlocks()
+            offloadRddCacheBlocks()
             logInfo(s"Attempt to replicate all cached blocks done")
             Thread.sleep(30000)
           } catch {

@@ -1762,7 +1762,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).contains(store1.blockManagerId))
 
-    store1.replicateRddCacheBlocks()
+    store1.offloadRddCacheBlocks()
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).toSet === Set(store2.blockManagerId,
       store3.blockManagerId))
@@ -1782,7 +1782,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
     assert(master.getLocations(blockIdSmall) === Seq(store1.blockManagerId))
 
-    store1.replicateRddCacheBlocks()
+    store1.offloadRddCacheBlocks()
     // Smaller block offloaded to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
     // Larger block still present in store1 as it can't be offloaded
