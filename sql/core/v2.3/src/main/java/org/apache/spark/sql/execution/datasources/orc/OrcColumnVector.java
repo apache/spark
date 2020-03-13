@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hive.ql.exec.vector.*;
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
@@ -136,7 +137,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   public long getLong(int rowId) {
     int index = getRowIndex(rowId);
     if (isTimestamp) {
-      return timestampData.time[index] * 1000 + timestampData.nanos[index] / 1000 % 1000;
+      return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
     } else {
       return longData.vector[index];
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
@@ -38,7 +38,7 @@ import java.util.Map;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface SupportsNamespaces extends CatalogPlugin {
 
   /**

@@ -29,7 +29,9 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
 
 sealed trait TimestampFormatter extends Serializable {
@@ -52,25 +54,33 @@ sealed trait TimestampFormatter extends Serializable {
 class Iso8601TimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
-    locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
+    locale: Locale,
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT)
+  extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
+
+  @transient
+  protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
+    pattern, zoneId, locale, legacyFormat)
 
   override def parse(s: String): Long = {
     val specialDate = convertSpecialTimestamp(s.trim, zoneId)
     specialDate.getOrElse {
-      val parsed = formatter.parse(s)
-      val parsedZoneId = parsed.query(TemporalQueries.zone())
-      val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-      // Parsed input might not have time related part. In that case, time component is set to
-      // zeros.
-      val parsedLocalTime = parsed.query(TemporalQueries.localTime)
-      val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-      val localDate = getLocalDate(s, parsed)
-      val zonedDateTime = ZonedDateTime.of(localDate, localTime, timeZoneId)
-      val epochSeconds = zonedDateTime.toEpochSecond
-      val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
-      Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
+      try {
+        val parsed = formatter.parse(s)
+        val parsedZoneId = parsed.query(TemporalQueries.zone())
+        val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+        // Parsed input might not have time related part. In that case, time component is set to
+        // zeros.
+        val parsedLocalTime = parsed.query(TemporalQueries.localTime)
+        val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
+        val localDate = getLocalDate(s, parsed)
+        val zonedDateTime = ZonedDateTime.of(localDate, localTime, timeZoneId)
+        val epochSeconds = zonedDateTime.toEpochSecond
+        val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
+        Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
+      } catch checkDiffResult(s, legacyFormatter.parse)
     }
   }
 
@@ -81,7 +91,7 @@ class Iso8601TimestampFormatter(
 }
 
 /**
- * The formatter parses/formats timestamps according to the pattern `uuuu-MM-dd HH:mm:ss.[..fff..]`
+ * The formatter parses/formats timestamps according to the pattern `yyyy-MM-dd HH:mm:ss.[..fff..]`
  * where `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not
  * output trailing zeros in the fraction. For example, the timestamp `2019-03-05 15:00:01.123400` is
  * formatted as the string `2019-03-05 15:00:01.1234`.
@@ -145,7 +155,7 @@ class LegacyFastTimestampFormatter(
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    Math.addExact(fromMillis(cal.getTimeInMillis), micros)
+    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
   }
 
   def format(timestamp: SQLTimestamp): String = {
@@ -168,7 +178,7 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    fromMillis(sdf.parse(s).getTime)
+    millisToMicros(sdf.parse(s).getTime)
   }
 
   override def format(us: Long): String = {
@@ -187,34 +197,41 @@ object TimestampFormatter {
 
   val defaultLocale: Locale = Locale.US
 
-  def defaultPattern(): String = s"${DateFormatter.defaultPattern()} HH:mm:ss"
+  def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 
   private def getFormatter(
-    format: Option[String],
-    zoneId: ZoneId,
-    locale: Locale = defaultLocale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
-
+      format: Option[String],
+      zoneId: ZoneId,
+      locale: Locale = defaultLocale,
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserEnabled) {
-      legacyFormat match {
-        case FAST_DATE_FORMAT =>
-          new LegacyFastTimestampFormatter(pattern, zoneId, locale)
-        case SIMPLE_DATE_FORMAT =>
-          new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = false)
-        case LENIENT_SIMPLE_DATE_FORMAT =>
-          new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = true)
-      }
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+      getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(pattern, zoneId, locale)
+      new Iso8601TimestampFormatter(pattern, zoneId, locale, legacyFormat)
+    }
+  }
+
+  def getLegacyFormatter(
+      pattern: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): TimestampFormatter = {
+    legacyFormat match {
+      case FAST_DATE_FORMAT =>
+        new LegacyFastTimestampFormatter(pattern, zoneId, locale)
+      case SIMPLE_DATE_FORMAT =>
+        new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = false)
+      case LENIENT_SIMPLE_DATE_FORMAT =>
+        new LegacySimpleTimestampFormatter(pattern, zoneId, locale, lenient = true)
     }
   }
 
   def apply(
-    format: String,
-    zoneId: ZoneId,
-    locale: Locale,
-    legacyFormat: LegacyDateFormat): TimestampFormatter = {
+      format: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): TimestampFormatter = {
     getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 

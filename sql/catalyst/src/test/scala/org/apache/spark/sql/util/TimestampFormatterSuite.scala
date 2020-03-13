@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
@@ -235,13 +235,28 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("SPARK-30958: parse timestamp with negative year") {
-    val formatter1 = TimestampFormatter("uuuu-MM-dd HH:mm:ss", ZoneOffset.UTC)
-    assert(formatter1.parse("-0123-02-22 02:22:22") === instantToMicros(
-      LocalDateTime.of(-123, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+    val formatter1 = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
+    assert(formatter1.parse("-1234-02-22 02:22:22") === instantToMicros(
+      LocalDateTime.of(-1234, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
 
-    // "yyyy" can't parse negative year or year 0000.
-    val formatter2 = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
-    intercept[DateTimeException](formatter2.parse("-0123-02-22 02:22:22"))
-    intercept[DateTimeException](formatter2.parse("0000-02-22 02:22:22"))
+    def assertParsingError(f: => Unit): Unit = {
+      intercept[Exception](f) match {
+        case e: SparkUpgradeException =>
+          assert(e.getCause.isInstanceOf[DateTimeException])
+        case e =>
+          assert(e.isInstanceOf[DateTimeException])
+      }
+    }
+
+    // "yyyy" with "G" can't parse negative year or year 0000.
+    val formatter2 = TimestampFormatter("G yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
+    assertParsingError(formatter2.parse("BC -1234-02-22 02:22:22"))
+    assertParsingError(formatter2.parse("AC 0000-02-22 02:22:22"))
+
+    assert(formatter2.parse("BC 1234-02-22 02:22:22") === instantToMicros(
+      LocalDateTime.of(-1233, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+    assert(formatter2.parse("AD 1234-02-22 02:22:22") === instantToMicros(
+      LocalDateTime.of(1234, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+
   }
 }

@@ -23,14 +23,13 @@ license: |
 `ALTER TABLE` statement changes the schema or properties of a table.
 
 ### RENAME 
-`ALTER TABLE RENAME` statement changes the table name of an existing table in the database.
+`ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database.
 
 #### Syntax
 {% highlight sql %}
 ALTER TABLE table_identifier RENAME TO table_identifier
 
 ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
-
 {% endhighlight %}
 
 #### Parameters
@@ -83,6 +82,109 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 </dl>
 
 
+### ALTER OR CHANGE COLUMN
+`ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's comment.
+
+#### Syntax
+{% highlight sql %}
+ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnAction
+{% endhighlight %}
+
+#### Parameters
+<dl>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>COLUMN col_spec</em></code></dt>
+  <dd>Specifies the column to be altered or be changed.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>alterColumnAction</em></code></dt>
+   <dd>
+     Change the comment string.<br><br>
+     <b>Syntax:</b>
+        <code>
+            COMMENT STRING
+        </code>     
+   </dd>     
+</dl>
+
+
+### ADD AND DROP PARTITION
+
+#### ADD PARTITION
+`ALTER TABLE ADD` statement adds partition to the partitioned table.
+
+##### Syntax
+{% highlight sql %}
+ALTER TABLE table_identifier ADD [IF NOT EXISTS] 
+    ( partition_spec [ partition_spec ... ] )
+{% endhighlight %}
+     
+##### Parameters
+<dl>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    Partition to be added. <br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
+</dl>     
+
+#### DROP PARTITION
+`ALTER TABLE DROP` statement drops the partition of the table.
+
+##### Syntax
+{% highlight sql %}
+ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
+{% endhighlight %}
+     
+##### Parameters
+<dl>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    Partition to be dropped. <br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
+</dl>     
+
+     
 ### SET AND UNSET
 
 #### SET TABLE PROPERTIES
@@ -217,7 +319,7 @@ SHOW PARTITIONS StudentInfo;
 | age=15     |
 +------------+--+
 
--- Add new column to a table
+-- Add new columns to a table
 
 DESC StudentInfo;
 +--------------------------+------------+----------+--+
@@ -248,6 +350,111 @@ DESC StudentInfo;
 | age                      | int        | NULL     |
 +--------------------------+------------+----------+--+
 
+-- Add a new partition to a table 
+
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
++------------+--+
+
+ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18);
+
+-- After adding a new partition to the table
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
+| age=18     |
++------------+--+
+
+-- Drop a partition from the table 
+
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
+| age=18     |
++------------+--+
+
+ALTER TABLE StudentInfo DROP IF EXISTS PARTITION (age=18);
+
+-- After dropping the partition of the table
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
++------------+--+
+
+-- Adding multiple partitions to the table
+
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
++------------+--+
+
+ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18) PARTITION (age=20);
+
+-- After adding multiple partitions to the table
+SHOW PARTITIONS StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
+| age=18     |
+| age=20     |
++------------+--+
+
+-- ALTER OR CHANGE COLUMNS
+
+DESC StudentInfo;
++--------------------------+------------+----------+--+
+|         col_name         | data_type  | comment  |
++--------------------------+------------+----------+--+
+| name                     | string     | NULL     |
+| rollno                   | int        | NULL     |
+| LastName                 | string     | NULL     |
+| DOB                      | timestamp  | NULL     |
+| age                      | int        | NULL     |
+| # Partition Information  |            |          |
+| # col_name               | data_type  | comment  |
+| age                      | int        | NULL     |
++--------------------------+------------+----------+--+
+
+ALTER TABLE StudentInfo ALTER COLUMN name COMMENT "new comment";
+
+--After ALTER or CHANGE COLUMNS
+DESC StudentInfo;
++--------------------------+------------+------------+--+
+|         col_name         | data_type  | comment    |
++--------------------------+------------+------------+--+
+| name                     | string     | new comment|
+| rollno                   | int        | NULL       |
+| LastName                 | string     | NULL       |
+| DOB                      | timestamp  | NULL       |
+| age                      | int        | NULL       |
+| # Partition Information  |            |            |
+| # col_name               | data_type  | comment    |
+| age                      | int        | NULL       |
++--------------------------+------------+------------+--+
 
 --Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;
@@ -260,7 +467,7 @@ ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'
 -- SET SERDE/ SERDE Properties
 ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
 
-ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
+ALTER TABLE dbx.tab1 SET SERDE 'org.apache.hadoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
 
 --SET TABLE PROPERTIES
 ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser')
