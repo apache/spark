@@ -127,6 +127,7 @@ private[parquet] class ParquetRowConverter(
     catalystType: StructType,
     convertTz: Option[ZoneId],
     caseSensitive: Boolean,
+    schemaPruning: Boolean,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -180,24 +181,35 @@ private[parquet] class ParquetRowConverter(
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
-    // For letter case issue, create name to field index based on case sensitivity
-    val catalystFieldNameToIndex = if (caseSensitive) {
-      catalystType.fieldNames.zipWithIndex.toMap
-    } else {
-      CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
-    }
 
-    parquetType.getFields.asScala.map { parquetField =>
-      val fieldIndex = catalystFieldNameToIndex.getOrElse(parquetField.getName,
-        throw new IllegalArgumentException(
-          s"${parquetField.getName} does not exist. " +
-            s"Available: ${catalystType.fieldNames.mkString(", ")}")
-      )
-      val catalystField = catalystType(fieldIndex)
-      // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
-    }.toArray
-  }
+    // (SPARK-31116) There is an issue when schema pruning is enabled, so we keep original codes
+    if (schemaPruning) {
+      // (SPARK-31116) For letter case issue, create name to field index based on case sensitivity
+      val catalystFieldNameToIndex = if (caseSensitive) {
+        catalystType.fieldNames.zipWithIndex.toMap
+      } else {
+        CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
+      }
+      parquetType.getFields.asScala.map { parquetField =>
+        val fieldIndex = catalystFieldNameToIndex.getOrElse(parquetField.getName,
+          throw new IllegalArgumentException(
+            s"${parquetField.getName} does not exist. " +
+              s"Available: ${catalystType.fieldNames.mkString(", ")}")
+        )
+        val catalystField = catalystType(fieldIndex)
+        // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
+        newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
+      }.toArray
+    } else {
+      parquetType.getFields.asScala.zip(catalystType).zipWithIndex.map {
+        case ((parquetFieldType, catalystField), ordinal) =>
+          // Converted field value should be set to the `ordinal`-th cell of `currentRow`
+          newConverter(
+            parquetFieldType, catalystField.dataType, new RowUpdater(currentRow, ordinal))
+      }.toArray
+    }
+}
+
 
   // Updaters for each field.
   private[this] val fieldUpdaters: Array[ParentContainerUpdater] = fieldConverters.map(_.updater)
@@ -361,7 +373,13 @@ private[parquet] class ParquetRowConverter(
           }
         }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, caseSensitive, wrappedUpdater)
+          schemaConverter,
+          parquetType.asGroupType(),
+          t,
+          convertTz,
+          caseSensitive,
+          schemaPruning,
+          wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
