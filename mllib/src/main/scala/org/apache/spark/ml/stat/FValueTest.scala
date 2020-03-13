@@ -63,11 +63,12 @@ object FValueTest {
    * @param dataset  DataFrame of continuous labels and continuous features.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
    * @param labelCol  Name of label column in dataset, of any numerical type
-   * @return Array containing the FRegressionTestResult for every feature against the label.
+   * @return Array containing the FValueTestResult for every feature against the label.
    */
-  @Since("3.1.0")
-  private[ml] def testRegression(dataset: Dataset[_], featuresCol: String, labelCol: String):
-  Array[SelectionTestResult] = {
+  private[ml] def testRegression(
+      dataset: Dataset[_],
+      featuresCol: String,
+      labelCol: String): Array[SelectionTestResult] = {
 
     val spark = dataset.sparkSession
     import spark.implicits._
