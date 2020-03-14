@@ -1828,10 +1828,10 @@ class HiveDDLSuite
     withTable("t") {
       withTempDir { dir =>
         val df = spark.catalog.createTable(
-          tableName = "t",
-          source = "hive",
-          schema = new StructType().add("i", "int"),
-          options = Map("path" -> dir.getCanonicalPath, "fileFormat" -> "parquet"))
+          "t",
+          "hive",
+          new StructType().add("i", "int"),
+          Map("path" -> dir.getCanonicalPath, "fileFormat" -> "parquet"))
         assert(df.collect().isEmpty)
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))

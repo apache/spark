@@ -535,10 +535,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
           sparkSession.catalog.createTable(
-            tableName = "createdJsonTable",
-            source = "org.apache.spark.sql.json",
-            schema = schema,
-            options = Map("path" -> tempPath.toString))
+            "createdJsonTable",
+            "org.apache.spark.sql.json",
+            schema,
+            Map("path" -> tempPath.toString))
 
           checkAnswer(
             sql("SELECT * FROM createdJsonTable"),
