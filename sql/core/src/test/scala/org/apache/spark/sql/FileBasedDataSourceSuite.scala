@@ -843,330 +843,139 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31116: Select simple parquet with case insensitive and schema pruning enabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "false",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
+  test("SPARK-31116: Select simple parquet with case insensitive mode") {
+    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
 
-        // Prepare values for testing specific parquet record reader
-        Seq("A").toDF("camelCase").write.parquet(path)
+          // Prepare values for testing specific parquet record reader
+          Seq("A").toDF("camelCase").write.parquet(path)
 
-        val exactSchema = new StructType().add("camelCase", StringType)
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
+          val exactSchema = new StructType().add("camelCase", StringType)
+          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
 
-        // In case insensitive manner, parquet's column cases are ignored
-        val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
-        checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row("A"))
-      }}
-    }
-  }
-  test("SPARK-31116: Select simple parquet with case insensitive and schema pruning disabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "false",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
-
-        // Prepare values for testing specific parquet record reader
-        Seq("A").toDF("camelCase").write.parquet(path)
-
-        val exactSchema = new StructType().add("camelCase", StringType)
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
-
-        // In case insensitive manner, parquet's column cases are ignored
-        val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
-        checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row("A"))
-      }}
+          // In case insensitive manner, parquet's column cases are ignored
+          val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
+          checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row("A"))
+        }
+      }
     }
   }
 
-  test("SPARK-31116: Select nested parquet with case insensitive and schema pruning enabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "false",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
+  test("SPARK-31116: Select nested parquet with case insensitive mode") {
+    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
 
-        // Prepare values for testing nested parquet data
-        spark
-          .range(1L)
-          .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-          .write.parquet(path)
+          // Prepare values for testing nested parquet data
+          spark
+            .range(1L)
+            .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
+            .write.parquet(path)
 
-        val exactSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
+          val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
 
-        // In case insensitive manner, parquet's column cases are ignored
-        val innerColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, 1)))
+          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
 
-        val rootColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(
-          spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, 1)))
-      }}
+          // In case insensitive manner, parquet's column cases are ignored
+          val innerColumnCaseInsensitiveSchema =
+            "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
+          checkAnswer(
+            spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
+            Row(Row(0, 1)))
+
+          val rootColumnCaseInsensitiveSchema =
+            "structColumn struct<lowercase: LONG, camelCase: LONG>"
+          checkAnswer(
+            spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
+            Row(Row(0, 1)))
+        }
+      }
     }
   }
 
-  test("SPARK-31116: Select nested parquet with case insensitive and schema pruning disabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "false",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
+  test("SPARK-31116: Select simple parquet with case sensitive mode") {
+    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "true",
+        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
 
-        // Prepare values for testing nested parquet data
-        spark
-          .range(1L)
-          .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-          .write.parquet(path)
+          // Prepare values for testing specific parquet record reader
+          Seq("A").toDF("camelCase").write.parquet(path)
 
-        val exactSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
+          val exactSchema = new StructType().add("camelCase", StringType)
+          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
 
-        // In case insensitive manner, parquet's column cases are ignored
-        val innerColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, 1)))
+          // In case sensitive manner, different letter case does not read column
+          val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
+          checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row(null))
 
-        val rootColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(
-          spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, 1)))
-      }}
+          // It also properly work in combined schema
+          val combinedSchema = new StructType()
+            .add("camelCase", StringType)
+            .add("camelcase", StringType)
+          checkAnswer(spark.read.schema(combinedSchema).parquet(path), Row("A", null))
+        }
+      }
     }
   }
 
-  test("SPARK-31116: Select simple parquet with case sensitive and schema pruning enabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "true",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
+  test("SPARK-31116: Select nested parquet with case sensitive mode") {
+    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "true",
+        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
 
-        // Prepare values for testing specific parquet record reader
-        Seq("A").toDF("camelCase").write.parquet(path)
+          // Prepare values for testing nested parquet data
+          spark
+            .range(1)
+            .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
+            .write.parquet(path)
 
-        val exactSchema = new StructType().add("camelCase", StringType)
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
+          val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
+          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
 
-        // In case sensitive manner, different letter case does not read column
-        val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
-        checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row(null))
+          val innerColumnCaseInsensitiveSchema =
+            "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
+          checkAnswer(
+            spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
+            Row(null))
 
-        // It also properly work in combined schema
-        val combinedSchema = new StructType()
-          .add("camelCase", StringType)
-          .add("camelcase", StringType)
-        checkAnswer(spark.read.schema(combinedSchema).parquet(path), Row("A", null))
-      }}
-    }
-  }
+          val innerPartialColumnCaseInsensitiveSchema =
+            "StructColumn struct<lowercase: LONG, camelcase: LONG>"
+          checkAnswer(
+            spark.read.schema(innerPartialColumnCaseInsensitiveSchema).parquet(path),
+            Row(Row(0, null)))
 
-  test("SPARK-31116: Select simple parquet with case sensitive and schema pruning disabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "true",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
+          val rootColumnCaseInsensitiveSchema =
+            "structColumn struct<lowercase: LONG, camelCase: LONG>"
+          checkAnswer(
+            spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
+            Row(null))
 
-        // Prepare values for testing specific parquet record reader
-        Seq("A").toDF("camelCase").write.parquet(path)
+          val combinedSchema =
+            """
+              |StructColumn
+              |struct<lowercase: LONG, camelCase: LONG, LowerCase: LONG, camelcase: LONG>,
+              |structColumn
+              |struct<lowercase: LONG, camelCase: LONG, LowerCase: LONG, camelcase: LONG>
+              |""".stripMargin
 
-        val exactSchema = new StructType().add("camelCase", StringType)
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
-
-        // In case sensitive manner, different letter case does not read column
-        val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
-        checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row(null))
-
-        // It also properly work in combined schema
-        val combinedSchema = new StructType()
-          .add("camelCase", StringType)
-          .add("camelcase", StringType)
-        checkAnswer(spark.read.schema(combinedSchema).parquet(path), Row("A", null))
-      }}
-    }
-  }
-
-  test("SPARK-31116: Select nested parquet with case sensitive and schema pruning enabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "true",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
-
-        // Prepare values for testing nested parquet data
-        spark
-          .range(1)
-          .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-          .write.parquet(path)
-
-        val exactSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
-
-        val innerColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
-          Row(null))
-
-        val innerPartialColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerPartialColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, null)))
-
-        val rootColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(
-          spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
-          Row(null))
-
-        val combinedSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType)
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType)
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(combinedSchema).parquet(path),
-          Row(Row(0, 1, null, null), null))
-      }}
-    }
-  }
-
-  test("SPARK-31116: Select nested parquet with case sensitive and schema pruning disabled") {
-    withSQLConf(
-      SQLConf.CASE_SENSITIVE.key -> "true",
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
-      withTempPath { dir => {
-        val path = dir.getCanonicalPath
-
-        // Prepare values for testing nested parquet data
-        spark
-          .range(1)
-          .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-          .write.parquet(path)
-
-        val exactSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
-
-        val innerColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
-          Row(null))
-
-        val innerPartialColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(innerPartialColumnCaseInsensitiveSchema).parquet(path),
-          Row(Row(0, null)))
-
-        val rootColumnCaseInsensitiveSchema = new StructType()
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType))
-        checkAnswer(
-          spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
-          Row(null))
-
-        val combinedSchema = new StructType()
-          .add(
-            "StructColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType)
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-          .add(
-            "structColumn",
-            new StructType()
-              .add("lowercase", LongType)
-              .add("camelCase", LongType)
-              .add("LowerCase", LongType)
-              .add("camelcase", LongType))
-        checkAnswer(
-          spark.read.schema(combinedSchema).parquet(path),
-          Row(Row(0, 1, null, null), null))
-      }}
+          checkAnswer(
+            spark.read.schema(combinedSchema).parquet(path),
+            Row(Row(0, 1, null, null), null))
+        }
+      }
     }
   }
 }
