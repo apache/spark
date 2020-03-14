@@ -257,9 +257,9 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-                   tableName: String,
-                   source: String,
-                   options: Map[String, String]): DataFrame
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame
 
   /**
    * Creates a table based on the dataset in a data source and a set of options.
@@ -271,10 +271,10 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-                   tableName: String,
-                   source: String,
-                   options: java.util.Map[String, String],
-                   description: String): DataFrame = {
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String],
+      description: String): DataFrame = {
     createTable(tableName, source, options.asScala.toMap, description)
   }
 
