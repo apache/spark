@@ -720,8 +720,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         "1582-10-15",
         "1969-12-31",
         "1970-01-01",
-        "2020-03-14"
-      ).foreach { date =>
+        "2020-03-14").foreach { date =>
         val julianDays = Math.toIntExact(Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY))
         val gregorianDays = localDateToDays(LocalDate.parse(date))
 
