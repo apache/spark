@@ -240,9 +240,9 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-                   tableName: String,
-                   source: String,
-                   options: java.util.Map[String, String]): DataFrame = {
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
     createTable(tableName, source, options.asScala.toMap)
   }
 
