@@ -984,7 +984,7 @@ object DateTimeUtils {
    * And takes microseconds since the epoch from the Julian timestamp.
    *
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
-   * @return Rebased microseconds since the epoch in Julian calendar.
+   * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     if (micros < GREGORIAN_CUTOVER_MICROS) {
@@ -1009,7 +1009,7 @@ object DateTimeUtils {
    * And takes microseconds since the epoch from the Gregorian timestamp.
    *
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
-   * @return Rebased microseconds since the epoch in Proleptic Gregorian calendar.
+   * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     if (micros < JULIAN_CUTOVER_MICROS) {
@@ -1034,9 +1034,20 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Converts the given number of days since the epoch day 1970-01-01 to
+   * a local date in Julian calendar, interprets the result as a local
+   * date in Proleptic Gregorian calendar, and take the number of days
+   * since the epoch from the Gregorian date.
+   *
+   * @param days The number of days since the epoch in Julian calendar.
+   * @return The rebased number of days in Gregorian calendar.
+   */
   def rebaseJulianToGregorianDays(days: Int): Int = {
     if (days < JULIAN_CUTOVER_DAY) {
       val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
         .setTimeZone(TimeZoneUTC)
         .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
@@ -1051,10 +1062,28 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Rebasing days since the epoch to store the same number of days
+   * as by Spark 2.4 and earlier versions. Spark 3.0 switched to
+   * Proleptic Gregorian calendar (see SPARK-26651), and as a consequence of that,
+   * this affects dates before 1582-10-15. Spark 2.4 and earlier versions use
+   * Julian calendar for dates before 1582-10-15. So, the same local date may
+   * be mapped to different number of days since the epoch in different calendars.
+   *
+   * For example:
+   *   Proleptic Gregorian calendar: 1582-01-01 -> -141714
+   *   Julian calendar: 1582-01-01 -> -141704
+   * The code below converts -141714 to -141704.
+   *
+   * @param days The number of days since the epoch 1970-01-01. It can be negative.
+   * @return The rebased number of days since the epoch in Julian calendar.
+   */
   def rebaseGregorianToJulianDays(days: Int): Int = {
     if (days < GREGORIAN_CUTOVER_DAY) {
       val localDate = LocalDate.ofEpochDay(days)
       val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
         .setTimeZone(TimeZoneUTC)
         .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
