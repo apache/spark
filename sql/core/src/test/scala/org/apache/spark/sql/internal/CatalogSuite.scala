@@ -476,10 +476,10 @@ class CatalogSuite extends SharedSparkSession {
       withTempDir { dir =>
         spark.catalog.createTable(
           tableName = "t",
-          description = description,
           source = "json",
           schema = new StructType().add("i", "int"),
-          options = Map("path" -> dir.getAbsolutePath))
+          options = Map("path" -> dir.getAbsolutePath),
+          description = description)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
         assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
