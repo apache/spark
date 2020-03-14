@@ -53,7 +53,7 @@ object DateTimeUtils {
       .atOffset(ZoneOffset.UTC)
       .toInstant)
   final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
-  final val JULIAN_CUTOVER_DAY = rebaseGregorianToJulianMicros(GREGORIAN_CUTOVER_MICROS)
+  final val JULIAN_CUTOVER_MICROS = rebaseGregorianToJulianMicros(GREGORIAN_CUTOVER_MICROS)
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
@@ -1010,7 +1010,7 @@ object DateTimeUtils {
    * @return Rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
-    if (micros < JULIAN_CUTOVER_DAY) {
+    if (micros < JULIAN_CUTOVER_MICROS) {
       val utcCal = new Calendar.Builder()
         // `gregory` is a hybrid calendar that supports both
         // the Julian and Gregorian calendar systems
