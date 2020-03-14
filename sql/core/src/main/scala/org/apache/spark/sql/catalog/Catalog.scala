@@ -271,11 +271,17 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    createTable(tableName, source, schema, options.asScala.toMap)
+                   tableName: String,
+                   description: String,
+                   source: String,
+                   schema: StructType,
+                   options: java.util.Map[String, String]): DataFrame = {
+    createTable(
+      tableName,
+      description = description,
+      source = source,
+      schema = schema,
+      options = options.asScala.toMap)
   }
 
   /**
@@ -290,6 +296,7 @@ abstract class Catalog {
    */
   def createTable(
       tableName: String,
+      description: String = "",
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame

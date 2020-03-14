@@ -310,7 +310,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    createTable(tableName, source, new StructType, options)
+    createTable(tableName, source = source, schema = new StructType, options = options)
   }
 
   /**
@@ -323,6 +323,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def createTable(
       tableName: String,
+      description: String = "",
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
@@ -338,7 +339,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some(source)
+      provider = Some(source),
+      comment = Some(description)
     )
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
