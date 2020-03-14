@@ -137,7 +137,8 @@ function flake8_test {
         exit 1
     fi
 
-    FLAKE8_VERSION="$($FLAKE8_BUILD --version)"
+    _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
+    FLAKE8_VERSION="${_FLAKE8_VERSION[0]}"
     EXPECTED_FLAKE8="$(satisfies_min_version $FLAKE8_VERSION $MINIMUM_FLAKE8)"
 
     if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
