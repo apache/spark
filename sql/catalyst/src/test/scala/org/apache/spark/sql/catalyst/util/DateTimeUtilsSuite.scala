@@ -730,4 +730,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("round trip rebase gregorian to/from julian micros") {
+    Seq(
+      "0001-01-01T01:02:03.654321",
+      "1000-01-01T03:02:01.123456",
+      "1969-12-31T11:22:33.000000",
+      "1970-01-01T00:00:00.000001",
+      "2020-03-14T09:33:01.500000").foreach { ts =>
+      val gregorianTs = instantToMicros(LocalDateTime.parse(ts).atZone(ZoneOffset.UTC).toInstant)
+      val result = rebaseJulianToGregorianMicros(rebaseGregorianToJulianMicros(gregorianTs))
+
+      assert(result === gregorianTs)
+    }
+  }
 }
