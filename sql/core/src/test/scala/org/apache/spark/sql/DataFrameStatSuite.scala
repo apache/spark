@@ -434,7 +434,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
     val dfx = df2.crossJoin(df1)
 
-    assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect().length == 2)
+    assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
 
     intercept[AnalysisException] {
       dfx.stat.freqItems(Array("num"))
