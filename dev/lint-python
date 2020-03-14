@@ -182,7 +182,7 @@ function pydocstyle_test {
     fi
 
     PYDOCSTYLE_VERSION="$($PYDOCSTYLE_BUILD --version)"
-    EXPECTED_FLAKE8="$(satisfies_min_version $VERSION $MINIMUM_PYDOCSTYLE)"
+    EXPECTED_PYDOCSTYLE="$(satisfies_min_version $PYDOCSTYLE_VERSION $MINIMUM_PYDOCSTYLE)"
 
     if [[ "$EXPECTED_PYDOCSTYLE" == "False" ]]; then
         echo "\
