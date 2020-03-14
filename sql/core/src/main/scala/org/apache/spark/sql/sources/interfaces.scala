@@ -295,7 +295,9 @@ trait PrunedFilteredScan {
 trait InsertableRelation {
   def insert(data: DataFrame, overwrite: Boolean): Unit = {}
 
-  def insert(data: DataFrame, overwrite: Boolean, metrics: Map[String, SQLMetric]): Unit = {}
+  def insert(data: DataFrame, overwrite: Boolean, metrics: Map[String, SQLMetric]): Unit = {
+    insert(data, overwrite)
+  }
 }
 
 /**
