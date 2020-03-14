@@ -310,7 +310,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    createTable(tableName, source = source, schema = new StructType, options = options)
+    createTable(tableName, source, new StructType, options)
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 2.2.0
+   */
+  override def createTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String],
+      description: String): DataFrame = {
+    createTable(tableName, source, new StructType, options, description)
   }
 
   /**
@@ -323,10 +339,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def createTable(
       tableName: String,
-      description: String = "",
       source: String,
       schema: StructType,
-      options: Map[String, String]): DataFrame = {
+      options: Map[String, String],
+      description: String = ""): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
