@@ -988,6 +988,8 @@ object DateTimeUtils {
     if (micros < GREGORIAN_CUTOVER_MICROS) {
       val ldt = microsToInstant(micros).atOffset(ZoneOffset.UTC).toLocalDateTime
       val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
         .setTimeZone(DateTimeUtils.TimeZoneUTC)
         .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
@@ -1010,6 +1012,8 @@ object DateTimeUtils {
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     if (micros < JULIAN_CUTOVER_DAY) {
       val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
         .setTimeZone(DateTimeUtils.TimeZoneUTC)
         .setInstant(microsToMillis(micros))
