@@ -2496,6 +2496,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PARQUET_REBASE_DATETIME =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTime.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps before 1582-10-15 from Proleptic " +
+        "Gregorian calendar to Julian calendar in write and from Julian to Proleptic " +
+        "Gregorian calendar in read. The rebasing is performed by converting micros/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of days/micros since" +
+        "the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
