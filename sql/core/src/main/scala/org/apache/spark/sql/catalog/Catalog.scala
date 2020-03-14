@@ -240,10 +240,42 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-      tableName: String,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
+                   tableName: String,
+                   source: String,
+                   options: java.util.Map[String, String]): DataFrame = {
     createTable(tableName, source, options.asScala.toMap)
+  }
+
+/**
+   * (Scala-specific)
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  def createTable(
+                   tableName: String,
+                   source: String,
+                   options: Map[String, String]): DataFrame
+
+  /**
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  def createTable(
+                   tableName: String,
+                   source: String,
+                   options: java.util.Map[String, String],
+                   description: String): DataFrame = {
+    createTable(tableName, source, options.asScala.toMap, description)
   }
 
   /**
@@ -257,9 +289,10 @@ abstract class Catalog {
    * @since 2.2.0
    */
   def createTable(
-      tableName: String,
-      source: String,
-      options: Map[String, String]): DataFrame
+                   tableName: String,
+                   source: String,
+                   options: Map[String, String],
+                   description: String): DataFrame
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options.
@@ -272,16 +305,17 @@ abstract class Catalog {
    */
   def createTable(
                    tableName: String,
-                   description: String,
                    source: String,
                    schema: StructType,
-                   options: java.util.Map[String, String]): DataFrame = {
+                   options: java.util.Map[String, String],
+                   description: String): DataFrame = {
     createTable(
       tableName,
-      description = description,
       source = source,
       schema = schema,
-      options = options.asScala.toMap)
+      options = options.asScala.toMap,
+      description = description
+    )
   }
 
   /**
@@ -296,10 +330,10 @@ abstract class Catalog {
    */
   def createTable(
       tableName: String,
-      description: String = "",
       source: String,
       schema: StructType,
-      options: Map[String, String]): DataFrame
+      options: Map[String, String],
+      description: String = ""): DataFrame
 
   /**
    * Drops the local temporary view with the given view name in the catalog.
