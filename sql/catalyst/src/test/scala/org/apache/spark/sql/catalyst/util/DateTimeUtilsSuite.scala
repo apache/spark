@@ -690,15 +690,44 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("rebase gregorian to julian micros") {
     val timeZone = DateTimeUtils.TimeZoneUTC
     withDefaultTimeZone(timeZone) {
-      val julianTs = Timestamp.valueOf("1000-01-01 01:02:03.123456")
-      val gregorianTs = instantToMicros(LocalDateTime.parse("1000-01-01T01:02:03.123456")
-        .atZone(timeZone.toZoneId)
-        .toInstant)
-      val rebased = rebaseGregorianToJulianMicros(gregorianTs)
+      Seq(
+        "0001-01-01 01:02:03.654321",
+        "1000-01-01 03:02:01.123456",
+        "1969-12-31 11:22:33.000000",
+        "1970-01-01 00:00:00.000001",
+        "2020-03-14 09:33:01.500000").foreach { ts =>
+        val julianTs = Timestamp.valueOf(ts)
+        val gregorianTs = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
+          .atZone(timeZone.toZoneId)
+          .toInstant)
+        val rebased = rebaseGregorianToJulianMicros(gregorianTs)
 
-      assert(microsToMillis(rebased) === julianTs.getTime)
-      assert(Math.floorMod(rebased, MICROS_PER_SECOND) ===
-        Math.floorDiv(julianTs.getNanos, NANOS_PER_MICROS))
+        assert(microsToMillis(rebased) === julianTs.getTime)
+        assert(Math.floorMod(rebased, MICROS_PER_SECOND) ===
+          Math.floorDiv(julianTs.getNanos, NANOS_PER_MICROS))
+      }
+    }
+  }
+
+  test("rebase julian to gregorian micros") {
+    val timeZone = DateTimeUtils.TimeZoneUTC
+    withDefaultTimeZone(timeZone) {
+      Seq(
+        "0001-01-01 01:02:03.654321",
+        "1000-01-01 03:02:01.123456",
+        "1969-12-31 11:22:33.000000",
+        "1970-01-01 00:00:00.000001",
+        "2020-03-14 09:33:01.500000").foreach { ts =>
+        val julianTs = Timestamp.valueOf(ts)
+        val julianMicros = millisToMicros(julianTs.getTime) +
+          ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
+        val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
+          .atZone(timeZone.toZoneId)
+          .toInstant)
+        val rebased = rebaseJulianToGregorianMicros(julianMicros)
+
+        assert(rebased === gregorianMicros)
+      }
     }
   }
 }

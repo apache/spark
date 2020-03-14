@@ -53,6 +53,7 @@ object DateTimeUtils {
       .atOffset(ZoneOffset.UTC)
       .toInstant)
   final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
+  final val JULIAN_CUTOVER_DAY = rebaseGregorianToJulianMicros(GREGORIAN_CUTOVER_MICROS)
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
@@ -993,6 +994,27 @@ object DateTimeUtils {
         .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
         .build()
       millisToMicros(utcCal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+    } else {
+      micros
+    }
+  }
+
+  def rebaseJulianToGregorianMicros(micros: Long): Long = {
+    if (micros < JULIAN_CUTOVER_DAY) {
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setInstant(microsToMillis(micros))
+        .build()
+      val localDateTime = LocalDateTime.of(
+        utcCal.get(Calendar.YEAR),
+        utcCal.get(Calendar.MONTH) + 1,
+        utcCal.get(Calendar.DAY_OF_MONTH),
+        utcCal.get(Calendar.HOUR_OF_DAY),
+        utcCal.get(Calendar.MINUTE),
+        utcCal.get(Calendar.SECOND),
+        (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
+      instantToMicros(localDateTime.atOffset(ZoneOffset.UTC).toInstant)
     } else {
       micros
     }
