@@ -687,35 +687,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
   }
 
-  test("rebase gregorian to julian micros") {
+  test("rebase julian to/from gregorian micros") {
     val timeZone = DateTimeUtils.TimeZoneUTC
     withDefaultTimeZone(timeZone) {
       Seq(
         "0001-01-01 01:02:03.654321",
         "1000-01-01 03:02:01.123456",
-        "1969-12-31 11:22:33.000000",
-        "1970-01-01 00:00:00.000001",
-        "2020-03-14 09:33:01.500000").foreach { ts =>
-        val julianTs = Timestamp.valueOf(ts)
-        val gregorianTs = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
-          .atZone(timeZone.toZoneId)
-          .toInstant)
-        val rebased = rebaseGregorianToJulianMicros(gregorianTs)
-
-        assert(microsToMillis(rebased) === julianTs.getTime)
-        assert(Math.floorMod(rebased, MICROS_PER_SECOND) ===
-          Math.floorDiv(julianTs.getNanos, NANOS_PER_MICROS))
-      }
-    }
-  }
-
-  test("rebase julian to gregorian micros") {
-    val timeZone = DateTimeUtils.TimeZoneUTC
-    withDefaultTimeZone(timeZone) {
-      Seq(
-        "0001-01-01 01:02:03.654321",
-        "1000-01-01 03:02:01.123456",
-        "1969-12-31 11:22:33.000000",
+        "1582-10-04 00:00:00.000000",
+        "1582-10-15 00:00:00.999999",
+        "1969-12-31 11:22:33.000100",
         "1970-01-01 00:00:00.000001",
         "2020-03-14 09:33:01.500000").foreach { ts =>
         val julianTs = Timestamp.valueOf(ts)
@@ -724,24 +704,30 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
           .atZone(timeZone.toZoneId)
           .toInstant)
-        val rebased = rebaseJulianToGregorianMicros(julianMicros)
 
-        assert(rebased === gregorianMicros)
+        assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
+        assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
       }
     }
   }
 
-  test("round trip rebase gregorian to/from julian micros") {
-    Seq(
-      "0001-01-01T01:02:03.654321",
-      "1000-01-01T03:02:01.123456",
-      "1969-12-31T11:22:33.000000",
-      "1970-01-01T00:00:00.000001",
-      "2020-03-14T09:33:01.500000").foreach { ts =>
-      val gregorianTs = instantToMicros(LocalDateTime.parse(ts).atZone(ZoneOffset.UTC).toInstant)
-      val result = rebaseJulianToGregorianMicros(rebaseGregorianToJulianMicros(gregorianTs))
+  test("rebase gregorian to/from julian days") {
+    withDefaultTimeZone(DateTimeUtils.TimeZoneUTC) {
+      Seq(
+        "0001-01-01",
+        "1000-01-01",
+        "1582-10-04",
+        "1582-10-15",
+        "1969-12-31",
+        "1970-01-01",
+        "2020-03-14"
+      ).foreach { date =>
+        val julianDays = Math.toIntExact(Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY))
+        val gregorianDays = localDateToDays(LocalDate.parse(date))
 
-      assert(result === gregorianTs)
+        assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
+        assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+      }
     }
   }
 }

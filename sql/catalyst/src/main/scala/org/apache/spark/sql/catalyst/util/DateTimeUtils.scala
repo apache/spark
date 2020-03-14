@@ -54,6 +54,8 @@ object DateTimeUtils {
       .toInstant)
   final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
   final val JULIAN_CUTOVER_MICROS = rebaseGregorianToJulianMicros(GREGORIAN_CUTOVER_MICROS)
+  final val JULIAN_CUTOVER_DAY =
+    rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
@@ -991,7 +993,7 @@ object DateTimeUtils {
         // `gregory` is a hybrid calendar that supports both
         // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
-        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setTimeZone(TimeZoneUTC)
         .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
         .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
         .build()
@@ -1015,7 +1017,7 @@ object DateTimeUtils {
         // `gregory` is a hybrid calendar that supports both
         // the Julian and Gregorian calendar systems
         .setCalendarType("gregory")
-        .setTimeZone(DateTimeUtils.TimeZoneUTC)
+        .setTimeZone(TimeZoneUTC)
         .setInstant(microsToMillis(micros))
         .build()
       val localDateTime = LocalDateTime.of(
@@ -1029,6 +1031,37 @@ object DateTimeUtils {
       instantToMicros(localDateTime.atOffset(ZoneOffset.UTC).toInstant)
     } else {
       micros
+    }
+  }
+
+  def rebaseJulianToGregorianDays(days: Int): Int = {
+    if (days < JULIAN_CUTOVER_DAY) {
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(TimeZoneUTC)
+        .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
+        .build()
+      val localDate = LocalDate.of(
+        utcCal.get(Calendar.YEAR),
+        utcCal.get(Calendar.MONTH) + 1,
+        utcCal.get(Calendar.DAY_OF_MONTH))
+      Math.toIntExact(localDate.toEpochDay)
+    } else {
+      days
+    }
+  }
+
+  def rebaseGregorianToJulianDays(days: Int): Int = {
+    if (days < GREGORIAN_CUTOVER_DAY) {
+      val localDate = LocalDate.ofEpochDay(days)
+      val utcCal = new Calendar.Builder()
+        .setCalendarType("gregory")
+        .setTimeZone(TimeZoneUTC)
+        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+        .build()
+      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    } else {
+      days
     }
   }
 }
