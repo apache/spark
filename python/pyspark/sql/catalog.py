@@ -139,7 +139,8 @@ class Catalog(object):
         return columns
 
     @since(2.2)
-    def createTable(self, tableName, description=None, path=None, source=None, schema=None, **options):
+    def createTable(
+            self, tableName, description=None, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the table.
