@@ -156,6 +156,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getShort(ordinal))
 
+      case DateType if rebaseDateTime =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val rebasedDays = DateTimeUtils.rebaseGregorianToJulianDays(row.getInt(ordinal))
+          recordConsumer.addInteger(rebasedDays)
+
       case IntegerType | DateType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
