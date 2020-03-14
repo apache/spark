@@ -69,7 +69,7 @@ function pycodestyle_test {
     local PYCODESTYLE_STATUS=
     local PYCODESTYLE_REPORT=
     local RUN_LOCAL_PYCODESTYLE=
-    local VERSION=
+    local PYCODESTYLE_VERSION=
     local EXPECTED_PYCODESTYLE=
     local PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$MINIMUM_PYCODESTYLE.py"
     local PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$MINIMUM_PYCODESTYLE/pycodestyle.py"
@@ -82,11 +82,7 @@ function pycodestyle_test {
     # check for locally installed pycodestyle & version
     RUN_LOCAL_PYCODESTYLE="False"
     if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
-        VERSION=$( $PYCODESTYLE_BUILD --version 2> /dev/null)
-        EXPECTED_PYCODESTYLE=$( ("$PYTHON_EXECUTABLE" -c 'from distutils.version import LooseVersion;
-                                print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_PYCODESTYLE'"""))')\
-                                2> /dev/null)
-
+        PYCODESTYLE_VERSION=$($PYCODESTYLE_BUILD --version)
         if [ "$EXPECTED_PYCODESTYLE" == "True" ]; then
             RUN_LOCAL_PYCODESTYLE="True"
         fi
@@ -130,7 +126,6 @@ function pycodestyle_test {
 
 function flake8_test {
     local FLAKE8_VERSION=
-    local VERSION=
     local EXPECTED_FLAKE8=
     local FLAKE8_REPORT=
     local FLAKE8_STATUS=
@@ -141,11 +136,7 @@ function flake8_test {
         exit 1
     fi
 
-    FLAKE8_VERSION="$($FLAKE8_BUILD --version  2> /dev/null)"
-    VERSION=($FLAKE8_VERSION)
-    EXPECTED_FLAKE8=$( ("$PYTHON_EXECUTABLE" -c 'from distutils.version import LooseVersion;
-                       print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_FLAKE8'"""))') \
-                       2> /dev/null)
+    FLAKE8_VERSION="$($FLAKE8_BUILD --version)"
 
     if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
         echo "\
@@ -187,10 +178,7 @@ function pydocstyle_test {
         return
     fi
 
-    PYDOCSTYLE_VERSION="$($PYDOCSTYLEBUILD --version 2> /dev/null)"
-    EXPECTED_PYDOCSTYLE=$("$PYTHON_EXECUTABLE" -c 'from distutils.version import LooseVersion; \
-                             print(LooseVersion("""'$PYDOCSTYLE_VERSION'""") >= LooseVersion("""'$MINIMUM_PYDOCSTYLE'"""))' \
-                             2> /dev/null)
+    PYDOCSTYLE_VERSION="$($PYDOCSTYLE_BUILD --version)"
 
     if [[ "$EXPECTED_PYDOCSTYLE" == "False" ]]; then
         echo "\
