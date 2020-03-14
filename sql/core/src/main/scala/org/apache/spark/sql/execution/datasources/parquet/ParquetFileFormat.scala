@@ -136,6 +136,10 @@ class ParquetFileFormat
         s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
+    conf.set(
+      SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key,
+      sparkSession.sessionState.conf.parquetRebaseDateTimeEnabled.toString)
+
     new OutputWriterFactory {
       // This OutputWriterFactory instance is deserialized when writing Parquet files on the
       // executor side without constructing or deserializing ParquetFileFormat. Therefore, we hold

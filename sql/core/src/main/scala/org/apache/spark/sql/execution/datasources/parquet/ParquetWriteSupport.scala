@@ -77,6 +77,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val decimalBuffer =
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
+  // Whether to rebase datetimes from Gregorian to Julian calendar in write
+  private var rebaseDateTime: Boolean = _
+
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     this.schema = StructType.fromString(schemaString)
@@ -106,6 +109,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
          |and corresponding Parquet message type:
          |$messageType
        """.stripMargin)
+
+    this.rebaseDateTime = {
+      val key = SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key
+      assert(configuration.get(key) != null)
+      configuration.get(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key).toBoolean
+    }
 
     new WriteContext(messageType, metadata)
   }
@@ -177,9 +186,20 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
               recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
 
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS if rebaseDateTime =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(row.getLong(ordinal))
+              recordConsumer.addLong(rebasedMicros)
+
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
             (row: SpecializedGetters, ordinal: Int) =>
               recordConsumer.addLong(row.getLong(ordinal))
+
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS if rebaseDateTime =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(row.getLong(ordinal))
+              val millis = DateTimeUtils.microsToMillis(rebasedMicros)
+              recordConsumer.addLong(millis)
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
             (row: SpecializedGetters, ordinal: Int) =>
