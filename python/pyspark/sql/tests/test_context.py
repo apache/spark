@@ -75,7 +75,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         df.write.saveAsTable("savedJsonTable", "json", "append", path=tmpPath)
-        actual = self.spark.catalog.createTable("externalJsonTable", path=tmpPath, source="json")
+        actual = self.spark.catalog.createTable("externalJsonTable", tmpPath, "json")
         self.assertEqual(sorted(df.collect()),
                          sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
         self.assertEqual(sorted(df.collect()),
