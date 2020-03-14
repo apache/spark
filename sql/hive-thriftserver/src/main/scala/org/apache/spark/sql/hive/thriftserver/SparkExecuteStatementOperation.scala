@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
 import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
@@ -179,14 +178,7 @@ private[hive] class SparkExecuteStatementOperation(
           }
           curCol += 1
         }
-        // Convert date-time instances to types that are acceptable by Hive libs
-        // used in conversions to strings.
-        val resultRow = row.map {
-          case i: Instant => Timestamp.from(i)
-          case ld: LocalDate => Date.valueOf(ld)
-          case other => other
-        }.toArray.asInstanceOf[Array[Object]]
-        resultRowSet.addRow(resultRow)
+        resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
         resultOffset += 1
       }

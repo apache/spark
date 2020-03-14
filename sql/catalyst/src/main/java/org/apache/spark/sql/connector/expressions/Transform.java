@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Represents a transform function in the public logical expression API.
@@ -27,7 +27,7 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface Transform extends Expression {
   /**
    * Returns the transform function name.

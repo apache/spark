@@ -298,6 +298,7 @@ class KubernetesSuite extends SparkFunSuite
         .headOption.getOrElse(false)
       result
     }
+
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
@@ -316,17 +317,25 @@ class KubernetesSuite extends SparkFunSuite
               logDebug(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
-              // decommissioning.
+              // decommissioning on the first exec pod.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
-                logDebug("Waiting for first pod to become OK prior to deletion")
+                logDebug("Waiting for pod to become OK prior to deletion")
                 Eventually.eventually(patienceTimeout, patienceInterval) {
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
-                // Sleep a small interval to allow execution of job
-                logDebug("Sleeping before killing pod.")
-                Thread.sleep(2000)
+                // Look for the string that indicates we're good to clean up
+                // on the driver
+                logDebug("Waiting for first collect...")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withName(driverPodName)
+                    .getLog
+                    .contains("Waiting to give nodes time to finish."),
+                    "Decommission test did not complete first collect.")
+                }
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
@@ -361,23 +370,6 @@ class KubernetesSuite extends SparkFunSuite
     Eventually.eventually(patienceTimeout, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
-    // If decommissioning we need to wait and check the executors were removed
-    if (decommissioningTest) {
-      // Sleep a small interval to ensure everything is registered.
-      Thread.sleep(100)
-      // Wait for the executors to become ready
-      Eventually.eventually(patienceTimeout, patienceInterval) {
-        val anyReadyPods = ! execPods.map{
-          case (name, resource) =>
-            (name, resource.getMetadata().getNamespace())
-        }.filter{
-          case (name, namespace) => checkPodReady(namespace, name)
-        }.isEmpty
-        val podsEmpty = execPods.values.isEmpty
-        val podsReadyOrDead = anyReadyPods || podsEmpty
-        podsReadyOrDead shouldBe (true)
-      }
-    }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(patienceTimeout, patienceInterval) {
@@ -386,10 +378,12 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .withName(driverPod.getMetadata.getName)
           .getLog
-          .contains(e), "The application did not complete.")
+          .contains(e),
+          s"The application did not complete, did not find str ${e}")
       }
     }
   }
+
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)

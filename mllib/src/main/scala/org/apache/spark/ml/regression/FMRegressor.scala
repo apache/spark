@@ -276,12 +276,16 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
  * FM is able to estimate interactions even in problems with huge sparsity
  * (like advertising and recommendation system).
  * FM formula is:
- * {{{
+ * <blockquote>
+ *   $$
+ *   \begin{align}
  *   y = w_0 + \sum\limits^n_{i-1} w_i x_i +
  *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
- * }}}
+ *   \end{align}
+ *   $$
+ * </blockquote>
  * First two terms denote global bias and linear term (as same as linear regression),
- * and last term denotes pairwise interactions term. {{{v_i}}} describes the i-th variable
+ * and last term denotes pairwise interactions term. v_i describes the i-th variable
  * with k factors.
  *
  * FM regression model uses MSE loss which can be solved by gradient descent method, and
@@ -405,7 +409,7 @@ class FMRegressor @Since("3.0.0") (
   @Since("3.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override protected[spark] def train(
+  override protected def train(
       dataset: Dataset[_]
     ): FMRegressionModel = instrumented { instr =>
 
