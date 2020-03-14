@@ -29,6 +29,17 @@ SPHINX_BUILD="sphinx-build"
 
 PYTHON_EXECUTABLE="python3"
 
+function satisfies_min_version {
+    local provided_version="$1"
+    local expected_version="$2"
+    echo "$(
+        "$PYTHON_EXECUTABLE" << EOM
+from packaging import version
+print(version.parse('$provided_version') >= version.parse('$expected_version'))
+EOM
+    )"
+}
+
 function compile_python_test {
     local COMPILE_STATUS=
     local COMPILE_REPORT=
