@@ -1,5 +1,8 @@
-flake8==3.5.0
+pycodestyle==2.5.0
+pydocstyle==5.0.2
+flake8==3.7.9
 jira==1.0.3
 PyGithub==1.26.0
 Unidecode==0.04.19
 sphinx
+numpy

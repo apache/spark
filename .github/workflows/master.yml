@@ -88,7 +88,7 @@ jobs:
       run: ./dev/lint-java
     - name: Python
       run: |
-        pip install flake8 sphinx numpy
+        pip install ./dev/requirements.txt
         ./dev/lint-python
     - name: License
       run: ./dev/check-license
@@ -147,7 +147,7 @@ jobs:
         sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev pandoc
     - name: Install packages
       run: |
-        pip install sphinx mkdocs numpy
+        pip install sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1
         gem install jekyll jekyll-redirect-from rouge
         sudo Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
     - name: Run jekyll build
