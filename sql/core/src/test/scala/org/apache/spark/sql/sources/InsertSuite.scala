@@ -27,6 +27,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -51,6 +53,15 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
     input.collect
+  }
+
+  override def insert(input: DataFrame, overwrite: Boolean,
+      metrics: Map[String, SQLMetric]): Unit = {
+    input.collect
+    metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).set(1L)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).set(100L)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).set(1L)
+    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).set(0L)
   }
 }
 

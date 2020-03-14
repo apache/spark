@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.sources.InsertableRelation
 
 
@@ -33,13 +35,25 @@ case class InsertIntoDataSourceCommand(
     overwrite: Boolean)
   extends RunnableCommand {
 
+  private lazy val sparkContext = SparkContext.getActive.get
+
+  override lazy val metrics = Map[String, SQLMetric](
+    BasicWriteJobStatsTracker.NUM_FILES_KEY ->
+      SQLMetrics.createMetric(sparkContext, "number of written files"),
+    BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY ->
+      SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+    BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY ->
+      SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    BasicWriteJobStatsTracker.NUM_PARTS_KEY ->
+      SQLMetrics.createMetric(sparkContext, "number of dynamic part"))
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = Dataset.ofRows(sparkSession, query)
     // Data has been casted to the target relation's schema by the PreprocessTableInsertion rule.
-    relation.insert(data, overwrite)
+    relation.insert(data, overwrite, metrics)
 
     // Re-cache all cached plans(including this relation itself, if it's cached) that refer to this
     // data source relation.

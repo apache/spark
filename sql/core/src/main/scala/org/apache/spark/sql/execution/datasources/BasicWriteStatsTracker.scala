@@ -164,10 +164,10 @@ class BasicWriteJobStatsTracker(
 }
 
 object BasicWriteJobStatsTracker {
-  private val NUM_FILES_KEY = "numFiles"
-  private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
-  private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
-  private val NUM_PARTS_KEY = "numParts"
+  val NUM_FILES_KEY = "numFiles"
+  val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
+  val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
+  val NUM_PARTS_KEY = "numParts"
 
   def metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
