@@ -341,6 +341,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options, "")
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 2.2.0
+   */
+  override def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
       options: Map[String, String],
       description: String = ""): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)

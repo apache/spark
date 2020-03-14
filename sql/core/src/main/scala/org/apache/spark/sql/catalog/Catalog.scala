@@ -307,6 +307,39 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame
+
+  /**
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
       options: java.util.Map[String, String],
       description: String): DataFrame = {
     createTable(
