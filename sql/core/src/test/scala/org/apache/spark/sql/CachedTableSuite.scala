@@ -1026,10 +1026,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         withTable(s"$db.cachedTable") {
           // Create table 'cachedTable' in temp db for testing purpose.
           spark.catalog.createTable(
-            s"$db.cachedTable",
-            "PARQUET",
-            StructType(Array(StructField("key", StringType))),
-            Map("LOCATION" -> path.toURI.toString))
+            tableName = s"$db.cachedTable",
+            source = "PARQUET",
+            schema = StructType(Array(StructField("key", StringType))),
+            options = Map("LOCATION" -> path.toURI.toString))
 
           withCache(s"$db.cachedTable") {
             // Cache the table 'cachedTable' in temp db with qualified table name with storage level
@@ -1071,10 +1071,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         withTable("cachedTable") {
           // Create table 'cachedTable' in default db for testing purpose.
           spark.catalog.createTable(
-            "cachedTable",
-            "PARQUET",
-            StructType(Array(StructField("key", StringType))),
-            Map("LOCATION" -> path.toURI.toString))
+            tableName = "cachedTable",
+            source = "PARQUET",
+            schema = StructType(Array(StructField("key", StringType))),
+            options = Map("LOCATION" -> path.toURI.toString))
           withCache("cachedTable") {
             // Cache the table 'cachedTable' in default db without qualified table name with storage
             // level 'MEMORY_AND_DISK2', and then check whether the table is cached with expected
