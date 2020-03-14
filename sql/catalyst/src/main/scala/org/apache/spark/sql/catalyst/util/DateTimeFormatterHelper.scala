@@ -107,7 +107,7 @@ private object DateTimeFormatterHelper {
       .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
-      .withResolverStyle(ResolverStyle.SMART)
+      .withResolverStyle(ResolverStyle.STRICT)
   }
 
   /**
