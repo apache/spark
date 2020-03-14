@@ -27,7 +27,7 @@ license: |
 
 ## Upgrading from Spark SQL 2.4 to 3.0
 
-### DML
+### DDL Statements
 
   - Since Spark 3.0, `CREATE TABLE` without a specific provider will use the value of `spark.sql.sources.default` as its provider. In Spark version 2.4 and earlier, it was hive. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.createHiveTableByDefault.enabled` to `true`.
 
