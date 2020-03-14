@@ -139,7 +139,7 @@ class Catalog(object):
         return columns
 
     @since(2.2)
-    def createTable(self, tableName, path=None, source=None, schema=None, **options):
+    def createTable(self, tableName, description=None, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the table.
@@ -156,6 +156,8 @@ class Catalog(object):
         """
         if path is not None:
             options["path"] = path
+        if description is None:
+            description = ""
         if source is None:
             source = self._sparkSession._wrapped._conf.defaultDataSourceName()
         if schema is None:
@@ -164,7 +166,8 @@ class Catalog(object):
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createTable(tableName, source, scala_datatype, options)
+            df = self._jcatalog.createTable(
+                tableName, description, source, scala_datatype, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
