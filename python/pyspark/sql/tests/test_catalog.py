@@ -58,7 +58,8 @@ class CatalogTests(ReusedSQLTestCase):
 
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
-                    spark.catalog.createTable("tab3_via_catalog", schema=schema, description=description)
+                    spark.catalog.createTable(
+                        "tab3_via_catalog", schema=schema, description=description)
 
                     tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
                     tablesDefault = \
