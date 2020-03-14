@@ -977,12 +977,12 @@ object DateTimeUtils {
   }
 
   /**
-   * Converts the given micros to a local date-time in UTC time zone in Proleptic Gregorian
+   * Converts the given microseconds to a local date-time in UTC time zone in Proleptic Gregorian
    * calendar, interprets the result as a local date-time in Julian calendar in UTC time zone.
-   * And takes micros since the epoch from the Julian timestamp.
+   * And takes microseconds since the epoch from the Julian timestamp.
    *
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
-   * @return rebased micros since the epoch in Julian calendar.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
+   * @return Rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     if (micros < GREGORIAN_CUTOVER_MICROS) {
@@ -999,6 +999,14 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Converts the given microseconds to a local date-time in UTC time zone in Julian calendar,
+   * interprets the result as a local date-time in Proleptic Gregorian calendar in UTC time zone.
+   * And takes microseconds since the epoch from the Gregorian timestamp.
+   *
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
+   * @return Rebased microseconds since the epoch in Proleptic Gregorian calendar.
+   */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     if (micros < JULIAN_CUTOVER_DAY) {
       val utcCal = new Calendar.Builder()
