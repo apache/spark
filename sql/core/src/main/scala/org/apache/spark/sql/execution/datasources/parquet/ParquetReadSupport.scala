@@ -54,6 +54,7 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
     enableVectorizedReader: Boolean)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
+  private var rebaseDateTime: Boolean = _
 
   def this() {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
@@ -109,6 +110,10 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
          |Catalyst requested schema:
          |${catalystRequestedSchema.treeString}
        """.stripMargin)
+
+    rebaseDateTime = conf.getBoolean(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key,
+      SQLConf.LEGACY_PARQUET_REBASE_DATETIME.defaultValue.get)
+
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
 
@@ -127,7 +132,8 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
-      convertTz)
+      convertTz,
+      rebaseDateTime)
   }
 }
 
