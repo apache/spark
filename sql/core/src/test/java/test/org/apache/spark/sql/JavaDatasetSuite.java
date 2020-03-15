@@ -825,11 +825,13 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   public static class NestedSmallBeanWithNonNullField implements Serializable {
+    @Nonnull
     private SmallBean nonNull_f;
+
     private SmallBean nullable_f;
+
     private Map<String, SmallBean> childMap;
 
-    @Nonnull
     public SmallBean getNonNull_f() {
       return nonNull_f;
     }

@@ -150,7 +150,9 @@ object JavaTypeInference {
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
           // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
-          val hasNonNull = property.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+          val hasNonNull = other.getDeclaredField(property.getName)
+            .isAnnotationPresent(classOf[Nonnull]) ||
+            property.getReadMethod.isAnnotationPresent(classOf[Nonnull])
           new StructField(property.getName, dataType, nullable && !hasNonNull)
         }
         (new StructType(fields), true)
@@ -344,7 +346,9 @@ object JavaTypeInference {
           val (dataType, nullable) = inferDataType(fieldType)
           val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
           // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
-          val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+          val hasNonNull = other.getDeclaredField(fieldName)
+            .isAnnotationPresent(classOf[Nonnull]) ||
+            p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
           val setter = expressionWithNullSafety(
             deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
               newTypePath),
@@ -447,7 +451,9 @@ object JavaTypeInference {
           val fields = properties.map { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
-            val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+            val hasNonNull = other.getDeclaredField(fieldName)
+              .isAnnotationPresent(classOf[Nonnull]) ||
+              p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
             val fieldValue = Invoke(
               inputObject,
               p.getReadMethod.getName,
