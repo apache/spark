@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
-import java.util.{Locale, TimeZone}
+import java.util.{GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -712,20 +712,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("rebase gregorian to/from julian days") {
-    withDefaultTimeZone(DateTimeUtils.TimeZoneUTC) {
-      Seq(
-        "0001-01-01",
-        "1000-01-01",
-        "1582-10-04",
-        "1582-10-15",
-        "1969-12-31",
-        "1970-01-01",
-        "2020-03-14").foreach { date =>
-        val julianDays = Math.toIntExact(Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY))
-        val gregorianDays = localDateToDays(LocalDate.parse(date))
+    outstandingTimezones.foreach { timeZone =>
+      withDefaultTimeZone(timeZone) {
+        Seq(
+          "0001-01-01",
+          "1000-01-01",
+          "1582-10-04",
+          "1582-10-16",
+          "1969-12-31",
+          "1970-01-01",
+          "2020-03-14"
+        ).foreach { date =>
+          withClue(s"time zone = ${timeZone.getID} date = $date") {
+            val julianDays = Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY).toInt
+            val gregCal = new GregorianCalendar()
+            gregCal.setGregorianChange(new Date(Long.MinValue))
+            val ldt = LocalDate.parse(date)
+            gregCal.set(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth, 0, 0, 0)
+            val gregorianDays = Math.floorDiv(gregCal.getTimeInMillis, MILLIS_PER_DAY).toInt
 
-        assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
-        assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+            assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
+            assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+          }
+        }
       }
     }
   }
