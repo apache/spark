@@ -222,14 +222,17 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
         case Row(label: Double, features: Vector) =>
           LabeledPoint(label, features)
       }
-
     val testResult = getSelectionTestResult(dataset)
       .zipWithIndex
     val features = $(selectorType) match {
       case "numTopFeatures" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take(getNumTopFeatures)
+        if (testResult.length <= getNumTopFeatures) {
+          testResult
+        } else {
+          testResult
+            .sortBy { case (res, _) => res.pValue }
+            .take(getNumTopFeatures)
+        }
       case "percentile" =>
         testResult
           .sortBy { case (res, _) => res.pValue }
@@ -352,11 +355,9 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
     val newIndices = new ArrayBuilder.ofInt
     var i = 0
     var j = 0
-    var indicesIdx = 0
-    var filterIndicesIdx = 0
     while (i < indices.length && j < selectedFeatures.length) {
-      indicesIdx = indices(i)
-      filterIndicesIdx = selectedFeatures(j)
+      val indicesIdx = indices(i)
+      val filterIndicesIdx = selectedFeatures(j)
       if (indicesIdx == filterIndicesIdx) {
         newIndices += j
         newValues += values(i)
