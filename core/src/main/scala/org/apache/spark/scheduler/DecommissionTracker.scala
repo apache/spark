@@ -56,8 +56,8 @@ private[scheduler] class DecommissionTracker (
   // last node (identified by nodeId) is running again.
   private val decommissionHostNameMap = new HashMap[String, NodeDecommissionInfo]
 
-  private val minDecommissionTime =
-    conf.get(config.GRACEFUL_DECOMMISSION_MIN_TERMINATION_TIME_IN_SEC)
+  private val minDecommissionTimeMs =
+    conf.get(config.GRACEFUL_DECOMMISSION_MIN_TERMINATION_TIME_IN_SEC)*1000
 
   private val executorDecommissionLeasePct =
     conf.get(config.GRACEFUL_DECOMMISSION_EXECUTOR_LEASETIME_PCT)
@@ -88,7 +88,7 @@ private[scheduler] class DecommissionTracker (
   }
 
   /**
-   * visible only for Unit Test
+   * Used for Unit Test
    */
   def getDecommissionedNodeState(hostname: String): Option[NodeDecommissionState.Value] =
     synchronized {
@@ -108,7 +108,7 @@ private[scheduler] class DecommissionTracker (
       currentTimeMs: Long): (Long, Long) = {
     val executorDecommissionTimeMs =
       if (executorDecommissionLeasePct > shuffleDataDecommissionLeasePct) {
-        // if executorDecommissionLeasePct  is greater than
+        // if executorDecommissionLeasePct is greater than
         // shuffleDataDecommissionLeasePct. In that scenario calculate
         // executorDecommissionTimeMs using shuffleDataDecommissionLeasePct
         (delayTime * shuffleDataDecommissionLeasePct) / 100 + currentTimeMs
@@ -116,9 +116,9 @@ private[scheduler] class DecommissionTracker (
         (delayTime * executorDecommissionLeasePct) / 100 + currentTimeMs
       }
     val shuffleDataDecommissionTimeMs =
-      if (executorDecommissionLeasePct <= shuffleDataDecommissionLeasePct) {
+      if (executorDecommissionLeasePct >= shuffleDataDecommissionLeasePct) {
       // Add a  delay of one second in shuffleDataDecommissionTimeMs if
-      // executorDecommissionLeasePct equals shuffleDataDecommissionLeasePct
+      // executorDecommissionLeasePct greater than equals to shuffleDataDecommissionLeasePct
       // Since we want executor to be decommissioned first
       // than after that shuffleDataDecommission
       (delayTime * shuffleDataDecommissionLeasePct) / 100 + currentTimeMs + 1000
@@ -171,9 +171,9 @@ private[scheduler] class DecommissionTracker (
     var shuffleDataDecommissionTimeMs = terminationTimeMs
 
     // if delay is less than a minDecommissionTime than decommission immediately
-    if (delay < minDecommissionTime * 1000) {
+    if (delay < minDecommissionTimeMs) {
       executorDecommissionTimeMs = curTimeMs
-      // Added the delay of 1 second in case of delay is less than a minute
+      // Added the delay of 1 second in case of delay is less than minDecommissionTime
       // Since we want executor to be decommissioned first
       // than after that shuffleDataDecommission
       shuffleDataDecommissionTimeMs = curTimeMs + 1000
@@ -189,13 +189,6 @@ private[scheduler] class DecommissionTracker (
           shuffleDataDecommissionTimeMs = shuffleDataDecommissionTime
         case _ =>
         // No action
-      }
-
-      if (executorDecommissionTimeMs > shuffleDataDecommissionTimeMs) {
-        executorDecommissionTimeMs = shuffleDataDecommissionTimeMs
-        logInfo(s"""Executor decommission time $executorDecommissionTimeMs needs to be less""" +
-          s""" than shuffle data decommission time $shuffleDataDecommissionTimeMs. Setting it """ +
-          s""" to shuffle data decommission time.""")
       }
     }
 
