@@ -58,7 +58,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
     val clock = new ManualClock(0)
     clock.setTime(0)
     decommissionTracker = new DecommissionTracker(conf,
-      Some(executorAllocationClient), Some(dagScheduler), clock = clock)
+      Some(executorAllocationClient), dagScheduler, clock = clock)
 
     when(executorAllocationClient.killExecutorsOnHost(anyString())).thenAnswer(new Answer[Boolean] {
       override def answer(invocation: InvocationOnMock): Boolean = {
@@ -83,7 +83,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
   test("Check Node Decommission state") {
     val clock = new ManualClock(0)
     decommissionTracker = new DecommissionTracker(conf,
-      Some(executorAllocationClient), Some(dagScheduler), clock = clock)
+      Some(executorAllocationClient), dagScheduler, clock = clock)
 
     when(executorAllocationClient.killExecutorsOnHost(anyString())).thenAnswer(new Answer[Boolean] {
       override def answer(invocation: InvocationOnMock): Boolean = {
@@ -235,7 +235,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
       .set(config.GRACEFUL_DECOMMISSION_SHUFFLEDATA_LEASETIME_PCT.key, "50")
 
     decommissionTracker = new DecommissionTracker(conf,
-      Some(executorAllocationClient), Some(dagScheduler), clock = clock)
+      Some(executorAllocationClient), dagScheduler, clock = clock)
 
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
     assert(decommissionTracker.isNodeDecommissioning("hostA"))

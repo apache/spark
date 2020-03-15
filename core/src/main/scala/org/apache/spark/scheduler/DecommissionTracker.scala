@@ -36,14 +36,14 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * decommission for that node.
  */
 private[scheduler] class DecommissionTracker (
-  conf: SparkConf,
-  executorAllocClient: Option[ExecutorAllocationClient],
-  dagScheduler: Option[DAGScheduler],
-  clock: Clock = new SystemClock()) extends Logging {
+    conf: SparkConf,
+    executorAllocClient: Option[ExecutorAllocationClient],
+    dagScheduler: DAGScheduler,
+    clock: Clock = new SystemClock()) extends Logging {
 
   def this(sc: SparkContext,
-           client: Option[ExecutorAllocationClient],
-           dagScheduler: Option[DAGScheduler]) = {
+      client: Option[ExecutorAllocationClient],
+      dagScheduler: DAGScheduler) = {
     this(sc.conf, client, dagScheduler)
   }
 
@@ -51,10 +51,10 @@ private[scheduler] class DecommissionTracker (
   private val decommissionThread =
     ThreadUtils.newDaemonThreadPoolScheduledExecutor("node-decommissioning-thread", 20)
 
-  // Contains workers hostname which are decommissioning. Added when spot-loss or
-  // graceful decommissioning event arrives from the AM. And is removed when the
+  // Contains workers hostname which are decommissioning. Added when
+  // decommissioning event arrives from the AM. And is removed when the
   // last node (identified by nodeId) is running again.
-  private val decommissionHostnameMap = new HashMap[String, NodeDecommissionInfo]
+  private val decommissionHostNameMap = new HashMap[String, NodeDecommissionInfo]
 
   private val minDecommissionTime =
     conf.get(config.GRACEFUL_DECOMMISSION_MIN_TERMINATION_TIME_IN_SEC)
@@ -70,7 +70,7 @@ private[scheduler] class DecommissionTracker (
    * view the node is considered decommissioned.
    */
   def isNodeDecommissioned(hostname: String): Boolean = synchronized {
-    decommissionHostnameMap.get(hostname) match {
+    decommissionHostNameMap.get(hostname) match {
       case None => false
       case Some(info) =>
         return info.state == NodeDecommissionState.SHUFFLEDATA_DECOMMISSIONED ||
@@ -84,22 +84,54 @@ private[scheduler] class DecommissionTracker (
    * Not necessarily decommissioned or terminated
    */
   def isNodeDecommissioning(hostname: String): Boolean = synchronized {
-    decommissionHostnameMap.contains(hostname)
+    decommissionHostNameMap.contains(hostname)
   }
 
   /**
    * visible only for Unit Test
    */
-  def getDecommissionedNodeState(hostname:
-                                 String): Option[NodeDecommissionState.Value] = synchronized {
-    decommissionHostnameMap.get(hostname) match {
+  def getDecommissionedNodeState(hostname: String): Option[NodeDecommissionState.Value] =
+    synchronized {
+    decommissionHostNameMap.get(hostname) match {
       case Some(info) => Some(info.state)
       case _ => None
     }
   }
 
-  def addNodeToDecommission(hostname: String, terminationTimeMs: Long,
-                            reason: NodeDecommissionReason): Unit = synchronized {
+  /**
+   * @param delayTime - time after which the node will be terminated
+   * @param currentTimeMs - Current time in milliseconds
+   * @return executorDecommissionTimeMs and shuffleDataDecommissionTimeMs
+   */
+  private def getDecommissionTimeOut(
+      delayTime: Long,
+      currentTimeMs: Long): (Long, Long) = {
+    val executorDecommissionTimeMs =
+      if (executorDecommissionLeasePct > shuffleDataDecommissionLeasePct) {
+        // if executorDecommissionLeasePct  is greater than
+        // shuffleDataDecommissionLeasePct. In that scenario calculate
+        // executorDecommissionTimeMs using shuffleDataDecommissionLeasePct
+        (delayTime * shuffleDataDecommissionLeasePct) / 100 + currentTimeMs
+      } else {
+        (delayTime * executorDecommissionLeasePct) / 100 + currentTimeMs
+      }
+    val shuffleDataDecommissionTimeMs =
+      if (executorDecommissionLeasePct <= shuffleDataDecommissionLeasePct) {
+      // Add a  delay of one second in shuffleDataDecommissionTimeMs if
+      // executorDecommissionLeasePct equals shuffleDataDecommissionLeasePct
+      // Since we want executor to be decommissioned first
+      // than after that shuffleDataDecommission
+      (delayTime * shuffleDataDecommissionLeasePct) / 100 + currentTimeMs + 1000
+      } else {
+        (delayTime * shuffleDataDecommissionLeasePct) / 100 + currentTimeMs
+      }
+    (executorDecommissionTimeMs, shuffleDataDecommissionTimeMs)
+  }
+
+  def addNodeToDecommission(
+      hostname: String,
+      terminationTimeMs: Long,
+      reason: NodeDecommissionReason): Unit = synchronized {
 
     val df: SimpleDateFormat = new SimpleDateFormat("YY/MM/dd HH:mm:ss")
     val tDateTime = df.format(terminationTimeMs)
@@ -114,14 +146,14 @@ private[scheduler] class DecommissionTracker (
       return
     }
 
-    // Override decommissionHostnameMap in case termination time is less than
-    // existing the terminationTime in decommissionHostnameMap.
-    if (decommissionHostnameMap.contains(hostname)) {
-      val nodeDecommissionInfo = decommissionHostnameMap(hostname)
-      // There will be no duplicate entry of terminationTimeMs in decommissionHostnameMap
+    // Override decommissionHostNameMap in case termination time is less than
+    // existing the terminationTime in decommissionHostNameMap.
+    if (decommissionHostNameMap.contains(hostname)) {
+      val nodeDecommissionInfo = decommissionHostNameMap(hostname)
+      // There will be no duplicate entry of terminationTimeMs in decommissionHostNameMap
       // since the terminationTime is updated only when it is less than the existing termination
-      // time in decommissionHostnameMap
-      if (decommissionHostnameMap(hostname).terminationTime <= terminationTimeMs) {
+      // time in decommissionHostNameMap
+      if (decommissionHostNameMap(hostname).terminationTime <= terminationTimeMs) {
         logDebug(
           s"""Ignoring decommissioning """ +
             s""" request : {"node":"$hostname","reason":"${reason.message}",terminationTime"""" +
@@ -139,7 +171,7 @@ private[scheduler] class DecommissionTracker (
     var shuffleDataDecommissionTimeMs = terminationTimeMs
 
     // if delay is less than a minDecommissionTime than decommission immediately
-    if (terminationTimeMs - curTimeMs < minDecommissionTime * 1000) {
+    if (delay < minDecommissionTime * 1000) {
       executorDecommissionTimeMs = curTimeMs
       // Added the delay of 1 second in case of delay is less than a minute
       // Since we want executor to be decommissioned first
@@ -148,12 +180,13 @@ private[scheduler] class DecommissionTracker (
     } else {
       reason match {
         case NodeLoss =>
-          // In Nodeloss(Spotloss in aws/ preemptible VMs i  GCP) case adjust termination time so
-          // that enough buffer to real termination is available for job to finish
+          // In Nodeloss case adjust termination time so that enough
+          // buffer to real termination is available for job to finish
           // consuming shuffle data.
-          executorDecommissionTimeMs = (delay * executorDecommissionLeasePct) / 100 + curTimeMs
-          shuffleDataDecommissionTimeMs =
-            (delay * shuffleDataDecommissionLeasePct) / 100 + curTimeMs
+          var (executorDecommissionTime, shuffleDataDecommissionTime) = getDecommissionTimeOut(
+            delay, curTimeMs)
+          executorDecommissionTimeMs = executorDecommissionTime
+          shuffleDataDecommissionTimeMs = shuffleDataDecommissionTime
         case _ =>
         // No action
       }
@@ -180,7 +213,7 @@ private[scheduler] class DecommissionTracker (
       s""" request : {"node":"$hostname",$nodeDecommissionInfo} """)
 
     // Add node to the list of decommissioning nodes.
-    decommissionHostnameMap.put(hostname, nodeDecommissionInfo)
+    decommissionHostNameMap.put(hostname, nodeDecommissionInfo)
 
     // Schedule executor decommission
     decommissionThread.schedule(new Runnable {
@@ -198,14 +231,14 @@ private[scheduler] class DecommissionTracker (
   }
 
   def removeNodeToDecommission(hostname: String): Unit = synchronized {
-    if (!decommissionHostnameMap.contains(hostname)) {
+    if (!decommissionHostNameMap.contains(hostname)) {
       return
     }
 
-    val nodeDecommissionInfo = decommissionHostnameMap(hostname)
+    val nodeDecommissionInfo = decommissionHostNameMap(hostname)
     logInfo(s"""Removing decommissioning""" +
       s""" request : {"node":"$hostname",$nodeDecommissionInfo}""")
-    decommissionHostnameMap -= hostname
+    decommissionHostNameMap -= hostname
   }
 
   def updateNodeToDecommissionSetTerminate(hostname: String): Unit = synchronized {
@@ -213,22 +246,22 @@ private[scheduler] class DecommissionTracker (
   }
 
   private def executorDecommission(hostname: String,
-                                   nodeDecommissionInfo: NodeDecommissionInfo): Unit = {
+      nodeDecommissionInfo: NodeDecommissionInfo): Unit = {
     // Not found, only valid scenario is the nodes
     // has moved back to running state
     // Scenario where nodeLoss terminated the node
     // for the Graceful Decommission node.
     // If the node is already terminated and hostname is re-used in that scenario
     // no need to kill the executor on that host
-    if (! decommissionHostnameMap.contains(hostname)) {
+    if (! decommissionHostNameMap.contains(hostname)) {
       logInfo(s"""Node $hostname not found in decommisssionTrackerList while""" +
         """performing executor decommission""")
       return
     }
     // if the terminationTime in the thread is not equal to
-    // terminationTime in decommissionHostnameMap for that
+    // terminationTime in decommissionHostNameMap for that
     // host than Ignore the ExecutorDecommission
-    if (decommissionHostnameMap(hostname).terminationTime
+    if (decommissionHostNameMap(hostname).terminationTime
       != nodeDecommissionInfo.terminationTime) {
       logInfo(s"Ignoring ExecutorDecommission for hostname ${hostname}," +
         s" since node is already terminated")
@@ -240,31 +273,28 @@ private[scheduler] class DecommissionTracker (
     // deadlock between schedulerBacked (ExecutorAllocationManager)
     // and this.
     executorAllocClient.map(_.killExecutorsOnHost(hostname))
-
-    decommissionHostnameMap(hostname).state = NodeDecommissionState.EXECUTOR_DECOMMISSIONED
-
+    decommissionHostNameMap(hostname).state = NodeDecommissionState.EXECUTOR_DECOMMISSIONED
     logInfo(s"Node $hostname decommissioned")
-
     return
   }
 
   private def removeShuffleData(hostname: String,
-                                nodeDecommissionInfo: NodeDecommissionInfo): Unit = {
+      nodeDecommissionInfo: NodeDecommissionInfo): Unit = {
     // Not found, only valid scenario is the nodes
     // has moved back to running state
     // This for scenario where about_to_be_lost terminated the node
     // for the Graceful Decommission node.
     // If the node is already terminated and hostname is reused in that scenario
     // no need to remove the shuffle entry from map-output tracker
-    if (! decommissionHostnameMap.contains(hostname)) {
+    if (! decommissionHostNameMap.contains(hostname)) {
       logInfo(s"""Node $hostname not found in decommisssionTrackerList while """ +
         """performing shuffle data decommission""")
       return
     }
     // if the terminationTime in the thread is not equal to
-    // terminationTime in decommissionHostnameMap for that
+    // terminationTime in decommissionHostNameMap for that
     // host than Ignore the removeShuffleData
-    if (decommissionHostnameMap(hostname).terminationTime
+    if (decommissionHostNameMap(hostname).terminationTime
       != nodeDecommissionInfo.terminationTime) {
       logInfo(s"Ignoring removeShuffleData for hostname ${hostname}," +
         s" since node is already terminated")
@@ -272,9 +302,9 @@ private[scheduler] class DecommissionTracker (
     }
 
     // Unregister shuffle data.
-    dagScheduler.map(_.nodeDecommissioned(hostname))
+    dagScheduler.nodeDecommissioned(hostname)
 
-    decommissionHostnameMap(hostname).state = NodeDecommissionState.SHUFFLEDATA_DECOMMISSIONED
+    decommissionHostNameMap(hostname).state = NodeDecommissionState.SHUFFLEDATA_DECOMMISSIONED
 
     logInfo(s"Node $hostname Shuffle data decommissioned")
 
@@ -284,15 +314,15 @@ private[scheduler] class DecommissionTracker (
   private def terminate(hostname: String): Unit = {
     // Not found, only valid scenario is the nodes
     // has moved back to running state
-    if (!decommissionHostnameMap.contains(hostname)) {
+    if (!decommissionHostNameMap.contains(hostname)) {
       logWarning(s"Node $hostname not found in decommisssionTrackerList")
       return
     }
 
     // Remove all the shuffle data of all the executors for the terminated node
-    dagScheduler.map(_.nodeDecommissioned(hostname))
+    dagScheduler.nodeDecommissioned(hostname)
 
-    decommissionHostnameMap(hostname).state = NodeDecommissionState.TERMINATED
+    decommissionHostNameMap(hostname).state = NodeDecommissionState.TERMINATED
 
     logInfo(s"Node $hostname terminated")
   }
@@ -367,11 +397,11 @@ private[spark] object DecommissionTracker extends Logging {
 }
 
 private class NodeDecommissionInfo(
-  var terminationTime: Long,
-  var executorDecommissionTime: Long,
-  var shuffleDataDecommissionTime: Long,
-  var state: NodeDecommissionState.Value,
-  var reason: NodeDecommissionReason) {
+    var terminationTime: Long,
+    var executorDecommissionTime: Long,
+    var shuffleDataDecommissionTime: Long,
+    var state: NodeDecommissionState.Value,
+    var reason: NodeDecommissionReason) {
   override def toString(): String = {
     val df: SimpleDateFormat = new SimpleDateFormat("YY/MM/dd HH:mm:ss")
     val tDateTime = df.format(terminationTime)

@@ -68,7 +68,7 @@ sealed trait TaskFailedReason extends TaskEndReason {
    * was unrelated to the task; for example, if the task failed because fetch failed exception
    * from the decommissioned node.
    */
-  var countTowardsStageFailures: Boolean = true
+  var countTowardsDecommissionStageFailures: Boolean = true
 }
 
 /**

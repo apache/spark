@@ -1633,18 +1633,19 @@ private[spark] class DAGScheduler(
         } else {
           // Gracefully handling the stage abort due to fetch failure in the
           // decommission nodes
-          if (!event.reason.asInstanceOf[FetchFailed].countTowardsStageFailures) {
+          if (!event.reason.asInstanceOf[FetchFailed].countTowardsDecommissionStageFailures) {
             // Ignore stage attempts due to fetch failed only
             // once per attempt
             if (!failedStage.failedAttemptIds.contains(task.stageAttemptId)) {
               failedStage.ignoredFailedStageAttempts += 1
               DecommissionTracker.incrFetchFailIgnoreCnt()
               failedStage.latestInfo.stageFailureIgnored(true)
+
+              logInfo(s"""Ignoring stage failure due to fetch failed from the decommissioned""" +
+                s""" node : {"stage":"$failedStage","attempt":"${task.stageAttemptId}",""" +
+                s""""totalIgnoredAttempts":"${failedStage.ignoredFailedStageAttempts}",""" +
+                s""""node":"$bmAddress"}""")
             }
-            logInfo(s"""Ignoring stage failure due to fetch failed from the decommissioned""" +
-              s""" node : {"stage":"$failedStage","attempt":"${task.stageAttemptId}",""" +
-              s""""totalIgnoredAttempts":"${failedStage.ignoredFailedStageAttempts}",""" +
-              s""""node":"$bmAddress"}""")
           }
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage = failedStage.failedAttemptIds.size >=

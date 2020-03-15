@@ -826,7 +826,7 @@ private[spark] class TaskSetManager(
               if (decommissionTracker.isNodeDecommissioned(fetchFailed.bmAddress.host)) {
                 logInfo(s"Do not count fetch failure from decommissioned" +
                   s" node ${fetchFailed.bmAddress.host}")
-                fetchFailed.countTowardsStageFailures = false
+                fetchFailed.countTowardsDecommissionStageFailures = false
               }
             case _ =>
             // No action

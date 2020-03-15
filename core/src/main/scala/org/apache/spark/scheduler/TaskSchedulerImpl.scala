@@ -1168,11 +1168,8 @@ private[spark] object TaskSchedulerImpl {
         case _ => None
       }
 
-      val dagScheduler: Option[DAGScheduler] = sc.dagScheduler match {
-        case b: DAGScheduler => Some(b)
-        case _ => None
-      }
-      if (executorAllocClient.isDefined && dagScheduler.isDefined) {
+      val dagScheduler = sc.dagScheduler
+      if (executorAllocClient.isDefined && dagScheduler != null) {
         Some(new DecommissionTracker(sc, executorAllocClient, dagScheduler))
       } else {
         None
