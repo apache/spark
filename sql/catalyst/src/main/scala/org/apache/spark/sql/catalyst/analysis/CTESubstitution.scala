@@ -118,7 +118,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * - If a CTE definition contains a subquery that contains an inner WITH node then substitution
    *   of inner should take precedence because it can shadow an outer CTE definition.
    *   For example the following query should return 2:
-   *   WITH t AS (SELECT 1 AS c)basicPhysicalOperators
+   *   WITH t AS (SELECT 1 AS c)
    *   SELECT max(c) FROM (
    *     WITH t AS (SELECT 2 AS c)
    *     SELECT * FROM t
