@@ -119,7 +119,7 @@ object ANOVATest {
       }
     ).map {
       case (col, (sum, sumOfSq, mapOfSumPerClass, mapOfCountPerClass)) =>
-        // e.g. feature is [3.3, 2.5, 1.0, 3.0, 2.0] and labels are [1, 2, 1, 3, 3]
+        // e.g. features are [3.3, 2.5, 1.0, 3.0, 2.0] and labels are [1, 2, 1, 3, 3]
         // sum: sum of all the features (3.3+2.5+1.0+3.0+2.0)
         // sumOfSq: sum of squares of all the features (3.3^2+2.5^2+1.0^2+3.0^2+2.0^2)
         // mapOfSumPerClass key: label, value: sum of features for each label
@@ -134,10 +134,10 @@ object ANOVATest {
         //     sum( sq_sum_classes[k] / n_samples_per_class[k] for k in range(n_classes))
         //     e.g. ((3.3+1.0)^2 / 2 + 2.5^2 / 1 + (3.0+2.0)^2 / 2)
         var sumOfSqSumPerClass = 0.0
-        val (keys1, values1) = mapOfSumPerClass.iterator.toSeq.sortBy(_._1).unzip
+        val (keys1, values1) = mapOfSumPerClass.toSeq.sortBy(_._1).unzip
         val keysArray1 = keys1.toArray
         val valuesArray1 = values1.toArray
-        val (keys2, values2) = mapOfCountPerClass.iterator.toSeq.sortBy(_._1).unzip
+        val (keys2, values2) = mapOfCountPerClass.toSeq.sortBy(_._1).unzip
         val keysArray2 = keys2.toArray
         val valuesArray2 = values2.toArray
         for (i <- 0 until mapOfSumPerClass.size) {
@@ -147,7 +147,6 @@ object ANOVATest {
         val ssbn = sumOfSqSumPerClass - (sqSum / numSamples)
         // Sums of Squares Within
         val sswn = ssTot - ssbn
-
         // degrees of freedom between
         val dfbn = numClasses - 1
         // degrees of freedom within

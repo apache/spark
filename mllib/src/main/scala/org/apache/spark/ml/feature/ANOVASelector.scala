@@ -250,11 +250,9 @@ class ANOVASelectorModel private[ml](
     val newIndices = new ArrayBuilder.ofInt
     var i = 0
     var j = 0
-    var indicesIdx = 0
-    var filterIndicesIdx = 0
     while (i < indices.length && j < selectedFeatures.length) {
-      indicesIdx = indices(i)
-      filterIndicesIdx = selectedFeatures(j)
+      val indicesIdx = indices(i)
+      val filterIndicesIdx = selectedFeatures(j)
       if (indicesIdx == filterIndicesIdx) {
         newIndices += j
         newValues += values(i)
