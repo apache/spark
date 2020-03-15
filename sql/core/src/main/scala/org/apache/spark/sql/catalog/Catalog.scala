@@ -246,7 +246,7 @@ abstract class Catalog {
     createTable(tableName, source, options.asScala.toMap)
   }
 
-/**
+  /**
    * (Scala-specific)
    * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
