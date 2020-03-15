@@ -981,22 +981,28 @@ object DateTimeUtils {
   private val julianCutover = new Date(Long.MaxValue)
   private val gregorianCutover = new Date(Long.MinValue)
 
-  private def rebaseMicros(micros: Long, from: Date, to: Date): Long = {
+  private def rebaseMillis(millis: Long, from: Date, to: Date): Long = {
     // It is a hybrid calendar that supports both the Julian and Gregorian calendars.
     // It behaves as Julian calendar before `JULIAN_CUTOVER_DAY`.
     val cal = new GregorianCalendar()
     // If `from` is `julianCutover`, obtain a pure Julian calendar
     // otherwise if it is `gregorianCutover`, obtain a pure Gregorian calendar.
     cal.setGregorianChange(from)
-    cal.setTimeInMillis(microsToMillis(micros))
+    cal.setTimeInMillis(millis)
     // Force fields compute from the duration
-    val millis = cal.get(Calendar.MILLISECOND)
+    val millisField = cal.get(Calendar.MILLISECOND)
     // If `to` is `julianCutover`, obtain a pure Julian calendar
     // otherwise if it is `gregorianCutover`, obtain a pure Gregorian calendar.
     cal.setGregorianChange(to)
-    // Force computation of new duration from date fields
-    cal.set(Calendar.MILLISECOND, millis)
-    millisToMicros(cal.getTimeInMillis) + Math.floorMod(micros, MICROS_PER_MILLIS)
+    // Force computation of new duration from date/time fields
+    cal.set(Calendar.MILLISECOND, millisField)
+
+    cal.getTimeInMillis
+  }
+
+  private def rebaseMicros(micros: Long, from: Date, to: Date): Long = {
+    val rebasedMillis = rebaseMillis(microsToMillis(micros), from, to)
+    millisToMicros(rebasedMillis) + Math.floorMod(micros, MICROS_PER_MILLIS)
   }
 
   /**
@@ -1032,21 +1038,8 @@ object DateTimeUtils {
   }
 
   private def rebaseDays(days: Int, from: Date, to: Date): Int = {
-    // It is a hybrid calendar that supports both the Julian and Gregorian calendars.
-    // It behaves as Julian calendar before `JULIAN_CUTOVER_DAY`.
-    val cal = new GregorianCalendar()
-    // If `from` is `julianCutover`, obtain a pure Julian calendar
-    // otherwise if it is `gregorianCutover`, obtain a pure Gregorian calendar.
-    cal.setGregorianChange(from)
-    cal.setTimeInMillis(Math.multiplyExact(days, MILLIS_PER_DAY))
-    // Force fields compute from the duration
-    val millis = cal.get(Calendar.MILLISECOND)
-    // If `to` is `julianCutover`, obtain a pure Julian calendar
-    // otherwise if it is `gregorianCutover`, obtain a pure Gregorian calendar.
-    cal.setGregorianChange(to)
-    // Force computation of new duration from date fields
-    cal.set(Calendar.MILLISECOND, millis)
-    Math.toIntExact(Math.floorDiv(cal.getTimeInMillis, MILLIS_PER_DAY))
+    val rebasedMillis = rebaseMillis(Math.multiplyExact(days, MILLIS_PER_DAY), from, to)
+    Math.toIntExact(Math.floorDiv(rebasedMillis, MILLIS_PER_DAY))
   }
 
   /**
