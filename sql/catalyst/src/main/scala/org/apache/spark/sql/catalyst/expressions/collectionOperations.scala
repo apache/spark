@@ -79,7 +79,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     _FUNC_(expr) - Returns the size of an array or a map.
     The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
     If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
-    By default, the spark.sql.legacy.sizeOfNull parameter is set to false.
+    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
   """,
   examples = """
     Examples:
@@ -88,11 +88,12 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(map('a', 1, 'b', 2));
        2
       > SELECT _FUNC_(NULL);
-       NULL
+       -1
   """)
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Size(child: Expression, legacySizeOfNull: Boolean)
+  extends UnaryExpression with ExpectsInputTypes {
 
-  val legacySizeOfNull = SQLConf.get.legacySizeOfNull
+  def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -122,6 +123,10 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       defineCodeGen(ctx, ev, c => s"($c).numElements()")
     }
   }
+}
+
+object Size {
+  def apply(child: Expression): Size = new Size(child)
 }
 
 /**

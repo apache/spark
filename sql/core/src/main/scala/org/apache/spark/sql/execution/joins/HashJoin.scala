@@ -22,37 +22,16 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{ExplainUtils, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
-trait HashJoin {
-  self: SparkPlan =>
-
-  val leftKeys: Seq[Expression]
-  val rightKeys: Seq[Expression]
-  val joinType: JoinType
-  val buildSide: BuildSide
-  val condition: Option[Expression]
-  val left: SparkPlan
-  val right: SparkPlan
+trait HashJoin extends BaseJoinExec {
+  def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
     s"$nodeName $joinType ${buildSide} ($opId)".trim
-  }
-
-  override def verboseStringWithOperatorId(): String = {
-    val joinCondStr = if (condition.isDefined) {
-      s"${condition.get}"
-    } else "None"
-
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Left keys: ${leftKeys}
-       |Right keys: ${rightKeys}
-       |Join condition: ${joinCondStr}
-     """.stripMargin
   }
 
   override def output: Seq[Attribute] = {

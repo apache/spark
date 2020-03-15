@@ -91,7 +91,7 @@ specify the type hints of `pandas.Series` and `pandas.DataFrame` as below:
 </div>
 </p>
 
-In the following sections, it describes the cominations of the supported type hints. For simplicity,
+In the following sections, it describes the combinations of the supported type hints. For simplicity,
 `pandas.DataFrame` variant is omitted.
 
 ### Series to Series

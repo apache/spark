@@ -31,6 +31,7 @@ import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingConf.STREAMING_UNPERSIST
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
@@ -447,7 +448,7 @@ abstract class DStream[T: ClassTag] (
    * this to clear their own metadata along with the generated RDDs.
    */
   private[streaming] def clearMetadata(time: Time): Unit = {
-    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
+    val unpersistData = ssc.conf.get(STREAMING_UNPERSIST)
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")

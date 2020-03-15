@@ -157,13 +157,13 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
     Seq("parquet", classOf[ParquetDataSourceV2].getCanonicalName).foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> format) {
         val commands = ArrayBuffer.empty[(String, LogicalPlan)]
-        val errors = ArrayBuffer.empty[(String, Throwable)]
+        val exceptions = ArrayBuffer.empty[(String, Exception)]
         val listener = new QueryExecutionListener {
           override def onFailure(
               funcName: String,
               qe: QueryExecution,
-              error: Throwable): Unit = {
-            errors += funcName -> error
+              exception: Exception): Unit = {
+            exceptions += funcName -> exception
           }
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {

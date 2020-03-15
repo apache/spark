@@ -54,7 +54,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaTokenUtil
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -67,8 +67,6 @@ class KafkaTestUtils(
     secure: Boolean = false) extends Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
-  private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
-  private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"
 
   private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
   logInfo(s"Local host name is $localCanonicalHostName")
@@ -204,7 +202,7 @@ class KafkaTestUtils(
     val content =
       s"""
       |Server {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
@@ -214,7 +212,7 @@ class KafkaTestUtils(
       |};
       |
       |Client {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
@@ -224,7 +222,7 @@ class KafkaTestUtils(
       |};
       |
       |KafkaServer {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  serviceName="$brokerServiceName"
       |  useKeyTab=true
       |  storeKey=true
@@ -279,7 +277,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
-      setupKrbDebug()
+      SecurityUtils.setGlobalKrbDebug(true)
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -291,14 +289,6 @@ class KafkaTestUtils(
     setupEmbeddedKafkaServer()
     eventually(timeout(1.minute)) {
       assert(zkClient.getAllBrokersInCluster.nonEmpty, "Broker was not up in 60 seconds")
-    }
-  }
-
-  private def setupKrbDebug(): Unit = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
-    } else {
-      System.setProperty(SUN_KRB_DEBUG_CONFIG, "true")
     }
   }
 
@@ -353,15 +343,7 @@ class KafkaTestUtils(
       kdc.stop()
     }
     UserGroupInformation.reset()
-    teardownKrbDebug()
-  }
-
-  private def teardownKrbDebug(): Unit = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      System.clearProperty(IBM_KRB_DEBUG_CONFIG)
-    } else {
-      System.clearProperty(SUN_KRB_DEBUG_CONFIG)
-    }
+    SecurityUtils.setGlobalKrbDebug(false)
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */

@@ -349,7 +349,7 @@ trait ProgressReporter extends Logging {
     result
   }
 
-  private def formatTimestamp(millis: Long): String = {
+  protected def formatTimestamp(millis: Long): String = {
     timestampFormat.format(new Date(millis))
   }
 

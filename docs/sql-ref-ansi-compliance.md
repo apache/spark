@@ -60,7 +60,7 @@ The following subsections present behaviour changes in arithmetic operations, ty
 ### Arithmetic Operations
 
 In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflows by default.
-This means that in case an operation causes overflows, the result is the same that the same operation returns in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
+This means that in case an operation causes overflows, the result is the same with the corresponding operation in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
 On the other hand, Spark SQL returns null for decimal overflows.
 When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
 

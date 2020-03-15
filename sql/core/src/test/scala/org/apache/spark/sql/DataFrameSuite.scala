@@ -196,7 +196,7 @@ class DataFrameSuite extends QueryTest
   test("explode on output of array-valued function") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     checkAnswer(
-      df.select(explode(split($"csv", ","))),
+      df.select(explode(split($"csv", pattern = ","))),
       Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 

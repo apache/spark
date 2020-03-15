@@ -650,4 +650,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
   }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
+      s"- caseSensitive=$caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val table = "test_table"
+        withTable(table) {
+          sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
+          val dupCol = if (caseSensitive) "value" else "VaLuE"
+          val errorMsg = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+          }.getMessage
+          assert(errorMsg.contains("Found duplicate column(s)"))
+        }
+      }
+    }
+  }
 }
