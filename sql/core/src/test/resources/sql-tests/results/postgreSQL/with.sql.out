@@ -389,7 +389,7 @@ SHOW CREATE TABLE vsubdepartment AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `vsubdepartment`(
+CREATE VIEW `default`.`vsubdepartment`(
   `id`,
   `parent_department`,
   `name`)
@@ -430,7 +430,7 @@ SHOW CREATE TABLE sums_1_100 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `sums_1_100`(
+CREATE VIEW `default`.`sums_1_100`(
   `sum(n)`)
 AS WITH RECURSIVE t(n) AS (
     VALUES (1)
@@ -1050,7 +1050,7 @@ SELECT * FROM x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`id`' given input columns: [default.y.a]; line 2 pos 57
+cannot resolve '`id`' given input columns: [spark_catalog.default.y.a]; line 2 pos 57
 
 
 -- !query

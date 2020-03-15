@@ -1052,19 +1052,25 @@ RecursiveRelation (3)
 
 
 (1) LocalTableScan [codegen id : 1]
-Output: [col1#x]
-     
+Output [1]: [col1#x]
+Arguments: [col1#x]
+      
 (2) Project [codegen id : 1]
-Output    : [col1#x AS level#x]
-Input     : [col1#x]
+Output [1]: [col1#x AS level#x]
+Input [1]: [col1#x]
      
 (3) RecursiveRelation 
+CTE: r
+Output [1]: [level#x]
      
 (4) RecursiveReference 
-     
+Arguments: r, [level#x], false, 0
+      
 (5) Filter 
-     
-(6) Project
+Arguments: (level#x < 10)
+      
+(6) Project 
+Arguments: [(level#x + 1) AS (level + 1)#x]
 
 
 -- !query

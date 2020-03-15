@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{Future => JFuture}
+import java.util.concurrent.{Future => JFuture, LinkedBlockingQueue}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
@@ -287,9 +287,10 @@ case class RecursiveRelationExec(
 
   override def stringArgs: Iterator[Any] = Iterator(cteName, output)
 
-  private val physicalRecursiveTerms = new mutable.ArrayBuffer[SparkPlan]
+  private val physicalRecursiveTerms = new LinkedBlockingQueue[SparkPlan]
 
-  def recursiveTermIterations: Seq[SparkPlan] = physicalRecursiveTerms.toList
+  def recursiveTermIterations: Seq[SparkPlan] =
+    physicalRecursiveTerms.toArray(Array.empty[SparkPlan])
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -307,14 +308,11 @@ case class RecursiveRelationExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val executionIdLong = if (false) {
-      None
-    } else {
-      Option(executionId).map(_.toLong)
-    }
+    val executionIdLong = Option(executionId).map(_.toLong)
 
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
 
+    // TODO: cache before count, as the RDD can be reused in the next iteration
     var prevIterationRDD = anchorTerm.execute().map(_.copy())
     var prevIterationCount = prevIterationRDD.count()
 
@@ -365,10 +363,11 @@ case class RecursiveRelationExec(
       val physicalRecursiveTerm =
         QueryExecution.prepareExecutedPlan(sqlContext.sparkSession, newLogicalRecursiveTerm)
 
-      physicalRecursiveTerms += physicalRecursiveTerm
+      physicalRecursiveTerms.offer(physicalRecursiveTerm)
 
       executionIdLong.foreach(onUpdatePlan)
 
+      // TODO: cache before count, as the RDD can be reused in the next iteration
       prevIterationRDD = physicalRecursiveTerm.execute().map(_.copy())
       prevIterationCount = prevIterationRDD.count()
 
@@ -384,6 +383,14 @@ case class RecursiveRelationExec(
     } else {
       sparkContext.union(accumulatedRDDs)
     }
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |${ExplainUtils.generateFieldString("CTE", cteName)}
+       |${ExplainUtils.generateFieldString("Output", output)}
+     """.stripMargin
   }
 }
 
