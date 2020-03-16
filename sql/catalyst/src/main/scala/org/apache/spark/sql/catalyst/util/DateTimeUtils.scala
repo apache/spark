@@ -985,14 +985,14 @@ object DateTimeUtils {
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     val ldt = microsToInstant(micros).atZone(ZoneId.systemDefault).toLocalDateTime
-    val utcCal = new Calendar.Builder()
+    val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
       .build()
-    millisToMicros(utcCal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+    millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
   /**
@@ -1004,19 +1004,19 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
-    val utcCal = new Calendar.Builder()
+    val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setInstant(microsToMillis(micros))
       .build()
     val localDateTime = LocalDateTime.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH),
-      utcCal.get(Calendar.HOUR_OF_DAY),
-      utcCal.get(Calendar.MINUTE),
-      utcCal.get(Calendar.SECOND),
+      cal.get(Calendar.YEAR),
+      cal.get(Calendar.MONTH) + 1,
+      cal.get(Calendar.DAY_OF_MONTH),
+      cal.get(Calendar.HOUR_OF_DAY),
+      cal.get(Calendar.MINUTE),
+      cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
