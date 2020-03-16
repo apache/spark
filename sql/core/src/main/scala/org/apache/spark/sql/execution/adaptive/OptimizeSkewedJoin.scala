@@ -193,7 +193,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val rightPartSpec = right.partitionsWithSizes(partitionIndex)._1
         val isRightCoalesced = rightPartSpec.startReducerIndex + 1 < rightPartSpec.endReducerIndex
 
-        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
+        // A skewed partition should never be coalesced, but skip it here just to be safe.
         val leftParts = if (isLeftSkew && !isLeftCoalesced) {
           val reducerId = leftPartSpec.startReducerIndex
           val skewSpecs = createSkewPartitionSpecs(
@@ -208,7 +208,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           Seq(leftPartSpec)
         }
 
-        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
+        // A skewed partition should never be coalesced, but skip it here just to be safe.
         val rightParts = if (isRightSkew && !isRightCoalesced) {
           val reducerId = rightPartSpec.startReducerIndex
           val skewSpecs = createSkewPartitionSpecs(
