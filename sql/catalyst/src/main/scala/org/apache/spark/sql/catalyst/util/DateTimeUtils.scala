@@ -53,9 +53,6 @@ object DateTimeUtils {
       .atOffset(ZoneOffset.UTC)
       .toInstant)
   final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
-  final val JULIAN_CUTOVER_MICROS = rebaseGregorianToJulianMicros(GREGORIAN_CUTOVER_MICROS)
-  final val JULIAN_CUTOVER_DAY =
-    rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
@@ -1038,6 +1035,7 @@ object DateTimeUtils {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
       .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
       .build()
     val localDate = LocalDate.of(
@@ -1069,6 +1067,7 @@ object DateTimeUtils {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
       .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
       .build()
     Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
